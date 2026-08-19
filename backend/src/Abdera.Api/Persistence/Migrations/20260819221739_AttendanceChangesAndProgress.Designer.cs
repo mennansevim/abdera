@@ -3,17 +3,20 @@ using System;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Abdera.Api.Modules.Auth.Persistence.Migrations
+namespace Abdera.Api.Persistence.Migrations
 {
     [DbContext(typeof(AbderaDbContext))]
-    partial class AbderaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260819221739_AttendanceChangesAndProgress")]
+    partial class AttendanceChangesAndProgress
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

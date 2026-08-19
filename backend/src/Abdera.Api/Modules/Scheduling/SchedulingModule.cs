@@ -11,5 +11,7 @@ public static class SchedulingModule
         app.MapSchoolCalendarDays();
         app.MapLessonSeries();
         app.MapCalendar();
+        app.MapChangeRequests();
+        app.MapCancelLesson();
     }
 }

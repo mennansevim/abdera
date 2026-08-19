@@ -18,14 +18,14 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 
 ## Durum
 
-**Phase 2 — kişiler ve takvim.** Öğrenci/veli/öğretmen/enstrüman/kayıt yönetimi, öğretmen uygunluğu ve izinleri, okul takvimi, tekrarlayan ders serisi tanımı ve otomatik ders üretimi (tatil/izin atlamalı, idempotent), haftalık takvim görünümü — hepsi çalışır ve `docker compose up` ile uçtan uca doğrulandı. Devam/RSVP, ders değişikliği, aidat, WhatsApp henüz yok — Phase 3'ten itibaren geliyor.
+**Phase 3 — devam, RSVP, ders değişikliği.** Öğretmen "Bugünkü Derslerim" ekranından yoklama alıp ders notu girebiliyor (ders otomatik tamamlandı oluyor); ders değişikliği talebi açıp Admin onay kuyruğundan onaylanabiliyor (geçmiş korunarak yeni ders açılıyor); doğrudan iptalde ≥24 saat kuralına göre telafi kredisi doğuyor ve kredi yeni bir telafi dersi açmak için kullanılabiliyor. Hepsi `docker compose up` ile uçtan uca doğrulandı. Fiyatlandırma/aidat ve WhatsApp henüz yok — Phase 4'ten itibaren geliyor.
 
 | Faz | Kapsam | Durum |
 |---|---|---|
 | 0 | Tasarım paketi, alan modeli, API yüzeyi, kararlar | ✅ |
 | 1 | İskelet: Compose + Postgres + API + web + auth | ✅ |
-| 2 | Kişiler ve takvim | ✅ Bu commit |
-| 3 | Devam, RSVP, ders değişikliği | ⬜ |
+| 2 | Kişiler ve takvim | ✅ |
+| 3 | Devam, RSVP, ders değişikliği | ✅ Bu commit |
 | 4 | Fiyatlandırma ve aidat | ⬜ |
 | 5 | WhatsApp | ⬜ |
 | 6 | Gelişim takibi ve hatırlatmalar | ⬜ |

@@ -30,7 +30,20 @@ Auth       → hiçbir modüle bağımlı değil; herkes Auth'a bağımlı (kiml
 
 Kural: bir modül başka modülün **iç** entity'sine EF navigation property ile join atmaz. İhtiyaç varsa o modülün `Features/` altında sunduğu bir sorgu/servis üzerinden okunur. Örnek: `Billing`, hangi `Student`'ın adı olduğunu `People` modülünün `IPeopleLookup` benzeri küçük bir arayüzünden alır — `Student` entity'sini kendi DbSet'i gibi sorgulamaz.
 
-İstisna: `Dashboard` salt-okunur olduğu için doğrudan SQL/LINQ projeksiyonu ile birden fazla modülün tablosunu okuyabilir (kendi yazma yetkisi yoktur, sadece toplulaştırır).
+İstisna 1: `Dashboard` salt-okunur olduğu için doğrudan SQL/LINQ projeksiyonu ile birden fazla modülün tablosunu okuyabilir (kendi yazma yetkisi yoktur, sadece toplulaştırır).
+
+İstisna 2 — **yazma tarafı**: bir modülün Feature'ı, başka bir modülün Domain entity'sini kendi genel (public) factory metoduyla oluşturup tek `AbderaDbContext` üzerinden ekleyebilir — bu okuma tarafındaki navigation-property yasağının kapsamı dışında. İki örnek: `People/Features/Teachers.cs` bir `Auth.Domain.User` oluşturur (öğretmen giriş hesabı); `Scheduling/Features/CancelLesson.cs` bir `Billing.Domain.MakeupCredit` oluşturur (telafi kredisi). Bu, tek `DbContext`'li modüler monolitin doğal bir sonucu — mikroservis gibi API çağrısı simüle etmek burada anlamsız olurdu.
+
+## Kısmi açılan modüller
+
+`Billing` ve `Progress` henüz tam değil — her ikisi de Phase 3'te yalnızca ihtiyaç duyulan tek bir tabloyla açıldı, geri kalanı planlandığı fazda gelecek:
+
+| Modül | Phase 3'te açılan | Phase 4/6'da gelecek |
+|---|---|---|
+| Billing | `makeup_credits` | `fee_plans`, `receivables`, `payments` (Phase 4, Pricing ile birlikte) |
+| Progress | `lesson_notes` | `skill_definitions`, `skill_assessments`, `practice_assignments` (Phase 6) |
+
+Bu, "modülü fazın sırasına göre bütün olarak aç" kuralının bilinçli bir istisnası — `MakeupCredit` ve `LessonNote` doğrudan Phase 3'ün kendi kapsamında (master prompt: "make-up lessons", "lesson notes") gerekli, geri kalan tablolar henüz hiçbir use-case tarafından ihtiyaç duyulmuyor.
 
 ## Modül başına tablolar
 

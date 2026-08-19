@@ -1,0 +1,101 @@
+using System.Security.Claims;
+using Abdera.Api.Modules.Scheduling.Domain;
+using Abdera.Api.Shared;
+using Microsoft.EntityFrameworkCore;
+
+namespace Abdera.Api.Modules.Scheduling.Features;
+
+// docs/00-master-prompt.md "Lesson change" akışı: Teacher veya Admin talep açar -> Admin
+// onaylar/reddeder -> onaylanırsa Lesson.CreateRescheduled ile geçmiş korunarak yeni satır
+// açılır. docs/04-permissions.md: talep açma Teacher(kendi dersi)/Admin, karar yalnızca Admin.
+public static class ChangeRequests
+{
+    public record CreateRequest(string? Reason, DateTimeOffset ProposedStartAt, DateTimeOffset ProposedEndAt);
+
+    public record ChangeRequestResponse(
+        Guid Id, Guid LessonId, Guid RequestedBy, string? Reason,
+        DateTimeOffset ProposedStartAt, DateTimeOffset ProposedEndAt,
+        LessonChangeRequestStatus Status, DateTimeOffset CreatedAt, DateTimeOffset? ResolvedAt);
+
+    public record ApproveResponse(ChangeRequestResponse Request, Guid NewLessonId);
+
+    public static void MapChangeRequests(this IEndpointRouteBuilder app)
+    {
+        app.MapPost("/api/lessons/{lessonId:guid}/change-requests", CreateAsync)
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+
+        app.MapGet("/api/change-requests", ListAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+
+        app.MapPost("/api/change-requests/{requestId:guid}/approve", ApproveAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+
+        app.MapPost("/api/change-requests/{requestId:guid}/reject", RejectAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+    }
+
+    private static async Task<IResult> CreateAsync(
+        Guid lessonId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
+            ?? throw new NotFoundException("Ders bulunamadı.");
+
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        if (teacherScope is { } teacherId && teacherId != lesson.TeacherId)
+            throw new ForbiddenException("Bu ders size atanmamış.");
+
+        if (lesson.Status != LessonStatus.Normal)
+            throw new ConflictException($"'{lesson.Status}' durumundaki bir ders için değişiklik talebi açılamaz.");
+
+        var changeRequest = LessonChangeRequest.Create(
+            lessonId, AuthContext.GetUserId(principal), request.Reason,
+            request.ProposedStartAt, request.ProposedEndAt, clock.UtcNow);
+
+        db.LessonChangeRequests.Add(changeRequest);
+        await db.SaveChangesAsync();
+
+        return Results.Created($"/api/change-requests/{changeRequest.Id}", ToResponse(changeRequest));
+    }
+
+    private static async Task<IResult> ListAsync(LessonChangeRequestStatus? status, AbderaDbContext db)
+    {
+        var query = db.LessonChangeRequests.AsQueryable();
+        if (status is { } s) query = query.Where(r => r.Status == s);
+
+        var items = await query.OrderByDescending(r => r.CreatedAt).ToListAsync();
+        return Results.Ok(items.Select(ToResponse));
+    }
+
+    private static async Task<IResult> ApproveAsync(Guid requestId, AbderaDbContext db, IClock clock)
+    {
+        var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
+            ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
+        var lesson = await db.Lessons.SingleAsync(l => l.Id == changeRequest.LessonId);
+
+        var hasConflict = await LessonConflictChecker.HasOverlapAsync(
+            db, lesson.TeacherId, lesson.StudentId, changeRequest.ProposedStartAt, changeRequest.ProposedEndAt, excludeLessonId: lesson.Id);
+        if (hasConflict)
+            throw new ConflictException("Önerilen saat, öğretmenin veya öğrencinin başka bir dersiyle çakışıyor.");
+
+        var newLesson = Lesson.CreateRescheduled(lesson, changeRequest.ProposedStartAt, changeRequest.ProposedEndAt, clock.UtcNow);
+        db.Lessons.Add(newLesson);
+        changeRequest.Approve(clock.UtcNow);
+
+        await db.SaveChangesAsync();
+        return Results.Ok(new ApproveResponse(ToResponse(changeRequest), newLesson.Id));
+    }
+
+    private static async Task<IResult> RejectAsync(Guid requestId, AbderaDbContext db, IClock clock)
+    {
+        var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
+            ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
+
+        changeRequest.Reject(clock.UtcNow);
+        await db.SaveChangesAsync();
+
+        return Results.Ok(ToResponse(changeRequest));
+    }
+
+    private static ChangeRequestResponse ToResponse(LessonChangeRequest r) => new(
+        r.Id, r.LessonId, r.RequestedBy, r.Reason, r.ProposedStartAt, r.ProposedEndAt, r.Status, r.CreatedAt, r.ResolvedAt);
+}

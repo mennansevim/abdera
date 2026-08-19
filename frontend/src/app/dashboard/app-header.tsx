@@ -12,16 +12,21 @@ const LINKS = [
   { href: "/dashboard/calendar", label: "Takvim" },
 ];
 
+// docs/04-permissions.md: ders değişikliği onay/red yalnızca Admin - link Teacher'a
+// gösterilmez (backend zaten 403 verirdi, ama gereksiz tıklamayı da önlemeye değer).
+const ADMIN_ONLY_LINKS = [{ href: "/dashboard/change-requests", label: "Değişiklik Talepleri" }];
+
 export function AppHeader({ me }: { me: Me }) {
   const pathname = usePathname();
   const router = useRouter();
   const logout = useLogout();
+  const links = me.role === "Admin" ? [...LINKS, ...ADMIN_ONLY_LINKS] : LINKS;
 
   return (
     <header className="border-b border-neutral-200 bg-white">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
         <nav className="flex items-center gap-4 text-sm">
-          {LINKS.map((link) => (
+          {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}

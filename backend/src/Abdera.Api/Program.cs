@@ -1,8 +1,11 @@
+using Abdera.Api.Modules.Attendance;
 using Abdera.Api.Modules.Auth;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Billing;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
 using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.Progress;
 using Abdera.Api.Modules.Scheduling;
 using Abdera.Api.Shared;
 using HealthChecks.NpgSql;
@@ -154,6 +157,9 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 app.MapAuthModule();
 app.MapPeopleModule();
 app.MapSchedulingModule();
+app.MapAttendanceModule();
+app.MapProgressModule();
+app.MapBillingModule();
 
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);

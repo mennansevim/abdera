@@ -1,6 +1,6 @@
 # İlk REST API Yüzeyi
 
-Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit ve TeacherTimeOff uç noktaları var (A1, A2, A3). `✅` işaretli satırlar Phase 1–2'de gerçekten uygulandı; işaretsiz olanlar henüz yok (Phase 3+).
+Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit ve TeacherTimeOff uç noktaları var (A1, A2, A3). `✅` işaretli satırlar Phase 1–3'te gerçekten uygulandı; işaretsiz olanlar henüz yok (Phase 4+).
 
 ```
 POST   /api/auth/login                          ✅
@@ -39,31 +39,37 @@ GET    /api/lessons                             ✅ /api/calendar ile aynı hand
 POST   /api/lesson-series                       ✅ oluşturur + ilk rolling window'u üretir
 PATCH  /api/lesson-series/{seriesId}            ✅ seriyi sonlandırır (EffectiveUntil)
 POST   /api/lesson-series/{seriesId}/generate   ✅ eklendi - üretim penceresini elle uzatır
-POST   /api/lessons/{lessonId}/change-requests  -- Phase 3
-POST   /api/change-requests/{requestId}/approve -- Phase 3
-POST   /api/change-requests/{requestId}/reject  -- Phase 3
+POST   /api/lessons/{lessonId}/change-requests  ✅ Teacher(kendi dersi)/Admin açar
+GET    /api/change-requests                     ✅ eklendi - Admin onay kuyruğu (?status=)
+POST   /api/change-requests/{requestId}/approve ✅ reschedule: eski ders RESCHEDULED, yeni NORMAL
+POST   /api/change-requests/{requestId}/reject  ✅
+POST   /api/lessons/{lessonId}/cancel           ✅ eklendi - doğrudan iptal, A2 kredi mantığı burada
 
 GET    /api/school-calendar-days                ✅ A3: tatiller ve okul etkinlikleri
 POST   /api/school-calendar-days                ✅
 
-POST   /api/lessons/{lessonId}/attendance
-POST   /api/lessons/{lessonId}/notes
-POST   /api/students/{studentId}/skill-assessments
-GET    /api/students/{studentId}/progress
+GET    /api/lessons/{lessonId}/rsvp             ✅ eklendi - WhatsApp'a kadar (Phase 5) Admin elle girer
+POST   /api/lessons/{lessonId}/rsvp             ✅ eklendi
+GET    /api/lessons/{lessonId}/attendance       ✅
+POST   /api/lessons/{lessonId}/attendance       ✅ Teacher(kendi)/Admin(override, audit'e düşer)
+GET    /api/lessons/{lessonId}/notes            ✅ Admin salt okuma, Teacher kendi dersi
+POST   /api/lessons/{lessonId}/notes            ✅ yalnızca Teacher
+POST   /api/students/{studentId}/skill-assessments   -- Progress'in kalanı, Phase 6
+GET    /api/students/{studentId}/progress            -- Phase 6
 
-GET    /api/price-lists                         -- A1
+GET    /api/price-lists                         -- A1, Phase 4
 POST   /api/price-lists
 POST   /api/price-lists/{priceListId}/preview-bulk-update   -- A1: uygulamadan önce önizleme
 POST   /api/price-lists/{priceListId}/apply
 
-GET    /api/receivables
+GET    /api/receivables                         -- Phase 4
 POST   /api/receivables
 POST   /api/receivables/{receivableId}/payments
 GET    /api/students/{studentId}/billing
 POST   /api/receivables/{receivableId}/send-reminder
 
-GET    /api/students/{studentId}/makeup-credits  -- A2
-POST   /api/makeup-credits/{creditId}/use
+GET    /api/students/{studentId}/makeup-credits  ✅ A2
+POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar
 
 GET    /api/notifications
 POST   /api/notifications/{notificationId}/retry

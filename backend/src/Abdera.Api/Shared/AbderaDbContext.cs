@@ -1,5 +1,8 @@
+using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.People.Domain;
+using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +33,14 @@ public class AbderaDbContext : DbContext
     public DbSet<SchoolCalendarDay> SchoolCalendarDays => Set<SchoolCalendarDay>();
     public DbSet<LessonSeries> LessonSeries => Set<LessonSeries>();
     public DbSet<Lesson> Lessons => Set<Lesson>();
+    public DbSet<LessonChangeRequest> LessonChangeRequests => Set<LessonChangeRequest>();
+
+    public DbSet<LessonRsvp> LessonRsvps => Set<LessonRsvp>();
+    public DbSet<LessonAttendance> LessonAttendances => Set<LessonAttendance>();
+
+    public DbSet<LessonNote> LessonNotes => Set<LessonNote>();
+
+    public DbSet<MakeupCredit> MakeupCredits => Set<MakeupCredit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

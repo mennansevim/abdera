@@ -14,19 +14,20 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
                                            teacher_availability, teacher_time_off,
                                            school_calendar_days
 003_seed_instruments (SeedInstruments)    instruments seed verisi (aşağıda)
-004_attendance                            lesson_rsvps, lesson_attendances               -- Phase 3
-005_lesson_change_requests                lesson_change_requests                         -- Phase 3
-006_pricing                               price_lists, price_list_items                  -- Phase 4
-007_billing                               fee_plans, receivables, payments,
-                                           makeup_credits                                -- Phase 4
-008_progress                              skill_definitions, lesson_notes,
-                                           skill_assessments, practice_assignments        -- Phase 6
-009_messaging                             notification_jobs, whatsapp_messages,
+004_attendance_changes_and_progress       lesson_attendances, lesson_change_requests,
+(AttendanceChangesAndProgress)            lesson_notes, lesson_rsvps, makeup_credits     -- Phase 3
+005_pricing                               price_lists, price_list_items                  -- Phase 4
+006_billing                               fee_plans, receivables, payments               -- Phase 4
+                                           (makeup_credits zaten 004'te - A2, Phase 3'te gerekliydi)
+007_progress                              skill_definitions, skill_assessments,
+                                           practice_assignments                          -- Phase 6
+                                           (lesson_notes zaten 004'te - Phase 3'te gerekliydi)
+008_messaging                             notification_jobs, whatsapp_messages,
                                            whatsapp_webhook_events, message_templates     -- Phase 5
-010_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
+009_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
 ```
 
-`lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu.
+`lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu. Aynı şekilde `lesson_change_requests` (Scheduling), `lesson_rsvps`/`lesson_attendances` (Attendance), `lesson_notes` (Progress'in bir dilimi) ve `makeup_credits` (Billing'in bir dilimi) Phase 3'ün tek migration'ında birlikte geldi — `docs/02-modules.md`'deki "Kısmi açılan modüller" notuna bak.
 
 ## Seed verisi
 
