@@ -4,7 +4,7 @@ Bu dosya kod yazarken tekrar tekrar anlatılmaması gereken mimari kararları sa
 
 ## Stack
 
-.NET 10 (LTS) · ASP.NET Core Minimal API · EF Core 10 + Npgsql · PostgreSQL 16 · FluentValidation · ASP.NET Core Identity · Serilog · Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui + TanStack Query.
+.NET 10 (LTS) · ASP.NET Core Minimal API · EF Core 10 + Npgsql · PostgreSQL 16 · FluentValidation · `PasswordHasher<T>` + httpOnly cookie oturumu (tam ASP.NET Core Identity değil — kendi minimal `users` tablomuz var, bkz. `docs/03-erd.md`) · Serilog · Next.js 16 (App Router) + TypeScript + Tailwind + TanStack Query (shadcn/ui Phase 2'de UI büyüyünce eklenecek).
 
 Yeni bağımlılık eklemeden önce sor: bu ölçekte (6–8 öğretmen, ~150 öğrenci) gerçekten gerekli mi, yoksa `BackgroundService` / `DbContext` / dahili bir sınıfla zaten çözülüyor mu? Şüpheye düşersen eklemeden bırak, `docs/10-decisions.md`'ye not düş.
 
@@ -56,6 +56,12 @@ CHECK (amount >= 0)
 - **Sessiz saat:** aidat hatırlatması ve doğum günü mesajı gibi zamanlanmış (cron kaynaklı) bildirimler yalnızca `Notifications__QuietHoursStart/End` penceresinde gönderilir; pencere dışı job bir sonraki pencere başına ötelenir. Ders hatırlatması (dersten 1 saat önce) bu kurala tabi değil.
 - **WhatsApp 24 saatlik pencere:** `Guardian.conversationWindowExpiresAt` her gelen mesajda yenilenir. Pencere kapalıyken serbest metin yerine onaylı template kullanılır.
 - **Opt-out:** gelen mesaj `dur`/`iptal`/`stop` içeriyorsa rıza kapatılır, bekleyen job'lar iptal edilir, tek teyit mesajı gönderilir.
+
+## Program.cs'te konfigürasyon okuma kuralı
+
+`WebApplicationFactory` (test altyapısı) konfigürasyon override'ını yalnızca `builder.Build()` çağrısı **sırasında/sonrasında** uygular. `Program.cs`'te `builder.Configuration`'ı `Build()`'den önce senkron okuyup bir karara/istisnaya bağlarsan (`var x = builder.Configuration["..."] ?? throw ...`), testler bu değeri asla göremez ve kırılır.
+
+Kural: bağlantı dizesi, cookie ayarları, CORS origin gibi değerleri **DI çözümlenirken** (`AddDbContext<T>((sp, options) => ...)`, `.AddCookie(options => ...)` gibi deferred delegate'ler içinde) oku, üstte `var` ile eager okuma. İstisna: bir arayüzün hangi somut sınıfa bağlanacağı (`IWhatsAppClient` → `Fake`/`Cloud`) gibi **yapısal DI kayıtları** `Build()`'den önce karar verilmek zorunda — bunlar gerçek ortam değişkenlerini görür, yalnızca `WebApplicationFactory`'nin test-time overlay'ini göremez; bu bilinen ve kabul edilmiş bir sınır, `Program.cs`'teki yorum satırına bak.
 
 ## WhatsApp entegrasyonu
 

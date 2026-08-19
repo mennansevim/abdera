@@ -25,10 +25,11 @@ dist/
 .turbo/
 
 # --- Ortam degiskenleri: ASLA commit'lenmez (repo public) ---
+# appsettings.Development.json secret icermez (log seviyesi vb.) - normal takip edilir.
+# Gercek yerel secret gerekiyorsa appsettings.Local.json veya dotnet user-secrets kullan.
 .env
 .env.*
 !.env.example
-appsettings.Development.json
 appsettings.Local.json
 secrets.json
 

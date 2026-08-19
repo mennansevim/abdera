@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Abdera.Api/Abdera.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Abdera.Tests/Abdera.Tests.csproj" />
+  </Folder>
+</Solution>

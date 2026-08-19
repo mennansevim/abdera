@@ -18,14 +18,12 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 
 ## Durum
 
-**Phase 0 — tasarım.** Henüz uygulama kodu yok. Bu repoda şu an tasarım paketi, çalışma kuralları ve proje skill'leri var.
-
-Master prompt'un kendi kuralı: *tasarım gözden geçirilmeden production kod yazılmaz.*
+**Phase 1 — çalışan iskelet.** `docker compose up` ile Postgres + backend + frontend ayağa kalkıyor; kimlik doğrulama (giriş/çıkış/şifre değişimi), ortak hata modeli, sağlık kontrolü, yapılandırılmış log ve test altyapısı çalışır durumda. Kişiler, takvim, aidat gibi iş modülleri henüz yok — onlar Phase 2'den itibaren geliyor.
 
 | Faz | Kapsam | Durum |
 |---|---|---|
-| 0 | Tasarım paketi, alan modeli, API yüzeyi, kararlar | ✅ Bu commit |
-| 1 | İskelet: Compose + Postgres + API + web + auth | ⬜ |
+| 0 | Tasarım paketi, alan modeli, API yüzeyi, kararlar | ✅ |
+| 1 | İskelet: Compose + Postgres + API + web + auth | ✅ Bu commit |
 | 2 | Kişiler ve takvim | ⬜ |
 | 3 | Devam, RSVP, ders değişikliği | ⬜ |
 | 4 | Fiyatlandırma ve aidat | ⬜ |
@@ -42,10 +40,10 @@ Master prompt'un kendi kuralı: *tasarım gözden geçirilmeden production kod y
 | Backend | .NET 10 (LTS) · ASP.NET Core Minimal API |
 | Veri | PostgreSQL 16 · EF Core 10 + Npgsql |
 | Doğrulama | FluentValidation |
-| Kimlik | ASP.NET Core Identity + httpOnly cookie oturumu |
-| Zamanlayıcı | `BackgroundService` + `PeriodicTimer` (Postgres `FOR UPDATE SKIP LOCKED`) |
+| Kimlik | `PasswordHasher<T>` + httpOnly cookie oturumu (tam ASP.NET Core Identity değil — kendi minimal `users` tablomuz var) |
+| Zamanlayıcı | `BackgroundService` + `PeriodicTimer` (Postgres `FOR UPDATE SKIP LOCKED`) — Phase 5'te geliyor |
 | Log / sağlık | Serilog · `HealthChecks` |
-| Frontend | Next.js 15 (App Router) · TypeScript · Tailwind · shadcn/ui · TanStack Query |
+| Frontend | Next.js 16 (App Router) · TypeScript · Tailwind · TanStack Query (shadcn/ui Phase 2'de UI büyüyünce eklenecek) |
 | Test | xUnit · `WebApplicationFactory` · Testcontainers (yalnızca gerçek Postgres gerekenlerde) |
 | Mesajlaşma | Meta WhatsApp Business Cloud API |
 | Çalıştırma | Docker + Docker Compose |
@@ -91,7 +89,16 @@ docker compose up
 | OpenAPI | http://localhost:8080/openapi |
 | Sağlık | http://localhost:8080/health |
 
-WhatsApp geliştirmesi Meta hesabı olmadan yapılabilir: `WhatsApp__Provider=Fake` giden mesajları veritabanına yazar, dev-only bir uç nokta da gelen webhook'u taklit eder. Ayrıntı: [`docs/06-whatsapp.md`](docs/06-whatsapp.md).
+İlk giriş: `.env`'deki `Bootstrap__AdminEmail` / `Bootstrap__AdminPassword` ile — yalnızca `users` tablosu boşken bir kere çalışır, ilk girişte kalıcı şifre belirlemen istenir.
+
+WhatsApp geliştirmesi Meta hesabı olmadan yapılabilir: `WhatsApp__Provider=Fake` (varsayılan) giden mesajları loglar, gerçek bir API çağrısı yapmaz. Gelen webhook'u taklit eden dev-only uç nokta, `Messaging` modülüyle birlikte Phase 5'te geliyor. Ayrıntı: [`docs/06-whatsapp.md`](docs/06-whatsapp.md).
+
+### Testler
+
+```bash
+cd backend && dotnet test    # birim + entegrasyon (Testcontainers gerçek bir Postgres başlatır - Docker gerekir)
+cd frontend && npm run lint && npm run build
+```
 
 ---
 

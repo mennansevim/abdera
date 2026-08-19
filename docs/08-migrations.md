@@ -2,8 +2,10 @@
 
 EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği Flyway'in yerine (`CLAUDE.md` — stack kararı). Her migration tek modülün tablolarını getirir, önceki migration'ların üzerine FK kurar; sıra bağımlılık grafiğini takip eder (`docs/02-modules.md`).
 
+**Not:** aşağıdaki `001_auth`, `002_people`... etiketleri mantıksal/kavramsal sıralamayı gösterir. EF Core migration dosyalarını kendi `<timestamp>_<Ad>` biçimiyle üretir (örn. `20260819204809_InitialAuth.cs`) — dosya adına elle numara eklenmez. Uygulama sırası, dosya adındaki numaraya değil, migration'ların **oluşturulma sırasına** (timestamp) göre belirlenir; bu yüzden migration'lar burada listelenen modül sırasıyla oluşturulmalı.
+
 ```
-001_auth                  users, audit_log
+001_auth (InitialAuth)     users, audit_log
 002_people                instruments, teachers, teacher_instruments,
                            students, guardians, student_guardians, enrollments
 003_scheduling            lesson_series, lessons, lesson_change_requests,
