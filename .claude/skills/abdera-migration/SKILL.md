@@ -15,7 +15,7 @@ Master prompt Flyway öneriyor; Abdera EF Core Migrations kullanıyor (`CLAUDE.m
 
 ## Adımlar
 
-1. `dotnet ef migrations add <AçıklayıcıAd>` — ad İngilizce, `docs/08-migrations.md`'deki numaralandırma sırasına uygun (`0NN_modül_açıklama` deseninden esinlenerek).
+1. `dotnet ef migrations add <AçıklayıcıAd>` — ad İngilizce. Tek modülü ilgilendiriyorsa `-o Modules/<Modül>/Persistence/Migrations`; birden fazla modülü ilgilendiriyorsa (bir faz birden fazla modülü aynı anda getiriyorsa, örn. Phase 2) `-o Persistence/Migrations` (paylaşılan, modül-dışı klasör — `docs/08-migrations.md`).
 2. Oluşan migration dosyasında kontrol et:
    - [ ] `created_at`, `updated_at` mutasyona açık her yeni tabloda var mı?
    - [ ] Dışa açık id `uuid` mi (sıralı int değil)?
@@ -25,7 +25,7 @@ Master prompt Flyway öneriyor; Abdera EF Core Migrations kullanıyor (`CLAUDE.m
    - [ ] Sık sorgulanacak filtre/join kolonlarında index var mı (örn. `lessons.start_at`, `receivables.status`, `notification_jobs.status, scheduled_at`)?
 3. `Down()` metodunun gerçekten geri aldığını yerel veritabanında test et (`dotnet ef database update <öncekiMigration>`).
 4. Yıkıcı işlemse (kolon/tablo silme), bunu ayrı bir migration'da yap ve `docs/08-migrations.md`'ye not düş — aynı migration'da hem ekleme hem silme yapma.
-5. Seed/referans veri değişikliğiyse (`docs/08-migrations.md` — 009), var olan satırları güncellerken `ON CONFLICT DO NOTHING`/`DO UPDATE` kullan, tekrar çalıştırılabilir olsun.
+5. Seed/referans veri değişikliğiyse (örnek: `SeedInstruments`), `migrationBuilder.Sql("INSERT ... ON CONFLICT (...) DO NOTHING")` kullan, tekrar çalıştırılabilir olsun. `HasData` yerine ham SQL tercih edilir çünkü domain entity'lerinin private constructor'ı var.
 6. `docs/08-migrations.md`'yi yeni migration'ı yansıtacak şekilde güncelle.
 
 ## Yapılmayacaklar

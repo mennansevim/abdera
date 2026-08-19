@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Shared;
 using Microsoft.AspNetCore.Identity;
@@ -30,7 +29,7 @@ public static class ResetPassword
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId)
             ?? throw new NotFoundException("Kullanıcı bulunamadı.");
 
-        var temporaryPassword = GenerateTemporaryPassword();
+        var temporaryPassword = TemporaryPasswordGenerator.Generate();
         var hash = passwordHasher.HashPassword(user, temporaryPassword);
         user.SetPassword(hash, clock.UtcNow, mustChangePassword: true);
 
@@ -39,19 +38,5 @@ public static class ResetPassword
 
         await db.SaveChangesAsync();
         return Results.Ok(new Response(temporaryPassword));
-    }
-
-    private static string GenerateTemporaryPassword()
-    {
-        // Okunması kolay, karışıklık yaratan karakterler (0/O, 1/l) hariç - telefonla iletilecek.
-        const string alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-        Span<byte> bytes = stackalloc byte[12];
-        RandomNumberGenerator.Fill(bytes);
-        var chars = new char[12];
-        for (var i = 0; i < bytes.Length; i++)
-        {
-            chars[i] = alphabet[bytes[i] % alphabet.Length];
-        }
-        return new string(chars);
     }
 }

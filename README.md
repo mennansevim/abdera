@@ -18,13 +18,13 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 
 ## Durum
 
-**Phase 1 — çalışan iskelet.** `docker compose up` ile Postgres + backend + frontend ayağa kalkıyor; kimlik doğrulama (giriş/çıkış/şifre değişimi), ortak hata modeli, sağlık kontrolü, yapılandırılmış log ve test altyapısı çalışır durumda. Kişiler, takvim, aidat gibi iş modülleri henüz yok — onlar Phase 2'den itibaren geliyor.
+**Phase 2 — kişiler ve takvim.** Öğrenci/veli/öğretmen/enstrüman/kayıt yönetimi, öğretmen uygunluğu ve izinleri, okul takvimi, tekrarlayan ders serisi tanımı ve otomatik ders üretimi (tatil/izin atlamalı, idempotent), haftalık takvim görünümü — hepsi çalışır ve `docker compose up` ile uçtan uca doğrulandı. Devam/RSVP, ders değişikliği, aidat, WhatsApp henüz yok — Phase 3'ten itibaren geliyor.
 
 | Faz | Kapsam | Durum |
 |---|---|---|
 | 0 | Tasarım paketi, alan modeli, API yüzeyi, kararlar | ✅ |
-| 1 | İskelet: Compose + Postgres + API + web + auth | ✅ Bu commit |
-| 2 | Kişiler ve takvim | ⬜ |
+| 1 | İskelet: Compose + Postgres + API + web + auth | ✅ |
+| 2 | Kişiler ve takvim | ✅ Bu commit |
 | 3 | Devam, RSVP, ders değişikliği | ⬜ |
 | 4 | Fiyatlandırma ve aidat | ⬜ |
 | 5 | WhatsApp | ⬜ |

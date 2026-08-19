@@ -10,6 +10,9 @@ Master prompt (`docs/00-master-prompt.md`) gözden geçirilirken bulunan boşluk
 | — | Stack | .NET 10 (LTS) + ASP.NET Core, Java/Spring Boot yerine (gerekçe: bellek/soğuk başlangıç, aşağıda) |
 | — | 4. enstrüman | Keman (`VIOLIN`) eklendi, kendi yetenek tanımlarıyla (`INTONATION`, `BOW_CONTROL`, `LEFT_HAND_POSITION`) |
 | A2 | Telafi hakkı doğuşu | Dersten **≥24 saat önce** iptal → 1 `MakeupCredit`. Habersiz gelmeme (no-show) kredi doğurmaz, ücret yine tahakkuk eder. |
+| — | Enrollment ↔ enstrüman tutarlılığı | Bir öğrenci bir öğretmene ancak o öğretmenin **çaldığı** (`TeacherInstrument`) bir enstrüman için kaydedilebilir — açık veri hatasını (piyano öğretmenine bateri kaydı) önler. `Modules/People/Features/Enrollments.cs`. |
+| — | LessonSeries çakışma kontrolü | Aynı öğretmen veya aynı öğrenci için gün+saat+tarih aralığı çakışan iki `ACTIVE` seri oluşturulamaz (409). Kontrol seri oluşturulurken yapılır, occurrence bazlı değil — Phase 2'de tekil ders/telafi/değişiklik henüz yok, bu yeterli. `Modules/Scheduling/Features/LessonSeriesFeatures.cs`. |
+| — | Ders üretim penceresi | Varsayılan 10 hafta (`Scheduling__GenerationWeeks`), seri oluşturulunca otomatik tetiklenir. Pencereyi elle uzatmak için `POST /api/lesson-series/{id}/generate` — Phase 5'e kadar otomatik/periyodik bir zamanlayıcı yok (bilinçli, master prompt'ta da şart koşulmuyor). |
 
 ## Java yerine .NET — gerekçe
 

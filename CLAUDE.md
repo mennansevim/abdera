@@ -63,6 +63,12 @@ CHECK (amount >= 0)
 
 Kural: bağlantı dizesi, cookie ayarları, CORS origin gibi değerleri **DI çözümlenirken** (`AddDbContext<T>((sp, options) => ...)`, `.AddCookie(options => ...)` gibi deferred delegate'ler içinde) oku, üstte `var` ile eager okuma. İstisna: bir arayüzün hangi somut sınıfa bağlanacağı (`IWhatsAppClient` → `Fake`/`Cloud`) gibi **yapısal DI kayıtları** `Build()`'den önce karar verilmek zorunda — bunlar gerçek ortam değişkenlerini görür, yalnızca `WebApplicationFactory`'nin test-time overlay'ini göremez; bu bilinen ve kabul edilmiş bir sınır, `Program.cs`'teki yorum satırına bak.
 
+## Çok tablolu sorgularda OrderBy sırası
+
+Birden fazla `Join` sonrası özel bir `record`'a projekte eden (`new LessonResponse(...)`) bir sorguda `.OrderBy(...)`'ı bu projeksiyondan **sonra** koyma — EF Core, bir record constructor'ının alanına göre sıralamayı SQL'e çeviremez ve çalışma zamanında "could not be translated" istisnası fırlatır (`Program.cs` build zamanı yakalamaz, yalnızca o satır ilk çalıştığında patlar — testlerde bu endpoint'i gerçekten HTTP üzerinden çağırmazsan fark edilmez, bkz. `Modules/Scheduling/Features/Calendar.cs` ve `PeopleAndSchedulingFlowTests.cs`).
+
+Doğru sıra: `Join(...).Join(...).OrderBy(x => x.Entity.Alan).Select(x => new Response(...))` — sıralama her zaman son projeksiyondan **önce**, ham/anonim ara tip üzerinde yapılır. Yeni bir sorgu handler'ı yazarken bir `record`'a projekte edip hemen ardından `OrderBy` eklemeden önce bunu hatırla; mümkünse handler'ı gerçek bir `WebApplicationFactory` testiyle en az bir kez HTTP üzerinden çağırarak doğrula (yalnızca DB'ye yazılan satırı saymak yetmez).
+
 ## WhatsApp entegrasyonu
 
 `IWhatsAppClient` arayüzünün iki implementasyonu vardır:

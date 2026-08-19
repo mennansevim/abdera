@@ -1,33 +1,43 @@
 # Migration Sırası
 
-EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği Flyway'in yerine (`CLAUDE.md` — stack kararı). Her migration tek modülün tablolarını getirir, önceki migration'ların üzerine FK kurar; sıra bağımlılık grafiğini takip eder (`docs/02-modules.md`).
+EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği Flyway'in yerine (`CLAUDE.md` — stack kararı). Her migration bağımlılık grafiğini takip eder (`docs/02-modules.md`); tek DbContext olduğu için (CLAUDE.md) bir migration birden fazla modülün tablosunu içerebilir — bu durumda master prompt'un phase gruplamasına uyulur (örn. "Phase 2 — People and scheduling" tek migration'dır).
 
-**Not:** aşağıdaki `001_auth`, `002_people`... etiketleri mantıksal/kavramsal sıralamayı gösterir. EF Core migration dosyalarını kendi `<timestamp>_<Ad>` biçimiyle üretir (örn. `20260819204809_InitialAuth.cs`) — dosya adına elle numara eklenmez. Uygulama sırası, dosya adındaki numaraya değil, migration'ların **oluşturulma sırasına** (timestamp) göre belirlenir; bu yüzden migration'lar burada listelenen modül sırasıyla oluşturulmalı.
+**Dosya konumu:** yalnızca tek modülü ilgilendiren migration o modülün `Persistence/Migrations/` altında kalır (örn. `InitialAuth`). Birden fazla modülü ilgilendiren migration'lar `src/Abdera.Api/Persistence/Migrations/` altındaki paylaşılan klasöre gider — belirli bir modülün klasörüne gömülü kalması yanıltıcı olurdu.
 
-```
-001_auth (InitialAuth)     users, audit_log
-002_people                instruments, teachers, teacher_instruments,
-                           students, guardians, student_guardians, enrollments
-003_scheduling            lesson_series, lessons, lesson_change_requests,
-                           teacher_availability, teacher_time_off,
-                           school_calendar_days
-004_attendance            lesson_rsvps, lesson_attendances
-005_pricing               price_lists, price_list_items
-006_billing               fee_plans, receivables, payments, makeup_credits
-007_progress              skill_definitions, lesson_notes,
-                           skill_assessments, practice_assignments
-008_messaging             notification_jobs, whatsapp_messages,
-                           whatsapp_webhook_events, message_templates
-009_seed_reference_data   instruments (piyano/gitar/keman/bateri),
-                           skill_definitions (ortak + enstrümana özel),
-                           message_templates (lesson_reminder_rsvp)
-```
-
-## Seed verisi (009)
+**Not:** aşağıdaki `001_auth`, `002_people`... etiketleri mantıksal/kavramsal sıralamayı gösterir. EF Core migration dosyalarını kendi `<timestamp>_<Ad>` biçimiyle üretir — dosya adına elle numara eklenmez. Uygulama sırası, dosya adındaki numaraya değil, migration'ların **oluşturulma sırasına** (timestamp) göre belirlenir; bu yüzden migration'lar burada listelenen modül sırasıyla oluşturulmalı.
 
 ```
-instruments: PIANO, GUITAR, VIOLIN, DRUMS
+001_auth (InitialAuth)                    users, audit_log
+002_people_and_scheduling                 instruments, teachers, teacher_instruments,
+(PeopleAndScheduling)                     students, guardians, student_guardians,
+                                           enrollments, lesson_series, lessons,
+                                           teacher_availability, teacher_time_off,
+                                           school_calendar_days
+003_seed_instruments (SeedInstruments)    instruments seed verisi (aşağıda)
+004_attendance                            lesson_rsvps, lesson_attendances               -- Phase 3
+005_lesson_change_requests                lesson_change_requests                         -- Phase 3
+006_pricing                               price_lists, price_list_items                  -- Phase 4
+007_billing                               fee_plans, receivables, payments,
+                                           makeup_credits                                -- Phase 4
+008_progress                              skill_definitions, lesson_notes,
+                                           skill_assessments, practice_assignments        -- Phase 6
+009_messaging                             notification_jobs, whatsapp_messages,
+                                           whatsapp_webhook_events, message_templates     -- Phase 5
+010_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
+```
 
+`lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu.
+
+## Seed verisi
+
+**003_seed_instruments** (uygulandı):
+```
+instruments: PIANO (Piyano), GUITAR (Gitar), VIOLIN (Keman), DRUMS (Bateri)
+```
+`INSERT ... ON CONFLICT (code) DO NOTHING` ile yazılır — tekrar çalıştırılabilir (abdera-migration skill kuralı).
+
+**010_seed_skill_definitions** (Phase 6'da eklenecek):
+```
 skill_definitions (ortak, instrument_id=null):
   RHYTHM, TEMPO_CONTROL, SIGHT_READING, MUSICAL_EXPRESSION,
   TECHNIQUE, PRACTICE_DISCIPLINE
@@ -43,4 +53,5 @@ skill_definitions (enstrümana özel):
 
 - Her migration `Up`/`Down` çifti içerir; `Down` gerçekten geri alınabilir olmalı (üretimde hiç çalıştırılmasa da, yerelde test edilir).
 - Yıkıcı işlem (kolon/tablo silme) ayrı bir migration'da, en az bir sürüm sonra yapılır — "expand/contract" yaklaşımı.
-- İlk canlıya almadan önce `dotnet ef database update` boş bir veritabanında baştan sona çalıştırılıp doğrulanır (Phase 0 doğrulama listesindeki madde 1).
+- Her migration, gerçek bir Postgres'e karşı hem ileri (`database update`) hem idempotency (iki kez çalıştırma) açısından doğrulanır — bkz. `docs/09-testing.md` madde 1 ve `MigrationTests.cs`.
+- Uygulama başlangıçta bekleyen migration'ları otomatik uygular (`Database__AutoMigrate=true`, `Shared/DatabaseMigrator.cs`) — `docker compose up` tek başına çalışan bir kurulum verir.

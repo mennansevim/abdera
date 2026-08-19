@@ -2,6 +2,8 @@ using Abdera.Api.Modules.Auth;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
+using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.Scheduling;
 using Abdera.Api.Shared;
 using HealthChecks.NpgSql;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -150,6 +152,8 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 });
 
 app.MapAuthModule();
+app.MapPeopleModule();
+app.MapSchedulingModule();
 
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);
