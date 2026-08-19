@@ -1,0 +1,82 @@
+# Abdera — Çalışma Kuralları
+
+Bu dosya kod yazarken tekrar tekrar anlatılmaması gereken mimari kararları sabitler. Tasarım gerekçeleri için `docs/10-decisions.md`; alan modeli için `docs/02-modules.md` ve `docs/03-erd.md`.
+
+## Stack
+
+.NET 10 (LTS) · ASP.NET Core Minimal API · EF Core 10 + Npgsql · PostgreSQL 16 · FluentValidation · ASP.NET Core Identity · Serilog · Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui + TanStack Query.
+
+Yeni bağımlılık eklemeden önce sor: bu ölçekte (6–8 öğretmen, ~150 öğrenci) gerçekten gerekli mi, yoksa `BackgroundService` / `DbContext` / dahili bir sınıfla zaten çözülüyor mu? Şüpheye düşersen eklemeden bırak, `docs/10-decisions.md`'ye not düş.
+
+## Backend yapısı — modül başına dikey dilim
+
+Master prompt'un `api/application/domain/infrastructure` dört katmanını **kullanma**. Bunun yerine modül başına:
+
+```
+Modules/Billing/
+  Domain/          # entity, enum, invariant — Spring MVC/EF'e bağımlı değil
+  Features/        # her use-case tek dosya: request + handler + endpoint kaydı
+    RecordPayment.cs
+    SendPaymentReminder.cs
+  Persistence/      # IEntityTypeConfiguration<T>, seed data
+```
+
+- **Repository pattern yok.** `AbderaDbContext` zaten Unit of Work + Repository; handler'lar doğrudan ona bağımlı.
+- Tek `AbderaDbContext`, modül başına ayrı context açma.
+- Modüller arası erişim EF navigation property üzerinden değil, açık bir servis/sorgu üzerinden olur — `Billing`, `Scheduling`'in iç entity'lerine doğrudan join atmaz.
+- Use-case büyüdüğünde dosyayı böl, ama "her katman için bir dosya" diye önden bölme.
+
+## Veri kuralları
+
+- Para: `decimal(12,2)` + ayrı `currency` kolonu. **`double`/`float` asla.**
+- Zaman: veritabanında her zaman `timestamptz` (UTC instant). Yerel gösterim/hesaplama `Europe/Istanbul` ile uygulama katmanında yapılır, saat dilimi konfigürasyondan okunur — hardcode etme.
+- Dışa açık kaynak id'leri: UUID. Sıralı int public API'de görünmez.
+- Mutasyona açık her tabloda `created_at`, `updated_at`. Eşzamanlı düzenleme riski olan tablolarda optimistic concurrency (`xmin` veya `rowversion` kolonu).
+- Finansal/audit kayıt **silinmez** — durum kolonu veya soft delete kullanılır (`CancelledAt`, `Status=INACTIVE`).
+- Para, takvim ve rıza (consent) değiştiren her use-case `audit_log`'a yazar: kim, ne zaman, hangi kayıt, önceki/yeni değer.
+
+## Kritik veritabanı kısıtları (bunları migration'dan düşürme)
+
+```
+UNIQUE (lesson_series_id, start_at)                         -- mükerrer ders üretimi engeli
+UNIQUE (type, reference_type, reference_id) ON notification_jobs   -- idempotency anahtarı
+UNIQUE (provider_event_id) ON whatsapp_webhook_events
+UNIQUE (enrollment_id, period) ON receivables
+CHECK (end_at > start_at)
+CHECK (amount >= 0)
+```
+
+`price_list_items`: aynı enstrüman × ders süresi için çakışan yürürlük tarihi aralığı olamaz — uygulama katmanında kontrol edilir (aralık çakışması genel `EXCLUDE` kısıtıyla ifade edilemeyecek kadar tabloya özeldir).
+
+## İş kuralları — kodda unutulmaması gerekenler
+
+- **Fiyat snapshot'ı:** `Receivable` oluşurken tutar `PriceListItem`'dan kopyalanır ve birlikte saklanır (`priceListItemId` + `amount`). Sonraki bir zam geçmiş `Receivable`'ları değiştirmez.
+- **Ders değişince eski job iptali:** bir `Lesson` `RESCHEDULED`/`CANCELLED` olduğunda, o derse bağlı bekleyen (`PENDING`) `NotificationJob` iptal edilir ve gerekiyorsa yeni saate göre yenisi kurulur. Bu invariant'ı bozan her değişiklik testle korunmalı.
+- **Telafi kredisi:** dersten ≥24 saat önce iptal edilirse `MakeupCredit` oluşur (kaynak ders + son kullanma tarihi ile). Habersiz gelmeme (no-show) kredi doğurmaz, ücret tahakkuk eder.
+- **Sessiz saat:** aidat hatırlatması ve doğum günü mesajı gibi zamanlanmış (cron kaynaklı) bildirimler yalnızca `Notifications__QuietHoursStart/End` penceresinde gönderilir; pencere dışı job bir sonraki pencere başına ötelenir. Ders hatırlatması (dersten 1 saat önce) bu kurala tabi değil.
+- **WhatsApp 24 saatlik pencere:** `Guardian.conversationWindowExpiresAt` her gelen mesajda yenilenir. Pencere kapalıyken serbest metin yerine onaylı template kullanılır.
+- **Opt-out:** gelen mesaj `dur`/`iptal`/`stop` içeriyorsa rıza kapatılır, bekleyen job'lar iptal edilir, tek teyit mesajı gönderilir.
+
+## WhatsApp entegrasyonu
+
+`IWhatsAppClient` arayüzünün iki implementasyonu vardır:
+- `FakeWhatsAppClient` — mesajı veritabanına yazar + loglar, Meta hesabı gerektirmez. **Dev/test varsayılanı.**
+- `CloudApiWhatsAppClient` — gerçek Meta Cloud API.
+
+Provider seçimi `WhatsApp__Provider` ortam değişkeninden gelir; kod içinde hardcode edilmez. Yeni bildirim tipi eklerken her iki implementasyonu da güncelle — bkz. `abdera-notification` skill'i.
+
+Webhook imzası (`X-Hub-Signature-256`) her istekte doğrulanır, doğrulanamayan istek reddedilir. Buton payload'larında tahmin edilebilir dahili id kullanılmaz — imzalı/opak referans (`WhatsApp__PayloadSigningKey`) kullanılır.
+
+## Test stratejisi
+
+- Zamanlama, RSVP, ücret hesaplama, ders-değişikliği onay kuralları → **saf birim testi**, gerçek veritabanı gerekmez.
+- Testcontainers **yalnızca** gerçek Postgres davranışı gerektiren durumlarda: migration'lar, `FOR UPDATE SKIP LOCKED` yarışı, unique kısıt ihlalleri, webhook idempotency.
+- Her yeni use-case en az bir mutlu yol + bir invariant-ihlali testiyle gelir.
+
+## Dil
+
+Kod, tip adı, değişken adı, commit mesajı gövdesi: **İngilizce**. Kullanıcı arayüzü metni ve WhatsApp mesaj şablonları: **Türkçe**. Domain terimleri için `docs/01-glossary.md`'deki eşleşmeyi kullan (örn. aidat → `Receivable`, telafi → `MakeupCredit`, veli → `Guardian`).
+
+## Yapılmayacaklar
+
+Mikroservis, Kafka/RabbitMQ/Redis/Kubernetes, Hangfire/Quartz gibi ek zamanlayıcı kütüphanesi, Repository pattern katmanı, sıfır implementasyonlu spekülatif arayüz (örn. AI özet arayüzü Phase 6'dan önce açılmaz), veli/öğrenci mobil uygulaması, online ödeme/e-fatura entegrasyonu — bunların hiçbiri MVP kapsamında değil ve eklenmesi `docs/10-decisions.md` üzerinden açıkça onaylanmadan yapılmaz.

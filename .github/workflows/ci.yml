@@ -1,0 +1,57 @@
+name: CI
+
+# Phase 0: henuz uygulama kodu yok, bu is akisi Phase 1'de aktif hale gelir.
+# Simdilik yalnizca secret sizintisi ve markdown/link kontrolu icin bir iskelet.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  guard-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: .env dosyasi commit'lenmis mi kontrol et
+        run: |
+          if git ls-files | grep -E '^\.env$|^\.env\.[^e]'; then
+            echo "HATA: .env dosyasi repoya commit'lenmis. Repo public - bunu asla yapma."
+            exit 1
+          fi
+          echo "OK: .env commit'lenmemis."
+
+  # Phase 1'den itibaren aktif olacak isler (simdilik yorumda, referans icin):
+  #
+  # backend-build-test:
+  #   runs-on: ubuntu-latest
+  #   services:
+  #     postgres:
+  #       image: postgres:16
+  #       env:
+  #         POSTGRES_PASSWORD: postgres
+  #       options: >-
+  #         --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-dotnet@v4
+  #       with:
+  #         dotnet-version: '10.0.x'
+  #     - run: dotnet restore backend
+  #     - run: dotnet build backend --no-restore
+  #     - run: dotnet test backend --no-build
+  #
+  # frontend-build-lint:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '22'
+  #     - run: npm ci --prefix frontend
+  #     - run: npm run lint --prefix frontend
+  #     - run: npm run build --prefix frontend
