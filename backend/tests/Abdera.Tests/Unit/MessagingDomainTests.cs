@@ -191,6 +191,19 @@ public class MessagingDomainTests
     }
 
     [Fact]
+    public void RsvpButtonPayload_TryVerify_rejects_when_signing_key_is_empty()
+    {
+        // SEC-2: WhatsApp__PayloadSigningKey tanimsiz kalirsa (bos string) imza sabit ve
+        // tahmin edilebilir hale gelir - Sign de ayni bos anahtarla imzalasa bile TryVerify
+        // reddetmeli, aksi halde imzanin var olma amaci (tahmini engellemek) bosa cikar.
+        var payload = RsvpButtonPayload.Sign(RsvpButtonPayload.AttendingAction, Guid.NewGuid(), "");
+
+        var verified = RsvpButtonPayload.TryVerify(payload, "", out _, out _);
+
+        Assert.False(verified);
+    }
+
+    [Fact]
     public void WebhookSignatureVerifier_IsValid_accepts_matching_signature()
     {
         const string body = """{"hello":"world"}""";
@@ -213,5 +226,18 @@ public class MessagingDomainTests
     {
         Assert.False(WebhookSignatureVerifier.IsValid("{}", null, "app-secret"));
         Assert.False(WebhookSignatureVerifier.IsValid("{}", "not-a-signature", "app-secret"));
+    }
+
+    [Fact]
+    public void WebhookSignatureVerifier_IsValid_rejects_when_app_secret_is_empty()
+    {
+        // SEC-1: WhatsApp__AppSecret tanimsiz kalirsa (bos string) HMAC deterministik/tahmin
+        // edilebilir hale gelir - dogru imzayla hesaplansa bile bos secret'ta fail-open olmamali.
+        const string body = """{"hello":"world"}""";
+        var expectedHexWithEmptySecret = Convert.ToHexStringLower(
+            System.Security.Cryptography.HMACSHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(""), System.Text.Encoding.UTF8.GetBytes(body)));
+
+        Assert.False(WebhookSignatureVerifier.IsValid(body, $"sha256={expectedHexWithEmptySecret}", ""));
     }
 }

@@ -159,6 +159,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+ProductionSecretsGuard.EnsureConfigured(app);
+
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
 app.UseCors();

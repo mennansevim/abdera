@@ -26,6 +26,11 @@ public static class RsvpButtonPayload
         action = "";
         lessonId = Guid.Empty;
 
+        // signingKey boşsa (ör. WhatsApp__PayloadSigningKey tanımsız kalmışsa) imza sabit/
+        // tahmin edilebilir hale gelir - bu imzanın var oluş amacı tam olarak bunu engellemekti.
+        if (string.IsNullOrEmpty(signingKey))
+            return false;
+
         var colonIndex = payload.IndexOf(':');
         if (colonIndex < 0) return false;
 

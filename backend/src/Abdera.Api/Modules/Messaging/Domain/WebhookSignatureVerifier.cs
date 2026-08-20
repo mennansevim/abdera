@@ -10,6 +10,13 @@ public static class WebhookSignatureVerifier
 {
     public static bool IsValid(string rawBody, string? signatureHeader, string appSecret)
     {
+        // appSecret boşsa (ör. WhatsApp__AppSecret ortam değişkeni tanımsız kalmışsa) HMAC'i
+        // boş anahtarla hesaplamak deterministik/tahmin edilebilir bir sonuç üretir - bu da
+        // imza doğrulamasını sessizce fail-open yapar. Bkz. Modules/Banking/Features/Webhooks.cs
+        // VerifySharedSecret ile aynı desen.
+        if (string.IsNullOrEmpty(appSecret))
+            return false;
+
         if (string.IsNullOrWhiteSpace(signatureHeader) || !signatureHeader.StartsWith("sha256="))
             return false;
 

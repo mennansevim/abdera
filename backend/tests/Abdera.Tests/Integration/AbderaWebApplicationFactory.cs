@@ -37,6 +37,11 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
             {
                 ["ConnectionStrings:Default"] = _postgres.GetConnectionString(),
                 ["WhatsApp:Provider"] = "Fake",
+                // SEC-1/SEC-2: WebhookSignatureVerifier/RsvpButtonPayload artik bos anahtarda
+                // fail-closed olduklarindan testlerin gercekci (bos olmayan) bir test secret'i
+                // olmasi lazim - bkz. MessagingFlowTests.
+                ["WhatsApp:AppSecret"] = "test-webhook-app-secret",
+                ["WhatsApp:PayloadSigningKey"] = "test-payload-signing-key",
                 ["Bootstrap:AdminEmail"] = "admin@test.local",
                 ["Bootstrap:AdminPassword"] = "Test1234!",
                 // NotificationDispatcher testlerinin gerçek 60 saniye beklemesine gerek kalmasın diye.

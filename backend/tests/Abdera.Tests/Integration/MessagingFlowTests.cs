@@ -376,10 +376,10 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             },
         });
 
-        // appsettings.json/test override'ında WhatsApp:AppSecret tanımlı değil -> Webhooks.cs
-        // boş string'e düşer; burada da aynı boş anahtarla imzalıyoruz.
+        // AbderaWebApplicationFactory'nin test override'ındaki WhatsApp:AppSecret ile aynı
+        // anahtarla imzalıyoruz (SEC-1 sonrası boş anahtar Webhooks.cs'te fail-closed).
         var signature = "sha256=" + Convert.ToHexStringLower(
-            HMACSHA256.HashData(Encoding.UTF8.GetBytes(""), Encoding.UTF8.GetBytes(body)));
+            HMACSHA256.HashData(Encoding.UTF8.GetBytes("test-webhook-app-secret"), Encoding.UTF8.GetBytes(body)));
 
         async Task<HttpResponseMessage> PostOnceAsync()
         {

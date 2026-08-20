@@ -85,6 +85,8 @@ rsvp_attending:e0b5c3a9f2...   (HMAC ile WhatsApp__PayloadSigningKey kullanılar
 
 Sunucu, gelen payload'ı doğrulamadan hiçbir lesson/guardian eşlemesi yapmaz — imza tutmuyorsa istek `422` ile reddedilir ve olay `FAILED` olarak loglanır.
 
+**Boş anahtar fail-closed'dır (denetim SEC-1/SEC-2, bkz. `docs/13-audit-fix-prompt.md`):** `WhatsApp__AppSecret` ve `WhatsApp__PayloadSigningKey` boş/tanımsızsa `WebhookSignatureVerifier.IsValid` ve `RsvpButtonPayload.TryVerify` doğrudan `false` döner — boş anahtarla HMAC hesaplayıp deterministik/tahmin edilebilir bir sonuçla karşılaştırmaz. Ayrıca `Program.cs`'teki `ProductionSecretsGuard`, `Production` ortamında bu iki değişken tanımsızsa uygulamanın başlamasını tamamen engeller (Development'ta zorunlu değil — `Fake` sağlayıcı bunları hiç kullanmaz).
+
 ## Konuşma penceresi (24 saat) — A7
 
 `Guardian.conversation_window_expires_at` her **gelen** mesajda `now() + 24h` olarak güncellenir. Deterministik intent'lere (`ders`, `aidat`, `telafi`, `okula yaz`) serbest metinle cevap verilirken:

@@ -129,3 +129,29 @@ Gönderen adı tek başına güvenilmez (farklı hesaptan gönderim, aynı isiml
 ### Kalan iş: Git
 
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.
+
+## Denetim düzeltmeleri — SEC-1 (Kritik) + SEC-2 (Yüksek): webhook/RSVP imzasında boş secret fail-open
+
+`docs/13-audit-fix-prompt.md`'deki 14 maddelik denetim listesinin ilk iki maddesi. `WebhookSignatureVerifier.IsValid` ve `RsvpButtonPayload.TryVerify`, `appSecret`/`signingKey` boş/tanımsız olduğunda ayrı bir kontrol yapmadan boş anahtarla HMAC hesaplayıp karşılaştırıyordu — bu deterministik bir sonuç ürettiğinden, `WhatsApp__AppSecret`/`WhatsApp__PayloadSigningKey` canlıda tanımsız kalırsa imza doğrulaması sessizce herkese açık (fail-open) hale geliyordu.
+
+### Yapılanlar
+
+- Her iki metoda da `Modules/Banking/Features/Webhooks.cs`'teki `VerifySharedSecret` ile aynı desende bir guard eklendi: anahtar boşsa doğrudan `false`.
+- **`Shared/ProductionSecretsGuard.cs`** eklendi — `Program.cs`'te `builder.Build()`'den hemen sonra çağrılıyor, `Production` ortamında bu iki değişkenden biri boşsa uygulama `InvalidOperationException` ile başlamayı reddediyor (Development'ta zorunlu değil).
+- `Unit/MessagingDomainTests.cs`'e boş anahtarda her iki fonksiyonun da reddettiğini doğrulayan iki test eklendi; `Unit/ProductionSecretsGuardTests.cs` (4 test) startup guard'ı kapsıyor.
+- `Integration/AbderaWebApplicationFactory.cs`'teki test konfigürasyonuna gerçek (boş olmayan) bir `WhatsApp:AppSecret`/`WhatsApp:PayloadSigningKey` eklendi — daha önce ikisi de boştu, `MessagingFlowTests.Webhook_does_not_reprocess_a_duplicate_provider_event_id` de boş anahtarla imzalıyordu; artık test secret'ıyla imzalıyor.
+- `docs/06-whatsapp.md`'ye fail-closed davranışı ve `ProductionSecretsGuard`'ı açıklayan bir not eklendi.
+
+### Testler
+
+`dotnet test` → 147/147 yeşil (141 + 6 yeni: 2 imza guard testi + 4 `ProductionSecretsGuard` testi).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+`.env`'de `WhatsApp__AppSecret` geçici olarak boşaltılıp `api` yeniden başlatıldı (Development'ta kasıtlı olarak hâlâ ayağa kalkıyor — guard yalnızca Production'da zorunlu kılıyor): boş anahtarla hesaplanmış geçerli bir HMAC ile `/api/webhooks/whatsapp`'a istek atıldığında `401` döndü (düzeltmeden önce bu istek `200` dönerdi). `.env` gerçek `dev-app-secret` değerine geri alınıp `api` yeniden başlatıldı, aynı body gerçek secret'la imzalandığında `200` döndü ve `/health` `Healthy` kaldı — regresyon yok.
+
+Not: bu doğrulama sırasında frontend (`web`) servisinin `docker-compose up --build` sırasında `next build` adımında `SIGKILL` ile başarısız olduğu görüldü (muhtemelen build container'ının bellek limiti) — bu, bu maddenin değişikliğiyle ilgisiz, önceden var olan bir ortam kısıtı; yalnızca `db`+`api` ayağa kaldırılarak doğrulama tamamlandı. Frontend build'i ayrı bir not olarak burada kayda geçiriliyor, henüz düzeltilmedi.
+
+### Kalan iş
+
+Henüz commit yok - denetim listesindeki madde 2 (RSVP) SEC-1 ile birlikte tek commit'te yapıldı (aynı zafiyet sınıfı, aynı dosyalarda küçük değişiklik). Sıradaki madde: SEC-3 (giriş ekranında rate limiting).
