@@ -105,7 +105,19 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
         int maxAttempts, ILogger logger, CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
-        var message = await NotificationMessageBuilder.BuildAsync(job, db, clock);
+        BuiltMessage? message;
+        try
+        {
+            message = await NotificationMessageBuilder.BuildAsync(job, db, clock);
+        }
+        catch (NotImplementedNotificationTypeException)
+        {
+            // ARC-2: "ilgili kayıt bulunamıyor" gibi yanıltıcı bir hata yerine panelde
+            // neden başarısız olduğu açıkça okunsun.
+            job.MarkFailed("Bu bildirim tipi henüz uygulanmadı (Faz 7).", maxAttempts, now);
+            return;
+        }
+
         if (message is null)
         {
             job.MarkFailed("İlgili kayıt (ders/aidat) artık bulunamıyor veya bu tip için mesaj oluşturulamadı.", maxAttempts, now);

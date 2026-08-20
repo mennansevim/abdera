@@ -20,6 +20,12 @@ public static class NotificationMessageBuilder
             NotificationJobType.LessonRescheduled => await BuildLessonMessageAsync(job, "lesson_rescheduled", db, clock),
             NotificationJobType.MakeupApproved => await BuildLessonMessageAsync(job, "makeup_approved", db, clock),
             NotificationJobType.PaymentReminder => await BuildPaymentMessageAsync(job, db, clock),
+            // ARC-2: Birthday/PackageEnding tanımlı ama hiçbir use-case tarafından
+            // üretilmiyor (Faz 7'ye kaldı) - sessizce null dönüp yanıltıcı bir "kayıt
+            // bulunamadı" hatasına düşmek yerine dispatcher'ın yakalayıp okunur bir
+            // LastError yazabileceği özel bir istisna fırlatılır.
+            NotificationJobType.Birthday or NotificationJobType.PackageEnding =>
+                throw new NotImplementedNotificationTypeException(job.Type),
             _ => null,
         };
     }

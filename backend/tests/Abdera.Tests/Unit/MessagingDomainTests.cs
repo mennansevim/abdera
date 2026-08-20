@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Shared;
 
 namespace Abdera.Tests.Unit;
@@ -106,6 +107,22 @@ public class MessagingDomainTests
         job.RetryManually(Now);
 
         Assert.Equal(NotificationJobStatus.Pending, job.Status);
+    }
+
+    [Theory]
+    [InlineData(NotificationJobType.Birthday)]
+    [InlineData(NotificationJobType.PackageEnding)]
+    public async Task NotificationMessageBuilder_BuildAsync_throws_for_types_no_use_case_produces_yet(NotificationJobType type)
+    {
+        // ARC-2: bu tipler hiçbir use-case tarafından üretilmiyor (bilinçli eksik, bkz.
+        // docs/05-state-models.md) - ama BuildAsync sessizce null dönüp dispatcher'ı
+        // yanıltıcı bir "kayıt bulunamadı" hatasına düşürmemeli, açık bir istisna fırlatmalı.
+        // Exception yolu db/clock'a hiç dokunmadığı için burada gerçek bir DbContext'e
+        // gerek yok - bu test saf birim testi olarak kalıyor.
+        var job = NotificationJob.Create(type, "+905551234567", "guardian", Guid.NewGuid(), Now.AddHours(1), Now);
+
+        await Assert.ThrowsAsync<NotImplementedNotificationTypeException>(
+            () => NotificationMessageBuilder.BuildAsync(job, null!, null!));
     }
 
     [Theory]

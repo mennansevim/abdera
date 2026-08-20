@@ -42,6 +42,8 @@ stateDiagram-v2
 
 Kural: `PARENT_REJECTED` durumunda sistem **sessizce** takvimi tekrar değiştirmez — talep `PENDING`'e döner ve yönetici ekranında "dikkat" olarak görünür (master prompt gereksinimi, `docs/00-master-prompt.md` "Lesson change" akışı).
 
+**Bilinçli eksik (denetim ARC-2, `docs/13-audit-fix-prompt.md`):** `ALTERNATIVE_PROPOSED`, `PARENT_CONFIRMATION_PENDING`, `PARENT_ACCEPTED`, `PARENT_REJECTED` yukarıdaki diyagramda tasarlanmış durumlardır ama bugün hiçbir use-case tarafından üretilmiyorlar (`LessonChangeRequestStatus` enum'unda tanımlı, kodda hiçbir yerde set edilmiyor) - bugünkü akış yalnızca `PENDING -> APPROVED/REJECTED`'i uyguluyor. Veliye alternatif saat önerme akışı Faz 7'ye kaldı; bu dört durum için ayrı bir kod değişikliği gerekmiyor, yalnızca gerçekten uygulanana kadar üretilmemeleri bilinçli.
+
 ## LessonRsvp.response
 
 ```mermaid

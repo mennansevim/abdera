@@ -296,4 +296,27 @@ Push edildi (732a1cf). Sıradaki madde: ARC-1 (optimistic concurrency).
 
 ### Kalan iş
 
+Push edildi (1bb45e8). Sıradaki madde: ARC-2 (üretilmeyen bildirim tipleri sessizce FAILED'a düşüyor).
+
+## Denetim düzeltmeleri — ARC-2 (Orta): tanımlı ama üretilmeyen bildirim tipleri yanıltıcı FAILED hatası veriyordu
+
+`docs/13-audit-fix-prompt.md` madde 9. `NotificationJobType.Birthday`/`PackageEnding` hiçbir use-case tarafından üretilmiyor; böyle bir job her nasılsa oluşursa `NotificationMessageBuilder.BuildAsync` sessizce `null` dönüyor, dispatcher da bunu "ilgili kayıt bulunamıyor" gibi yanıltıcı bir hatayla `FAILED`'a düşürüyordu.
+
+### Yapılanlar
+
+1. Yeni `Modules/Messaging/Domain/NotImplementedNotificationTypeException.cs` eklendi.
+2. `NotificationMessageBuilder.BuildAsync`'in switch'ine `Birthday`/`PackageEnding` için bu istisnayı fırlatan bir dal eklendi.
+3. `NotificationDispatcher.SendOneAsync` bu istisnayı yakalayıp `job.MarkFailed("Bu bildirim tipi henüz uygulanmadı (Faz 7).", ...)` ile açık bir hata yazıyor.
+4. `docs/05-state-models.md`'ye `LessonChangeRequestStatus`'ün dört veli-etkileşimi durumunun (`AlternativeProposed`/`ParentConfirmationPending`/`ParentAccepted`/`ParentRejected`) hâlâ hiçbir yerde üretilmediğini doğrulayan bir "bilinçli eksik" notu eklendi (grep ile teyit edildi - yalnızca enum tanımında var, kodda hiç set edilmiyor).
+
+### Testler
+
+`Unit/MessagingDomainTests.cs`'e `[Theory]` ile iki tip için `BuildAsync`'in `NotImplementedNotificationTypeException` fırlattığını doğrulayan bir test eklendi (bu istisna db/clock'a hiç dokunmadan fırlatıldığı için gerçek DbContext gerekmiyor, saf birim testi). `dotnet test` → 153/153 yeşil (151 + 2 yeni).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+Hiçbir use-case `Birthday` job'ı üretmediğinden, gerçek bir tane doğrudan SQL ile eklendi. İlk denemede dispatcher job'ı sessiz saat (A6, `Notifications:QuietHoursStart/End=21:00/09:00`) içinde bulup ertesi sabaha erteledi - bu, ARC-2 ile ilgisiz, zaten çalışan bir davranıştı (kısa süre kafa karıştırdı). Sessiz saat penceresini geçici olarak daraltıp (`03:00-03:01`) dispatch aralığını hızlandırarak (`5sn`) job yeniden tetiklendi: 5 deneme sonunda `Failed` durumuna düştü ve `last_error` tam olarak `"Bu bildirim tipi henüz uygulanmadı (Faz 7)."` oldu - panelde artık neden başarısız olduğu okunur. `.env` orijinaline geri alındı.
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.
