@@ -13,21 +13,20 @@ public class WhatsAppOptions
 }
 
 // WhatsApp__Provider=Cloud. Meta WhatsApp Business Cloud API - gerçek gönderim.
-// docs/06-whatsapp.md - approved template kullanır, serbest metin göndermez (24 saat
-// penceresi kontrolü çağıran use-case'in sorumluluğu, bkz. docs/10-decisions.md A7).
+// docs/06-whatsapp.md - SendTemplateAsync onaylı şablon kullanır (business-initiated);
+// SendFreeTextAsync yalnızca 24 saatlik pencere açıkken kullanılabilir - bu kontrol
+// çağıran use-case'in sorumluluğu (docs/10-decisions.md A7), burada zorlanmaz.
 public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOptions> options, ILogger<CloudApiWhatsAppClient> logger)
     : IWhatsAppClient
 {
     private readonly WhatsAppOptions _options = options.Value;
 
-    public async Task<WhatsAppSendResult> SendTemplateAsync(
+    public Task<WhatsAppSendResult> SendTemplateAsync(
         string toPhoneNumber,
         string templateName,
         IReadOnlyDictionary<string, string> parameters,
         CancellationToken cancellationToken = default)
     {
-        var url = $"https://graph.facebook.com/{_options.ApiVersion}/{_options.PhoneNumberId}/messages";
-
         var payload = new
         {
             messaging_product = "whatsapp",
@@ -47,6 +46,26 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
                 },
             },
         };
+
+        return SendAsync(payload, cancellationToken);
+    }
+
+    public Task<WhatsAppSendResult> SendFreeTextAsync(string toPhoneNumber, string body, CancellationToken cancellationToken = default)
+    {
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "text",
+            text = new { body },
+        };
+
+        return SendAsync(payload, cancellationToken);
+    }
+
+    private async Task<WhatsAppSendResult> SendAsync(object payload, CancellationToken cancellationToken)
+    {
+        var url = $"https://graph.facebook.com/{_options.ApiVersion}/{_options.PhoneNumberId}/messages";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.AccessToken);

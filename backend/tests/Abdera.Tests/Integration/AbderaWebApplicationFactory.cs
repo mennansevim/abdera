@@ -39,6 +39,8 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 ["WhatsApp:Provider"] = "Fake",
                 ["Bootstrap:AdminEmail"] = "admin@test.local",
                 ["Bootstrap:AdminPassword"] = "Test1234!",
+                // NotificationDispatcher testlerinin gerçek 60 saniye beklemesine gerek kalmasın diye.
+                ["Notifications:DispatchIntervalSeconds"] = "1",
             });
         });
     }

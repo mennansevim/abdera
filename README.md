@@ -18,7 +18,7 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 
 ## Durum
 
-**Phase 4 — fiyatlandırma ve aidat.** Admin fiyat listesi tanımlıyor (enstrüman × süre × aylık/paket), bir kayda ücret planı açıyor, aidat (`Receivable`) üretiyor ve nakit/havale/kart/diğer ödeme kaydediyor — durum otomatik güncelleniyor (ödenmedi/kısmi/ödendi), vadesi geçenler saatlik bir arka plan işiyle otomatik "vadesi geçti" oluyor. Toplu zam önizlemeli uygulanıyor ve geçmiş aidatları geriye dönük etkilemiyor (tutar snapshot alınıyor). Hepsi `docker compose up` ile uçtan uca doğrulandı. WhatsApp henüz yok — Phase 5'ten itibaren geliyor.
+**Phase 5 — WhatsApp.** Ders serisi/erteleme/telafi/aidat akışları artık `INotificationScheduler` portu üzerinden otomatik bildirim job'ı açıyor (`notification_jobs`, `UNIQUE(type,reference_type,reference_id)` ile idempotent). `NotificationDispatcher` (`BackgroundService` + `FOR UPDATE SKIP LOCKED`) her dakika bekleyen job'ları alıp `IWhatsAppClient` üzerinden gönderiyor — sessiz saat dışına düşen cron kaynaklı bildirimler (aidat/doğum günü/paket bitişi) bir sonraki pencereye ötelenir, ders hatırlatması bu kurala tabi değil. Gelen webhook imzası (`X-Hub-Signature-256`) doğrulanıyor, RSVP butonları HMAC ile imzalı opak referans taşıyor, deterministik intent'ler (`ders`/`aidat`/`telafi`/`okula yaz`) ve opt-out (`dur`/`iptal`/`stop`) çalışıyor. Meta hesabı olmadan uçtan uca test için dev-only `POST /api/dev/whatsapp/simulate-text` ve `simulate-rsvp` var (`WhatsApp__Provider=Fake` varsayılan - D2). Hepsi `docker compose up` ile uçtan uca doğrulandı; ayrıntılı ilerleme günlüğü `docs/11-progress-log.md`.
 
 | Faz | Kapsam | Durum |
 |---|---|---|
@@ -26,8 +26,8 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 | 1 | İskelet: Compose + Postgres + API + web + auth | ✅ |
 | 2 | Kişiler ve takvim | ✅ |
 | 3 | Devam, RSVP, ders değişikliği | ✅ |
-| 4 | Fiyatlandırma ve aidat | ✅ Bu commit |
-| 5 | WhatsApp | ⬜ |
+| 4 | Fiyatlandırma ve aidat | ✅ |
+| 5 | WhatsApp | ✅ Bu commit |
 | 6 | Gelişim takibi ve hatırlatmalar | ⬜ |
 | 7 | Sağlamlaştırma ve devreye alma | ⬜ |
 
@@ -41,7 +41,7 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 | Veri | PostgreSQL 16 · EF Core 10 + Npgsql |
 | Doğrulama | FluentValidation |
 | Kimlik | `PasswordHasher<T>` + httpOnly cookie oturumu (tam ASP.NET Core Identity değil — kendi minimal `users` tablomuz var) |
-| Zamanlayıcı | `BackgroundService` + `PeriodicTimer` (Postgres `FOR UPDATE SKIP LOCKED`) — Phase 5'te geliyor |
+| Zamanlayıcı | `BackgroundService` + `PeriodicTimer` (Postgres `FOR UPDATE SKIP LOCKED`) — `NotificationDispatcher`, Phase 5 |
 | Log / sağlık | Serilog · `HealthChecks` |
 | Frontend | Next.js 16 (App Router) · TypeScript · Tailwind · TanStack Query (shadcn/ui Phase 2'de UI büyüyünce eklenecek) |
 | Test | xUnit · `WebApplicationFactory` · Testcontainers (yalnızca gerçek Postgres gerekenlerde) |
@@ -91,7 +91,7 @@ docker compose up
 
 İlk giriş: `.env`'deki `Bootstrap__AdminEmail` / `Bootstrap__AdminPassword` ile — yalnızca `users` tablosu boşken bir kere çalışır, ilk girişte kalıcı şifre belirlemen istenir.
 
-WhatsApp geliştirmesi Meta hesabı olmadan yapılabilir: `WhatsApp__Provider=Fake` (varsayılan) giden mesajları loglar, gerçek bir API çağrısı yapmaz. Gelen webhook'u taklit eden dev-only uç nokta, `Messaging` modülüyle birlikte Phase 5'te geliyor. Ayrıntı: [`docs/06-whatsapp.md`](docs/06-whatsapp.md).
+WhatsApp geliştirmesi Meta hesabı olmadan yapılabilir: `WhatsApp__Provider=Fake` (varsayılan) giden mesajları loglar, gerçek bir API çağrısı yapmaz. Gelen webhook'u taklit eden dev-only uç noktalar (`POST /api/dev/whatsapp/simulate-text`, `simulate-rsvp` — yalnızca Development ortamı) RSVP/opt-out/deterministik intent akışlarını Meta hesabı olmadan uçtan uca test etmeyi sağlıyor. Ayrıntı: [`docs/06-whatsapp.md`](docs/06-whatsapp.md).
 
 ### Testler
 

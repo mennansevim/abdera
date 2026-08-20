@@ -1,5 +1,8 @@
 using System.Security.Claims;
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +46,8 @@ public static class MakeupCredits
         return Results.Ok(credits);
     }
 
-    private static async Task<IResult> UseAsync(Guid creditId, UseRequest request, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> UseAsync(
+        Guid creditId, UseRequest request, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
     {
         if (request.DurationMinutes <= 0)
             throw new ValidationFailedException(new Dictionary<string, string[]> { ["durationMinutes"] = ["Süre pozitif olmalı."] });
@@ -65,6 +69,12 @@ public static class MakeupCredits
         db.Lessons.Add(makeupLesson);
 
         credit.Use(makeupLesson.Id, clock.UtcNow);
+
+        var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, credit.StudentId);
+        if (primaryGuardianId is { } guardianId)
+        {
+            await scheduler.ScheduleAsync(NotificationJobType.MakeupApproved, "lesson", makeupLesson.Id, guardianId, clock.UtcNow);
+        }
 
         await db.SaveChangesAsync();
         return Results.Ok(new UseResponse(credit.Id, makeupLesson.Id));

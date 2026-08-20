@@ -75,6 +75,12 @@ Doğru sıra: `Join(...).Join(...).OrderBy(x => x.Entity.Alan).Select(x => new R
 
 Kural: her zaman `System.Text.Json.JsonSerializer.Serialize(new { ... })` kullan — hem kültürden bağımsızdır (JSON sayıları her zaman `.` ile yazar) hem kaçışı otomatik yapar. Program.cs ayrıca uygulamanın varsayılan thread kültürünü `CultureInfo.InvariantCulture`'a sabitler (savunma katmanı) — ama bu, `JsonSerializer` kullanma kuralının yerini tutmaz, yalnızca ek güvenlik.
 
+## Kullanıcıya gösterilecek metinde `new CultureInfo("tr-TR")` kullanıyorsan Dockerfile'ı kontrol et
+
+WhatsApp mesajı/tarih-para gösterimi gibi **veliye görünecek** metinlerde (yukarıdaki JSON kuralının tersine) `CultureInfo.GetCultureInfo("tr-TR")` ile açık biçimlendirme doğru ve gereklidir — ama Microsoft'un resmi `mcr.microsoft.com/dotnet/aspnet:*-alpine` imajı `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true`'yu **varsayılan** taşır. Bu env değişkeni açıkken Dockerfile'da `icu-data-full` kurulu olsa bile .NET ICU'yu hiç yüklemez ve herhangi bir adlandırılmış kültür çağrısı (`new CultureInfo("tr-TR")` / `CultureInfo.GetCultureInfo("tr-TR")`) `CultureNotFoundException` fırlatır — yalnızca invariant kültür desteklenir.
+
+Gerçek bir prod bug'ı olarak Faz 5'te bulundu: `NotificationDispatcher`, WhatsApp mesaj metnini tr-TR formatında biçimlendirmeye çalışırken bu istisnayı fırlatıp job'ları sessizce `FAILED`'a düşürüyordu — yerel test koşusu (macOS/Linux, Alpine değil) bunu hiç yakalamadı, yalnızca `docker compose up` ile canlı denemede ortaya çıktı. Kural: Dockerfile'da `icu-data-full` kurulumundan hemen sonra `ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false` satırının durduğunu doğrula — biri diğeri olmadan işe yaramaz. Yeni bir named-culture çağrısı eklerken mutlaka `docker compose up` ile canlı doğrula, birim testi bu sınıf bug'ı yakalamaz (bkz. `docs/11-progress-log.md` Faz 5 notu).
+
 ## WhatsApp entegrasyonu
 
 `IWhatsAppClient` arayüzünün iki implementasyonu vardır:

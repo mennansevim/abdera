@@ -18,6 +18,7 @@ const LINKS = [
 const ADMIN_ONLY_LINKS = [
   { href: "/dashboard/change-requests", label: "Değişiklik Talepleri" },
   { href: "/dashboard/billing", label: "Aidatlar" },
+  { href: "/dashboard/notifications", label: "Bildirimler" },
 ];
 
 export function AppHeader({ me }: { me: Me }) {

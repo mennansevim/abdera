@@ -19,7 +19,10 @@ Modules/
 
 ```
 Dashboard  → (okur) People, Scheduling, Attendance, Billing, Messaging
-Messaging  → (tetikler) Scheduling, Billing, Attendance olaylarını; kendi verisine sahip
+Scheduling/Billing → (tetikler) Messaging'i `INotificationScheduler` portu üzerinden (Phase 5,
+             uygulandı) - Messaging'in kendi entity'lerine doğrudan bağımlı olmadan job açar
+Messaging  → (yazar) Attendance'a - WhatsApp RSVP butonu `LessonRsvp` oluşturur/günceller
+             (Phase 5); kendi verisine (notification_jobs, whatsapp_messages, ...) sahip
 Billing    → People (kim borçlu), Pricing (tutar), Scheduling (hangi ders paketten düşer)
 Attendance → Scheduling (hangi Lesson), People (hangi Guardian/Teacher)
 Scheduling → People (hangi Student/Teacher/Instrument)

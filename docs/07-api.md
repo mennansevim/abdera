@@ -1,6 +1,6 @@
 # İlk REST API Yüzeyi
 
-Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit ve TeacherTimeOff uç noktaları var (A1, A2, A3). `✅` işaretli satırlar Phase 1–3'te gerçekten uygulandı; işaretsiz olanlar henüz yok (Phase 4+).
+Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit ve TeacherTimeOff uç noktaları var (A1, A2, A3). `✅` işaretli satırlar Phase 1–5'te gerçekten uygulandı; işaretsiz olanlar henüz yok (Phase 6+, Progress modülünün kalanı).
 
 ```
 POST   /api/auth/login                          ✅
@@ -48,7 +48,7 @@ POST   /api/lessons/{lessonId}/cancel           ✅ eklendi - doğrudan iptal, A
 GET    /api/school-calendar-days                ✅ A3: tatiller ve okul etkinlikleri
 POST   /api/school-calendar-days                ✅
 
-GET    /api/lessons/{lessonId}/rsvp             ✅ eklendi - WhatsApp'a kadar (Phase 5) Admin elle girer
+GET    /api/lessons/{lessonId}/rsvp             ✅ eklendi - source=ADMIN (Phase 3) veya source=WHATSAPP (Phase 5, buton yanıtı)
 POST   /api/lessons/{lessonId}/rsvp             ✅ eklendi
 GET    /api/lessons/{lessonId}/attendance       ✅
 POST   /api/lessons/{lessonId}/attendance       ✅ Teacher(kendi)/Admin(override, audit'e düşer)
@@ -70,16 +70,17 @@ POST   /api/receivables                         ✅ aktif FeePlan'dan snapshot a
 POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edilemez
 POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
 GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
-POST   /api/receivables/{receivableId}/send-reminder   -- Messaging'e bağımlı, Phase 5
+POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar
 
 GET    /api/students/{studentId}/makeup-credits  ✅ A2
 POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar
 
-GET    /api/notifications
-POST   /api/notifications/{notificationId}/retry
-GET    /api/webhooks/whatsapp
-POST   /api/webhooks/whatsapp
-POST   /api/dev/whatsapp/simulate-webhook        -- yalnızca Development ortamı
+GET    /api/notifications                        ✅ ?status= filtresiyle, admin panel listesi
+POST   /api/notifications/{notificationId}/retry ✅ yalnızca FAILED durumundan
+GET    /api/webhooks/whatsapp                    ✅ Meta abonelik doğrulama handshake'i
+POST   /api/webhooks/whatsapp                    ✅ imza doğrulama + idempotency + RSVP/opt-out/intent yönlendirme
+POST   /api/dev/whatsapp/simulate-text           ✅ yalnızca Development - serbest metin/opt-out testi
+POST   /api/dev/whatsapp/simulate-rsvp           ✅ yalnızca Development - imzalı RSVP butonu testi
 
 GET    /api/dashboard/today
 ```

@@ -21,6 +21,16 @@ WORKDIR /app
 # okulun kendi yerel ayarı tr-TR olduğu için varsayılan icu-data-en yetersiz kalır).
 RUN apk add --no-cache tzdata krb5-libs icu-libs icu-data-full
 
+# Microsoft'un resmi aspnet:alpine imajı DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true'yu
+# VARSAYILAN olarak taşır (imaj boyutunu küçük tutmak için) - yukarıda icu-data-full'u
+# kursak bile bu env değişkeni devredeyken .NET ICU'yu hiç yüklemeye çalışmaz ve
+# `new CultureInfo("tr-TR")` gibi herhangi bir adlandırılmış kültür çağrısı
+# CultureNotFoundException fırlatır (yalnızca "invariant culture" desteklenir).
+# Gerçek bir prod bug'ı olarak bulundu (bkz. NotificationDispatcher/NotificationMessageBuilder,
+# Phase 5) - LessonReminder job'ları veliye tr-TR biçimli tarih/saat göndermeye çalışırken
+# sessizce FAILED'a düşüyordu. Bu satır icu-data-full kurulumunu gerçekten etkin kılar.
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
 # Auth__KeysDirectory (Data Protection anahtarları) buraya yazılır - bir volume ile
 # eşleşecek, "app" kullanıcısının (1654:1654) yazabilmesi için COPY'den önce oluşturulup
 # sahiplik veriliyor; COPY --chown olmadan varsayılan olarak root sahipli gelirdi.

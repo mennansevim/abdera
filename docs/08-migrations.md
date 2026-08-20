@@ -18,13 +18,17 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
 (AttendanceChangesAndProgress)            lesson_notes, lesson_rsvps, makeup_credits     -- Phase 3
 005_pricing_and_billing                   fee_plans, payments, price_list_items,
 (PricingAndBilling)                       price_lists, receivables                       -- Phase 4
-006_progress                              skill_definitions, skill_assessments,
+006_messaging (Messaging)                 notification_jobs, whatsapp_messages,
+                                           whatsapp_webhook_events, message_templates     -- Phase 5, uygulandı
+007_seed_message_templates                message_templates seed verisi (aşağıda)        -- Phase 5, uygulandı
+(SeedMessageTemplates)
+008_progress                              skill_definitions, skill_assessments,
                                            practice_assignments                          -- Phase 6
                                            (lesson_notes zaten 004'te - Phase 3'te gerekliydi)
-007_messaging                             notification_jobs, whatsapp_messages,
-                                           whatsapp_webhook_events, message_templates     -- Phase 5
-008_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
+009_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
 ```
+
+Not: Messaging, Progress'ten (Phase 6) önce geldi çünkü Phase 5 fiilen Phase 6'dan önce uygulandı — bu dosyanın Phase 4 sonrası bölümü önceden plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not").
 
 `lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu. Aynı şekilde `lesson_change_requests` (Scheduling), `lesson_rsvps`/`lesson_attendances` (Attendance), `lesson_notes` (Progress'in bir dilimi) ve `makeup_credits` (Billing'in bir dilimi) Phase 3'ün tek migration'ında birlikte geldi; Pricing ve Billing'in kalanı (`price_lists`, `price_list_items`, `fee_plans`, `receivables`, `payments`) Phase 4'te tek migration'da birlikte geldi — `docs/02-modules.md`'deki "Kısmi açılan modüller" notuna bak.
 
@@ -35,6 +39,16 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
 instruments: PIANO (Piyano), GUITAR (Gitar), VIOLIN (Keman), DRUMS (Bateri)
 ```
 `INSERT ... ON CONFLICT (code) DO NOTHING` ile yazılır — tekrar çalıştırılabilir (abdera-migration skill kuralı).
+
+**007_seed_message_templates** (uygulandı, Phase 5):
+```
+message_templates:
+  lesson_reminder_rsvp  -- docs/06-whatsapp.md'deki tam metin, Meta onayı bekliyor (D2)
+  lesson_rescheduled    -- kendi taslağımız, Meta onayı bekliyor
+  makeup_approved       -- kendi taslağımız, Meta onayı bekliyor
+  payment_reminder      -- kendi taslağımız, Meta onayı bekliyor
+```
+`INSERT ... ON CONFLICT (name) DO NOTHING` ile yazılır. Meta onayı gelene kadar `WhatsApp__Provider=Fake` ile geliştirme paralel ilerler (D2) - şablon adı/parametre isimleri değişirse bu migration'a yeni bir migration ile `UPDATE` eklenir, var olan satır elle düzenlenmez.
 
 **010_seed_skill_definitions** (Phase 6'da eklenecek):
 ```

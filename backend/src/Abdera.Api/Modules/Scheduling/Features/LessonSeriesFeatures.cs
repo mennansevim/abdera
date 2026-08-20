@@ -1,3 +1,6 @@
+using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
@@ -32,7 +35,8 @@ public static class LessonSeriesFeatures
         group.MapPost("/{seriesId:guid}/generate", GenerateAsync);
     }
 
-    private static async Task<IResult> CreateAsync(CreateRequest request, AbderaDbContext db, IClock clock, IConfiguration config)
+    private static async Task<IResult> CreateAsync(
+        CreateRequest request, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
     {
         if (request.DurationMinutes <= 0)
             throw new ValidationFailedException(new Dictionary<string, string[]> { ["durationMinutes"] = ["Ders süresi pozitif olmalı."] });
@@ -55,7 +59,7 @@ public static class LessonSeriesFeatures
         db.LessonSeries.Add(series);
         await db.SaveChangesAsync();
 
-        var generation = await GenerateForSeriesAsync(series, enrollment, db, clock, config);
+        var generation = await GenerateForSeriesAsync(series, enrollment, db, clock, config, scheduler);
 
         return Results.Created($"/api/lesson-series/{series.Id}", new CreateResponse(ToResponse(series), generation));
     }
@@ -79,18 +83,20 @@ public static class LessonSeriesFeatures
         return Results.Ok(ToResponse(series));
     }
 
-    private static async Task<IResult> GenerateAsync(Guid seriesId, AbderaDbContext db, IClock clock, IConfiguration config)
+    private static async Task<IResult> GenerateAsync(
+        Guid seriesId, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
     {
         var series = await db.LessonSeries.SingleOrDefaultAsync(s => s.Id == seriesId)
             ?? throw new NotFoundException("Ders serisi bulunamadı.");
         var enrollment = await db.Enrollments.SingleAsync(e => e.Id == series.EnrollmentId);
 
-        var generation = await GenerateForSeriesAsync(series, enrollment, db, clock, config);
+        var generation = await GenerateForSeriesAsync(series, enrollment, db, clock, config, scheduler);
         return Results.Ok(generation);
     }
 
     private static async Task<GenerationSummary> GenerateForSeriesAsync(
-        LessonSeries series, Enrollment enrollment, AbderaDbContext db, IClock clock, IConfiguration config)
+        LessonSeries series, Enrollment enrollment, AbderaDbContext db, IClock clock, IConfiguration config,
+        INotificationScheduler scheduler)
     {
         var weeks = config.GetValue("Scheduling:GenerationWeeks", 10);
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
@@ -116,14 +122,27 @@ public static class LessonSeriesFeatures
 
         var plan = LessonGenerator.Plan(series, windowStart, windowEnd, existingDates, holidayDates, timeOffRanges);
 
+        // docs/06-whatsapp.md: her üretilen ders için dersten Notifications__LessonReminderMinutesBefore
+        // (varsayılan 60 dk) önce bir LESSON_REMINDER job'ı kurulur - yalnızca öğrencinin birincil velisine.
+        var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, enrollment.StudentId);
+        var reminderMinutesBefore = config.GetValue("Notifications:LessonReminderMinutesBefore", 60);
+
         foreach (var occurrence in plan.ToCreate)
         {
             var startAt = LessonGenerator.ToUtcInstant(occurrence.Date, occurrence.StartTime, clock.SchoolTimeZone);
             var endAt = LessonGenerator.ToUtcInstant(occurrence.Date, occurrence.EndTime, clock.SchoolTimeZone);
 
-            db.Lessons.Add(Lesson.CreateFromSeries(
+            var lesson = Lesson.CreateFromSeries(
                 series.Id, enrollment.StudentId, enrollment.TeacherId, enrollment.InstrumentId,
-                startAt, endAt, clock.UtcNow));
+                startAt, endAt, clock.UtcNow);
+            db.Lessons.Add(lesson);
+
+            if (primaryGuardianId is { } guardianId)
+            {
+                await scheduler.ScheduleAsync(
+                    NotificationJobType.LessonReminder, "lesson", lesson.Id, guardianId,
+                    startAt.AddMinutes(-reminderMinutesBefore));
+            }
         }
 
         await db.SaveChangesAsync();

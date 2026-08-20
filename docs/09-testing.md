@@ -34,3 +34,10 @@
 6. Bir ders-değişikliği talebi onaylanır ve bildirim oluşturulur
 
 Bu 6 senaryo Phase 1–5 tamamlandığında CI'da (`.github/workflows/ci.yml`) çalışır; Phase 0'da yalnızca senaryo listesi olarak var.
+
+## Phase 5 notları (uygulandıktan sonra eklendi)
+
+- Yukarıdaki listenin tamamı `Unit/MessagingDomainTests.cs` (27 test) ve `Integration/MessagingFlowTests.cs` (12 test, Testcontainers) ile karşılanıyor — `docs/11-progress-log.md`'de ayrıntılı liste.
+- **Bilinçli boşluk — `FOR UPDATE SKIP LOCKED`'ın gerçek eşzamanlı iki-worker senaryosu testlenmedi.** Bu ölçekte (`CLAUDE.md` — 6–8 öğretmen, tek `NotificationDispatcher` instance'ı, `docs/10-decisions.md`'nin "mikroservis/Kubernetes yok" kararı) birden fazla worker instance'ı hiç çalışmıyor; `SKIP LOCKED` yalnızca aynı instance içindeki teorik bir yarışa karşı savunma. Sorgunun kendisi (`SELECT ... FOR UPDATE SKIP LOCKED`) `MigrationTests.cs`'in de doğruladığı gibi gerçek Postgres'e karşı çalışıyor (`Dispatcher_sends_a_due_job_through_fake_client_and_marks_it_sent` testi bunu dolaylı doğruluyor - sorgu sözdizimi hatalıysa test de patlardı).
+- **Bilinçli boşluk — sessiz saat (A6) dispatch-anı davranışı yalnızca birim testli.** `IClock` gerçek `SystemClock` olduğu için entegrasyon testinde "şu an sessiz saat içinde" durumunu deterministik kuramıyoruz - saf fonksiyonlar (`QuietHours.IsWithinQuietHours`/`ResolveSendTime`) ayrı ayrı birim testli, dispatcher'daki çağrı tek satırlık düz bir if.
+- **Yeni öğrenilen kural — globalizasyon/Alpine bug'ları yerel testle yakalanamaz.** `docker compose up` ile Alpine container'ında canlı doğrulama, bu sınıf bug için testin yerini tutmuyor, tamamlıyor. Ayrıntı: `CLAUDE.md` "Kullanıcıya gösterilecek metinde `new CultureInfo(...)` kullanıyorsan Dockerfile'ı kontrol et".

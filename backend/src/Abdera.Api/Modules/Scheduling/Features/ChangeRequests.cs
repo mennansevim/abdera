@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -66,7 +69,8 @@ public static class ChangeRequests
         return Results.Ok(items.Select(ToResponse));
     }
 
-    private static async Task<IResult> ApproveAsync(Guid requestId, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> ApproveAsync(
+        Guid requestId, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
     {
         var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
             ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
@@ -80,6 +84,21 @@ public static class ChangeRequests
         var newLesson = Lesson.CreateRescheduled(lesson, changeRequest.ProposedStartAt, changeRequest.ProposedEndAt, clock.UtcNow);
         db.Lessons.Add(newLesson);
         changeRequest.Approve(clock.UtcNow);
+
+        // docs/10-decisions.md A4: eski derse bağlı bekleyen hatırlatma iptal edilir, yeni
+        // saate göre yenisi kurulur; ayrıca veliye "ders ertelendi" bilgisi anında gönderilir.
+        await scheduler.CancelPendingAsync("lesson", lesson.Id);
+
+        var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, lesson.StudentId);
+        if (primaryGuardianId is { } guardianId)
+        {
+            var reminderMinutesBefore = config.GetValue("Notifications:LessonReminderMinutesBefore", 60);
+            await scheduler.ScheduleAsync(
+                NotificationJobType.LessonReminder, "lesson", newLesson.Id, guardianId,
+                newLesson.StartAt.AddMinutes(-reminderMinutesBefore));
+            await scheduler.ScheduleAsync(
+                NotificationJobType.LessonRescheduled, "lesson", newLesson.Id, guardianId, clock.UtcNow);
+        }
 
         await db.SaveChangesAsync();
         return Results.Ok(new ApproveResponse(ToResponse(changeRequest), newLesson.Id));

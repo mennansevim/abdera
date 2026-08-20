@@ -1,6 +1,7 @@
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Pricing.Domain;
 using Abdera.Api.Modules.Progress.Domain;
@@ -48,6 +49,11 @@ public class AbderaDbContext : DbContext
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
+
+    public DbSet<NotificationJob> NotificationJobs => Set<NotificationJob>();
+    public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
+    public DbSet<WhatsAppWebhookEvent> WhatsAppWebhookEvents => Set<WhatsAppWebhookEvent>();
+    public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

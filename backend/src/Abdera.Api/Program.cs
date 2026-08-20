@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Attendance;
 using Abdera.Api.Modules.Auth;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing;
+using Abdera.Api.Modules.Messaging;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
 using Abdera.Api.Modules.People;
@@ -58,6 +59,7 @@ builder.Services.AddDbContext<AbderaDbContext>((sp, options) => options.UseNpgsq
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddBillingModule();
+builder.Services.AddMessagingModule();
 
 // --- Data Protection anahtarları kalıcı bir dizine yazılır ---
 // Aksi halde anahtarlar yalnızca bellekte tutulur ve her container yeniden başlatmasında
@@ -173,6 +175,7 @@ app.MapAttendanceModule();
 app.MapProgressModule();
 app.MapPricingModule();
 app.MapBillingModule();
+app.MapMessagingModule();
 
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);

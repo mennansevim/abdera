@@ -46,7 +46,7 @@ function AdminOverview() {
       )}
 
       <section className="rounded-lg border border-dashed border-neutral-300 p-6 text-sm text-neutral-500">
-        Aidat durumu ve bildirimler Phase 4-5&apos;te burada görünecek. Şimdilik{" "}
+        Özet gösterge paneli (GET /api/dashboard/today) Phase 6&apos;da geliyor. Şimdilik{" "}
         <Link href="/dashboard/students" className="underline">
           Öğrenciler
         </Link>
@@ -57,10 +57,18 @@ function AdminOverview() {
         ,{" "}
         <Link href="/dashboard/calendar" className="underline">
           Takvim
-        </Link>{" "}
-        ve{" "}
+        </Link>
+        ,{" "}
         <Link href="/dashboard/change-requests" className="underline">
           Değişiklik Talepleri
+        </Link>
+        ,{" "}
+        <Link href="/dashboard/billing" className="underline">
+          Aidatlar
+        </Link>{" "}
+        ve{" "}
+        <Link href="/dashboard/notifications" className="underline">
+          Bildirimler
         </Link>{" "}
         sekmelerinden veri girebilirsin.
       </section>

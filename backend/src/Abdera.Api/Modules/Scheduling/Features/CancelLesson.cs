@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,13 +21,17 @@ public static class CancelLesson
     }
 
     private static async Task<IResult> HandleAsync(
-        Guid lessonId, Request request, AbderaDbContext db, IClock clock, IConfiguration config)
+        Guid lessonId, Request request, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
 
         var now = clock.UtcNow;
         lesson.Cancel(now);
+
+        // docs/10-decisions.md A4: ders iptal olunca bekleyen hatırlatma da iptal edilir -
+        // aksi halde veli gerçekleşmeyecek bir ders için hatırlatma alır.
+        await scheduler.CancelPendingAsync("lesson", lesson.Id);
 
         // docs/10-decisions.md A2: okul kaynaklı iptal her zaman kredi doğurur (velinin
         // hatası değil); veli kaynaklı iptal yalnızca yeterli bildirim süresiyle doğurur.
