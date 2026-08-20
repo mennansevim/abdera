@@ -250,4 +250,24 @@ Frontend `npm run dev` ile ayağa kaldırılıp tarayıcıda `/login` sayfasınd
 
 ### Kalan iş
 
+Push edildi (b3817ec). Sıradaki madde: UX-4 (kullanılmayan karanlık tema CSS'i).
+
+## Denetim düzeltmeleri — UX-4 (Düşük): kullanılmayan karanlık tema CSS'i silindi
+
+`docs/13-audit-fix-prompt.md` madde 7. `globals.css`'teki `@media (prefers-color-scheme: dark)` bloğu, `layout.tsx`'in gövdeye verdiği `bg-neutral-50 text-neutral-900` Tailwind sınıfları tarafından eziliyordu - karanlık tema ne çalışıyordu ne tasarlandı, yanıltıcı ölü kod. Kullanıcıya karar soruldu: "bloğu sil" (karanlık tema ileride ayrı bir görev olarak ele alınabilir).
+
+### Yapılanlar
+
+`globals.css`'teki `@media (prefers-color-scheme: dark) { :root { ... } }` bloğu tamamen silindi. `:root`'taki temel `--background`/`--foreground` değişkenleri ve `@theme inline` eşlemesi (Next.js şablonundan gelen, başka bir yerde `bg-background`/`text-foreground` olarak kullanılmıyor ama zararsız) dokunulmadan bırakıldı - denetim yalnızca yanıltıcı dark-mode bloğunu hedefliyordu.
+
+### Testler
+
+Saf CSS silme - `npm run build` temiz.
+
+### Canlı doğrulama (bu oturumda yapıldı)
+
+`npm run dev` ile ayağa kaldırılıp tarayıcı `prefers-color-scheme: dark` simüle edecek şekilde ayarlandı (`matchMedia('(prefers-color-scheme: dark)').matches === true` doğrulandı), `/login` sayfasında `body` arka planının hâlâ beyaz (`rgb(255,255,255)`) kaldığı doğrulandı - önceki davranışla birebir aynı (zaten hiç çalışmıyordu), yalnızca yanıltıcı kod kalktı.
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.
