@@ -70,14 +70,14 @@ export default function ChangeRequestsPage() {
               <button
                 onClick={() => handleApprove(request.id)}
                 disabled={busyId === request.id}
-                className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                className="min-h-11 rounded-md bg-neutral-900 px-3 text-sm text-white disabled:opacity-50"
               >
                 Onayla
               </button>
               <button
                 onClick={() => handleReject(request.id)}
                 disabled={busyId === request.id}
-                className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                className="min-h-11 rounded-md border border-neutral-300 px-3 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
               >
                 Reddet
               </button>

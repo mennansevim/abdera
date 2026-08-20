@@ -201,4 +201,33 @@ Push edildi (b2bd577). Sıradaki madde: SEC-4 (Login.cs'teki zamanlama kanalı).
 
 ### Kalan iş
 
-Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push. Sıradaki madde: UX-1 (mobil destek, Sıcak Stüdyo tasarım dili kullanılacak - kullanıcı onayı alındı).
+Push edildi (5f7e755). Sıradaki madde: UX-1 (mobil destek).
+
+## Denetim düzeltmeleri — UX-1 (Yüksek): mobil desteği fiilen yoktu
+
+`docs/13-audit-fix-prompt.md` madde 5. "Sıcak Stüdyo" tasarım konseptinin görseli bu oturumda erişilebilir değildi (yalnızca ismi geçiyordu, mockup/renk/tipografi detayı yoktu) - kullanıcıyla netleştirildi: bu turda yalnızca **fonksiyonel düzeltme** yapıldı (mevcut nötr renk/tipografi korunarak), tam görsel yeniden tasarım kapsam dışı bırakıldı.
+
+### Yapılanlar
+
+1. **`app-header.tsx`**: `md:` (768px) altında yatay nav gizlenip hamburger + sağdan açılan slide-in drawer'a geçiyor; `md` ve üstünde eski yatay nav aynen kalıyor. Drawer: backdrop tıklaması/X butonu/link tıklaması ile kapanıyor (route değişince kapatmak için `useEffect` içinde `setState` yerine - React'in "effect içinde senkron setState" lint kuralına takılmamak için - doğrudan `Link onClick`'te kapatılıyor). Hamburger butonu ve linkler `min-h-11`.
+2. **`billing/price-lists-section.tsx`** ve **`billing/student-billing-section.tsx`**: tablolar `overflow-x-auto rounded-lg border` ile sarıldı (banking/notifications sayfalarındaki desenle aynı).
+3. Denetimde adı geçen üç birincil aksiyon butonu `min-h-11` (44px) yapıldı: **`billing/student-billing-section.tsx`** "Ödeme al"/"Kaydet", **`change-requests/page.tsx`** "Onayla"/"Reddet", **`notifications/page.tsx`** "Yeniden dene". `price-lists-section.tsx`'teki "Fiyat listesi oluştur"/"Uygula" da aynı gerekçeyle eklendi.
+4. `.claude/launch.json` eklendi (`run`/önizleme için frontend dev server tanımı) - bu oturumda tarayıcı doğrulaması için kullanıldı, sonraki oturumlar için de kalıcı.
+
+### Testler
+
+Bu madde saf frontend/UI - birim/entegrasyon testi kapsamı dışında (backend değişmedi, `dotnet test` zaten 149/149 yeşildi). `npm run build` ve `npm run lint` temiz (yalnızca `banking/page.tsx:49`'daki önceden var olan, bu değişiklikle ilgisiz bir `react/no-unescaped-entities` hatası kaldı - ayrı bir görev olarak flag'lendi).
+
+### Canlı doğrulama (bu oturumda yapıldı)
+
+`db`+`api` docker'da, frontend `npm run dev` ile (`NEXT_PUBLIC_API_BASE_URL` varsayılanı `localhost:8080`'i kullanıyor) ayrı ayrı ayağa kaldırıldı, tarayıcı 375×812 (mobil) ve masaüstü genişliklerinde denendi:
+- Mobilde hamburger görünüyor, tıklanınca drawer (8 link + e-posta/rol + çıkış) backdrop ile açılıyor; X butonuyla kapanıyor.
+- Masaüstünde (`resize_window` desktop preset) eski yatay nav aynen duruyor, hamburger görünmüyor.
+- `/dashboard/billing`'de "Banka Öğrenci" seçilip receivables tablosu açıldı: tablo sarmalayıcısının `overflow-x: auto` olduğu ve sayfa genelinde yatay kaydırma oluşmadığı (`document.documentElement.scrollWidth === clientWidth`) doğrulandı; "Ödeme al" butonunun gerçek render yüksekliği `getBoundingClientRect()` ile **44px** ölçüldü.
+- `/dashboard/notifications`'daki (önceden de doğru olan) tablo sarmalı hâlâ çalışıyor, regresyon yok.
+
+Not: bu oturumda `docker compose up --build` ile frontend imajının `next build` adımında `SIGKILL` aldığı görüldü (muhtemelen build container'ının bellek limiti) - `npm run build` yerelde hatasız tamamlandığından bunun kod değişikliğiyle ilgisi olmadığı doğrulandı; bu yüzden canlı doğrulama `db`+`api` docker'da, frontend yerel `npm run dev` ile yapıldı. Frontend'in docker imajı build'i ayrı, önceden var olan bir ortam sorunu olarak kayda geçiriliyor.
+
+### Kalan iş
+
+Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push. Sıradaki madde: UX-2 (Geist fontu render edilmiyor).

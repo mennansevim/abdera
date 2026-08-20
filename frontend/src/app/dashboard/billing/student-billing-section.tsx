@@ -91,13 +91,15 @@ function EnrollmentBillingCard({
             {feePlan.dueDay && ` · her ayın ${feePlan.dueDay}. günü`}
           </p>
 
-          <table className="mb-3 w-full text-sm">
-            <tbody>
-              {receivables.map((r) => (
-                <ReceivableRow key={r.id} studentId={studentId} receivable={r} />
-              ))}
-            </tbody>
-          </table>
+          <div className="mb-3 overflow-x-auto rounded-lg border border-neutral-100">
+            <table className="w-full text-sm">
+              <tbody>
+                {receivables.map((r) => (
+                  <ReceivableRow key={r.id} studentId={studentId} receivable={r} />
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <CreateReceivableForm
             onSubmit={async (period) => {
@@ -191,14 +193,15 @@ function ReceivableRow({ studentId, receivable }: { studentId: string; receivabl
 
   return (
     <tr className="border-t border-neutral-100 align-top">
-      <td className="py-1.5">{receivable.period}</td>
-      <td className="py-1.5 text-neutral-500">vade: {receivable.dueDate}</td>
-      <td className="py-1.5">{receivable.amount.toLocaleString("tr-TR")} {receivable.currency}</td>
-      <td className={`py-1.5 font-medium ${statusColor[receivable.status]}`}>{statusLabel[receivable.status]}</td>
-      <td className="py-1.5">
+      <td className="px-3 py-1.5">{receivable.period}</td>
+      <td className="px-3 py-1.5 text-neutral-500">vade: {receivable.dueDate}</td>
+      <td className="px-3 py-1.5">{receivable.amount.toLocaleString("tr-TR")} {receivable.currency}</td>
+      <td className={`px-3 py-1.5 font-medium ${statusColor[receivable.status]}`}>{statusLabel[receivable.status]}</td>
+      <td className="px-3 py-1.5">
         {receivable.status !== "Paid" && receivable.status !== "Cancelled" && (
           <>
-            <button onClick={() => setShowForm((v) => !v)} className="text-blue-600 underline">
+            <button onClick={() => setShowForm((v) => !v)}
+              className="inline-flex min-h-11 items-center text-blue-600 underline">
               Ödeme al
             </button>
             {showForm && (
@@ -212,7 +215,7 @@ function ReceivableRow({ studentId, receivable }: { studentId: string; receivabl
                   <option value="Card">Kart</option>
                   <option value="Other">Diğer</option>
                 </select>
-                <button type="submit" className="rounded bg-neutral-900 px-2 py-0.5 text-white">Kaydet</button>
+                <button type="submit" className="min-h-11 rounded bg-neutral-900 px-2 text-white">Kaydet</button>
               </form>
             )}
             {error && <p className="text-red-600">{error}</p>}

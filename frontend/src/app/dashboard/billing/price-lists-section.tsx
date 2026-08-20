@@ -34,20 +34,22 @@ export function PriceListsSection() {
                 </p>
               </div>
             </div>
-            <table className="mb-3 w-full text-sm">
-              <tbody>
-                {list.items.map((item) => (
-                  <tr key={item.id} className="border-t border-neutral-100">
-                    <td className="py-1">{instruments?.find((i) => i.id === item.instrumentId)?.name ?? "?"}</td>
-                    <td className="py-1 text-neutral-500">{item.durationMinutes} dk</td>
-                    <td className="py-1 text-neutral-500">{item.billingType === "Monthly" ? "Aylık" : "Paket"}</td>
-                    <td className="py-1 text-right font-medium">
-                      {item.amount.toLocaleString("tr-TR")} {item.currency}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="mb-3 overflow-x-auto rounded-lg border border-neutral-100">
+              <table className="w-full text-sm">
+                <tbody>
+                  {list.items.map((item) => (
+                    <tr key={item.id} className="border-t border-neutral-100 first:border-t-0">
+                      <td className="px-3 py-1">{instruments?.find((i) => i.id === item.instrumentId)?.name ?? "?"}</td>
+                      <td className="px-3 py-1 text-neutral-500">{item.durationMinutes} dk</td>
+                      <td className="px-3 py-1 text-neutral-500">{item.billingType === "Monthly" ? "Aylık" : "Paket"}</td>
+                      <td className="px-3 py-1 text-right font-medium">
+                        {item.amount.toLocaleString("tr-TR")} {item.currency}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <BulkUpdateForm priceListId={list.id} />
           </div>
         ))}
@@ -138,7 +140,7 @@ function CreatePriceListForm({ instruments }: { instruments: { id: string; name:
       </div>
 
       <button type="submit" disabled={createPriceList.isPending}
-        className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+        className="min-h-11 rounded-md bg-neutral-900 px-3 text-sm text-white disabled:opacity-50">
         {createPriceList.isPending ? "Oluşturuluyor…" : "Fiyat listesi oluştur"}
       </button>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -187,7 +189,7 @@ function BulkUpdateForm({ priceListId }: { priceListId: string }) {
           Önizle
         </button>
         {previewResult && (
-          <button onClick={handleApply} className="rounded-md bg-neutral-900 px-3 py-1 text-white">
+          <button onClick={handleApply} className="min-h-11 rounded-md bg-neutral-900 px-3 text-white">
             Uygula
           </button>
         )}

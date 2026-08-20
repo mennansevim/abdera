@@ -121,7 +121,7 @@ export default function NotificationsPage() {
                     <button
                       onClick={() => handleRetry(job.id)}
                       disabled={retry.isPending}
-                      className="rounded-md border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50"
+                      className="min-h-11 rounded-md border border-neutral-300 px-2 text-xs hover:bg-neutral-100 disabled:opacity-50"
                     >
                       Yeniden dene
                     </button>
