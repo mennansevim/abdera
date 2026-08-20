@@ -22,13 +22,15 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
                                            whatsapp_webhook_events, message_templates     -- Phase 5, uygulandı
 007_seed_message_templates                message_templates seed verisi (aşağıda)        -- Phase 5, uygulandı
 (SeedMessageTemplates)
-008_progress                              skill_definitions, skill_assessments,
-                                           practice_assignments                          -- Phase 6
+008_banking (Banking)                     virtual_ibans, bank_incoming_transactions +
+                                           payments.created_by nullable'a çevrildi     -- Phase 6 (E1), uygulandı
+009_progress                              skill_definitions, skill_assessments,
+                                           practice_assignments                          -- Phase 7
                                            (lesson_notes zaten 004'te - Phase 3'te gerekliydi)
-009_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
+010_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
 ```
 
-Not: Messaging, Progress'ten (Phase 6) önce geldi çünkü Phase 5 fiilen Phase 6'dan önce uygulandı — bu dosyanın Phase 4 sonrası bölümü önceden plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not").
+Not: Messaging ve Banking, Progress'ten önce geldi çünkü kullanıcı bu ikisini Progress'ten önce istedi (Phase 5 ve Phase 6) - bu dosyanın önceki bölümü plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not"). Banking master prompt'ta hiç yoktu (`docs/10-decisions.md` E1) - Progress artık Phase 7'ye kaydı.
 
 `lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu. Aynı şekilde `lesson_change_requests` (Scheduling), `lesson_rsvps`/`lesson_attendances` (Attendance), `lesson_notes` (Progress'in bir dilimi) ve `makeup_credits` (Billing'in bir dilimi) Phase 3'ün tek migration'ında birlikte geldi; Pricing ve Billing'in kalanı (`price_lists`, `price_list_items`, `fee_plans`, `receivables`, `payments`) Phase 4'te tek migration'da birlikte geldi — `docs/02-modules.md`'deki "Kısmi açılan modüller" notuna bak.
 

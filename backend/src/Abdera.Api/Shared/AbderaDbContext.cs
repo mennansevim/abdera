@@ -1,5 +1,6 @@
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
@@ -54,6 +55,9 @@ public class AbderaDbContext : DbContext
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppWebhookEvent> WhatsAppWebhookEvents => Set<WhatsAppWebhookEvent>();
     public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
+
+    public DbSet<VirtualIban> VirtualIbans => Set<VirtualIban>();
+    public DbSet<BankIncomingTransaction> BankIncomingTransactions => Set<BankIncomingTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

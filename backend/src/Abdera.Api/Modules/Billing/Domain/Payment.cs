@@ -18,14 +18,17 @@ public class Payment
     public PaymentMethod Method { get; private set; }
     public string? Reference { get; private set; }
     public string? Note { get; private set; }
-    public Guid CreatedBy { get; private set; }
+    // Nullable: docs/10-decisions.md E1 - banka entegrasyonunun otomatik eşleştirdiği
+    // ödemelerde bir admin yok (AuditLog.ActorUserId'nin sistem-olayları null işaretlemesiyle
+    // aynı kural, bkz. guardian.opted_out).
+    public Guid? CreatedBy { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
     private Payment() { }
 
     public static Payment Create(
         Guid receivableId, decimal amount, DateOnly paymentDate, PaymentMethod method,
-        string? reference, string? note, Guid createdBy, DateTimeOffset now)
+        string? reference, string? note, Guid? createdBy, DateTimeOffset now)
     {
         if (amount <= 0) throw new ArgumentException("Ödeme tutarı pozitif olmalı.", nameof(amount));
 

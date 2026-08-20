@@ -1,6 +1,6 @@
 # Modül Haritası
 
-9 modül, master prompt'un 8'ine ek olarak **Pricing** (bkz. `docs/10-decisions.md` A1). Her modül `Domain/ Features/ Persistence/` dikey dilimiyle organize edilir — `CLAUDE.md`'deki katman kuralına bak.
+10 modül, master prompt'un 8'ine ek olarak **Pricing** (`docs/10-decisions.md` A1) ve **Banking** (`docs/10-decisions.md` E1 — master prompt'un başlangıçta hariç tuttuğu, sonradan onaylanan bir kapsam). Her modül `Domain/ Features/ Persistence/` dikey dilimiyle organize edilir — `CLAUDE.md`'deki katman kuralına bak.
 
 ```
 Modules/
@@ -12,6 +12,7 @@ Modules/
 ├── Billing/        ücret planı, aidat, ödeme, telafi kredisi
 ├── Progress/       ders notu, yetenek tanımı/değerlendirme, ödev
 ├── Messaging/       bildirim işi, WhatsApp mesajı/webhook, şablon
+├── Banking/         sanal IBAN, gelen havale eşleştirme         ← yeni (E1, Phase 6)
 └── Dashboard/       salt-okunur sorgu modeli (kendi tablosu yok)
 ```
 
@@ -23,6 +24,12 @@ Scheduling/Billing → (tetikler) Messaging'i `INotificationScheduler` portu üz
              uygulandı) - Messaging'in kendi entity'lerine doğrudan bağımlı olmadan job açar
 Messaging  → (yazar) Attendance'a - WhatsApp RSVP butonu `LessonRsvp` oluşturur/günceller
              (Phase 5); kendi verisine (notification_jobs, whatsapp_messages, ...) sahip
+Banking    → (yazar) Billing'e - eşleşen bir banka işlemi `Payment` oluşturur ve
+             `Receivable.RecordPaymentEffect` çağırır (Phase 6, E1); (okur) People'ı -
+             velinin bağlı öğrenci/kayıtlarını bulmak için `StudentGuardian`/`Enrollment`
+             doğrudan sorgular (Messaging'in Lesson/Student/Teacher'ı doğrudan sorgulamasıyla
+             aynı, kurulu pratik - bkz. `NotificationMessageBuilder.cs`); kendi verisine
+             (virtual_ibans, bank_incoming_transactions) sahip
 Billing    → People (kim borçlu), Pricing (tutar), Scheduling (hangi ders paketten düşer)
 Attendance → Scheduling (hangi Lesson), People (hangi Guardian/Teacher)
 Scheduling → People (hangi Student/Teacher/Instrument)
@@ -62,6 +69,7 @@ progress   : lesson_notes, skill_definitions, skill_assessments,
              practice_assignments
 messaging  : notification_jobs, whatsapp_messages,
              whatsapp_webhook_events, message_templates
+banking    : virtual_ibans, bank_incoming_transactions
 dashboard  : (tablosu yok — diğer modüllerin projeksiyonu)
 ```
 

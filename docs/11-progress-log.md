@@ -4,9 +4,13 @@ Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma gün
 
 ## Devam noktası (şu an)
 
-**Faz 5 — WhatsApp tamamlandı ve `main`'e push edildi** (commit `a0ef126`). Kod, testler (birim + Testcontainers entegrasyon, 123/123 yeşil), frontend "Bildirimler" sayfası, doküman güncellemeleri ve `docker compose` canlı doğrulaması hepsi bitti.
+**Faz 6 — Banka entegrasyonu (sanal IBAN) tamamlandı, commit'lendi, push bekliyor.** Kod, testler (13 birim + 5 Testcontainers entegrasyon, tüm suite 141/141 yeşil), frontend "Banka" sayfası, doküman güncellemeleri (`docs/10-decisions.md` E1, yeni `docs/12-bank-integration.md`, `02/03/07/08/09-*.md` ve README güncellemeleri, CLAUDE.md'ye yeni bölüm) ve `docker compose` canlı doğrulaması hepsi bitti. Kullanıcının kendisi istedi (master prompt'ta yoktu) - bkz. "Faz 6" bölümü aşağıda.
 
-Sıradaki faz: **Phase 6 — Gelişim takibi ve hatırlatmalar** (Progress modülünün kalanı: `skill_definitions`/`skill_assessments`/`practice_assignments`, doğum günü ve paket bitiş bildirimleri — `NotificationJobType.Birthday`/`PackageEnding` enum'da tanımlı ama hiçbir use-case üretmiyor, `NotificationMessageBuilder.BuildAsync`'e henüz eklenmedi —, dashboard `GET /api/dashboard/today`). Başlarken önce `docker compose up` ile Faz 5'in hâlâ ayakta olduğunu doğrula, sonra `docs/00-master-prompt.md` + `docs/02-modules.md`'nin Progress bölümünü oku.
+- [ ] Commit + push (push için kullanıcı onayı gerekiyor — public repo). Henüz commit edilmedi, bir sonraki adım bu.
+
+Commit sonrası sıradaki faz: **Phase 7 — Gelişim takibi ve hatırlatmalar** (Progress modülünün kalanı: `skill_definitions`/`skill_assessments`/`practice_assignments`, doğum günü ve paket bitiş bildirimleri — `NotificationJobType.Birthday`/`PackageEnding` enum'da tanımlı ama hiçbir use-case üretmiyor, `NotificationMessageBuilder.BuildAsync`'e henüz eklenmedi —, dashboard `GET /api/dashboard/today`). Başlarken önce `docker compose up` ile Faz 5-6'nın hâlâ ayakta olduğunu doğrula, sonra `docs/00-master-prompt.md` + `docs/02-modules.md`'nin Progress bölümünü oku.
+
+**Gerçek sağlayıcı seçimi hâlâ açık soru** (`docs/10-decisions.md` E1) - kullanıcı henüz PayTR/Papara İşletme/banka ürünü arasında karar vermedi, `Banking__Provider=Fake` ile ilerleniyor. Gerçek sağlayıcı seçilince yalnızca `IBankPaymentProvider`'ın yeni bir implementasyonu + `Webhooks.cs`'deki `VerifySharedSecret`'ın o sağlayıcının gerçek imza şemasıyla değiştirilmesi gerekiyor - iş mantığının geri kalanı (eşleştirme, admin çözümleme, testler) değişmez.
 
 ## Faz 0 — Tasarım (tamamlandı, push edildi)
 
@@ -39,7 +43,7 @@ Pricing modülü (PriceList/PriceListItem, önizlemeli toplu zam), Billing modü
 
 **Bulunan/düzeltilen gerçek bug (önemli):** `audit_log.before_json/after_json` (jsonb) kolonlarına yazılan metin string interpolation ile kuruluyordu (`$"{{\"amount\":{tutar}}}"`) — konteynerin/OS'un kültürü tr-TR olduğunda `decimal.ToString()` virgüllü ondalık üretip geçersiz JSON'a, dolayısıyla `DbUpdateException`/500'e yol açıyordu. Canlı `docker compose` testinde bulundu. Düzeltme: her yerde `JsonSerializer.Serialize(new {...})` + `Program.cs`'te `CultureInfo.InvariantCulture` varsayılan thread kültürü olarak sabitlendi (savunma katmanı). CLAUDE.md'ye kalıcı kural olarak işlendi.
 
-## Faz 5 — WhatsApp (tamamlandı, push bekliyor)
+## Faz 5 — WhatsApp (tamamlandı, push edildi)
 
 ### Yapılanlar
 
@@ -81,8 +85,47 @@ Yerel `dotnet test` bu bug'ı **hiç yakalayamaz** çünkü test host'u macOS/Li
 
 `Webhooks.cs`'nin `HandleTextMessageAsync`'i derlenmeyen bir çağrı içeriyordu (`DeterministicIntents.TryResolve` — böyle bir metot yok, gerçek metot `ResolveAsync`). Düzeltildi: `IWhatsAppClient` enjekte edildi, `ResolveAsync` sonucu `SendFreeTextAsync` ile gerçekten gönderiliyor ve outbound `WhatsAppMessage` olarak loglanıyor. `CloudApiWhatsAppClient`'a da `SendFreeTextAsync` eklendi (iki implementasyon senkron kalsın diye — `abdera-notification` skill kuralı).
 
-### Kalan tek iş: Git
+### Git
 
-Henüz commit yok. Bir sonraki oturum: `git add -A`, Türkçe commit mesajı (temp dosya + `git commit -F` — apostrof/Türkçe karakter kaçış sorunları için), push öncesi kullanıcıdan onay (`AskUserQuestion`, public repo).
+Commit `a0ef126` + doküman düzeltmesi `da7f94b` olarak `main`'e push edildi (kullanıcı onayıyla).
 
-**Ortam notu:** Bu oturumda yerel test için repo kökünde bir `.env` oluşturuldu (gerçek `.gitignore`'lu, commit'lenmeyecek, sahte/dev değerleriyle: `WhatsApp__Provider=Fake`, `Bootstrap__AdminEmail=admin@example.com` vb.). Bir sonraki oturumda aynı `.env` duruyorsa tekrar oluşturmaya gerek yok; duruyor mu diye önce kontrol et.
+**Ortam notu:** Bu oturumda yerel test için repo kökünde bir `.env` oluşturuldu (gerçek `.gitignore`'lu, commit'lenmeyecek, sahte/dev değerleriyle: `WhatsApp__Provider=Fake`, `Bootstrap__AdminEmail=admin@example.com` vb.). Sonraki oturumlarda aynı `.env` duruyorsa tekrar oluşturmaya gerek yok; duruyor mu diye önce kontrol et.
+
+## Faz 6 — Banka entegrasyonu / sanal IBAN (tamamlandı, push bekliyor)
+
+Kullanıcının kendi isteğiyle başladı ("gönderen ismi ile para ibana yattığında otomatik ödemeyi uygulamaya yansıtma gibi bir şey olur mu?") — master prompt'ta yoktu, hatta açıkça hariç tutulmuştu ("do not add ... bank reconciliation, bank integration"). Üç seçenek sunuldu (isim eşleştirme/sanal IBAN/ekstre içe aktarma), kullanıcı **sanal IBAN + tam otomasyon**'u seçti, ardından **gerçek sağlayıcıyı henüz seçmeden Fake ile ilerlemeyi** ve **Progress modülünden önce Phase 6 olarak** yapılmasını seçti (bkz. `docs/10-decisions.md` E1).
+
+### Neden isim eşleştirmesi değil
+
+Gönderen adı tek başına güvenilmez (farklı hesaptan gönderim, aynı isimli birden fazla veli, ad/soyad varyasyonu) - para söz konusu olduğunda yanlış eşleştirme kabul edilemez. Sanal IBAN "hangi veli" sorusunu kesin cevaplıyor, geriye yalnızca "hangi Receivable" sorusu kalıyor - o da tutar (+ opsiyonel açıklama-dönem ipucu) ile çözülüyor, **belirsizse asla tahmin edilmiyor**.
+
+### Yapılanlar
+
+- **Banking modülü** (`Modules/Banking/`): `Domain/` (`VirtualIban`, `BankIncomingTransaction`, `IBankPaymentProvider`, `PaymentMatcher` - saf eşleştirme fonksiyonu), `Features/` (`AssignVirtualIban`, `Webhooks` - hem gerçek webhook hem dev simülatörünün çağırdığı ortak işleme fonksiyonu, `BankTransactions` - admin liste/resolve, `DevBankSimulator` - dev-only), `Infrastructure/` (`FakeBankPaymentProvider`), `Persistence/` (2 `IEntityTypeConfiguration`), `BankingModule.cs`.
+- **`Payment.CreatedBy` nullable'a çevrildi** - otomatik eşleşen ödemelerde bir admin yok, `AuditLog.ActorUserId`'nin sistem-olaylarını `null` işaretleme kuralına uyumlu hale getirildi (migration additive, veri kaybı yok).
+- **Eşleştirme algoritması** (`PaymentMatcher.Match`, saf fonksiyon, DB'ye bağımlı değil): açıklamada `YYYY-MM` deseni bir tek adayı işaret ediyorsa ve tutar o adayın kalan bakiyesini karşılıyorsa → o adaya; yoksa tutar tam olarak yalnızca bir açık `Receivable`'ın kalan bakiyesine eşitse → ona; ikisi de net değilse → `NeedsReview`.
+- **Migration** (`20260820130609_Banking`): `virtual_ibans` (`UNIQUE(iban)`), `bank_incoming_transactions` (`UNIQUE(provider, provider_transaction_id)`, `CHECK(amount>0)`), `payments.created_by` nullable'a çevrildi.
+- **Dev-only simülatör:** `POST /api/dev/bank/simulate-transaction` gerçek webhook'un çağıracağı aynı `Webhooks.ProcessIncomingTransactionAsync`'i çağırıyor - iki yol hiç sapmıyor (WhatsApp'taki simulate-text/simulate-rsvp ile aynı desen).
+- **Gerçek webhook** (`POST /api/webhooks/bank`): imza şeması henüz seçilmedi (sağlayıcı seçilmedi), bu yüzden paylaşılan-sır (`Banking__WebhookSharedSecret` + `X-Bank-Webhook-Secret` başlığı, sabit-zamanlı karşılaştırma) ile korunuyor - sağlayıcı seçilince gerçek imza şemasına değiştirilecek tek nokta burası.
+- **Frontend:** `/dashboard/banking` sayfası - veliye sanal IBAN atama (zaten atanmışsa gösterme), gelen işlemler listesi (durum filtresi), `NeedsReview` için "Bu aidata say" (Receivable ID gir) / "Hiçbirine sayma" aksiyonları.
+
+### Testler (yazıldı, hepsi yeşil)
+
+- **Birim** (`Unit/BankingDomainTests.cs`, 13 test): `VirtualIban.Deactivate` iki kez çağrılamaz, `BankIncomingTransaction` durum makinesi (`Matched`'ten sonra tekrar eşleşme/`Ignore` reddi, `NeedsReview`'dan `Matched`'e geçiş serbest), `PaymentMatcher`'ın tüm dallı yolu (tek net eşleşme, iki aynı-tutarlı aday belirsiz kalır, açıklama-dönem eşleşmesi amount-only'e önceliklidir, açıklama eşleşmesi kalan bakiyeyi karşılamazsa reddedilir, açıklamadaki dönem adaylar arasında yoksa amount-only'e düşer).
+- **Entegrasyon** (`Integration/BankingFlowTests.cs`, 5 test, Testcontainers): ikinci aktif sanal IBAN ataması 409, net tutar eşleşmesi otomatik `Payment` + `Receivable` güncelleme (`CreatedBy=null`), **belirsiz tutar hiçbir Receivable'a dokunmadan NeedsReview'da kalır** (en kritik test), admin elle çözebilir (`CreatedBy`=admin), aynı `provider_transaction_id` iki kez işlenmez.
+- **Test yazarken bulunan/düzeltilen hatalar (ürün bug'ı değil, test izolasyonu):** Aynı test sınıfındaki birden fazla `SeedReceivableAsync` çağrısı aynı enstrüman+süre+tip+tarih aralığıyla `price_list_items` çakışma kısıtına takılıyordu (durationMinutes'i `Interlocked.Increment` ile tekilleştirildi); birkaç assertion tüm tabloyu filtresiz `SingleAsync()`/`CountAsync()` ile sorguluyordu - `IClassFixture` aynı DB'yi sınıftaki TÜM testler arasında paylaştığı için başka testlerin satırlarını da yakalıyordu, ilgili id'ye göre filtrelenerek düzeltildi.
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+1. Migration sıfırdan değil, Faz 1-5'in üzerine (mevcut veritabanına) hatasız uygulandı.
+2. Teacher/student/guardian/enrollment/price-list/fee-plan/receivable oluşturuldu, veliye sanal IBAN atandı (`POST /api/guardians/{id}/virtual-iban`) → ikinci atama denemesi doğru şekilde 409 döndü.
+3. `POST /api/dev/bank/simulate-transaction` ile tam tutarlı bir işlem gönderildi → `Receivable` `Paid`'e geçti, `Payment` (`method=Transfer`, `created_by=null`) oluştu, `bank_incoming_transactions.status=Matched`, `audit_log`'a `receivable.auto_payment_matched` düştü.
+4. Yeni bir dönem için ikinci bir `Receivable` açılıp kasıtlı yanlış tutarlı bir işlem gönderildi → `NeedsReview`'da kaldı, hiçbir `Receivable` etkilenmedi.
+5. `GET /api/bank-transactions?status=NeedsReview` + `POST /api/bank-transactions/{id}/resolve` ile admin elle çözdü → `Receivable` `Partial`'a geçti, bu sefer `Payment.created_by` gerçek admin id'si oldu.
+6. Aynı `providerTransactionId` iki kez gönderildi → yalnızca bir `bank_incoming_transactions` satırı oluştu (idempotency).
+7. Gerçek webhook'a paylaşılan sır olmadan istek atıldı → 401.
+8. Frontend `/dashboard/banking` sayfası tarayıcıda gerçek admin oturumuyla denendi: veli seçince atanmış IBAN görünüyor, `NeedsReview` listesinden "Hiçbirine sayma" ile bir işlem gerçekten `Ignored`'a düştü ve listeden kayboldu.
+
+### Kalan iş: Git
+
+Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.

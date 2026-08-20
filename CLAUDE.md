@@ -91,6 +91,18 @@ Provider seçimi `WhatsApp__Provider` ortam değişkeninden gelir; kod içinde h
 
 Webhook imzası (`X-Hub-Signature-256`) her istekte doğrulanır, doğrulanamayan istek reddedilir. Buton payload'larında tahmin edilebilir dahili id kullanılmaz — imzalı/opak referans (`WhatsApp__PayloadSigningKey`) kullanılır.
 
+## Banka entegrasyonu (Faz 6, `docs/10-decisions.md` E1)
+
+Master prompt'un başlangıçta hariç tuttuğu ("do not add ... bank reconciliation, bank integration") bir kapsam — kullanıcının açık onayıyla eklendi, kapsamı yalnızca **gelen havalenin otomatik `Receivable`'a işlenmesi** (sanal IBAN). Online ödeme/checkout, e-fatura, muhasebe entegrasyonu hâlâ kapsam dışı.
+
+`IBankPaymentProvider` arayüzünün WhatsApp'takiyle aynı ikili yapısı vardır:
+- `FakeBankPaymentProvider` — sahte bir IBAN üretir, gerçek bir sağlayıcı hesabı gerektirmez. **Dev/test varsayılanı.**
+- Gerçek sağlayıcı (PayTR/Papara İşletme/banka Sanal IBAN ürünü) **henüz seçilmedi** — seçilince yeni implementasyon eklenir, `Banking` modülünün geri kalanı değişmez.
+
+**Kritik iş kuralı — belirsizlikte asla otomatik davranma.** Gelen bir banka işlemi bir veliye (sanal IBAN üzerinden) kesin bağlanır, ama hangi `Receivable`'a sayılacağı yalnızca **tek bir net aday** varsa (tutar birebir eşleşiyor, ya da açıklamadaki dönem tekil bir adayı işaret ediyor) otomatik işlenir. Birden fazla aday veya hiç aday yoksa işlem `NeedsReview`'da kalır, admin elle çözer. Bu kuralı gevşetmek (örn. "en yakın tutara say") parada yanlış öğrenciye/aidata ödeme yazma riski taşır — ayrıntı ve algoritma: `docs/12-bank-integration.md`.
+
+Otomatik eşleşen ödemelerde `Payment.CreatedBy` `null`'dır (bir admin yok) — `AuditLog.ActorUserId`'nin sistem-kaynaklı olayları `null` işaretlemesiyle aynı kural.
+
 ## Test stratejisi
 
 - Zamanlama, RSVP, ücret hesaplama, ders-değişikliği onay kuralları → **saf birim testi**, gerçek veritabanı gerekmez.
@@ -104,3 +116,5 @@ Kod, tip adı, değişken adı, commit mesajı gövdesi: **İngilizce**. Kullan�
 ## Yapılmayacaklar
 
 Mikroservis, Kafka/RabbitMQ/Redis/Kubernetes, Hangfire/Quartz gibi ek zamanlayıcı kütüphanesi, Repository pattern katmanı, sıfır implementasyonlu spekülatif arayüz (örn. AI özet arayüzü Phase 6'dan önce açılmaz), veli/öğrenci mobil uygulaması, online ödeme/e-fatura entegrasyonu — bunların hiçbiri MVP kapsamında değil ve eklenmesi `docs/10-decisions.md` üzerinden açıkça onaylanmadan yapılmaz.
+
+**Not (E1 — kısmi istisna):** "Banka entegrasyonu" genel olarak yasak listesindeydi, ama kullanıcı Faz 6'da yalnızca **gelen havalenin otomatik `Receivable`'a işlenmesini** (sanal IBAN) açıkça onayladı — bkz. `docs/10-decisions.md` E1, `docs/12-bank-integration.md`. Online ödeme/checkout (veli sitede kart girip ödeme yapması), e-fatura, muhasebe entegrasyonu **hâlâ yasak** — bunlar E1'in onayladığı kapsamın dışında, ayrı bir onay gerektirir.

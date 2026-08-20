@@ -1,6 +1,6 @@
 # İlk REST API Yüzeyi
 
-Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit ve TeacherTimeOff uç noktaları var (A1, A2, A3). `✅` işaretli satırlar Phase 1–5'te gerçekten uygulandı; işaretsiz olanlar henüz yok (Phase 6+, Progress modülünün kalanı).
+Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6); işaretsiz olanlar henüz yok (Progress modülünün kalanı, dashboard).
 
 ```
 POST   /api/auth/login                          ✅
@@ -81,6 +81,13 @@ GET    /api/webhooks/whatsapp                    ✅ Meta abonelik doğrulama ha
 POST   /api/webhooks/whatsapp                    ✅ imza doğrulama + idempotency + RSVP/opt-out/intent yönlendirme
 POST   /api/dev/whatsapp/simulate-text           ✅ yalnızca Development - serbest metin/opt-out testi
 POST   /api/dev/whatsapp/simulate-rsvp           ✅ yalnızca Development - imzalı RSVP butonu testi
+
+POST   /api/guardians/{guardianId}/virtual-iban  ✅ Phase 6 (E1) - veliye sanal IBAN atar, aktifken tekrar atanamaz
+GET    /api/guardians/{guardianId}/virtual-iban  ✅ atanmışsa döner, yoksa 404
+GET    /api/bank-transactions                    ✅ ?status= filtresiyle, admin panel listesi
+POST   /api/bank-transactions/{transactionId}/resolve   ✅ NeedsReview'ı elle bir Receivable'a bağlar (veya "hiçbirine sayma")
+POST   /api/webhooks/bank                        ✅ paylaşılan-sır başlığı ile doğrulama + idempotency + eşleştirme (gerçek sağlayıcı seçilince imza şeması değişecek)
+POST   /api/dev/bank/simulate-transaction        ✅ yalnızca Development - eşleştirme mantığını gerçek sağlayıcı olmadan test eder
 
 GET    /api/dashboard/today
 ```

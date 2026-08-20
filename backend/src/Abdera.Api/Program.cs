@@ -1,6 +1,9 @@
 using Abdera.Api.Modules.Attendance;
 using Abdera.Api.Modules.Auth;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Banking;
+using Abdera.Api.Modules.Banking.Domain;
+using Abdera.Api.Modules.Banking.Infrastructure;
 using Abdera.Api.Modules.Billing;
 using Abdera.Api.Modules.Messaging;
 using Abdera.Api.Modules.Messaging.Domain;
@@ -91,6 +94,18 @@ else
     builder.Services.AddSingleton<IWhatsAppClient, FakeWhatsAppClient>();
 }
 
+// --- Banka entegrasyonu sağlayıcısı: docs/10-decisions.md E1 - WhatsApp'takiyle aynı
+// yapısal DI kararı, gerçek sağlayıcı (PayTR/Papara İşletme/vb.) henüz seçilmedi. ---
+var bankingProvider = builder.Configuration["Banking:Provider"] ?? "Fake";
+if (string.Equals(bankingProvider, "Fake", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IBankPaymentProvider, FakeBankPaymentProvider>();
+}
+else
+{
+    throw new InvalidOperationException($"Bilinmeyen Banking:Provider değeri: '{bankingProvider}'. Henüz yalnızca 'Fake' destekleniyor (bkz. docs/12-bank-integration.md).");
+}
+
 // --- Kimlik doğrulama: httpOnly cookie oturumu (docs/10-decisions.md B4 - JWT'nin
 // refresh/iptal derdi 8 kullanıcılık sistemde karşılıksız) ---
 // Not: builder.Configuration burada bir kapanış (closure) içinde okunuyor - bu delegate
@@ -176,6 +191,7 @@ app.MapProgressModule();
 app.MapPricingModule();
 app.MapBillingModule();
 app.MapMessagingModule();
+app.MapBankingModule();
 
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);

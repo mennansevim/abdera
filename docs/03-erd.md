@@ -46,6 +46,10 @@ erDiagram
     GUARDIAN ||--o{ NOTIFICATION_JOB : "is recipient"
     NOTIFICATION_JOB ||--o| WHATSAPP_MESSAGE : sends
     MESSAGE_TEMPLATE ||--o{ WHATSAPP_MESSAGE : uses
+
+    GUARDIAN ||--o| VIRTUAL_IBAN : "assigned (E1)"
+    VIRTUAL_IBAN ||--o{ BANK_INCOMING_TRANSACTION : receives
+    BANK_INCOMING_TRANSACTION ||--o| RECEIVABLE : "matched to"
 ```
 
 ## Auth
@@ -291,7 +295,7 @@ payments
   method         text        -- CASH | TRANSFER | CARD | OTHER
   reference      text null
   note           text null
-  created_by     uuid fk -> users(id)
+  created_by     uuid fk -> users(id) null   -- E1: otomatik eşleşen banka ödemesinde null (sistem)
   created_at     timestamptz
 
   CHECK (amount > 0)
@@ -395,6 +399,41 @@ message_templates
   is_active      boolean default true
 ```
 
+## Banking (yeni — E1, docs/12-bank-integration.md)
+
+```
+virtual_ibans
+  id                 uuid pk
+  guardian_id        uuid fk -> guardians(id)
+  iban               text unique
+  provider           text            -- "Fake" (dev) veya gerçek sağlayıcı adı
+  provider_reference text null
+  status             text            -- ACTIVE | INACTIVE
+  created_at         timestamptz
+  updated_at         timestamptz
+
+  -- Bir veliye aynı anda birden fazla ACTIVE sanal IBAN atanamaz - uygulama katmanında
+  -- kontrol edilir (price_list_items çakışma kontrolü örneğiyle aynı desen).
+
+bank_incoming_transactions
+  id                       uuid pk
+  virtual_iban_id          uuid fk -> virtual_ibans(id)
+  provider                 text
+  provider_transaction_id  text
+  amount                   numeric(12,2)
+  currency                 text default 'TRY'
+  sender_name              text null
+  description              text null
+  received_at              timestamptz
+  status                   text        -- RECEIVED | MATCHED | NEEDS_REVIEW | IGNORED
+  matched_receivable_id    uuid fk -> receivables(id) null
+  created_at               timestamptz
+  updated_at               timestamptz
+
+  UNIQUE (provider, provider_transaction_id)   -- idempotency anahtarı
+  CHECK (amount > 0)
+```
+
 ## Kritik kısıtlar — özet
 
 ```
@@ -404,8 +443,10 @@ UNIQUE (provider_event_id) ON whatsapp_webhook_events
 UNIQUE (enrollment_id, period) ON receivables
 UNIQUE (lesson_id, guardian_id) ON lesson_rsvps
 UNIQUE (lesson_id) ON lesson_attendances
+UNIQUE (iban) ON virtual_ibans
+UNIQUE (provider, provider_transaction_id) ON bank_incoming_transactions
 CHECK (end_at > start_at) ON lessons
 CHECK (amount >= 0) ON receivables, price_list_items
-CHECK (amount > 0) ON payments
+CHECK (amount > 0) ON payments, bank_incoming_transactions
 CHECK (score BETWEEN 1 AND 5) ON skill_assessments
 ```

@@ -18,7 +18,7 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 
 ## Durum
 
-**Phase 5 — WhatsApp.** Ders serisi/erteleme/telafi/aidat akışları artık `INotificationScheduler` portu üzerinden otomatik bildirim job'ı açıyor (`notification_jobs`, `UNIQUE(type,reference_type,reference_id)` ile idempotent). `NotificationDispatcher` (`BackgroundService` + `FOR UPDATE SKIP LOCKED`) her dakika bekleyen job'ları alıp `IWhatsAppClient` üzerinden gönderiyor — sessiz saat dışına düşen cron kaynaklı bildirimler (aidat/doğum günü/paket bitişi) bir sonraki pencereye ötelenir, ders hatırlatması bu kurala tabi değil. Gelen webhook imzası (`X-Hub-Signature-256`) doğrulanıyor, RSVP butonları HMAC ile imzalı opak referans taşıyor, deterministik intent'ler (`ders`/`aidat`/`telafi`/`okula yaz`) ve opt-out (`dur`/`iptal`/`stop`) çalışıyor. Meta hesabı olmadan uçtan uca test için dev-only `POST /api/dev/whatsapp/simulate-text` ve `simulate-rsvp` var (`WhatsApp__Provider=Fake` varsayılan - D2). Hepsi `docker compose up` ile uçtan uca doğrulandı; ayrıntılı ilerleme günlüğü `docs/11-progress-log.md`.
+**Phase 6 — Banka entegrasyonu (sanal IBAN).** Master prompt'un başlangıçta hariç tuttuğu bir kapsam — kullanıcının açık onayıyla eklendi (`docs/10-decisions.md` E1), yalnızca gelen havalenin otomatik `Receivable`'a işlenmesini kapsıyor (online ödeme/e-fatura hâlâ kapsam dışı). Admin bir veliye sanal IBAN atıyor; o IBAN'a gelen her transfer, velinin açık aidatları arasında **tek bir net eşleşme** varsa (tutar birebir veya açıklamadaki dönem tekil bir adayı işaret ediyorsa) otomatik `Payment`'a dönüşüp `Receivable`'ı güncelliyor — belirsizse (`NeedsReview`) admin panelinde elle çözülüyor, asla tahmin edilmiyor. Gerçek sağlayıcı (PayTR/Papara İşletme/banka Sanal IBAN ürünü) henüz seçilmedi — WhatsApp'takiyle aynı desen: `FakeBankPaymentProvider` + dev-only `POST /api/dev/bank/simulate-transaction` ile kod bekletilmeden ilerliyor. Hepsi `docker compose up` ile uçtan uca doğrulandı; ayrıntı `docs/12-bank-integration.md`, ilerleme günlüğü `docs/11-progress-log.md`.
 
 | Faz | Kapsam | Durum |
 |---|---|---|
@@ -27,9 +27,10 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 | 2 | Kişiler ve takvim | ✅ |
 | 3 | Devam, RSVP, ders değişikliği | ✅ |
 | 4 | Fiyatlandırma ve aidat | ✅ |
-| 5 | WhatsApp | ✅ Bu commit |
-| 6 | Gelişim takibi ve hatırlatmalar | ⬜ |
-| 7 | Sağlamlaştırma ve devreye alma | ⬜ |
+| 5 | WhatsApp | ✅ |
+| 6 | Banka entegrasyonu (sanal IBAN, E1) | ✅ Bu commit |
+| 7 | Gelişim takibi ve hatırlatmalar | ⬜ |
+| 8 | Sağlamlaştırma ve devreye alma | ⬜ |
 
 ---
 
@@ -92,6 +93,8 @@ docker compose up
 İlk giriş: `.env`'deki `Bootstrap__AdminEmail` / `Bootstrap__AdminPassword` ile — yalnızca `users` tablosu boşken bir kere çalışır, ilk girişte kalıcı şifre belirlemen istenir.
 
 WhatsApp geliştirmesi Meta hesabı olmadan yapılabilir: `WhatsApp__Provider=Fake` (varsayılan) giden mesajları loglar, gerçek bir API çağrısı yapmaz. Gelen webhook'u taklit eden dev-only uç noktalar (`POST /api/dev/whatsapp/simulate-text`, `simulate-rsvp` — yalnızca Development ortamı) RSVP/opt-out/deterministik intent akışlarını Meta hesabı olmadan uçtan uca test etmeyi sağlıyor. Ayrıntı: [`docs/06-whatsapp.md`](docs/06-whatsapp.md).
+
+Banka entegrasyonu geliştirmesi de aynı desende, gerçek bir sağlayıcı hesabı olmadan yapılabilir: `Banking__Provider=Fake` (varsayılan) sahte bir IBAN üretir. Gelen bir havaleyi taklit eden dev-only uç nokta (`POST /api/dev/bank/simulate-transaction` — yalnızca Development ortamı) eşleştirme mantığını (net eşleşme/`NeedsReview`/idempotency) gerçek sağlayıcı seçilmeden test etmeyi sağlıyor. Ayrıntı: [`docs/12-bank-integration.md`](docs/12-bank-integration.md).
 
 ### Testler
 

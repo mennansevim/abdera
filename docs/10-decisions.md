@@ -87,6 +87,22 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 | D6 | MVP birebir ders varsayıyor (`Lesson.studentId` tekil) | Bilinçli sınır — grup dersi (teori, orkestra) gelirse şema değişir |
 | D7 | Kardeş indirimi | MVP dışı, ama `PriceList` tasarımı bunu ileride engellemez |
 
+## E — MVP kapsamı sonradan genişletilen kararlar
+
+`docs/00-master-prompt.md` satır 470 ve 1009: *"Do not add online payment, bank reconciliation... Do not implement... bank integration..."* — bilinçli bir MVP sınırıydı. Kullanıcı Faz 5'ten sonra bunu açıkça istedi ve aşağıdaki kapsam/yaklaşımı onayladı; CLAUDE.md'nin "Yapılmayacaklar" kuralının gerektirdiği açık onay budur.
+
+| # | Konu | Karar |
+|---|---|---|
+| E1 | Banka entegrasyonu — kapsam | Yalnızca **gelen havale/EFT'nin otomatik olarak `Receivable`'a işlenmesi** (tahsilat). Online ödeme/checkout (veli sitede kart girip ödeme yapması), e-fatura, muhasebe entegrasyonu **hâlâ kapsam dışı** — bunlar ayrı, henüz onaylanmamış kararlar. |
+| E1 | Yöntem | **Sanal IBAN** (isim eşleştirme değil — bkz. gerekçe aşağıda). Her veliye (`Guardian`) bir sanal IBAN atanır; o IBAN'a gelen her transfer sağlayıcının webhook'uyla bildirilir. |
+| E1 | Sağlayıcı | **Henüz seçilmedi.** WhatsApp'taki D2 deseninin birebir aynısı: `IBankPaymentProvider` portu + `FakeBankPaymentProvider` (dev/test varsayılanı, gerçek sağlayıcı hesabı gerektirmez) ile kod bekletilmeden ilerler. Gerçek sağlayıcı (PayTR/Papara İşletme/banka Sanal IBAN ürünü) seçilince yalnızca yeni bir `IBankPaymentProvider` implementasyonu eklenir, iş mantığı değişmez. |
+| E1 | Eşleştirme neden isimle değil tutarla | Gönderen adı güvenilmez (farklı hesaptan gönderim, aynı isimli birden fazla veli, ad/soyad varyasyonu) — parada yanlış eşleştirme kabul edilemez bir risk. Sanal IBAN zaten *hangi veli* olduğunu kesin verir; geriye yalnızca *hangi Receivable* sorusu kalır, bu da tutar (+ varsa açıklama alanındaki dönem bilgisi) ile çözülür. |
+| E1 | Belirsiz eşleşme davranışı | Veli'nin birden fazla açık `Receivable`'ı varsa ve gelen tutar tam olarak yalnızca birine denk gelmiyorsa **otomatik uygulanmaz** — `NeedsReview` durumunda admin panelinde bekler, admin elle hangi aidata sayılacağını seçer. Sessizce tahmin etmek yerine insan onayına düşmek tercih edildi (WhatsApp opt-out/RSVP'deki "belirsizlikte otomatik davranma" ilkesiyle tutarlı). |
+| E1 | `Payment.CreatedBy` | Otomatik eşleşen ödemelerde bir admin yok — `CreatedBy` nullable'a çevrildi (mevcut `AuditLog.ActorUserId`'nin zaten nullable olup sistem-kaynaklı olayları `null` ile işaretlediği kurala uyumlu, bkz. `guardian.opted_out`). |
+| E1 | Faz | Phase 6 olarak Progress modülünün önüne alındı — Billing zaten hazır olduğu için doğal bir devam, Progress'in (yetenek takibi) kullanıcı için aciliyeti yok. |
+
+Ayrıntılı akış/entity tasarımı: `docs/12-bank-integration.md`.
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |
