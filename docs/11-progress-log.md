@@ -230,4 +230,24 @@ Not: bu oturumda `docker compose up --build` ile frontend imajının `next build
 
 ### Kalan iş
 
-Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push. Sıradaki madde: UX-2 (Geist fontu render edilmiyor).
+Push edildi (4e9438a). Sıradaki madde: UX-2 (Geist fontu render edilmiyor).
+
+## Denetim düzeltmeleri — UX-2 (Orta): Geist fontu indiriliyor ama Arial render ediliyordu
+
+`docs/13-audit-fix-prompt.md` madde 6. `layout.tsx` Geist Sans'ı Google Fonts'tan yükleyip `--font-geist-sans` CSS değişkenini tanımlıyordu ama `globals.css`'teki `body { font-family: Arial, ... }` bu değişkeni hiç kullanmıyordu - iki font dosyası boşuna iniyor, uygulama Arial ile render ediliyordu.
+
+### Yapılanlar
+
+`globals.css`'teki `body { font-family: ... }` satırı `var(--font-geist-sans), Arial, Helvetica, sans-serif` yapıldı (Arial/Helvetica fallback zinciri olarak korundu).
+
+### Testler
+
+Saf CSS değişikliği - `npm run build`/`npm run lint` temiz (yalnızca önceden var olan, ilgisiz `banking/page.tsx:49` hatası kaldı).
+
+### Canlı doğrulama (bu oturumda yapıldı)
+
+Frontend `npm run dev` ile ayağa kaldırılıp tarayıcıda `/login` sayfasında `getComputedStyle(document.body).fontFamily` çalıştırıldı: önceden `"Arial, Helvetica, sans-serif"` dönerken artık `"Geist, \"Geist Fallback\", Arial, Helvetica, sans-serif"` dönüyor.
+
+### Kalan iş
+
+Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.
