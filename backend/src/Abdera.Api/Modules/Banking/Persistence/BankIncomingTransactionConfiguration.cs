@@ -29,5 +29,11 @@ public class BankIncomingTransactionConfiguration : IEntityTypeConfiguration<Ban
         builder.HasIndex(t => new { t.Provider, t.ProviderTransactionId }).IsUnique();
         builder.HasIndex(t => t.Status);
         builder.ToTable(tb => tb.HasCheckConstraint("CK_bank_incoming_transactions_amount", "amount > 0"));
+
+        // ARC-1 (docs/13-audit-fix-prompt.md): eşleştirme/çözme işlemleri (Match/Ignore/
+        // Resolve) aynı satıra eşzamanlı uygulanırsa ikincisi birincisini sessizce ezmesin.
+        // Npgsql.EntityFrameworkCore.PostgreSQL 7.0'dan itibaren UseXminAsConcurrencyToken()
+        // kaldırıldı; bkz. ReceivableConfiguration.cs'teki not.
+        builder.Property<uint>("Version").IsRowVersion();
     }
 }

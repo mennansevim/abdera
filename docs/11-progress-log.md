@@ -270,4 +270,30 @@ Saf CSS silme - `npm run build` temiz.
 
 ### Kalan iş
 
+Push edildi (732a1cf). Sıradaki madde: ARC-1 (optimistic concurrency).
+
+## Denetim düzeltmeleri — ARC-1 (Yüksek): optimistic concurrency hiç uygulanmamıştı
+
+`docs/13-audit-fix-prompt.md` madde 8. CLAUDE.md'nin kendi kuralı ("Eşzamanlı düzenleme riski olan tablolarda optimistic concurrency") kodda hiç örneği yoktu - iki admin aynı `Receivable`'a aynı anda ödeme işlerse ikinci yazma birincisini sessizce eziyordu.
+
+### Yapılanlar
+
+1. **Sürpriz:** Denetimin önerdiği `UseXminAsConcurrencyToken()` API'si Npgsql.EntityFrameworkCore.PostgreSQL 7.0'dan itibaren **kaldırılmış** ([npgsql/efcore.pg#3539](https://github.com/npgsql/efcore.pg/issues/3539)) - proje 10.0.3 kullanıyor. Güncel standart EF mekanizması: `builder.Property<uint>("Version").IsRowVersion();` (shadow property, domain entity'ye dokunulmadan) - sağlayıcı bunu otomatik `xmin` sistem koluna eşliyor. Detay: `docs/08-migrations.md` "Optimistic concurrency (xmin)".
+2. `ReceivableConfiguration.cs` ve `BankIncomingTransactionConfiguration.cs`'e bu shadow property eklendi.
+3. `abdera-migration` skill'iyle migration oluşturuldu: `011_add_optimistic_concurrency` (`AddOptimisticConcurrency`) - üretilen SQL **boş** (`dotnet ef migrations script` yalnızca `__EFMigrationsHistory`'ye satır ekliyor), çünkü `xmin` zaten var olan bir sistem kolonu; migration yalnızca model snapshot'ı günceller. `Down()` da yerel veritabanında test edildi (abdera-migration skill kuralı).
+4. `GlobalExceptionHandler.cs`'e `DbUpdateConcurrencyException -> 409` dalı eklendi.
+5. `Integration/ConcurrencyFlowTests.cs` (yeni dosya, 2 test, Testcontainers): aynı `Receivable`'ı/`BankIncomingTransaction`'ı iki ayrı `DbContext` ile okuyup çelişen şekilde değiştiriyor - ilk `SaveChangesAsync` başarılı, ikincisi `DbUpdateConcurrencyException` fırlatıyor; kazanan yazının sessizce ezilmediği de ayrıca doğrulanıyor.
+
+### Testler
+
+`dotnet test` → 151/151 yeşil (149 + 2 yeni).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+1. Volume sıfırlanıp (`docker compose down -v`) `db`+`api` yeniden ayağa kaldırıldı: tüm 9 migration (`AddOptimisticConcurrency` dahil) sıfırdan hatasız uygulandı.
+2. Gerçek bir teacher/student/enrollment/price-list/fee-plan/receivable HTTP üzerinden oluşturulup, **aynı receivable'a 5 tur boyunca gerçekten eşzamanlı** (arka planda `&`+`wait` ile) iki ödeme isteği atıldı - bu yalıtılmış bir test değil, gerçek çalışan uygulamaya karşı gerçek bir yarış: birden çok istek `409` ile döndü, response body'si tam olarak `{"title":"Kayıt başka bir işlemce güncellendi", "status":409, ...}` (yeni `DbUpdateConcurrencyException` dalı) - bazı geç denemeler ayrıca zaten var olan `"Çakışma"`/`"'Paid' durumundaki bir aidata ödeme kaydedilemez."` kuralına takıldı, ikisi birlikte doğru çalıştı.
+3. `GET /api/students/{id}/billing` ile son durum kontrol edildi: `totalPaid` başarılı isteklerin toplamıyla birebir tutarlı, hiçbir yazma sessizce kaybolmadı/çift sayılmadı.
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Shared;
 
@@ -15,6 +16,11 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
             ValidationFailedException => (StatusCodes.Status400BadRequest, "Doğrulama hatası"),
             ForbiddenException => (StatusCodes.Status403Forbidden, "Yetkisiz işlem"),
             ConflictException => (StatusCodes.Status409Conflict, "Çakışma"),
+            // ARC-1 (docs/13-audit-fix-prompt.md): xmin tabanlı optimistic concurrency
+            // (bkz. ReceivableConfiguration/BankIncomingTransactionConfiguration) bir kaydın
+            // okunduktan sonra başka bir işlemce değiştirildiğini burada yakalar - sessizce
+            // ezmek yerine 409 döner, istemci güncel veriyi çekip tekrar denemeli.
+            DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Kayıt başka bir işlemce güncellendi"),
             _ => (StatusCodes.Status500InternalServerError, "Beklenmeyen bir hata oluştu"),
         };
 

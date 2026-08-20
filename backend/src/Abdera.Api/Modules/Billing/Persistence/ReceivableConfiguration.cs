@@ -26,5 +26,15 @@ public class ReceivableConfiguration : IEntityTypeConfiguration<Receivable>
         builder.HasIndex(r => r.Status);
 
         builder.ToTable(t => t.HasCheckConstraint("CK_receivables_amount", "amount >= 0"));
+
+        // ARC-1 (docs/13-audit-fix-prompt.md): iki admin aynı Receivable'a aynı anda ödeme
+        // işlerse ikinci yazma birincisini sessizce ezmesin diye Postgres'in sistem kolonu
+        // xmin'i optimistic concurrency token olarak kullanıyoruz - ek kolon gerekmez.
+        // Npgsql.EntityFrameworkCore.PostgreSQL 7.0'dan itibaren UseXminAsConcurrencyToken()
+        // kaldırıldı; standart EF mekanizması olan uint + IsRowVersion() kullanılıyor,
+        // sağlayıcı bunu otomatik olarak xmin sistem kolonuna eşliyor (bkz.
+        // https://www.npgsql.org/efcore/modeling/concurrency.html). Domain entity'sine
+        // dokunmamak için shadow property olarak tanımlanıyor.
+        builder.Property<uint>("Version").IsRowVersion();
     }
 }

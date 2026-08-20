@@ -28,6 +28,10 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
                                            practice_assignments                          -- Phase 7
                                            (lesson_notes zaten 004'te - Phase 3'te gerekliydi)
 010_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
+011_add_optimistic_concurrency            receivables ve bank_incoming_transactions için
+(AddOptimisticConcurrency)                xmin tabanlı concurrency token (ARC-1, Faz 6 sonrası
+                                           denetim) - yeni kolon eklemez, yalnızca model
+                                           snapshot'ı günceller (bkz. aşağıdaki not)
 ```
 
 Not: Messaging ve Banking, Progress'ten önce geldi çünkü kullanıcı bu ikisini Progress'ten önce istedi (Phase 5 ve Phase 6) - bu dosyanın önceki bölümü plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not"). Banking master prompt'ta hiç yoktu (`docs/10-decisions.md` E1) - Progress artık Phase 7'ye kaydı.
@@ -64,6 +68,16 @@ skill_definitions (enstrümana özel):
   VIOLIN -> INTONATION, BOW_CONTROL, LEFT_HAND_POSITION
   DRUMS  -> TIMING, LIMB_INDEPENDENCE, GROOVE_CONSISTENCY
 ```
+
+## Optimistic concurrency (xmin)
+
+**011_add_optimistic_concurrency** (uygulandı, denetim ARC-1): `receivables` ve `bank_incoming_transactions` için Postgres'in sistem kolonu `xmin`'i concurrency token olarak kullanıyoruz - `CLAUDE.md`'nin "eşzamanlı düzenleme riski olan tablolarda optimistic concurrency" kuralı.
+
+Npgsql.EntityFrameworkCore.PostgreSQL 7.0'dan itibaren eski `UseXminAsConcurrencyToken()` API'si kaldırıldı; standart EF mekanizması kullanılıyor - domain entity'sine dokunmadan bir shadow property:
+```csharp
+builder.Property<uint>("Version").IsRowVersion();
+```
+Sağlayıcı bunu otomatik olarak `xmin` sistem koluna eşler (bkz. [Npgsql concurrency docs](https://www.npgsql.org/efcore/modeling/concurrency.html)). Üretilen migration'ın SQL'i **boştur** (`dotnet ef migrations script` yalnızca `__EFMigrationsHistory`'ye satır ekler) - gerçek bir `ALTER TABLE ADD COLUMN` çalışmaz, çünkü `xmin` zaten var olan bir sistem kolonudur; migration yalnızca EF'in model snapshot'ını güncellemek için gerekli. `DbUpdateConcurrencyException` `GlobalExceptionHandler`'da 409'a çevrilir.
 
 ## Kurallar
 
