@@ -4,11 +4,9 @@ Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma gün
 
 ## Devam noktası (şu an)
 
-**Faz 5 — WhatsApp tamamlandı.** Kod, testler (birim + Testcontainers entegrasyon), frontend "Bildirimler" sayfası, doküman güncellemeleri ve `docker compose` canlı doğrulaması hepsi bitti. Kalan tek şey:
+**Faz 5 — WhatsApp tamamlandı ve `main`'e push edildi** (commit `a0ef126`). Kod, testler (birim + Testcontainers entegrasyon, 123/123 yeşil), frontend "Bildirimler" sayfası, doküman güncellemeleri ve `docker compose` canlı doğrulaması hepsi bitti.
 
-- [ ] Commit + push (push için kullanıcı onayı gerekiyor — public repo)
-
-Kod ve migration'lar `main`'e henüz commit'lenmedi — bir sonraki oturum önce `git status` ile bekleyen değişiklikleri görmeli, sonra commit/push akışına geçmeli. Commit sonrası sıradaki faz **Phase 6 — Gelişim takibi ve hatırlatmalar** (Progress modülünün kalanı: skill_definitions/skill_assessments/practice_assignments, doğum günü ve paket bitiş bildirimleri, dashboard `GET /api/dashboard/today`).
+Sıradaki faz: **Phase 6 — Gelişim takibi ve hatırlatmalar** (Progress modülünün kalanı: `skill_definitions`/`skill_assessments`/`practice_assignments`, doğum günü ve paket bitiş bildirimleri — `NotificationJobType.Birthday`/`PackageEnding` enum'da tanımlı ama hiçbir use-case üretmiyor, `NotificationMessageBuilder.BuildAsync`'e henüz eklenmedi —, dashboard `GET /api/dashboard/today`). Başlarken önce `docker compose up` ile Faz 5'in hâlâ ayakta olduğunu doğrula, sonra `docs/00-master-prompt.md` + `docs/02-modules.md`'nin Progress bölümünü oku.
 
 ## Faz 0 — Tasarım (tamamlandı, push edildi)
 
