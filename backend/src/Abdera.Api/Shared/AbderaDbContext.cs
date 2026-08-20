@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.People.Domain;
+using Abdera.Api.Modules.Pricing.Domain;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,12 @@ public class AbderaDbContext : DbContext
     public DbSet<LessonNote> LessonNotes => Set<LessonNote>();
 
     public DbSet<MakeupCredit> MakeupCredits => Set<MakeupCredit>();
+    public DbSet<FeePlan> FeePlans => Set<FeePlan>();
+    public DbSet<Receivable> Receivables => Set<Receivable>();
+    public DbSet<Payment> Payments => Set<Payment>();
+
+    public DbSet<PriceList> PriceLists => Set<PriceList>();
+    public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

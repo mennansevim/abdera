@@ -16,18 +16,17 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
 003_seed_instruments (SeedInstruments)    instruments seed verisi (aşağıda)
 004_attendance_changes_and_progress       lesson_attendances, lesson_change_requests,
 (AttendanceChangesAndProgress)            lesson_notes, lesson_rsvps, makeup_credits     -- Phase 3
-005_pricing                               price_lists, price_list_items                  -- Phase 4
-006_billing                               fee_plans, receivables, payments               -- Phase 4
-                                           (makeup_credits zaten 004'te - A2, Phase 3'te gerekliydi)
-007_progress                              skill_definitions, skill_assessments,
+005_pricing_and_billing                   fee_plans, payments, price_list_items,
+(PricingAndBilling)                       price_lists, receivables                       -- Phase 4
+006_progress                              skill_definitions, skill_assessments,
                                            practice_assignments                          -- Phase 6
                                            (lesson_notes zaten 004'te - Phase 3'te gerekliydi)
-008_messaging                             notification_jobs, whatsapp_messages,
+007_messaging                             notification_jobs, whatsapp_messages,
                                            whatsapp_webhook_events, message_templates     -- Phase 5
-009_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
+008_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
 ```
 
-`lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu. Aynı şekilde `lesson_change_requests` (Scheduling), `lesson_rsvps`/`lesson_attendances` (Attendance), `lesson_notes` (Progress'in bir dilimi) ve `makeup_credits` (Billing'in bir dilimi) Phase 3'ün tek migration'ında birlikte geldi — `docs/02-modules.md`'deki "Kısmi açılan modüller" notuna bak.
+`lesson_series`/`lessons` başlangıçta People ile aynı migration'da geldi çünkü Phase 2 ("People and scheduling") master prompt'ta tek faz — ayrı migration'lara bölmek yapay bir ayrım olurdu. Aynı şekilde `lesson_change_requests` (Scheduling), `lesson_rsvps`/`lesson_attendances` (Attendance), `lesson_notes` (Progress'in bir dilimi) ve `makeup_credits` (Billing'in bir dilimi) Phase 3'ün tek migration'ında birlikte geldi; Pricing ve Billing'in kalanı (`price_lists`, `price_list_items`, `fee_plans`, `receivables`, `payments`) Phase 4'te tek migration'da birlikte geldi — `docs/02-modules.md`'deki "Kısmi açılan modüller" notuna bak.
 
 ## Seed verisi
 

@@ -36,14 +36,13 @@ Kural: bir modül başka modülün **iç** entity'sine EF navigation property il
 
 ## Kısmi açılan modüller
 
-`Billing` ve `Progress` henüz tam değil — her ikisi de Phase 3'te yalnızca ihtiyaç duyulan tek bir tabloyla açıldı, geri kalanı planlandığı fazda gelecek:
+`Billing` Phase 4 ile tamamlandı (`makeup_credits` Phase 3'te, `fee_plans`/`receivables`/`payments` Phase 4'te). `Progress` hâlâ kısmi:
 
-| Modül | Phase 3'te açılan | Phase 4/6'da gelecek |
+| Modül | Açılan | Kalan |
 |---|---|---|
-| Billing | `makeup_credits` | `fee_plans`, `receivables`, `payments` (Phase 4, Pricing ile birlikte) |
-| Progress | `lesson_notes` | `skill_definitions`, `skill_assessments`, `practice_assignments` (Phase 6) |
+| Progress | `lesson_notes` (Phase 3) | `skill_definitions`, `skill_assessments`, `practice_assignments` (Phase 6) |
 
-Bu, "modülü fazın sırasına göre bütün olarak aç" kuralının bilinçli bir istisnası — `MakeupCredit` ve `LessonNote` doğrudan Phase 3'ün kendi kapsamında (master prompt: "make-up lessons", "lesson notes") gerekli, geri kalan tablolar henüz hiçbir use-case tarafından ihtiyaç duyulmuyor.
+Bu, "modülü fazın sırasına göre bütün olarak aç" kuralının bilinçli bir istisnası — `MakeupCredit` ve `LessonNote` doğrudan Phase 3'ün kendi kapsamında (master prompt: "make-up lessons", "lesson notes") gerekliydi, geri kalan Progress tabloları henüz hiçbir use-case tarafından ihtiyaç duyulmuyor.
 
 ## Modül başına tablolar
 

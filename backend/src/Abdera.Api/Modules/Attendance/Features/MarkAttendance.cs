@@ -58,7 +58,9 @@ public static class MarkAttendance
             return Results.Created($"/api/lessons/{lessonId}/attendance", ToResponse(attendance));
         }
 
-        var before = $"{{\"status\":\"{existing.Status}\",\"note\":{(existing.Note is null ? "null" : $"\"{existing.Note}\"")}}}";
+        // JsonSerializer kullanılır - elle string birleştirme hem kültüre hem kaçış (escaping)
+        // karakterlerine karşı kırılgan (bkz. CLAUDE.md - BulkUpdate.cs'deki benzer düzeltme notu).
+        var before = System.Text.Json.JsonSerializer.Serialize(new { status = existing.Status.ToString(), note = existing.Note });
         existing.Correct(request.Status, lesson.TeacherId, request.Note, clock.UtcNow);
         db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_corrected", nameof(LessonAttendance), existing.Id, clock.UtcNow, beforeJson: before));
 

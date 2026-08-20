@@ -12,9 +12,13 @@ const LINKS = [
   { href: "/dashboard/calendar", label: "Takvim" },
 ];
 
-// docs/04-permissions.md: ders değişikliği onay/red yalnızca Admin - link Teacher'a
-// gösterilmez (backend zaten 403 verirdi, ama gereksiz tıklamayı da önlemeye değer).
-const ADMIN_ONLY_LINKS = [{ href: "/dashboard/change-requests", label: "Değişiklik Talepleri" }];
+// docs/04-permissions.md: ders değişikliği onay/red ve aidat/tahsilat tamamen Admin -
+// linkler Teacher'a gösterilmez (backend zaten 403 verirdi, ama gereksiz tıklamayı da
+// önlemeye değer).
+const ADMIN_ONLY_LINKS = [
+  { href: "/dashboard/change-requests", label: "Değişiklik Talepleri" },
+  { href: "/dashboard/billing", label: "Aidatlar" },
+];
 
 export function AppHeader({ me }: { me: Me }) {
   const pathname = usePathname();

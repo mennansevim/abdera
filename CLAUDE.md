@@ -69,6 +69,12 @@ Birden fazla `Join` sonrası özel bir `record`'a projekte eden (`new LessonResp
 
 Doğru sıra: `Join(...).Join(...).OrderBy(x => x.Entity.Alan).Select(x => new Response(...))` — sıralama her zaman son projeksiyondan **önce**, ham/anonim ara tip üzerinde yapılır. Yeni bir sorgu handler'ı yazarken bir `record`'a projekte edip hemen ardından `OrderBy` eklemeden önce bunu hatırla; mümkünse handler'ı gerçek bir `WebApplicationFactory` testiyle en az bir kez HTTP üzerinden çağırarak doğrula (yalnızca DB'ye yazılan satırı saymak yetmez).
 
+## Elle JSON string'i asla string interpolation ile kurma
+
+`audit_log.before_json/after_json` gibi `jsonb` kolonlarına yazılacak metni **asla** `$"{{\"amount\":{tutar}}}"` gibi string interpolation ile kurma — bir `decimal`'i interpolate etmek makinenin/konteynerin işletim sistemi kültürüne bağımlıdır (örn. tr-TR'de `1200,00`), bu da geçersiz JSON üretip `DbUpdateException` ile 500'e yol açar (gerçek bir prod bug'ı olarak bulundu, bkz. `BulkUpdate.cs`/`Payments.cs`/`MarkAttendance.cs` git geçmişi). Ayrıca elle kaçış (escaping) yapılmadığı için bir metin alanı tırnak/backslash içerirse de bozulur.
+
+Kural: her zaman `System.Text.Json.JsonSerializer.Serialize(new { ... })` kullan — hem kültürden bağımsızdır (JSON sayıları her zaman `.` ile yazar) hem kaçışı otomatik yapar. Program.cs ayrıca uygulamanın varsayılan thread kültürünü `CultureInfo.InvariantCulture`'a sabitler (savunma katmanı) — ama bu, `JsonSerializer` kullanma kuralının yerini tutmaz, yalnızca ek güvenlik.
+
 ## WhatsApp entegrasyonu
 
 `IWhatsAppClient` arayüzünün iki implementasyonu vardır:

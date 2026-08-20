@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Billing;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
 using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.Pricing;
 using Abdera.Api.Modules.Progress;
 using Abdera.Api.Modules.Scheduling;
 using Abdera.Api.Shared;
@@ -15,7 +16,17 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
+using System.Globalization;
 using System.Text.Json.Serialization;
+
+// Sunucunun (veya konteynerin) işletim sistemi kültürü ne olursa olsun (örn. tr-TR),
+// ToString()/string interpolation kültüre bağımlı biçim üretmesin - aksi halde bir decimal'i
+// elle JSON'a basan kod (örn. audit log) virgüllü ondalık üretip jsonb kolonunda parse
+// hatasına yol açabilir (gerçek bir prod bug'ı - bkz. BulkUpdate.cs/Payments.cs yorumları).
+// Kullanıcıya gösterilecek tr-TR'ye özgü biçimlendirme (tarih/para gösterimi) gerektiğinde
+// bu, ilgili yerde CultureInfo.GetCultureInfo("tr-TR") ile açıkça belirtilir.
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +57,7 @@ builder.Services.AddDbContext<AbderaDbContext>((sp, options) => options.UseNpgsq
 
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddBillingModule();
 
 // --- Data Protection anahtarları kalıcı bir dizine yazılır ---
 // Aksi halde anahtarlar yalnızca bellekte tutulur ve her container yeniden başlatmasında
@@ -159,6 +171,7 @@ app.MapPeopleModule();
 app.MapSchedulingModule();
 app.MapAttendanceModule();
 app.MapProgressModule();
+app.MapPricingModule();
 app.MapBillingModule();
 
 await DatabaseMigrator.RunAsync(app);

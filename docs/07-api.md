@@ -57,16 +57,20 @@ POST   /api/lessons/{lessonId}/notes            ✅ yalnızca Teacher
 POST   /api/students/{studentId}/skill-assessments   -- Progress'in kalanı, Phase 6
 GET    /api/students/{studentId}/progress            -- Phase 6
 
-GET    /api/price-lists                         -- A1, Phase 4
-POST   /api/price-lists
-POST   /api/price-lists/{priceListId}/preview-bulk-update   -- A1: uygulamadan önce önizleme
-POST   /api/price-lists/{priceListId}/apply
+GET    /api/price-lists                         ✅ A1
+POST   /api/price-lists                         ✅ liste + tüm kalemleri tek seferde
+POST   /api/price-lists/{priceListId}/preview-bulk-update   ✅ A1: uygulamadan önce önizleme
+POST   /api/price-lists/{priceListId}/apply     ✅ yalnızca bu listenin kalemleri, geçmiş Receivable etkilenmez
 
-GET    /api/receivables                         -- Phase 4
-POST   /api/receivables
-POST   /api/receivables/{receivableId}/payments
-GET    /api/students/{studentId}/billing
-POST   /api/receivables/{receivableId}/send-reminder
+POST   /api/enrollments/{enrollmentId}/fee-plan ✅ eklendi - docs'ta yoktu, Receivable'ın ön koşulu
+GET    /api/enrollments/{enrollmentId}/fee-plan ✅ eklendi
+
+GET    /api/receivables                         ✅ ?status= filtresiyle
+POST   /api/receivables                         ✅ aktif FeePlan'dan snapshot alır
+POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edilemez
+POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
+GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
+POST   /api/receivables/{receivableId}/send-reminder   -- Messaging'e bağımlı, Phase 5
 
 GET    /api/students/{studentId}/makeup-credits  ✅ A2
 POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar

@@ -18,6 +18,10 @@ Master prompt (`docs/00-master-prompt.md`) gözden geçirilirken bulunan boşluk
 | — | LessonChangeRequest'in Phase 3 kapsamı | Durum makinesindeki `PENDING → APPROVED/REJECTED` yolu tam çalışır. `ALTERNATIVE_PROPOSED`/`PARENT_CONFIRMATION_PENDING`/`PARENT_ACCEPTED`/`PARENT_REJECTED` durumları veliyle WhatsApp üzerinden etkileşim gerektirdiği için (Phase 5) enum'da tanımlı ama hiçbir use-case tarafından henüz üretilmiyor — bilinçli, kayda değer bir eksik (sessizce atlanmadı). |
 | — | RSVP'yi kim ayarlar (Phase 3'te) | `POST /api/lessons/{id}/rsvp` yalnızca Admin'e açık, `source=ADMIN` ile kaydeder — WhatsApp (Phase 5) gelene kadar velinin sözlü/telefonla bildirdiği cevabı yönetici girer. Veli, dersin öğrencisiyle `student_guardians` üzerinden ilişkili olmalı, aksi halde `400`. |
 | — | Yoklama düzeltmesi audit'e ne zaman düşer | İlk kayıt (öğretmen normal akış) audit'e düşmez; **düzeltme** (var olan kaydı güncelleme) her zaman düşer, aktör Admin ya da Teacher fark etmez — `docs/05-state-models.md`'nin "düzeltme audit_log'a düşer" kuralı. Admin'in **ilk kaydı** kendisi girerse (override) ayrıca audit'e düşer — `docs/04-permissions.md`'nin "gerekirse override edebilir, audit'e düşer" kuralı. |
+| — | Bir kayda birden fazla aktif FeePlan olamaz | `POST /api/enrollments/{id}/fee-plan` zaten aktif (`active_until IS NULL`) bir plan varsa 409 döner — hangi tutarın "geçerli" olduğu belirsizleşmesin diye. Fiyat/enstrüman değişikliği gerekiyorsa önce eskisi `End()` ile kapatılmalı (bu akış henüz UI'da yok, API'de mevcut). |
+| — | Receivable.OVERDUE geçişi ile ödeme geçişi ayrımı | `docs/05-state-models.md`'nin "OVERDUE -> PARTIAL: kısmi ödeme girildi" okundan anlaşılan: ödeme kaydı asla doğrudan OVERDUE üretmemeli, yalnızca vadeyi hiç kontrol etmeden Paid/Partial hesaplamalı. Bu yüzden `Receivable`'da tek bir `RecalculateStatus` yerine iki ayrı metot var: `RecordPaymentEffect` (yalnızca tutar) ve `MarkOverdueIfPastDue` (yalnızca gecelik sweeper çağırır). Tek metot bu ayrımı bozardı - bkz. `Modules/Billing/Domain/Receivable.cs` yorumu. |
+| — | Vadesi geçmiş taraması ilk zamanlanmış iş | `OverdueReceivableSweeper` (saatlik `BackgroundService`) — daha önce "Phase 5'e kadar otomatik/periyodik zamanlayıcı yok" denmişti (ders üretimi bağlamında); bu, saf Billing'in kendi doğruluğu için gerekli olduğundan istisna: WhatsApp/Messaging'e bağımlı değil, Phase 5'i beklemedi. |
+| — | `send-reminder` Phase 5'e ertelendi | `POST /api/receivables/{id}/send-reminder` Messaging modülüne (NotificationJob, WhatsApp) bağımlı — o modül olmadan anlamsız, bu yüzden Phase 4'te uygulanmadı, docs/07-api.md'de işaretsiz bırakıldı. |
 
 ## Java yerine .NET — gerekçe
 
@@ -47,11 +51,11 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 
 | # | Soru | Öneri (henüz onaylanmadı) |
 |---|---|---|
-| B1 | `PACKAGE` tipi paket hangi ders durumunda tükeniyor? | `COMPLETED` + habersiz `ABSENT` düşer; `CANCELLED`/okul kaynaklı iptal düşmez |
-| B2 | Devamsızlık aidatı etkiliyor mu? | `MONTHLY`'de hayır; telafi hakkı A2 kuralına göre ayrı doğar |
+| B1 | `PACKAGE` tipi paket hangi ders durumunda tükeniyor? | **Hâlâ uygulanmadı.** Phase 4, `PACKAGE`'ı bir `billing_type` seçeneği olarak (fiyat kalemi + ücret planı + tek seferlik `Receivable`) destekliyor, ama "N ders sonra paket biter, otomatik yeni `Receivable` üretilir" tüketim takibi (Attendance→Billing bağlantısı) kodda yok. Öneri hâlâ geçerli: `COMPLETED` + habersiz `ABSENT` düşer; `CANCELLED`/okul kaynaklı iptal düşmez — ama bu, Attendance modülünde bir "paket kredisi düş" adımı gerektirir, henüz yazılmadı. |
+| B2 | Devamsızlık aidatı etkiliyor mu? | `MONTHLY` için fiilen doğrulandı: `Receivable.Amount`, `FeePlan`'dan sabit snapshot alınır, hiçbir kod yolu yoklama durumuna göre bu tutarı değiştirmiyor — "devamsızlık aidatı etkilemez" örtük olarak uygulanmış durumda. |
 | D4 | Deploy hedefi: Cloudflare + managed Postgres mi, yoksa Raspberry Pi mi (diğer projelerinle tutarlı)? | Phase 7'den önce netleşmeli — yedekleme ve kaynak planlamasını etkiliyor |
 
-**Not:** B3 ve B4 aşağıda kendi öneri notlarıyla birlikte kabul edilmiş kararlar olarak işlendi (net alternatifleri yoktu, tersi mantıksız olurdu); B1/B2/D4 hâlâ açık — Phase 2/4/7'den önce onay gerekiyor.
+**Not:** B3 ve B4 aşağıda kendi öneri notlarıyla birlikte kabul edilmiş kararlar olarak işlendi (net alternatifleri yoktu, tersi mantıksız olurdu); B1 kod düzeyinde hâlâ eksik, D4 hâlâ açık — ikisi de ilgili faz tamamlanmadan önce netleşmeli (B1: bir sonraki Billing/Attendance dokunuşu, D4: Phase 7).
 
 ## Kabul edilen varsayımlar (B3, B5 ve devamı)
 

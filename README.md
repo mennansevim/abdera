@@ -18,15 +18,15 @@ Enstrümanlar: **piyano · gitar · keman · bateri**
 
 ## Durum
 
-**Phase 3 — devam, RSVP, ders değişikliği.** Öğretmen "Bugünkü Derslerim" ekranından yoklama alıp ders notu girebiliyor (ders otomatik tamamlandı oluyor); ders değişikliği talebi açıp Admin onay kuyruğundan onaylanabiliyor (geçmiş korunarak yeni ders açılıyor); doğrudan iptalde ≥24 saat kuralına göre telafi kredisi doğuyor ve kredi yeni bir telafi dersi açmak için kullanılabiliyor. Hepsi `docker compose up` ile uçtan uca doğrulandı. Fiyatlandırma/aidat ve WhatsApp henüz yok — Phase 4'ten itibaren geliyor.
+**Phase 4 — fiyatlandırma ve aidat.** Admin fiyat listesi tanımlıyor (enstrüman × süre × aylık/paket), bir kayda ücret planı açıyor, aidat (`Receivable`) üretiyor ve nakit/havale/kart/diğer ödeme kaydediyor — durum otomatik güncelleniyor (ödenmedi/kısmi/ödendi), vadesi geçenler saatlik bir arka plan işiyle otomatik "vadesi geçti" oluyor. Toplu zam önizlemeli uygulanıyor ve geçmiş aidatları geriye dönük etkilemiyor (tutar snapshot alınıyor). Hepsi `docker compose up` ile uçtan uca doğrulandı. WhatsApp henüz yok — Phase 5'ten itibaren geliyor.
 
 | Faz | Kapsam | Durum |
 |---|---|---|
 | 0 | Tasarım paketi, alan modeli, API yüzeyi, kararlar | ✅ |
 | 1 | İskelet: Compose + Postgres + API + web + auth | ✅ |
 | 2 | Kişiler ve takvim | ✅ |
-| 3 | Devam, RSVP, ders değişikliği | ✅ Bu commit |
-| 4 | Fiyatlandırma ve aidat | ⬜ |
+| 3 | Devam, RSVP, ders değişikliği | ✅ |
+| 4 | Fiyatlandırma ve aidat | ✅ Bu commit |
 | 5 | WhatsApp | ⬜ |
 | 6 | Gelişim takibi ve hatırlatmalar | ⬜ |
 | 7 | Sağlamlaştırma ve devreye alma | ⬜ |
