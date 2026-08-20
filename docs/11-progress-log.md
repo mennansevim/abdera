@@ -178,4 +178,27 @@ Push edildi (e47fa0a). Sıradaki madde: SEC-3 (giriş ekranında rate limiting).
 
 ### Kalan iş
 
-Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push. Sıradaki madde: SEC-4 (Login.cs'teki zamanlama kanalı).
+Push edildi (b2bd577). Sıradaki madde: SEC-4 (Login.cs'teki zamanlama kanalı).
+
+## Denetim düzeltmeleri — SEC-4 (Orta): Login.cs'te kullanıcı numaralandırmasına yeten zamanlama kanalı
+
+`docs/13-audit-fix-prompt.md` madde 4. Kullanıcı bulunamadığında hash doğrulama adımı (PBKDF2) hiç çalışmıyordu - yanıt mesajı aynı ama süre farklıydı (kayıtlı e-posta ~50-100ms, kayıtsız ~1ms), bu da e-posta numaralandırmasına yeten bir zamanlama kanalıydı. Ayrıca koddaki yorum ("aynı genel mesaj döner - kullanıcı numaralandırmasına karşı") gerçek davranışı yanlış tarif ediyordu (yalnızca mesajı eşitliyordu, süreyi değil).
+
+### Yapılanlar
+
+- `Login.cs`'e sabit, önceden hesaplanmış bir dummy kullanıcı/hash eklendi (`DummyUser`/`DummyPasswordHash`, tip başlatılırken bir kez hesaplanıyor).
+- Kullanıcı `null` olduğunda artık bu dummy hash'e karşı `passwordHasher.VerifyHashedPassword` çağrılıyor (sonuç kullanılmıyor, yalnızca PBKDF2 maliyeti eşitleniyor), ardından aynı 401 dönülüyor.
+- Yorum, koddaki gerçek davranışla (mesaj + süre eşitleme) eşleştirildi.
+- `AuthFlowTests.cs`'e yeni test: var olmayan e-posta ile yanlış şifrenin aynı görünür yanıtı (title/detail) verdiğini doğruluyor. Zamanlama farkının kapanması CI'da flaky bir eşik gerektireceğinden otomatik teste bağlanmadı - canlı doğrulama ile ayrıca ölçüldü (aşağıya bakınız).
+
+### Testler
+
+`dotnet test` → 149/149 yeşil (148 + 1 yeni).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+`RateLimiting__LoginPermitLimit` geçici olarak çok yükseltilip (`auth-login` politikasının timing ölçümünü etkilememesi için) 10'ar istekle iki grup ölçüldü: kayıtlı e-postaya yanlış şifre ortalama ~64ms, var olmayan e-postaya herhangi bir şifre ortalama ~55ms - önceki davranışta (dummy hash yokken) ikinci grup ~1ms civarında olurdu (hash hiç hesaplanmıyordu). Fark artık ölçüm gürültüsü seviyesinde, yapısal bir "adımı tamamen atla" farkı değil. `.env` sonra orijinal değerine geri alındı, gerçek admin girişinin hâlâ `200` döndüğü doğrulandı.
+
+### Kalan iş
+
+Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push. Sıradaki madde: UX-1 (mobil destek, Sıcak Stüdyo tasarım dili kullanılacak - kullanıcı onayı alındı).

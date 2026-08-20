@@ -14,6 +14,13 @@ public static class Login
 
     public record Response(Guid Id, string Email, UserRole Role, bool MustChangePassword);
 
+    // SEC-4 (docs/13-audit-fix-prompt.md): kullanıcı bulunamadığında da hash doğrulamasının
+    // ÇALIŞTIRILMASI için sabit, önceden hesaplanmış bir "dummy" kullanıcı/hash - aşağıdaki
+    // dummy şifre yalnızca bu hash'i üretmek için kullanılıyor, gerçek bir hesaba ait değil.
+    private static readonly User DummyUser = User.Create("dummy@internal.local", "", UserRole.Admin, DateTimeOffset.UnixEpoch);
+    private static readonly string DummyPasswordHash =
+        new PasswordHasher<User>().HashPassword(DummyUser, "dummy-password-for-timing-safety-only");
+
     public static void MapLogin(this IEndpointRouteBuilder app)
     {
         // SEC-3: kaba kuvvet korumasi - IP basina sabit pencere (bkz. Program.cs "auth-login" politikasi).
@@ -32,8 +39,12 @@ public static class Login
 
         if (user is null)
         {
-            // Var olmayan e-posta ile yanlış şifre arasında zamanlama farkı bırakmamak için
-            // aynı genel mesaj döner - kullanıcı numaralandırmasına karşı.
+            // Var olmayan e-posta ile yanlış şifre arasında yanıt mesajı zaten aynıydı, ama
+            // hash doğrulama adımı hiç çalışmadığından SÜRE farklıydı (kayıtlı e-posta ~50-100ms,
+            // kayıtsız ~1ms) - bu da kullanıcı numaralandırmasına yeten bir zamanlama kanalıydı.
+            // Sonucu kullanılmasa da sabit bir dummy hash'e karşı doğrulama çalıştırarak süre
+            // eşitleniyor.
+            passwordHasher.VerifyHashedPassword(DummyUser, DummyPasswordHash, request.Password);
             return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: "E-posta veya şifre hatalı.");
         }
 

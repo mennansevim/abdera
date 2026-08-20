@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Abdera.Api.Modules.Auth.Features;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 
 namespace Abdera.Tests.Integration;
@@ -78,6 +79,33 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         var newLogin = await freshClient.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "YeniSifre2026!"));
         Assert.Equal(HttpStatusCode.OK, newLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_with_nonexistent_email_returns_the_same_response_as_wrong_password()
+    {
+        // SEC-4: kullanıcı numaralandırmasına karşı - var olmayan e-posta ile kayıtlı bir
+        // e-postaya yanlış şifre girmek aynı görünür yanıtı vermeli (durum kodu + gövde).
+        // Zamanlama farkının kapatılması (dummy hash doğrulaması) burada otomatik test
+        // edilmiyor - CI'da güvenilir bir eşik belirlemek flaky olurdu; Login.cs'teki
+        // yorum bu invariant'ı ve nedenini açıklıyor.
+        using var client = _factory.CreateClient();
+
+        var wrongPasswordResponse = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request("admin@test.local", "wrong-password"));
+        var nonexistentEmailResponse = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request("hic-boyle-bir-kullanici-yok@test.local", "herhangi-bir-sifre"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, wrongPasswordResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, nonexistentEmailResponse.StatusCode);
+
+        // ProblemDetails'in traceId'si her istekte farklı olduğundan tüm gövdeyi değil,
+        // görünür alanları (title/detail) karşılaştırıyoruz - kullanıcı numaralandırmasına
+        // karşı asıl önem taşıyan bunlar.
+        var wrongPasswordBody = await wrongPasswordResponse.Content.ReadFromJsonAsync<ProblemDetails>(TestJson.Options);
+        var nonexistentEmailBody = await nonexistentEmailResponse.Content.ReadFromJsonAsync<ProblemDetails>(TestJson.Options);
+        Assert.Equal(wrongPasswordBody!.Title, nonexistentEmailBody!.Title);
+        Assert.Equal(wrongPasswordBody.Detail, nonexistentEmailBody.Detail);
     }
 
     [Fact]
