@@ -157,6 +157,53 @@ builder.Services.AddCors(options =>
         .AllowCredentials());
 });
 
+// --- Rate limiting (SEC-3, docs/13-audit-fix-prompt.md): ASP.NET Core'un yerleşik
+// Microsoft.AspNetCore.RateLimiting'i kullanıyoruz - zaten paylaşılan çerçevede (shared
+// framework) geliyor, ek NuGet paketi gerekmiyor (CLAUDE.md "gereksiz bağımlılık ekleme").
+// Politika delegate'leri her istekte çalışır (Build()'den sonra) - RateLimiting:* ayarları
+// burada değil, IConfiguration üzerinden istek anında okunur, bu yüzden
+// WebApplicationFactory'nin test-time override'ı sorunsuz yansır.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // /api/auth/login: IP başına sabit pencere (öneri: 5 istek / 15 dakika) - kaba kuvvet
+    // saldırısına karşı. Testlerde CreateAdminClientAsync onlarca kez çağrıldığından
+    // (bkz. MessagingFlowTests vb.), test factory bu limiti config override'ıyla
+    // pratikte devre dışı bırakacak kadar yükseltiyor; SEC-3 testi kendi düşük limitli
+    // factory'sini WithWebHostBuilder ile kurar.
+    options.AddPolicy("auth-login", httpContext =>
+    {
+        var config = httpContext.RequestServices.GetRequiredService<IConfiguration>();
+        return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetClientIp(httpContext),
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = config.GetValue("RateLimiting:LoginPermitLimit", 5),
+                Window = TimeSpan.FromMinutes(config.GetValue("RateLimiting:LoginWindowMinutes", 15)),
+                QueueLimit = 0,
+            });
+    });
+
+    // Webhook uçları (WhatsApp/banka sağlayıcısı) tamamen sınırsız kalmasın ama gerçek
+    // sağlayıcı trafiğini de engellemesin - IP başına dakikada 60 istek.
+    options.AddPolicy("webhooks", httpContext =>
+    {
+        var config = httpContext.RequestServices.GetRequiredService<IConfiguration>();
+        return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetClientIp(httpContext),
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = config.GetValue("RateLimiting:WebhookPermitLimitPerMinute", 60),
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            });
+    });
+});
+
+static string GetClientIp(HttpContext httpContext) =>
+    httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
 var app = builder.Build();
 
 ProductionSecretsGuard.EnsureConfigured(app);
@@ -164,6 +211,7 @@ ProductionSecretsGuard.EnsureConfigured(app);
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

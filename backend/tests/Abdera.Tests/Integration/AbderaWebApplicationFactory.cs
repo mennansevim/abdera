@@ -46,6 +46,12 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 ["Bootstrap:AdminPassword"] = "Test1234!",
                 // NotificationDispatcher testlerinin gerçek 60 saniye beklemesine gerek kalmasın diye.
                 ["Notifications:DispatchIntervalSeconds"] = "1",
+                // SEC-3: paylaşılan bu factory'yi kullanan test sınıflarının çoğu
+                // CreateAdminClientAsync üzerinden onlarca kez giriş yapıyor (bkz.
+                // MessagingFlowTests). Varsayılan 5/15dk limiti burada pratikte devre dışı
+                // bırakılıyor - RateLimitingFlowTests kendi düşük limitli factory'sini
+                // WithWebHostBuilder ile kurup asıl davranışı doğruluyor.
+                ["RateLimiting:LoginPermitLimit"] = "10000",
             });
         });
     }

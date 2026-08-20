@@ -16,7 +16,8 @@ public static class Login
 
     public static void MapLogin(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/auth/login", HandleAsync).AllowAnonymous();
+        // SEC-3: kaba kuvvet korumasi - IP basina sabit pencere (bkz. Program.cs "auth-login" politikasi).
+        app.MapPost("/api/auth/login", HandleAsync).AllowAnonymous().RequireRateLimiting("auth-login");
     }
 
     private static async Task<IResult> HandleAsync(

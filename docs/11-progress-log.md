@@ -154,4 +154,28 @@ Not: bu doğrulama sırasında frontend (`web`) servisinin `docker-compose up --
 
 ### Kalan iş
 
-Henüz commit yok - denetim listesindeki madde 2 (RSVP) SEC-1 ile birlikte tek commit'te yapıldı (aynı zafiyet sınıfı, aynı dosyalarda küçük değişiklik). Sıradaki madde: SEC-3 (giriş ekranında rate limiting).
+Push edildi (e47fa0a). Sıradaki madde: SEC-3 (giriş ekranında rate limiting).
+
+## Denetim düzeltmeleri — SEC-3 (Yüksek): giriş ekranında rate limiting / kaba kuvvet koruması yoktu
+
+`docs/13-audit-fix-prompt.md` madde 3. 69 endpoint'in hiçbirinde `AddRateLimiter` yoktu, `/api/auth/login` sınırsız denenebiliyordu.
+
+### Yapılanlar
+
+- ASP.NET Core'un yerleşik `Microsoft.AspNetCore.RateLimiting`'i kullanıldı (shared framework'te geliyor, ek NuGet paketi eklenmedi).
+- `Program.cs`'te iki fixed-window politika: `auth-login` (IP başına, varsayılan 5 istek/15 dk, `RateLimiting:LoginPermitLimit`/`LoginWindowMinutes` ile yapılandırılabilir) ve `webhooks` (IP başına dakikada 60 istek, `RateLimiting:WebhookPermitLimitPerMinute`). Politika delegate'leri istek anında `IConfiguration`'ı okuyor, bu yüzden test override'ları sorunsuz yansıyor.
+- `/api/auth/login`, `/api/webhooks/whatsapp` (POST), `/api/webhooks/bank` (POST) ilgili politikalarla işaretlendi. Limit aşımı `429` döner.
+- `AbderaWebApplicationFactory`'nin paylaşılan test config'inde `RateLimiting:LoginPermitLimit=10000` ile limit pratikte devre dışı bırakıldı - `MessagingFlowTests`/`AttendanceAndChangesFlowTests` gibi sınıflar `CreateAdminClientAsync`'i onlarca kez çağırıyor, gerçek 5'lik limit bunları kırardı.
+- `AuthFlowTests.cs`'e yeni test: `_factory.WithWebHostBuilder(...)` ile ayrı, düşük limitli (`LoginPermitLimit=3`) bir host kurup 4. denemenin `429` döndüğünü doğruluyor.
+
+### Testler
+
+`dotnet test` → 148/148 yeşil (147 + 1 yeni).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+`db`+`api` ayağa kaldırıldı, `/api/auth/login`'e art arda 6 hatalı-şifre isteği atıldı: ilk 5'i `401`, 6.'sı `429` döndü. Ardından `/api/webhooks/whatsapp`'a gerçek imzayla tek bir istek atılıp hâlâ `200` döndüğü ve `/health`'in `Healthy` kaldığı doğrulandı (rate limiter middleware'i webhook akışını bozmadı).
+
+### Kalan iş
+
+Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push. Sıradaki madde: SEC-4 (Login.cs'teki zamanlama kanalı).

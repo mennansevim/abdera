@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using Abdera.Api.Modules.Auth.Features;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 
 namespace Abdera.Tests.Integration;
 
@@ -76,5 +78,31 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         var newLogin = await freshClient.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "YeniSifre2026!"));
         Assert.Equal(HttpStatusCode.OK, newLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_returns_429_after_exceeding_rate_limit()
+    {
+        // SEC-3: paylaşılan AbderaWebApplicationFactory login limitini testler bozulmasın
+        // diye pratikte sınırsız yapıyor (RateLimiting:LoginPermitLimit=10000) - asıl
+        // davranışı doğrulamak için burada düşük bir limitle ayrı bir host kuruyoruz.
+        using var limitedFactory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RateLimiting:LoginPermitLimit"] = "3",
+                ["RateLimiting:LoginWindowMinutes"] = "15",
+            }));
+        });
+        using var client = limitedFactory.CreateClient();
+
+        HttpResponseMessage? response = null;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            response = await client.PostAsJsonAsync("/api/auth/login",
+                new Login.Request("admin@test.local", "wrong-password"));
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, response!.StatusCode);
     }
 }

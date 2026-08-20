@@ -14,7 +14,9 @@ public static class Webhooks
     public static void MapWebhooks(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/webhooks/whatsapp", VerifySubscription).AllowAnonymous();
-        app.MapPost("/api/webhooks/whatsapp", ReceiveAsync).AllowAnonymous();
+        // SEC-3: gerçek sağlayıcı trafiğini engellemeyecek ama sınırsız da bırakmayan
+        // gevşek bir politika (bkz. Program.cs "webhooks" politikası).
+        app.MapPost("/api/webhooks/whatsapp", ReceiveAsync).AllowAnonymous().RequireRateLimiting("webhooks");
     }
 
     private static IResult VerifySubscription(HttpRequest request, IConfiguration config)
