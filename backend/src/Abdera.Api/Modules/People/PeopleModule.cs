@@ -14,5 +14,6 @@ public static class PeopleModule
         app.MapEnrollments();
         app.MapGuardianAuth();
         app.MapGuardianPortal();
+        app.MapGuardianPortalData();
     }
 }

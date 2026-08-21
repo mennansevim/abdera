@@ -8,8 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Abdera.Api.Modules.People.Features;
 
 // docs/10-decisions.md Karar F reversal: veli kendi öğrencisinin listesini, takvimini ve
-// RSVP'sini görebilir/ayarlayabilir - GuardianAuth.cs ile kurulan oturuma bağlı. Kapsam
-// bilinçli olarak dar tutuldu: aidat (billing) ve bildirim listesi burada YOK, ayrı bir iş.
+// RSVP'sini görebilir/ayarlayabilir - GuardianAuth.cs ile kurulan oturuma bağlı. Salt-okunur
+// aidat ve mesaj görünümü GuardianPortalData.cs'te ayrı bir read model olarak sunulur.
 // URL'deki studentId/lessonId'ye asla güvenilmez - her handler önce StudentGuardians üzerinden
 // çağıran velinin gerçekten o öğrenciye bağlı olduğunu doğrular (AuthContext'teki "Teacher
 // isteğinde hedef kaynak oturumdan çözümlenir" ilkesinin Guardian karşılığı).

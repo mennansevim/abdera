@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Features;
+using Abdera.Api.Modules.Banking.Domain;
+using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Scheduling.Features;
 using Microsoft.EntityFrameworkCore;
@@ -139,6 +141,35 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
         var rsvpResponse = await guardianClient.PostAsJsonAsync(
             $"/api/guardian/me/lessons/{someoneElses.LessonId}/rsvp", new GuardianPortal.SetRsvpRequest(RsvpResponse.Attending));
         Assert.Equal(HttpStatusCode.Forbidden, rsvpResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Guardian_portal_data_is_scoped_to_the_logged_in_guardian()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var mine = await SeedLessonAsync(admin, "gp-data-a");
+        var someoneElses = await SeedLessonAsync(admin, "gp-data-b");
+        var now = DateTimeOffset.UtcNow;
+
+        db.VirtualIbans.Add(VirtualIban.Create(mine.GuardianId, "TR000000000000000000000001", "FakeBank", "test", now));
+        db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(null, mine.GuardianId, null, "Sadece benim bildirimin", null, now));
+        db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(null, someoneElses.GuardianId, null, "Başka velinin bildirimi", null, now));
+        await db.SaveChangesAsync();
+
+        using var guardianClient = await LoginAsGuardianAsync(_factory, mine.GuardianPhone);
+
+        var billing = await (await guardianClient.GetAsync("/api/guardian/me/billing"))
+            .Content.ReadFromJsonAsync<GuardianPortalData.GuardianBillingResponse>(TestJson.Options);
+        Assert.NotNull(billing);
+        Assert.Contains(billing!.Enrollments, enrollment => enrollment.StudentId == mine.StudentId);
+        Assert.DoesNotContain(billing.Enrollments, enrollment => enrollment.StudentId == someoneElses.StudentId);
+        Assert.Equal("TR000000000000000000000001", billing.VirtualIban!.Iban);
+
+        var messages = await (await guardianClient.GetAsync("/api/guardian/me/messages"))
+            .Content.ReadFromJsonAsync<List<GuardianPortalData.GuardianMessageResponse>>(TestJson.Options);
+        Assert.Contains(messages!, message => message.Body == "Sadece benim bildirimin");
+        Assert.DoesNotContain(messages!, message => message.Body == "Başka velinin bildirimi");
     }
 
     [Fact]

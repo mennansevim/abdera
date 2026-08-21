@@ -89,6 +89,15 @@ POST   /api/bank-transactions/{transactionId}/resolve   ✅ NeedsReview'ı elle 
 POST   /api/webhooks/bank                        ✅ paylaşılan-sır başlığı ile doğrulama + idempotency + eşleştirme (gerçek sağlayıcı seçilince imza şeması değişecek)
 POST   /api/dev/bank/simulate-transaction        ✅ yalnızca Development - eşleştirme mantığını gerçek sağlayıcı olmadan test eder
 
+POST   /api/guardian/otp/request                 ✅ yalnızca kayıtlı veli telefonu için WhatsApp OTP
+POST   /api/guardian/otp/verify                  ✅ GuardianOnly cookie oturumu açar
+GET    /api/guardian/me                          ✅ oturumdaki veliyi döner
+GET    /api/guardian/me/students                 ✅ yalnızca bağlı öğrenciler
+GET    /api/guardian/me/students/{studentId}/calendar ✅ yalnızca bağlı öğrencinin takvimi
+POST   /api/guardian/me/lessons/{lessonId}/rsvp  ✅ yalnızca bağlı ders için veli RSVP'si
+GET    /api/guardian/me/billing                  ✅ yalnızca bağlı öğrencilerin salt-okunur aidat/telafi/IBAN görünümü
+GET    /api/guardian/me/messages                 ✅ yalnızca velinin giden WhatsApp bildirim geçmişi (son 50)
+
 GET    /api/dashboard/today                     ✅ rol bazlı kapsam (docs/04-permissions.md) - denetim E2/ARC-6
 ```
 
