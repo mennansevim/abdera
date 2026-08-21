@@ -82,6 +82,32 @@ export function useRejectChangeRequest() {
   });
 }
 
+// Sürükle-bırak takvim (dashboard/calendar/page.tsx): admin bir dersi yeni gün/saate
+// taşıdığında ayrı bir "hızlı taşıma" endpoint'i yok - var olan LessonChangeRequest
+// akışını (create + approve) arka arkaya çağırıyoruz. Böylece çakışma kontrolü, eski
+// bildirim job'unun iptali ve yeni hatırlatmanın kurulması ChangeRequests.cs'teki
+// ApproveAsync'ten aynen miras alınır; ayrı bir backend değişikliği gerekmez.
+export function useRescheduleLesson() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ lessonId, proposedStartAt, proposedEndAt }: { lessonId: string; proposedStartAt: string; proposedEndAt: string }) => {
+      const request = await api.post<ChangeRequest>(`/api/lessons/${lessonId}/change-requests`, { proposedStartAt, proposedEndAt });
+      try {
+        await api.post(`/api/change-requests/${request.id}/approve`);
+      } catch (err) {
+        // Onay başarısız oldu (örn. çakışma) - yarım kalan talebi reddederek "Bekleyen
+        // Değişiklik Talepleri" listesinde asılı bırakmıyoruz.
+        await api.post(`/api/change-requests/${request.id}/reject`).catch(() => {});
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["change-requests"] });
+    },
+  });
+}
+
 export function useCancelLesson() {
   const queryClient = useQueryClient();
   return useMutation({
