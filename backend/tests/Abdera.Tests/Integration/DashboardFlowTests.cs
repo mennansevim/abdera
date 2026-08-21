@@ -6,7 +6,9 @@ using Abdera.Api.Modules.Dashboard.Features;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Modules.Scheduling.Features;
+using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -76,13 +78,27 @@ public class DashboardFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // Haftalık seri üretim akışını tetiklemiyoruz (gün eşleşmesi gerektirir), doğrudan
         // "bugün"e Lesson.CreateFromSeries ile açıyoruz. lessonB ise MAKEUP - farklı bir
         // durumun da dashboard'a doğru sayıldığını (Cancelled olmadığı sürece) gösteriyor.
+        //
+        // Ders saatleri artık `now.AddHours(n)` ile DEĞİL, okulun yerel "bugün"üne sabit
+        // saatlerle (10:00/12:00) çapalanıyor - Dashboard.cs "bugün" penceresini
+        // Europe/Istanbul yerel gün sınırına göre hesaplıyor (docs/00-master-prompt.md).
+        // Eski hâliyle test UTC gece yarısına yakın (İstanbul akşam saatlerinde) çalışınca
+        // `now.AddHours(3..4)` yerel günü aşıp "yarın"a düşüyor, TodayLessons beklenenin altına
+        // düşüp testi kırılgan (flaky) yapıyordu - gerçek bir prod bug'ı bulundu ve CI'da
+        // gözlemlendi.
         var now = DateTimeOffset.UtcNow;
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var lessonAStart = LessonGenerator.ToUtcInstant(todayLocal, new TimeOnly(10, 0), clock.SchoolTimeZone);
+        var lessonAEnd = lessonAStart.AddMinutes(45);
+        var lessonBStart = LessonGenerator.ToUtcInstant(todayLocal, new TimeOnly(12, 0), clock.SchoolTimeZone);
+        var lessonBEnd = lessonBStart.AddMinutes(45);
         var seriesA = Abdera.Api.Modules.Scheduling.Domain.LessonSeries.Create(
-            enrollmentA.Id, now.DayOfWeek, TimeOnly.FromDateTime(now.AddHours(1).DateTime), 45,
-            DateOnly.FromDateTime(now.Date), null, now);
+            enrollmentA.Id, clock.ToSchoolLocal(lessonAStart).DayOfWeek, TimeOnly.FromDateTime(lessonAStart.DateTime), 45,
+            todayLocal, null, now);
         db.LessonSeries.Add(seriesA);
-        var lessonA = Lesson.CreateFromSeries(seriesA.Id, studentA.Id, teacherA.Teacher.Id, piano.Id, now.AddHours(1), now.AddHours(2), now);
-        var lessonB = Lesson.CreateMakeup(studentB.Id, teacherB.Id, piano.Id, now.AddHours(3), now.AddHours(4), now);
+        var lessonA = Lesson.CreateFromSeries(seriesA.Id, studentA.Id, teacherA.Teacher.Id, piano.Id, lessonAStart, lessonAEnd, now);
+        var lessonB = Lesson.CreateMakeup(studentB.Id, teacherB.Id, piano.Id, lessonBStart, lessonBEnd, now);
         db.Lessons.AddRange(lessonA, lessonB);
 
         var rsvp = LessonRsvp.Create(lessonA.Id, guardianA.Id, now);
