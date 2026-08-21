@@ -33,7 +33,7 @@
 5. Yönetici bir ödeme kaydeder ve `Receivable` durumu değişir
 6. Bir ders-değişikliği talebi onaylanır ve bildirim oluşturulur
 
-Bu 6 senaryo Phase 1–5 tamamlandığında CI'da (`.github/workflows/ci.yml`) çalışır; Phase 0'da yalnızca senaryo listesi olarak var.
+Bu 6 senaryo CI'da (`.github/workflows/ci.yml`, `backend-build-test` job'ı) gerçekten çalışıyor - denetim OPS-1 (`docs/13-audit-fix-prompt.md` madde 14) ile açıldı.
 
 ## Phase 5 notları (uygulandıktan sonra eklendi)
 
@@ -47,3 +47,12 @@ Bu 6 senaryo Phase 1–5 tamamlandığında CI'da (`.github/workflows/ci.yml`) �
 `Unit/BankingDomainTests.cs` (13 test): `VirtualIban`/`BankIncomingTransaction` durum makinesi (çift eşleşme reddi, `Ignore`'un `Matched`'ten sonra reddi), `PaymentMatcher` (docs/12-bank-integration.md algoritmasının tamamı — tek net eşleşme, birden fazla eşleşme belirsiz kalır, açıklama-dönem eşleşmesi amount-only'e önceliklidir, açıklama eşleşmesi kalan bakiyeyi karşılamıyorsa reddedilir). `Integration/BankingFlowTests.cs` (5 test, Testcontainers): tek aktif sanal IBAN kısıtı, net tutar eşleşmesi otomatik `Payment` oluşturup `Receivable`'ı günceller (`CreatedBy=null`), belirsiz tutar hiçbir `Receivable`'a dokunmadan `NeedsReview`'da kalır, admin elle çözebilir (`CreatedBy`=admin), aynı `provider_transaction_id` iki kez işlenmez.
 
 **En önemli test:** `Incoming_transaction_with_ambiguous_amount_stays_needs_review_and_does_not_touch_receivable` — bu, docs/10-decisions.md E1'in "belirsizlikte otomatik davranma" kararının gerçekten uygulandığını doğrulayan test. Bu testin kırılması, para yanlış hesaba işlenebilir demektir.
+
+## OPS-1 — CI (denetim, `docs/13-audit-fix-prompt.md` madde 14)
+
+Altı fazdır `.github/workflows/ci.yml`'de yalnızca `guard-secrets` (`.env` commit kontrolü) çalışıyordu; `backend-build-test` (`dotnet restore/build/test`) yorum satırında kalmıştı - 156 testin koruma değeri yalnızca elle `dotnet test` çalıştırmaya bağlıydı, bir PR testleri kırsa CI bunu yakalamıyordu.
+
+- `backend-build-test` job'ı açıldı. Testcontainers.PostgreSql kendi Postgres container'ını doğrudan Docker daemon'ı üzerinden başlatıyor (`AbderaWebApplicationFactory`) - `ubuntu-latest` runner'ında Docker zaten hazır çalıştığından ayrı bir `services: postgres` bloğuna **gerek yok**, eklenmedi (ikisi aynı iş için çakışan/gereksiz bir ikinci Postgres olurdu).
+- Birim/entegrasyon testleri tek `dotnet test` çağrısında birlikte kalıyor (ayrı job'lara bölünmedi) - suite yerel olarak ~15-25 saniyede bitiyor, bu ölçekte ayırmanın getirisi yok.
+- `frontend-build-lint` **hâlâ yorumda** - `npm run lint` şu an `banking/page.tsx`'teki önceden var olan (bu denetimin kapsamı dışında, ayrı bir görev olarak flag'lenmiş) bir `react/no-unescaped-entities` hatasından dolayı kırmızı döner. O düzeltilmeden açılırsa CI ilk çalıştığı andan itibaren kırmızı kalır - o yüzden düzeltme ayrı görev tamamlanana kadar bilinçli olarak açılmadı.
+- **Eksik/kullanıcı eylemi gerektiren adım:** bu job'ın `main`'e push/PR'da **zorunlu (required) status check** olması bir workflow dosyası değişikliğiyle değil, GitHub repo ayarlarından yapılır (Settings → Branches → Branch protection rules → "Require status checks to pass" → `backend-build-test` seç). Bu, kod değişikliği kapsamının dışında - repo sahibinin GitHub arayüzünden yapması gerekiyor.

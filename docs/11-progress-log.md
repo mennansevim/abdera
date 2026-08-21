@@ -416,4 +416,22 @@ GET /api/dashboard/today
 
 ### Kalan iş
 
-Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.
+Push edildi (ca3bf82). Sıradaki madde: OPS-1 (CI altı fazdır testleri çalıştırmıyor) - denetim listesinin son maddesi.
+
+## Denetim düzeltmeleri — OPS-1 (Yüksek): CI'daki test bloğu açıldı
+
+`docs/13-audit-fix-prompt.md` madde 14 - denetim listesinin son maddesi. `.github/workflows/ci.yml`'de yalnızca `guard-secrets` çalışıyordu, `backend-build-test` Faz 0'dan beri yorumdaydı - 156 testin koruma değeri yalnızca elle çalıştırmaya bağlıydı.
+
+### Yapılanlar
+
+1. `backend-build-test` job'ı açıldı: `dotnet restore/build/test` `backend/Abdera.slnx` üzerinde. `services: postgres` bloğu **eklenmedi** - Testcontainers zaten kendi Postgres'ini `ubuntu-latest` runner'ının hazır Docker daemon'ı üzerinden başlatıyor, ikinci bir Postgres gereksiz/çakışan olurdu (denetimin sunduğu iki seçenekten biri).
+2. `frontend-build-lint` **bilinçli olarak yorumda bırakıldı** - `npm run lint` şu an `banking/page.tsx`'teki önceden var olan, ayrı bir görev olarak flag'lenmiş bir hatadan dolayı kırmızı dönüyor; o düzeltilmeden açılırsa CI ilk günden kırmızı kalırdı.
+3. `docs/09-testing.md`'ye OPS-1 notu eklendi - "required check" ayarının GitHub repo ayarlarından (Settings → Branches) yapılması gerektiği, bunun kod değişikliği kapsamının dışında olduğu açıkça yazıldı.
+
+### Doğrulama - bu madde için özel durum
+
+Diğer 13 maddenin aksine bu değişiklik yerel `docker compose`/tarayıcı ile doğrulanamıyor - GitHub Actions yalnızca GitHub'ın kendi altyapısında çalışır. Yerel olarak yapılan doğrulama: `.github/workflows/ci.yml` Ruby'nin `YAML.load_file`'ı ile sözdizimi açısından doğrulandı (`act` bu makinede kurulu değil). **Asıl doğrulama, push sonrası gerçek bir GitHub Actions çalıştırması izlenerek yapılacak** - `gh run watch` ile push sonrası iş akışının gerçekten yeşil döndüğü teyit edilecek, kırmızı dönerse düzeltilip tekrar push edilecek (kullanıcı onayıyla).
+
+### Kalan iş
+
+Henüz commit yok - commit sonrası kullanıcı onayıyla push edilecek, push sonrası CI çalıştırması `gh run watch` ile izlenip sonuç raporlanacak.
