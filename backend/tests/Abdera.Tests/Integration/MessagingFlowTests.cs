@@ -8,6 +8,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Scheduling.Features;
+using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Tests.Integration;
@@ -320,6 +321,24 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
                         && m.BodySnapshot.Contains("durduruldu"))
             .CountAsync();
         Assert.Equal(1, confirmations);
+    }
+
+    [Fact]
+    public async Task Notifications_list_returns_paged_envelope_and_respects_page_size()
+    {
+        // ARC-3 (docs/13-audit-fix-prompt.md): liste artık Take(200) ile sessizce
+        // kesilmiyor, { items, totalCount, page, pageSize } zarfı dönüyor.
+        var admin = await CreateAdminClientAsync();
+        await SeedLessonAsync(admin, "pageenv");
+
+        var page = await admin.GetFromJsonAsync<PagedResponse<Notifications.NotificationJobResponse>>(
+            "/api/notifications?pageSize=1&page=1", TestJson.Options);
+
+        Assert.NotNull(page);
+        Assert.True(page!.TotalCount >= 1);
+        Assert.True(page.Items.Count <= 1);
+        Assert.Equal(1, page.Page);
+        Assert.Equal(1, page.PageSize);
     }
 
     [Fact]

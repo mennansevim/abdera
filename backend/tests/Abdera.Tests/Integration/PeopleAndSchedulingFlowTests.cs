@@ -136,6 +136,26 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
     }
 
     [Fact]
+    public async Task Calendar_rejects_date_range_wider_than_three_months()
+    {
+        // ARC-3 (docs/13-audit-fix-prompt.md): bir yıllık ders geçmişi biriktiğinde takvim
+        // sorgusu sınırsız satır dönmesin diye zorunlu bir üst sınır var.
+        var admin = await CreateAdminClientAsync();
+
+        var from = DateTimeOffset.UtcNow;
+        var tooWide = from.AddDays(94);
+        var response = await admin.GetAsync(
+            $"/api/calendar?from={Uri.EscapeDataString(from.ToString("O"))}&to={Uri.EscapeDataString(tooWide.ToString("O"))}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var withinLimit = from.AddDays(90);
+        var okResponse = await admin.GetAsync(
+            $"/api/calendar?from={Uri.EscapeDataString(from.ToString("O"))}&to={Uri.EscapeDataString(withinLimit.ToString("O"))}");
+        Assert.Equal(HttpStatusCode.OK, okResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Teacher_can_only_see_own_assigned_students_and_lessons()
     {
         await using var db = await _factory.CreateDbContextAsync();

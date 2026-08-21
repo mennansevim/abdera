@@ -83,9 +83,19 @@ const STATUS_COLORS: Record<BankTransactionStatus, string> = {
   Received: "text-neutral-500", Matched: "text-green-700", NeedsReview: "text-amber-600", Ignored: "text-neutral-400",
 };
 
+const TRANSACTIONS_PAGE_SIZE = 50;
+
 function TransactionsSection() {
   const [filter, setFilter] = useState<BankTransactionStatus | "all">("NeedsReview");
-  const { data: transactions, isLoading } = useBankTransactions(filter === "all" ? undefined : filter);
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useBankTransactions(filter === "all" ? undefined : filter, page, TRANSACTIONS_PAGE_SIZE);
+  const transactions = data?.items;
+  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
+
+  function handleFilterChange(next: BankTransactionStatus | "all") {
+    setFilter(next);
+    setPage(1); // filtre değişince sayfa sıfırlanır - aksi halde boş bir sayfada kalınabilir.
+  }
 
   return (
     <section className="space-y-3">
@@ -93,7 +103,7 @@ function TransactionsSection() {
 
       <div className="flex flex-wrap gap-2">
         {(["NeedsReview", "Matched", "Ignored", "all"] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
+          <button key={f} onClick={() => handleFilterChange(f)}
             className={filter === f
               ? "rounded-md bg-neutral-900 px-3 py-1 text-sm text-white"
               : "rounded-md border border-neutral-300 px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-100"}>
@@ -128,6 +138,30 @@ function TransactionsSection() {
           </tbody>
         </table>
       </div>
+
+      {data && data.totalCount > 0 && (
+        <div className="flex items-center justify-between text-sm text-neutral-500">
+          <span>
+            Toplam {data.totalCount} kayıt - sayfa {data.page} / {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="min-h-11 rounded-md border border-neutral-300 px-3 hover:bg-neutral-100 disabled:opacity-50"
+            >
+              Önceki
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="min-h-11 rounded-md border border-neutral-300 px-3 hover:bg-neutral-100 disabled:opacity-50"
+            >
+              Sonraki
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

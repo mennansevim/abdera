@@ -27,18 +27,27 @@ public static class BankTransactions
         group.MapPost("/{transactionId:guid}/resolve", ResolveAsync);
     }
 
-    private static async Task<IResult> ListAsync(BankIncomingTransactionStatus? status, AbderaDbContext db)
+    private static async Task<IResult> ListAsync(BankIncomingTransactionStatus? status, int? page, int? pageSize, AbderaDbContext db)
     {
+        var (normalizedPage, normalizedPageSize) = Pagination.Normalize(page, pageSize);
+
         var query = db.BankIncomingTransactions.AsQueryable();
         if (status is { } s) query = query.Where(t => t.Status == s);
 
-        var transactions = await query.OrderByDescending(t => t.ReceivedAt).Take(200).ToListAsync();
+        var totalCount = await query.CountAsync();
+        var transactions = await query
+            .OrderByDescending(t => t.ReceivedAt)
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
+            .ToListAsync();
         var virtualIbanIds = transactions.Select(t => t.VirtualIbanId).Distinct().ToList();
         var virtualIbans = await db.VirtualIbans.Where(v => virtualIbanIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, v => v.GuardianId);
 
-        return Results.Ok(transactions.Select(t => new TransactionResponse(
+        var items = transactions.Select(t => new TransactionResponse(
             t.Id, t.VirtualIbanId, virtualIbans.GetValueOrDefault(t.VirtualIbanId), t.Amount, t.Currency,
-            t.SenderName, t.Description, t.ReceivedAt, t.Status, t.MatchedReceivableId)));
+            t.SenderName, t.Description, t.ReceivedAt, t.Status, t.MatchedReceivableId)).ToList();
+
+        return Results.Ok(new PagedResponse<TransactionResponse>(items, totalCount, normalizedPage, normalizedPageSize));
     }
 
     private static async Task<IResult> ResolveAsync(

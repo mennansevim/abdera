@@ -28,11 +28,21 @@ export interface NotificationJob {
   sentAt: string | null;
 }
 
-export function useNotifications(status?: NotificationJobStatus) {
-  const query = status ? `?status=${status}` : "";
+// ARC-3 (docs/13-audit-fix-prompt.md): liste artık Take(200) ile sessizce kesilmiyor,
+// backend { items, totalCount, page, pageSize } zarfı dönüyor.
+export interface PagedResponse<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export function useNotifications(status?: NotificationJobStatus, page: number = 1, pageSize: number = 50) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (status) params.set("status", status);
   return useQuery({
-    queryKey: ["notifications", status ?? "all"],
-    queryFn: () => api.get<NotificationJob[]>(`/api/notifications${query}`),
+    queryKey: ["notifications", status ?? "all", page, pageSize],
+    queryFn: () => api.get<PagedResponse<NotificationJob>>(`/api/notifications?${params.toString()}`),
   });
 }
 

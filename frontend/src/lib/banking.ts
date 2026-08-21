@@ -50,11 +50,21 @@ export function useAssignVirtualIban() {
   });
 }
 
-export function useBankTransactions(status?: BankTransactionStatus) {
-  const query = status ? `?status=${status}` : "";
+// ARC-3 (docs/13-audit-fix-prompt.md): liste artık Take(200) ile sessizce kesilmiyor,
+// backend { items, totalCount, page, pageSize } zarfı dönüyor.
+export interface PagedResponse<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export function useBankTransactions(status?: BankTransactionStatus, page: number = 1, pageSize: number = 50) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (status) params.set("status", status);
   return useQuery({
-    queryKey: ["bank-transactions", status ?? "all"],
-    queryFn: () => api.get<BankTransaction[]>(`/api/bank-transactions${query}`),
+    queryKey: ["bank-transactions", status ?? "all", page, pageSize],
+    queryFn: () => api.get<PagedResponse<BankTransaction>>(`/api/bank-transactions?${params.toString()}`),
   });
 }
 

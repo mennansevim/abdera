@@ -8,6 +8,7 @@ using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Pricing.Domain;
 using Abdera.Api.Modules.Pricing.Features;
+using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Tests.Integration;
@@ -213,9 +214,10 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             description = (string?)null,
         });
 
-        var pending = await admin.GetFromJsonAsync<List<BankTransactions.TransactionResponse>>(
+        // ARC-3: liste artık { items, totalCount, page, pageSize } zarfı dönüyor.
+        var pending = await admin.GetFromJsonAsync<PagedResponse<BankTransactions.TransactionResponse>>(
             "/api/bank-transactions?status=NeedsReview", TestJson.Options);
-        var transaction = pending!.Single(t => t.GuardianId == seeded.GuardianId);
+        var transaction = pending!.Items.Single(t => t.GuardianId == seeded.GuardianId);
 
         var resolveResponse = await admin.PostAsJsonAsync($"/api/bank-transactions/{transaction.Id}/resolve",
             new BankTransactions.ResolveRequest(seeded.ReceivableId));

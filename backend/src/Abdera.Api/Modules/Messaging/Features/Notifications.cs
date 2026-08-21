@@ -19,17 +19,22 @@ public static class Notifications
         group.MapPost("/{jobId:guid}/retry", RetryAsync);
     }
 
-    private static async Task<IResult> ListAsync(NotificationJobStatus? status, AbderaDbContext db)
+    private static async Task<IResult> ListAsync(NotificationJobStatus? status, int? page, int? pageSize, AbderaDbContext db)
     {
+        var (normalizedPage, normalizedPageSize) = Pagination.Normalize(page, pageSize);
+
         var query = db.NotificationJobs.AsQueryable();
         if (status is { } s) query = query.Where(j => j.Status == s);
 
+        var totalCount = await query.CountAsync();
         var jobs = await query
             .OrderByDescending(j => j.ScheduledAt)
-            .Take(200)
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
             .ToListAsync();
 
-        return Results.Ok(jobs.Select(ToResponse));
+        return Results.Ok(new PagedResponse<NotificationJobResponse>(
+            jobs.Select(ToResponse).ToList(), totalCount, normalizedPage, normalizedPageSize));
     }
 
     private static async Task<IResult> RetryAsync(Guid jobId, AbderaDbContext db, IClock clock)

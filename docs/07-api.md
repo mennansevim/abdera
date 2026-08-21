@@ -34,7 +34,7 @@ POST   /api/teachers/{teacherId}/time-off       ✅ A3
 GET    /api/instruments                         ✅
 POST   /api/instruments                         ✅
 
-GET    /api/calendar                            ✅ ?from=&to=&teacherId=&instrumentId=
+GET    /api/calendar                            ✅ ?from=&to=&teacherId=&instrumentId= - aralık en fazla 3 ay (ARC-3), aşarsa 400
 GET    /api/lessons                             ✅ /api/calendar ile aynı handler
 POST   /api/lesson-series                       ✅ oluşturur + ilk rolling window'u üretir
 PATCH  /api/lesson-series/{seriesId}            ✅ seriyi sonlandırır (EffectiveUntil)
@@ -75,7 +75,7 @@ POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMEN
 GET    /api/students/{studentId}/makeup-credits  ✅ A2
 POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar
 
-GET    /api/notifications                        ✅ ?status= filtresiyle, admin panel listesi
+GET    /api/notifications                        ✅ ?status=&page=&pageSize= (varsayılan 50, en fazla 200) - yanıt {items,totalCount,page,pageSize} zarfında (ARC-3)
 POST   /api/notifications/{notificationId}/retry ✅ yalnızca FAILED durumundan
 GET    /api/webhooks/whatsapp                    ✅ Meta abonelik doğrulama handshake'i
 POST   /api/webhooks/whatsapp                    ✅ imza doğrulama + idempotency + RSVP/opt-out/intent yönlendirme
@@ -84,7 +84,7 @@ POST   /api/dev/whatsapp/simulate-rsvp           ✅ yalnızca Development - imz
 
 POST   /api/guardians/{guardianId}/virtual-iban  ✅ Phase 6 (E1) - veliye sanal IBAN atar, aktifken tekrar atanamaz
 GET    /api/guardians/{guardianId}/virtual-iban  ✅ atanmışsa döner, yoksa 404
-GET    /api/bank-transactions                    ✅ ?status= filtresiyle, admin panel listesi
+GET    /api/bank-transactions                    ✅ ?status=&page=&pageSize= (varsayılan 50, en fazla 200) - yanıt {items,totalCount,page,pageSize} zarfında (ARC-3)
 POST   /api/bank-transactions/{transactionId}/resolve   ✅ NeedsReview'ı elle bir Receivable'a bağlar (veya "hiçbirine sayma")
 POST   /api/webhooks/bank                        ✅ paylaşılan-sır başlığı ile doğrulama + idempotency + eşleştirme (gerçek sağlayıcı seçilince imza şeması değişecek)
 POST   /api/dev/bank/simulate-transaction        ✅ yalnızca Development - eşleştirme mantığını gerçek sağlayıcı olmadan test eder

@@ -319,4 +319,29 @@ Hiçbir use-case `Birthday` job'ı üretmediğinden, gerçek bir tane doğrudan 
 
 ### Kalan iş
 
+Push edildi (11c9a4c). Sıradaki madde: ARC-3 (sayfalama yok, sessiz 200 kayıt kesintisi).
+
+## Denetim düzeltmeleri — ARC-3 (Orta): sayfalama yok, iki listede sessiz 200 kayıt kesintisi
+
+`docs/13-audit-fix-prompt.md` madde 10. `Notifications`/`BankTransactions` listeleri `Take(200)` ile sessizce kesiliyordu, toplam sayı dönmüyordu. `/api/calendar`'a da tarih aralığı üst sınırı yoktu.
+
+### Yapılanlar
+
+1. Yeni `Shared/PagedResponse.cs`: ortak `PagedResponse<T>` zarfı + `Pagination.Normalize` (page/pageSize'ı 1..200 aralığına clamp'ler, varsayılan pageSize 50).
+2. `Notifications.ListAsync` ve `BankTransactions.ListAsync`: `?page=&pageSize=` parametreleri eklendi, `CountAsync()` ile toplam sayı hesaplanıp `{ items, totalCount, page, pageSize }` zarfında dönülüyor.
+3. `Calendar.ListAsync`: `to - from` 3 aydan (93 gün) fazlaysa `ValidationFailedException` (400) fırlatılıyor.
+4. **Frontend:** `lib/messaging.ts`/`lib/banking.ts`'teki hook'lar yeni zarfı okuyacak şekilde güncellendi (`page`/`pageSize` parametreleri eklendi); `notifications/page.tsx` ve `banking/page.tsx`'e "Toplam N kayıt - sayfa X/Y" + Önceki/Sonraki pager eklendi (butonlar `min-h-11`, UX-1 tutarlılığı için), filtre değişince sayfa 1'e sıfırlanıyor.
+
+### Testler
+
+- `Unit`: yok (saf HTTP/EF davranışı, integration ile kapsandı).
+- `Integration`: `MessagingFlowTests.Notifications_list_returns_paged_envelope_and_respects_page_size` (zarf şekli + `pageSize` sınırı), `PeopleAndSchedulingFlowTests.Calendar_rejects_date_range_wider_than_three_months` (94 gün → 400, 90 gün → 200), `BankingFlowTests`'teki mevcut liste testi yeni zarfı okuyacak şekilde güncellendi.
+- `dotnet test` → 155/155 yeşil (153 + 2 yeni). `npm run build` temiz.
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+`db`+`api` ayağa kaldırılıp `curl` ile doğrudan doğrulandı: `/api/notifications?page=1&pageSize=2` ve `/api/bank-transactions?page=1&pageSize=2` doğru `{items,totalCount,page,pageSize}` şeklini döndü; `/api/calendar`'a 94 günlük aralık `400` (`"Tarih aralığı en fazla 3 ay olabilir."`), 90 günlük aralık `200` döndü. Frontend `npm run dev` ile ayrı ayağa kaldırılıp tarayıcıda `/dashboard/notifications` ve `/dashboard/banking` sayfaları gerçek admin oturumuyla açıldı: pager metni ("Toplam 1 kayıt - sayfa 1 / 1") doğru göründü, konsol hatası yok (yalnızca HMR/dev sunucusuna özgü websocket gürültüsü).
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.

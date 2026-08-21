@@ -21,10 +21,23 @@ public static class Calendar
         app.MapGet("/api/lessons", ListAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
+    // ARC-3 (docs/13-audit-fix-prompt.md): bu uç noktada sayfalama yok (tek bir takvim
+    // görünümü, doğal olarak sınırlı sayıda ders döner) - ama tarih aralığına hiç üst sınır
+    // yoktu, bir yıllık ders geçmişi biriktiğinde sınırsız satır dönebilirdi.
+    private static readonly TimeSpan MaxRange = TimeSpan.FromDays(93); // ~3 ay
+
     private static async Task<IResult> ListAsync(
         DateTimeOffset from, DateTimeOffset to, Guid? teacherId, Guid? instrumentId,
         ClaimsPrincipal principal, AbderaDbContext db)
     {
+        if (to - from > MaxRange)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["to"] = ["Tarih aralığı en fazla 3 ay olabilir."],
+            });
+        }
+
         var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
 
         var query = db.Lessons.Where(l => l.StartAt >= from && l.StartAt < to);

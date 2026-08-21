@@ -46,11 +46,21 @@ const FILTERS: { value: NotificationJobStatus | "all"; label: string }[] = [
   { value: "Cancelled", label: "İptal" },
 ];
 
+const PAGE_SIZE = 50;
+
 export default function NotificationsPage() {
   const [filter, setFilter] = useState<NotificationJobStatus | "all">("all");
-  const { data: jobs, isLoading } = useNotifications(filter === "all" ? undefined : filter);
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useNotifications(filter === "all" ? undefined : filter, page, PAGE_SIZE);
+  const jobs = data?.items;
+  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
   const retry = useRetryNotification();
   const [retryError, setRetryError] = useState<string | null>(null);
+
+  function handleFilterChange(next: NotificationJobStatus | "all") {
+    setFilter(next);
+    setPage(1); // filtre değişince sayfa sıfırlanır - aksi halde boş bir sayfada kalınabilir.
+  }
 
   async function handleRetry(jobId: string) {
     setRetryError(null);
@@ -73,7 +83,7 @@ export default function NotificationsPage() {
         {FILTERS.map((f) => (
           <button
             key={f.value}
-            onClick={() => setFilter(f.value)}
+            onClick={() => handleFilterChange(f.value)}
             className={
               filter === f.value
                 ? "rounded-md bg-neutral-900 px-3 py-1 text-sm text-white"
@@ -139,6 +149,30 @@ export default function NotificationsPage() {
           </tbody>
         </table>
       </div>
+
+      {data && data.totalCount > 0 && (
+        <div className="flex items-center justify-between text-sm text-neutral-500">
+          <span>
+            Toplam {data.totalCount} kayıt - sayfa {data.page} / {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="min-h-11 rounded-md border border-neutral-300 px-3 hover:bg-neutral-100 disabled:opacity-50"
+            >
+              Önceki
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="min-h-11 rounded-md border border-neutral-300 px-3 hover:bg-neutral-100 disabled:opacity-50"
+            >
+              Sonraki
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
