@@ -41,6 +41,15 @@ function formatTime(date: Date) {
   return date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 }
 
+// Gece yarısından itibaren dakika -> "HH:MM". Sürükleme sırasında bırakılacak saat aralığını
+// göstermek için (docs/14-ui-design-prompt.md sonrası kullanıcı geri bildirimi: "hangi saat
+// aralığına bıraktığımı göremiyorum").
+function formatMinutesOfDay(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60) % 24;
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 export default function CalendarPage() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
@@ -114,7 +123,7 @@ function WeeklyGrid({
   const draggingRef = useRef<CalendarLesson | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
-  const [hoverSlot, setHoverSlot] = useState<{ day: string; minutes: number } | null>(null);
+  const [hoverSlot, setHoverSlot] = useState<{ day: string; minutes: number; label: string; heightPercent: number } | null>(null);
   const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   function showToast(tone: "success" | "error", text: string) {
@@ -146,7 +155,16 @@ function WeeklyGrid({
     if (!draggingRef.current) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    setHoverSlot({ day: day.toDateString(), minutes: minutesFromEvent(event) });
+    const minutes = minutesFromEvent(event);
+    const lesson = draggingRef.current;
+    const durationMinutes = Math.max(15, (new Date(lesson.endAt).getTime() - new Date(lesson.startAt).getTime()) / 60000);
+    const startOfDayMinutes = hourWindow.startHour * 60 + minutes;
+    setHoverSlot({
+      day: day.toDateString(),
+      minutes,
+      label: `${formatMinutesOfDay(startOfDayMinutes)}–${formatMinutesOfDay(startOfDayMinutes + durationMinutes)}`,
+      heightPercent: Math.min(100, (durationMinutes / windowMinutes) * 100),
+    });
   }
 
   async function handleDrop(event: DragEvent<HTMLDivElement>, day: Date) {
@@ -215,7 +233,7 @@ function WeeklyGrid({
               hourWindow={hourWindow}
               draggingId={draggingId}
               movingId={movingId}
-              hoverMinutes={hoverSlot?.day === day.toDateString() ? hoverSlot.minutes : null}
+              hoverSlot={hoverSlot?.day === day.toDateString() ? hoverSlot : null}
               onDragStartLesson={handleDragStart}
               onDragEndLesson={handleDragEnd}
               onDragOverColumn={(event) => handleDragOver(event, day)}
@@ -268,7 +286,7 @@ function GridDayColumn({
   hourWindow,
   draggingId,
   movingId,
-  hoverMinutes,
+  hoverSlot,
   onDragStartLesson,
   onDragEndLesson,
   onDragOverColumn,
@@ -281,7 +299,7 @@ function GridDayColumn({
   hourWindow: HourWindow;
   draggingId: string | null;
   movingId: string | null;
-  hoverMinutes: number | null;
+  hoverSlot: { minutes: number; label: string; heightPercent: number } | null;
   onDragStartLesson: (event: DragEvent<HTMLDivElement>, lesson: CalendarLesson) => void;
   onDragEndLesson: () => void;
   onDragOverColumn: (event: DragEvent<HTMLDivElement>) => void;
@@ -297,15 +315,23 @@ function GridDayColumn({
     <div
       onDragOver={onDragOverColumn}
       onDrop={onDropColumn}
-      className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fbfaf7]"} ${hoverMinutes !== null ? "outline outline-2 -outline-offset-2 outline-[color:var(--brand)]" : ""}`}
+      className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fbfaf7]"} ${hoverSlot ? "outline outline-2 -outline-offset-2 outline-[color:var(--brand)]" : ""}`}
       style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}
     >
       {Array.from({ length: totalHours - 1 }, (_, index) => (
         <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#ebe7e1]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />
       ))}
 
-      {hoverMinutes !== null && (
-        <span className="pointer-events-none absolute inset-x-1 z-20 rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand)]/10" style={{ top: `${(hoverMinutes / totalMinutes) * 100}%`, height: "2.4rem" }} />
+      {/* Sürüklerken bırakılacak saat aralığını gösteren etiket - önceden yalnızca boş, saat
+          bilgisi olmayan bir dikdörtgendi, hangi saate bırakılacağı tahmin edilemiyordu
+          (kullanıcı geri bildirimi). Yükseklik artık dersin gerçek süresine göre ölçekleniyor. */}
+      {hoverSlot && (
+        <span
+          className="pointer-events-none absolute inset-x-1 z-20 flex items-start justify-center overflow-hidden rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand)]/10 pt-0.5"
+          style={{ top: `${(hoverSlot.minutes / totalMinutes) * 100}%`, height: `${hoverSlot.heightPercent}%`, minHeight: "1.6rem" }}
+        >
+          <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.62rem] font-bold tabular-nums text-white shadow-sm">{hoverSlot.label}</span>
+        </span>
       )}
 
       {entries.map((lesson) => {
