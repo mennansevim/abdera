@@ -25,7 +25,7 @@ export default function StudentsPage() {
         {students?.length === 0 && <p className="p-4 text-sm text-neutral-500">Henüz öğrenci yok.</p>}
         <ul className="divide-y divide-neutral-200">
           {students?.map((student) => (
-            <li key={student.id}>
+            <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[#f0edff]">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
                 className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-neutral-50"

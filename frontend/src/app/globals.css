@@ -1,8 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8f6f1;
+  --foreground: #25222c;
+  --surface: #fffdf9;
+  --surface-muted: #f4f1ec;
+  --line: #e8e2da;
+  --muted: #7e7985;
+  --brand: #4a378f;
+  --brand-strong: #2b215f;
+  --brand-soft: #efedff;
+  --success: #2f9b5c;
+  --danger: #ce5454;
+  --warning: #b8780b;
+  --shadow-card: 0 1px 2px rgba(38, 31, 24, 0.04), 0 8px 28px rgba(38, 31, 24, 0.055);
 }
 
 @theme inline {
@@ -19,4 +30,116 @@ body {
      yükleyip --font-geist-sans değişkenini tanımlıyordu ama burada hiç kullanılmıyordu -
      tarayıcı iki font dosyasını boşuna indirip Arial ile render ediyordu. */
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  scrollbar-color: #c9c3d4 transparent;
+  scrollbar-width: thin;
+}
+
+::selection {
+  background: #dcd5ff;
+  color: #241a55;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(91, 71, 174, 0.26);
+  outline-offset: 2px;
+}
+
+.brand-mark {
+  display: inline-flex;
+  height: 2.2rem;
+  width: 2.2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.7rem;
+  color: white;
+  background: linear-gradient(145deg, #6651b6, #392678);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 8px 20px rgba(52,36,113,.2);
+}
+
+.app-card {
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface) 96%, white);
+  box-shadow: var(--shadow-card);
+}
+
+.pressable {
+  transition: transform 120ms ease-out, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.pressable:active {
+  transform: scale(.975);
+}
+
+.field {
+  min-height: 2.75rem;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: .75rem;
+  background: rgba(255,255,255,.84);
+  padding: .65rem .8rem;
+  color: var(--foreground);
+  box-shadow: inset 0 1px 2px rgba(44,37,31,.025);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.field:hover { border-color: #d5cec4; }
+.field:focus { border-color: #7764bd; box-shadow: 0 0 0 3px rgba(91,71,174,.11); outline: none; background: white; }
+
+.skeleton {
+  overflow: hidden;
+  background: #eeeae5;
+  position: relative;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.62), transparent);
+  animation: shimmer 1.45s infinite;
+}
+
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .pressable:active { transform: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .app-card { background: white; }
+}
+
+@media (prefers-contrast: more) {
+  :root { --line: #b8b1aa; --muted: #57515c; }
+  .app-card { box-shadow: none; }
 }

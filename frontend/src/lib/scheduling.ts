@@ -66,6 +66,7 @@ export interface CalendarLesson {
   teacherName: string;
   instrumentId: string;
   instrumentName: string;
+  rsvpResponse?: "Unknown" | "Attending" | "NotAttending" | null;
 }
 
 export function useCalendar(from: string, to: string) {

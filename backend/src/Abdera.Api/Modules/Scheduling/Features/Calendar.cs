@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -13,7 +14,7 @@ public static class Calendar
     public record LessonResponse(
         Guid Id, DateTimeOffset StartAt, DateTimeOffset EndAt, LessonStatus Status,
         Guid StudentId, string StudentName, Guid TeacherId, string TeacherName,
-        Guid InstrumentId, string InstrumentName);
+        Guid InstrumentId, string InstrumentName, RsvpResponse? RsvpResponse);
 
     public static void MapCalendar(this IEndpointRouteBuilder app)
     {
@@ -67,9 +68,27 @@ public static class Calendar
                 x.Lesson.Id, x.Lesson.StartAt, x.Lesson.EndAt, x.Lesson.Status,
                 x.Student.Id, x.Student.FirstName + " " + x.Student.LastName,
                 x.Teacher.Id, x.Teacher.FirstName + " " + x.Teacher.LastName,
-                x.Instrument.Id, x.Instrument.Name))
+                x.Instrument.Id, x.Instrument.Name, null))
             .ToListAsync();
 
-        return Results.Ok(lessons);
+        var lessonIds = lessons.Select(l => l.Id).ToList();
+        var rsvpRows = await db.LessonRsvps
+            .Where(r => lessonIds.Contains(r.LessonId))
+            .GroupBy(r => r.LessonId)
+            .Select(group => new
+            {
+                LessonId = group.Key,
+                HasAttending = group.Any(r => r.Response == RsvpResponse.Attending),
+                HasNotAttending = group.Any(r => r.Response == RsvpResponse.NotAttending),
+            })
+            .ToListAsync();
+        var rsvpByLesson = rsvpRows.ToDictionary(
+            row => row.LessonId,
+            row => row.HasAttending ? RsvpResponse.Attending : row.HasNotAttending ? RsvpResponse.NotAttending : RsvpResponse.Unknown);
+
+        return Results.Ok(lessons.Select(lesson => lesson with
+        {
+            RsvpResponse = rsvpByLesson.GetValueOrDefault(lesson.Id),
+        }));
     }
 }

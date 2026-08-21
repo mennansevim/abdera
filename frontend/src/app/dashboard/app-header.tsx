@@ -1,141 +1,159 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { BrandMark, Icon, type IconName } from "@/components/icons";
 import type { Me } from "@/lib/api";
 import { useLogout } from "@/lib/use-auth";
 
-const LINKS = [
-  { href: "/dashboard", label: "Bugün" },
-  { href: "/dashboard/students", label: "Öğrenciler" },
-  { href: "/dashboard/teachers", label: "Öğretmenler" },
-  { href: "/dashboard/calendar", label: "Takvim" },
+type NavItem = { href: string; label: string; icon: IconName; alert?: boolean };
+
+const CORE_LINKS: NavItem[] = [
+  { href: "/dashboard", label: "Bugün", icon: "home" },
+  { href: "/dashboard/students", label: "Öğrenciler", icon: "students" },
+  { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers" },
+  { href: "/dashboard/calendar", label: "Takvim", icon: "calendar" },
 ];
 
-// docs/04-permissions.md: ders değişikliği onay/red ve aidat/tahsilat tamamen Admin -
-// linkler Teacher'a gösterilmez (backend zaten 403 verirdi, ama gereksiz tıklamayı da
-// önlemeye değer).
-const ADMIN_ONLY_LINKS = [
-  { href: "/dashboard/change-requests", label: "Değişiklik Talepleri" },
-  { href: "/dashboard/billing", label: "Aidatlar" },
-  { href: "/dashboard/notifications", label: "Bildirimler" },
-  { href: "/dashboard/banking", label: "Banka" },
+const ADMIN_LINKS: NavItem[] = [
+  { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet" },
+  { href: "/dashboard/notifications", label: "Bildirimler", icon: "bell", alert: true },
+  { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true },
+  { href: "/dashboard/change-requests", label: "Değişiklik Talepleri", icon: "swap" },
 ];
 
-// UX-1 (docs/13-audit-fix-prompt.md): 8 linkli nav dar ekranda flex-wrap ile 3-4 satıra
-// yayılıyordu, hamburger/drawer yoktu. md (768px) altında yatay nav gizlenip hamburger +
-// sağdan açılan slide-in drawer'a geçiliyor; md ve üstünde eski yatay nav aynen kalıyor.
-export function AppHeader({ me }: { me: Me }) {
+function isActive(pathname: string, href: string) {
+  return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+}
+
+function displayName(email: string) {
+  return email
+    .split("@")[0]
+    .split(/[._-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR") + part.slice(1))
+    .join(" ");
+}
+
+export function AppShell({ me, children }: { me: Me; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const logout = useLogout();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const links = me.role === "Admin" ? [...LINKS, ...ADMIN_ONLY_LINKS] : LINKS;
+  const links = me.role === "Admin" ? [...CORE_LINKS, ...ADMIN_LINKS] : CORE_LINKS;
+  const mobilePrimary: NavItem[] = me.role === "Admin"
+    ? [links[0]!, links[3]!, links[4]!, links[5]!]
+    : [
+        { ...CORE_LINKS[0], label: "Bugün" },
+        { ...CORE_LINKS[3], label: "Takvimim" },
+        { ...CORE_LINKS[1], label: "Öğrencilerim" },
+      ];
 
-  const handleLogout = () => {
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMenuOpen]);
+
+  function handleLogout() {
     logout.mutate(undefined, { onSuccess: () => router.replace("/login") });
-  };
+  }
 
   return (
-    <header className="border-b border-neutral-200 bg-white">
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
-        <nav className="hidden items-center gap-4 text-sm md:flex">
+    <div className="min-h-dvh bg-[var(--background)] lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(180deg,#493690_0%,#281e5c_100%)] px-3 py-5 text-white lg:flex">
+        <Link href="/dashboard" className="mb-6 px-2 text-white"><BrandMark /></Link>
+        <nav className="flex flex-1 flex-col gap-1" aria-label="Ana menü">
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={
-                pathname === link.href
-                  ? "font-semibold text-neutral-900"
-                  : "text-neutral-500 hover:text-neutral-900"
-              }
+              aria-current={isActive(pathname, link.href) ? "page" : undefined}
+              className={`pressable group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium ${
+                isActive(pathname, link.href)
+                  ? "bg-white/17 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.1)]"
+                  : "text-white/70 hover:bg-white/8 hover:text-white"
+              }`}
             >
-              {link.label}
+              <Icon name={link.icon} className="h-[1.1rem] w-[1.1rem] shrink-0" />
+              <span className="truncate">{link.label}</span>
+              {link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#ff665e]" aria-label="Dikkat gereken kayıtlar olabilir" />}
             </Link>
           ))}
         </nav>
-
-        <button
-          type="button"
-          onClick={() => setIsMenuOpen(true)}
-          aria-label="Menüyü aç"
-          aria-expanded={isMenuOpen}
-          className="flex min-h-11 min-w-11 items-center justify-center rounded-md border border-neutral-300 text-neutral-700 hover:bg-neutral-100 md:hidden"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-
-        <div className="hidden items-center gap-3 text-sm text-neutral-500 md:flex">
-          <span>
-            {me.email} · {me.role === "Admin" ? "Yönetici" : "Öğretmen"}
-          </span>
-          <button
-            onClick={handleLogout}
-            className="min-h-11 rounded-md border border-neutral-300 px-3 text-neutral-700 hover:bg-neutral-100"
-          >
-            Çıkış yap
-          </button>
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold">
+              {displayName(me.email).slice(0, 2).toLocaleUpperCase("tr-TR")}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-semibold">{displayName(me.email) || me.email}</span>
+              <span className="block text-[.65rem] text-white/55">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
+            </span>
+            <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white" aria-label="Çıkış yap">
+              <Icon name="logout" className="h-4 w-4" />
+            </button>
+          </div>
         </div>
+      </aside>
+
+      <div className="min-w-0">
+        <header className={`${me.role === "Teacher" ? "hidden" : "flex"} sticky top-0 z-30 h-16 items-center justify-between border-b border-black/5 bg-[rgba(248,246,241,.82)] px-4 backdrop-blur-xl lg:hidden`}>
+          <Link href="/dashboard" className="text-[var(--brand-strong)]"><BrandMark /></Link>
+          <button onClick={() => setIsMenuOpen(true)} className="pressable grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--brand-strong)]" aria-label="Tüm menüyü aç" aria-expanded={isMenuOpen}>
+            <Icon name="menu" className="h-5 w-5" />
+          </button>
+        </header>
+
+        <main className={`mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-8 lg:pb-10 lg:pt-7 xl:px-10 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
+          {children}
+        </main>
+
+        <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${me.role === "Admin" ? "grid-cols-5" : "grid-cols-4"} border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden`} aria-label="Mobil ana menü">
+          {mobilePrimary.map((link) => <MobileNavLink key={link.href} link={link} active={isActive(pathname, link.href)} />)}
+          <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.61rem] font-medium text-[var(--muted)]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
+            <Icon name={me.role === "Admin" ? "more" : "teachers"} className="h-[1.05rem] w-[1.05rem]" /><span>{me.role === "Admin" ? "Daha Fazla" : "Profil"}</span>
+          </button>
+        </nav>
       </div>
 
       {isMenuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <button
-            type="button"
-            aria-label="Menüyü kapat"
-            onClick={() => setIsMenuOpen(false)}
-            className="absolute inset-0 bg-black/30"
-          />
-          <div className="absolute inset-y-0 right-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
-              <span className="truncate text-sm text-neutral-500">{me.email}</span>
-              <button
-                type="button"
-                onClick={() => setIsMenuOpen(false)}
-                aria-label="Menüyü kapat"
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button aria-label="Menüyü kapat" onClick={() => setIsMenuOpen(false)} className="absolute inset-0 bg-[#171320]/35 backdrop-blur-[2px]" />
+          <section className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col bg-[var(--surface)] shadow-[-24px_0_60px_rgba(30,22,53,.18)]" role="dialog" aria-modal="true" aria-label="Uygulama menüsü">
+            <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
+              <BrandMark />
+              <button onClick={() => setIsMenuOpen(false)} className="pressable grid h-11 w-11 place-items-center rounded-xl hover:bg-black/5" aria-label="Menüyü kapat"><Icon name="close" className="h-5 w-5" /></button>
             </div>
-            <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
+            <nav className="flex-1 space-y-1 overflow-y-auto p-3">
               {links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setIsMenuOpen(false)}
-                  className={`flex min-h-11 items-center rounded-md px-3 text-base ${
-                    pathname === link.href
-                      ? "bg-neutral-100 font-semibold text-neutral-900"
-                      : "text-neutral-700 hover:bg-neutral-100"
-                  }`}
-                >
-                  {link.label}
+                <Link key={link.href} href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[#514b59] hover:bg-black/[.035]"}`}>
+                  <Icon name={link.icon} className="h-5 w-5" /><span>{link.label}</span>{link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#e75b55]" />}
                 </Link>
               ))}
             </nav>
-            <div className="border-t border-neutral-200 p-3">
-              <span className="mb-2 block text-xs text-neutral-500">
-                {me.role === "Admin" ? "Yönetici" : "Öğretmen"}
-              </span>
-              <button
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  handleLogout();
-                }}
-                className="flex min-h-11 w-full items-center justify-center rounded-md border border-neutral-300 text-neutral-700 hover:bg-neutral-100"
-              >
-                Çıkış yap
+            <div className="border-t border-[var(--line)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <p className="truncate text-sm font-semibold">{displayName(me.email) || me.email}</p>
+              <p className="mt-0.5 text-xs text-[var(--muted)]">{me.email} · {me.role === "Admin" ? "Yönetici" : "Öğretmen"}</p>
+              <button onClick={handleLogout} className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-sm font-semibold text-[#5b5362] hover:border-[#cfc6bc]">
+                <Icon name="logout" className="h-4 w-4" /> Çıkış yap
               </button>
             </div>
-          </div>
+          </section>
         </div>
       )}
-    </header>
+    </div>
+  );
+}
+
+function MobileNavLink({ link, active }: { link: NavItem; active: boolean }) {
+  return (
+    <Link href={link.href} aria-current={active ? "page" : undefined} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.61rem] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
+      <Icon name={link.icon} className="h-[1.05rem] w-[1.05rem]" /><span className="max-w-full truncate">{link.label}</span>
+    </Link>
   );
 }

@@ -46,7 +46,7 @@ function VirtualIbanSection() {
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Sanal IBAN Ataması</h2>
       <p className="text-sm text-neutral-500">
-        Bir veliye sanal IBAN atandığında o IBAN'a gelen havaleler otomatik olarak veliye bağlı aidatlara
+        Bir veliye sanal IBAN atandığında o IBAN&apos;a gelen havaleler otomatik olarak veliye bağlı aidatlara
         işlenmeye çalışılır. Belirsiz kalan işlemler aşağıdaki listede görünür.
       </p>
 

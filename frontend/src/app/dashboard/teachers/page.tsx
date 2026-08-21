@@ -22,7 +22,7 @@ export default function TeachersPage() {
         {teachers?.length === 0 && <p className="p-4 text-sm text-neutral-500">Henüz öğretmen yok.</p>}
         <ul className="divide-y divide-neutral-200">
           {teachers?.map((teacher) => (
-            <li key={teacher.id} className="flex items-center justify-between px-4 py-3 text-sm">
+            <li id={`teacher-${teacher.id}`} key={teacher.id} className="scroll-mt-24 flex items-center justify-between px-4 py-3 text-sm target:bg-[#f0edff]">
               <span>
                 {teacher.firstName} {teacher.lastName}
                 <span className="ml-2 text-neutral-400">

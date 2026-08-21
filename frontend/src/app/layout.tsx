@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Abdera",
-  description: "Müzik okulu yönetim sistemi",
+  title: {
+    default: "Abdera",
+    template: "%s · Abdera",
+  },
+  description: "Abdera Müzik Okulu Yönetim Sistemi",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -24,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="tr"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">
+      <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
       </body>
     </html>

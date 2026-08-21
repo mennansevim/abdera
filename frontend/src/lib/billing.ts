@@ -126,6 +126,14 @@ export interface Receivable {
   totalPaid: number;
 }
 
+export function useReceivables(status?: ReceivableStatus) {
+  const params = status ? `?status=${encodeURIComponent(status)}` : "";
+  return useQuery({
+    queryKey: ["receivables", status ?? "all"],
+    queryFn: () => api.get<Receivable[]>(`/api/receivables${params}`),
+  });
+}
+
 export function useStudentBilling(studentId: string) {
   return useQuery({
     queryKey: ["student-billing", studentId],
