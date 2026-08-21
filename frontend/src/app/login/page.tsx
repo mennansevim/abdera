@@ -14,13 +14,20 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
   { role: "Guardian", title: "Veliyim", description: "Ders ve ödeme bildirimlerini takip ederim", icon: "students", color: "#2b918d" },
 ];
 
+// Şimdilik geliştirme kolaylığı: AdminBootstrapper.cs'nin oluşturduğu ilk yönetici hesabıyla
+// eşleşir (.env / .env.example - Bootstrap__AdminEmail=admin@example.com,
+// Bootstrap__AdminPassword=DevAdmin123!). Yalnızca production build'e sızmasın diye env
+// kontrolü var - gerçek bir dağıtımda bu alanlar boş kalır.
+const DEV_ADMIN_EMAIL = process.env.NODE_ENV !== "production" ? "admin@example.com" : "";
+const DEV_ADMIN_PASSWORD = process.env.NODE_ENV !== "production" ? "DevAdmin123!" : "";
+
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
   const emailRef = useRef<HTMLInputElement>(null);
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(DEV_ADMIN_EMAIL);
+  const [password, setPassword] = useState(DEV_ADMIN_PASSWORD);
   const [error, setError] = useState<string | null>(null);
 
   function chooseRole(role: LoginRole) {
@@ -29,6 +36,13 @@ export default function LoginPage() {
     if (role === "Guardian") {
       router.push("/parent/login");
       return;
+    }
+    if (role === "Admin") {
+      setEmail(DEV_ADMIN_EMAIL);
+      setPassword(DEV_ADMIN_PASSWORD);
+    } else {
+      setEmail("");
+      setPassword("");
     }
     requestAnimationFrame(() => emailRef.current?.focus());
   }

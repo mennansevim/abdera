@@ -54,6 +54,14 @@ export default function GuardianLoginPage() {
             <BrandMark />
           </div>
 
+          <button
+            type="button"
+            onClick={() => router.push("/login")}
+            className="pressable mb-5 flex items-center gap-1.5 text-[.68rem] font-semibold text-[var(--muted)]"
+          >
+            <Icon name="arrow-left" className="h-3.5 w-3.5" /> Ana sayfaya dön
+          </button>
+
           <div className="mb-6">
             <h1 className="text-[1.05rem] font-bold tracking-[-0.015em]">
               {step === "phone" ? "Veli girişi" : "Telefonuna gelen kodu gir"}
