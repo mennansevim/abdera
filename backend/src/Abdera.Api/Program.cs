@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Banking;
 using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Banking.Infrastructure;
 using Abdera.Api.Modules.Billing;
+using Abdera.Api.Modules.Dashboard;
 using Abdera.Api.Modules.Messaging;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
@@ -234,6 +235,7 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 });
 
 app.MapAuthModule();
+app.MapDashboardModule();
 app.MapPeopleModule();
 app.MapSchedulingModule();
 app.MapAttendanceModule();

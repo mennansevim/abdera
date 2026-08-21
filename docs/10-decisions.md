@@ -104,6 +104,18 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 
 Ayrıntılı akış/entity tasarımı: `docs/12-bank-integration.md`.
 
+| # | Konu | Karar |
+|---|---|---|
+| E2 | Dashboard modülü zamanlaması (denetim ARC-6, `docs/13-audit-fix-prompt.md` madde 13) | `docs/02-modules.md`/`docs/07-api.md` bir Dashboard modülü ve `GET /api/dashboard/today` tanımlıyordu ama hiç yazılmamıştı, frontend ana sayfası yer tutucuydu. Kullanıcıya "şimdi mi, Faz 7'ye mi" soruldu - **şimdi yazılsın** kararı verildi (veri zaten yerinde: öğrenci/öğretmen/ders/aidat sayıları tek bir salt-okunur projeksiyon sorgusuyla toplanabiliyor). |
+
+## F — Veli web paneli: WhatsApp tek kanal olarak kalır
+
+Denetim UX-3 (`docs/13-audit-fix-prompt.md` madde 13): sistem veli verisini/RSVP'sini/aidat durumunu tutuyor ama velinin bakabileceği hiçbir web ekranı yoktu, yalnızca WhatsApp üzerinden etkileşim vardı - bu daha önce netleşmemiş bir belirsizlikti (ne yasak ne planlıydı). Kullanıcıya "ayrı bir faz olarak planlansın mı, yoksa WhatsApp tek kanal olarak mı kalsın" soruldu.
+
+**Karar: WhatsApp tek kanal olarak kalır, ayrı bir veli web paneli planlanmıyor.**
+
+Gerekçe: bir veli web paneli açmak yalnızca yeni ekranlar değil, yeni bir kimlik doğrulama modeli de gerektirir (veli nasıl giriş yapacak - e-posta yok, `docs/10-decisions.md` B4; telefon numarasıyla OTP mi, farklı bir mekanizma mı?) - bu, mevcut `User`/cookie-oturum modelinin dışında tamamen yeni bir yüzey. WhatsApp zaten RSVP, aidat hatırlatması, telafi ve opt-out akışlarını uçtan uca karşılıyor; veli tarafında ek bir kanal açmanın bu ölçekte (6-8 öğretmen, ~150 öğrenci) karşılığı şimdilik yok. Bu MVP sınırı bilinçli olarak korunuyor - ihtiyaç netleşirse ayrı bir faz olarak yeniden değerlendirilir.
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

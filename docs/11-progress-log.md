@@ -386,4 +386,34 @@ Saf bağımlılık kaldırma - davranış değişmedi. `dotnet restore` + `dotne
 
 ### Kalan iş
 
+Push edildi (a4bd06e). Sıradaki madde: 13 (ARC-6/UX-3 kararları + Dashboard modülü).
+
+## Denetim düzeltmeleri — madde 13 (ARC-6/UX-3): Dashboard modülü yazıldı, Veli web paneli kararı verildi
+
+`docs/13-audit-fix-prompt.md` madde 13 kod yazmadan önce iki soru soruyordu - kullanıcıya soruldu: (a) Dashboard modülü şimdi mi yazılsın → **evet**, (b) Veli web paneli ayrı bir faz mı → **hayır, WhatsApp tek kanal kalsın**. Kararlar `docs/10-decisions.md`'ye E2 ve yeni F bölümü olarak yazıldı.
+
+### Yapılanlar — Dashboard modülü
+
+`abdera-module` skill'iyle yeni bir modül: `Modules/Dashboard/Features/Dashboard.cs` + `DashboardModule.cs`. `docs/02-modules.md` İstisna 1 (Dashboard salt-okunur, kendi tablosu yok, başka modüllerin tablolarını doğrudan `AbderaDbContext` üzerinden LINQ ile okuyabilir) ve `docs/07-api.md`'deki tam yanıt şekli izlendi:
+
+```
+GET /api/dashboard/today
+{ todayLessons, attending, notAttending, noResponse, pendingChangeRequests, overduePayments, upcomingBirthdays, upcomingSchoolEvents }
+```
+
+- Rol bazlı kapsam (`docs/04-permissions.md`): Admin okul geneli, Teacher yalnızca kendi dersleri/öğrencileri (`AuthContext.ResolveTeacherScopeAsync` deseni). `overduePayments` Teacher için sorgu bile çalıştırılmadan her zaman `0` - mali özet tamamen Admin'e ait.
+- `todayLessons` = `attending + notAttending + noResponse` (bir derste birden fazla veli RSVP'si varsa: herhangi biri Attending ise Attending, yoksa herhangi biri NotAttending ise NotAttending, hiç RSVP yoksa NoResponse).
+- `upcomingBirthdays`/`upcomingSchoolEvents`: 30 günlük pencere, doğum günü ay/gün karşılaştırması (yıl bağımsız, artık yıl 29 Şubat düzeltmesiyle) belleğe çekilip C# tarafında hesaplanıyor - "Do not turn the dashboard into a BI project" (master prompt) uyarınca SQL tarafında karmaşık tarih matematiği kurulmadı, bu ölçekte (~150 öğrenci) sorun değil.
+- **Frontend:** `lib/dashboard.ts` (`useDashboardToday`) + `dashboard/page.tsx`'teki yer tutucu bölüm gerçek 8 istatistik karosuyla (`StatTile`, `min-h-11`) değiştirildi; bekleyen değişiklik talebi/vadesi geçmiş aidat karoları `>0` olduğunda uyarı rengiyle vurgulanıp ilgili sayfaya link veriyor. Teacher'ın mevcut "Bugünkü Derslerim" (`TeacherTodayLessons`) listesi zaten master prompt'un Teacher UX'ini karşılıyor, dokunulmadı.
+
+### Testler
+
+`Integration/DashboardFlowTests.cs` (yeni, 1 test, Testcontainers): iki öğretmen + iki bugünkü ders + bir RSVP + bir bekleyen değişiklik talebi + yaklaşan doğum günü seed edilip Admin'in okul genelini, Teacher A'nın yalnızca kendi dersini (`todayLessons=1`, `overduePayments=0` her zaman) gördüğü doğrulanıyor; `todayLessons == attending+notAttending+noResponse` invariant'ı da kontrol ediliyor. `dotnet test` → 156/156 yeşil (155 + 1 yeni). `npm run build` temiz.
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+`db`+`api` sıfırdan ayağa kaldırılıp gerçek bir teacher/student/enrollment + doğrudan SQL ile "bugün"e bir ders eklendi: admin görünümü `todayLessons=1`, `upcomingBirthdays=1` doğru döndü. İkinci bir öğretmen+ders eklenince admin görünümü `todayLessons=2`'ye çıktı ama ilk öğretmenin kendi girişiyle çektiği görünüm hâlâ `todayLessons=1` kaldı - rol izolasyonu gerçek HTTP istekleriyle doğrulandı. Frontend `npm run dev` ile ayrı ayağa kaldırılıp `/dashboard` sayfasında gerçek admin oturumuyla 8 karonun (`2 Bugünkü ders`, `1 Yaklaşan doğum günü` dahil) doğru göründüğü teyit edildi, konsol hatası yok.
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.

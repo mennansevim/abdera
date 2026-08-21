@@ -1,6 +1,6 @@
 # İlk REST API Yüzeyi
 
-Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6); işaretsiz olanlar henüz yok (Progress modülünün kalanı, dashboard).
+Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6, Dashboard denetim sonrası E2); işaretsiz olanlar henüz yok (Progress modülünün kalanı).
 
 ```
 POST   /api/auth/login                          ✅
@@ -89,7 +89,7 @@ POST   /api/bank-transactions/{transactionId}/resolve   ✅ NeedsReview'ı elle 
 POST   /api/webhooks/bank                        ✅ paylaşılan-sır başlığı ile doğrulama + idempotency + eşleştirme (gerçek sağlayıcı seçilince imza şeması değişecek)
 POST   /api/dev/bank/simulate-transaction        ✅ yalnızca Development - eşleştirme mantığını gerçek sağlayıcı olmadan test eder
 
-GET    /api/dashboard/today
+GET    /api/dashboard/today                     ✅ rol bazlı kapsam (docs/04-permissions.md) - denetim E2/ARC-6
 ```
 
 ## `GET /api/dashboard/today` örnek yanıt
