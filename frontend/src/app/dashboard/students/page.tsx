@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useCreateStudent, useStudents } from "@/lib/people";
@@ -15,26 +16,27 @@ export default function StudentsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Öğrenciler</h1>
+    <div className="space-y-5">
+      <h1 className="text-display">Öğrenciler</h1>
 
       {isAdmin && <CreateStudentForm />}
 
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-        {isLoading && <p className="p-4 text-sm text-neutral-500">Yükleniyor…</p>}
-        {students?.length === 0 && <p className="p-4 text-sm text-neutral-500">Henüz öğrenci yok.</p>}
-        <ul className="divide-y divide-neutral-200">
+      <div className="app-card overflow-hidden">
+        {isLoading && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
+        {students?.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">Henüz öğrenci yok.</p>}
+        <ul className="divide-y divide-[var(--line)]">
           {students?.map((student) => (
-            <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[#f0edff]">
+            <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
-                className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-neutral-50"
+                className="pressable flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
+                aria-expanded={expandedId === student.id}
               >
-                <span>
-                  {student.firstName} {student.lastName}
-                  <span className="ml-2 text-neutral-400">{student.birthDate}</span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-bold">{student.firstName} {student.lastName}</span>
+                  <span className="text-meta mt-0.5 block">{student.birthDate}</span>
                 </span>
-                <span className="text-neutral-400">{expandedId === student.id ? "▲" : "▼"}</span>
+                <Icon name="chevron" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${expandedId === student.id ? "rotate-90" : ""}`} />
               </button>
               {expandedId === student.id && <StudentDetail studentId={student.id} isAdmin={isAdmin} />}
             </li>
@@ -66,27 +68,23 @@ function CreateStudentForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-neutral-600">Ad</label>
-        <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required
-          className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+    <form onSubmit={handleSubmit} className="app-card flex flex-wrap items-end gap-3 p-4">
+      <div className="space-y-1.5">
+        <label className="text-[.7rem] font-semibold text-[#625c68]">Ad</label>
+        <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
       </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-neutral-600">Soyad</label>
-        <input value={lastName} onChange={(e) => setLastName(e.target.value)} required
-          className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+      <div className="space-y-1.5">
+        <label className="text-[.7rem] font-semibold text-[#625c68]">Soyad</label>
+        <input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
       </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-neutral-600">Doğum tarihi</label>
-        <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required
-          className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+      <div className="space-y-1.5">
+        <label className="text-[.7rem] font-semibold text-[#625c68]">Doğum tarihi</label>
+        <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required className="field min-h-11 text-sm" />
       </div>
-      <button type="submit" disabled={createStudent.isPending}
-        className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+      <button type="submit" disabled={createStudent.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
         {createStudent.isPending ? "Ekleniyor…" : "Öğrenci ekle"}
       </button>
-      {error && <p className="w-full text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="w-full rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
     </form>
   );
 }

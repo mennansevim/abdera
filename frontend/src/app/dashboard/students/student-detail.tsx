@@ -11,6 +11,8 @@ import {
   useTeachers,
 } from "@/lib/people";
 
+const ENROLLMENT_STATUS_LABEL: Record<string, string> = { Active: "aktif", Paused: "durduruldu", Ended: "sona erdi" };
+
 // isAdmin=false (Teacher) iken veli bilgisi hiç istenmez - /api/students/{id}/guardians
 // Admin-only olduğu için Teacher'a 403 dönerdi (docs/04-permissions.md).
 export function StudentDetail({ studentId, isAdmin }: { studentId: string; isAdmin: boolean }) {
@@ -20,38 +22,37 @@ export function StudentDetail({ studentId, isAdmin }: { studentId: string; isAdm
   const { data: instruments } = useInstruments();
 
   return (
-    <div className="grid gap-6 border-t border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-2">
+    <div className="grid gap-4 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2">
       {isAdmin && (
         <section>
-          <h3 className="mb-2 text-sm font-semibold text-neutral-700">Veliler</h3>
-          <ul className="mb-3 space-y-1 text-sm">
+          <h3 className="text-micro mb-2">Veliler</h3>
+          <ul className="mb-3 space-y-1.5">
             {guardians?.map((g) => (
-              <li key={g.id} className="rounded border border-neutral-200 bg-white px-2 py-1">
-                {g.firstName} {g.lastName} · {g.phoneNumber}
-                {g.relationship && ` · ${g.relationship}`}
-                {g.isPrimary && " · birincil"}
+              <li key={g.id} className="rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm">
+                <span className="font-semibold">{g.firstName} {g.lastName}</span>
+                <span className="text-meta"> · {g.phoneNumber}{g.relationship && ` · ${g.relationship}`}{g.isPrimary && " · birincil"}</span>
               </li>
             ))}
-            {guardians?.length === 0 && <li className="text-neutral-400">Henüz veli eklenmemiş.</li>}
+            {guardians?.length === 0 && <li className="text-meta px-1">Henüz veli eklenmemiş.</li>}
           </ul>
           <AddGuardianForm studentId={studentId} />
         </section>
       )}
 
       <section>
-        <h3 className="mb-2 text-sm font-semibold text-neutral-700">Kayıtlar (Enrollment)</h3>
-        <ul className="mb-3 space-y-1 text-sm">
+        <h3 className="text-micro mb-2">Kayıtlar (Enrollment)</h3>
+        <ul className="mb-3 space-y-1.5">
           {enrollments?.map((e) => {
             const teacher = teachers?.find((t) => t.id === e.teacherId);
             const instrument = instruments?.find((i) => i.id === e.instrumentId);
             return (
-              <li key={e.id} className="rounded border border-neutral-200 bg-white px-2 py-1">
-                {instrument?.name ?? "?"} · {teacher ? `${teacher.firstName} ${teacher.lastName}` : "?"} ·{" "}
-                {e.status === "Active" ? "aktif" : e.status === "Paused" ? "durduruldu" : "sona erdi"}
+              <li key={e.id} className="flex items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm">
+                <span><span className="font-semibold">{instrument?.name ?? "?"}</span><span className="text-meta"> · {teacher ? `${teacher.firstName} ${teacher.lastName}` : "?"}</span></span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[.62rem] font-bold ${e.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{ENROLLMENT_STATUS_LABEL[e.status] ?? e.status}</span>
               </li>
             );
           })}
-          {enrollments?.length === 0 && <li className="text-neutral-400">Henüz kayıt yok.</li>}
+          {enrollments?.length === 0 && <li className="text-meta px-1">Henüz kayıt yok.</li>}
         </ul>
         {isAdmin && (
           <AddEnrollmentForm studentId={studentId} teachers={teachers ?? []} instruments={instruments ?? []} />
@@ -84,20 +85,13 @@ function AddGuardianForm({ studentId }: { studentId: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 text-sm">
-      <input placeholder="Ad" value={firstName} onChange={(e) => setFirstName(e.target.value)} required
-        className="w-24 rounded border border-neutral-300 px-2 py-1" />
-      <input placeholder="Soyad" value={lastName} onChange={(e) => setLastName(e.target.value)} required
-        className="w-24 rounded border border-neutral-300 px-2 py-1" />
-      <input placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required
-        className="w-32 rounded border border-neutral-300 px-2 py-1" />
-      <input placeholder="Yakınlık (anne/baba)" value={relationship} onChange={(e) => setRelationship(e.target.value)}
-        className="w-36 rounded border border-neutral-300 px-2 py-1" />
-      <button type="submit" disabled={createAndLink.isPending}
-        className="rounded bg-neutral-900 px-3 py-1 text-white disabled:opacity-50">
-        Ekle
-      </button>
-      {error && <p className="w-full text-red-600">{error}</p>}
+    <form onSubmit={handleSubmit} className="flex flex-wrap gap-2">
+      <input placeholder="Ad" value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field min-h-10 w-24 text-xs" />
+      <input placeholder="Soyad" value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field min-h-10 w-24 text-xs" />
+      <input placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="field min-h-10 w-32 text-xs" />
+      <input placeholder="Yakınlık (anne/baba)" value={relationship} onChange={(e) => setRelationship(e.target.value)} className="field min-h-10 w-36 text-xs" />
+      <button type="submit" disabled={createAndLink.isPending} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-3 text-xs font-bold text-white disabled:opacity-50">Ekle</button>
+      {error && <p role="alert" className="w-full text-xs font-medium text-[#b84545]">{error}</p>}
     </form>
   );
 }
@@ -134,28 +128,22 @@ function AddEnrollmentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 text-sm">
-      <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} required
-        className="rounded border border-neutral-300 px-2 py-1">
+    <form onSubmit={handleSubmit} className="flex flex-wrap gap-2">
+      <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} required className="field min-h-10 w-auto text-xs">
         <option value="">Öğretmen seç</option>
         {teachers.map((t) => (
           <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>
         ))}
       </select>
-      <select value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} required
-        className="rounded border border-neutral-300 px-2 py-1">
+      <select value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} required className="field min-h-10 w-auto text-xs">
         <option value="">Enstrüman seç</option>
         {availableInstruments.map((i) => (
           <option key={i.id} value={i.id}>{i.name}</option>
         ))}
       </select>
-      <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} required
-        className="rounded border border-neutral-300 px-2 py-1" />
-      <button type="submit" disabled={createEnrollment.isPending}
-        className="rounded bg-neutral-900 px-3 py-1 text-white disabled:opacity-50">
-        Kaydet
-      </button>
-      {error && <p className="w-full text-red-600">{error}</p>}
+      <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} required className="field min-h-10 w-auto text-xs" />
+      <button type="submit" disabled={createEnrollment.isPending} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-3 text-xs font-bold text-white disabled:opacity-50">Kaydet</button>
+      {error && <p role="alert" className="w-full text-xs font-medium text-[#b84545]">{error}</p>}
     </form>
   );
 }

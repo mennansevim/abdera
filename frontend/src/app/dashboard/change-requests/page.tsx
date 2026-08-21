@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 
@@ -38,31 +39,36 @@ export default function ChangeRequestsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Ders Değişikliği Talepleri</h1>
+    <div className="space-y-5">
+      <h1 className="text-display">Ders Değişikliği Talepleri</h1>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {isLoading && <p className="text-sm text-neutral-500">Yükleniyor…</p>}
-      {requests?.length === 0 && (
-        <p className="rounded-lg border border-dashed border-neutral-300 p-6 text-sm text-neutral-500">
-          Bekleyen talep yok.
-        </p>
+      {error && <p role="alert" className="rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+
+      {isLoading && <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-24 rounded-2xl" />)}</div>}
+
+      {!isLoading && requests?.length === 0 && (
+        <div className="app-card grid min-h-40 place-items-center border-dashed p-8 text-center">
+          <div>
+            <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="swap" className="h-6 w-6" /></span>
+            <p className="mt-4 text-sm font-bold">Bekleyen talep yok</p>
+          </div>
+        </div>
       )}
 
       <ul className="space-y-3">
         {requests?.map((request) => (
-          <li key={request.id} className="rounded-lg border border-neutral-200 bg-white p-4">
-            <div className="mb-2 text-sm">
+          <li key={request.id} className="app-card p-4">
+            <div className="mb-3 text-sm">
               <p>
                 Önerilen saat:{" "}
-                <strong>
+                <strong className="font-bold">
                   {new Date(request.proposedStartAt).toLocaleString("tr-TR", {
                     weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
                   })}
                 </strong>
               </p>
-              {request.reason && <p className="text-neutral-500">Sebep: {request.reason}</p>}
-              <p className="text-xs text-neutral-400">
+              {request.reason && <p className="text-meta mt-1">Sebep: {request.reason}</p>}
+              <p className="text-meta mt-1">
                 Talep tarihi: {new Date(request.createdAt).toLocaleString("tr-TR")}
               </p>
             </div>
@@ -70,16 +76,16 @@ export default function ChangeRequestsPage() {
               <button
                 onClick={() => handleApprove(request.id)}
                 disabled={busyId === request.id}
-                className="min-h-11 rounded-md bg-neutral-900 px-3 text-sm text-white disabled:opacity-50"
+                className="pressable flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)] disabled:opacity-50"
               >
-                Onayla
+                <Icon name="check" className="h-4 w-4" /> Onayla
               </button>
               <button
                 onClick={() => handleReject(request.id)}
                 disabled={busyId === request.id}
-                className="min-h-11 rounded-md border border-neutral-300 px-3 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50"
+                className="pressable flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 text-xs font-bold text-[#756f7a] hover:bg-[var(--surface-muted)] disabled:opacity-50"
               >
-                Reddet
+                <Icon name="x" className="h-4 w-4" /> Reddet
               </button>
             </div>
           </li>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
@@ -12,8 +12,20 @@ import { useNotifications } from "@/lib/messaging";
 import { useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
+import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
 import { ChangePasswordForm } from "./change-password-form";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
+
+const HOUR_HEIGHT_REM = 3.25;
+
+// Ders bloklarındaki katılım noktası ve haftalık ızgara başlığındaki gösterge için ortak sözlük -
+// teacher-today-lessons.tsx'teki StatusBadge ile aynı terimler (Geliyor/Cevap yok/Gelmiyor).
+function rsvpDotTone(lesson: CalendarLesson): { color: string; label: string } {
+  if (lesson.status !== "Normal") return { color: "transparent", label: "" };
+  if (lesson.rsvpResponse === "Attending") return { color: "var(--success)", label: "Geliyor" };
+  if (lesson.rsvpResponse === "NotAttending") return { color: "var(--danger)", label: "Gelmiyor" };
+  return { color: "var(--warning)", label: "Cevap yok" };
+}
 
 const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"];
 
@@ -74,7 +86,7 @@ function AdminDashboard({ email }: { email: string }) {
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Günün özeti">
         <StatCard icon="calendar" value={today?.todayLessons} label="Bugünkü Ders" loading={statsLoading} tone="purple" />
         <StatCard icon="swap" value={today?.pendingChangeRequests} label="Bekleyen Değişiklik Talebi" loading={statsLoading} tone="amber" href="/dashboard/change-requests" />
-        <StatCard icon="wallet" value={`${overdueReceivables.length} kayıt · ₺${formatMoney(overdueTotal)}`} label="Vadesi Geçen Aidat" loading={statsLoading} tone="red" href="/dashboard/billing" />
+        <StatCard icon="wallet" value={`${overdueReceivables.length} kayıt`} secondaryValue={`₺${formatMoney(overdueTotal)}`} label="Vadesi Geçen Aidat" loading={statsLoading} tone="red" href="/dashboard/billing" />
         <StatCard icon="bell" value={failedNotifications?.totalCount ?? 0} label="Gönderilemeyen Bildirim" loading={statsLoading} tone="rose" href="/dashboard/notifications" />
       </section>
 
@@ -138,35 +150,60 @@ const STAT_TONES: Record<StatTone, { icon: string; iconBg: string; value: string
   rose: { icon: "#ca5b61", iconBg: "#ffe8e7", value: "#a63c43" },
 };
 
-function StatCard({ icon, value, label, detail, loading, tone, href }: { icon: IconName; value?: number | string; label: string; detail?: string; loading: boolean; tone: StatTone; href?: string }) {
+function StatCard({ icon, value, secondaryValue, label, loading, tone, href }: { icon: IconName; value?: number | string; secondaryValue?: string; label: string; loading: boolean; tone: StatTone; href?: string }) {
   const palette = STAT_TONES[tone];
   const content = (
     <div className="flex h-full items-start gap-3 p-4">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ color: palette.icon, background: palette.iconBg }}><Icon name={icon} className="h-[1.05rem] w-[1.05rem]" /></span>
-      <span className="min-w-0 pt-0.5">
-        {loading ? <span className="skeleton mb-2 block h-7 w-16 rounded-md" /> : <span className="block text-[1.4rem] font-bold leading-none tracking-[-0.04em]" style={{ color: palette.value }}>{value ?? 0}</span>}
-        <span className="mt-2 block text-[.68rem] font-medium leading-snug text-[#6f6874]">{label}</span>
-        {detail && <span className="mt-1 block text-[.6rem] text-[var(--muted)]">{detail}</span>}
+      <span className="min-w-0 flex-1 pt-0.5">
+        {loading ? (
+          <span className="skeleton mb-2 block h-7 w-16 rounded-md" />
+        ) : (
+          <span className="block">
+            {/* İkincil değeri olan kartlar (örn. "3 kayıt" + "₺8.400") sözcük içerir ve tutar
+                sınırsız büyüyebilir (çok sayıda vadesi geçen aidat) - display ölçeği dar kartta
+                taşar/kırpılır, bu yüzden bu kartlarda her iki satır da başlık ölçeğinde kalır. */}
+            <span className={`block truncate ${secondaryValue ? "text-title" : "text-display"}`} style={{ color: palette.value }}>{value ?? 0}</span>
+            {secondaryValue && <span className="text-title mt-0.5 block truncate" style={{ color: palette.value }}>{secondaryValue}</span>}
+          </span>
+        )}
+        <span className="text-meta mt-2 block leading-snug">{label}</span>
       </span>
-      {href && <Icon name="chevron" className="ml-auto mt-2 h-3.5 w-3.5 text-[#b5afb8]" />}
+      {href && <Icon name="chevron" className="ml-auto mt-2 h-3.5 w-3.5 shrink-0 text-[#b5afb8]" />}
     </div>
   );
   return href ? <Link href={href} className="app-card pressable min-h-[6.8rem] overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(38,31,24,.08)]">{content}</Link> : <article className="app-card min-h-[6.8rem] overflow-hidden">{content}</article>;
 }
 
-function WeeklySchedule({ weekStart, lessons, loading, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; onWeekChange: (offset: number) => void }) {
+const RSVP_LEGEND: { color: string; label: string }[] = [
+  { color: "var(--success)", label: "Geliyor" },
+  { color: "var(--warning)", label: "Cevap yok" },
+  { color: "var(--danger)", label: "Gelmiyor" },
+];
+
+function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; onWeekChange: (offset: number) => void }) {
   const weekdays = Array.from({ length: 5 }, (_, index) => addDays(weekStart, index));
+  // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
+  // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bu eski kaydı ızgarada göstermeye devam
+  // etmek aynı dersin iki yerde birden görünmesine yol açıyordu ("taşıdığım ders eski yerinde de
+  // kalıyor" bulgusu) - `Rescheduled` artık burada, kaynakta filtreleniyor.
+  const lessons = useMemo(() => allLessons.filter((lesson) => lesson.status !== "Rescheduled"), [allLessons]);
   const lessonColors = useMemo(() => buildInstrumentColorMap(lessons.map((lesson) => lesson.instrumentName)), [lessons]);
+  const hourWindow = useMemo(() => computeHourWindow(lessons.filter((lesson) => weekdays.some((day) => new Date(lesson.startAt).toDateString() === day.toDateString()))), [lessons, weekdays]);
+  const [openLesson, setOpenLesson] = useState<CalendarLesson | null>(null);
 
   return (
     <section className="app-card min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
         <div>
-          <h2 className="text-sm font-bold">Bu Hafta</h2>
-          <p className="mt-0.5 text-[.65rem] text-[var(--muted)]">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-title">Bu Hafta</h2>
+            <Link href="/dashboard/calendar" className="text-[.62rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
+          </div>
+          <p className="text-meta mt-0.5">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p>
         </div>
-        <div className="ml-auto hidden flex-wrap items-center justify-end gap-2 lg:flex">
-          {[...lessonColors.entries()].slice(0, 5).map(([name, tone]) => <span key={name} className="inline-flex items-center gap-1 text-[.53rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: tone.border }} />{name}</span>)}
+        <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 lg:flex">
+          {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.62rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />{item.label}</span>)}
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => onWeekChange(-1)} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
@@ -177,20 +214,22 @@ function WeeklySchedule({ weekStart, lessons, loading, onWeekChange }: { weekSta
 
       {loading ? <ScheduleSkeleton /> : (
         <>
-          <div className="hidden grid-cols-[3.2rem_repeat(5,minmax(0,1fr))] border-t border-[var(--line)] xl:grid">
+          {/* Izgara görünümü ≥768px'te (docs/14-ui-design-prompt.md B3.1) - önceden yalnızca ≥1280px'te
+              açılıyordu, 768-1279 arasında istenmeyen bir ajanda görünümüne düşüyordu. */}
+          <div className="hidden grid-cols-[3.2rem_repeat(5,minmax(0,1fr))] border-t border-[var(--line)] md:grid">
             <div className="border-r border-[var(--line)]" />
-            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[#f0efff]" : ""}`}><span className="block text-[.66rem] font-semibold text-[#746d79]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
-            <TimeLabels />
-            {weekdays.map((day) => <DayColumn key={day.toISOString()} day={day} lessons={lessons} colors={lessonColors} />)}
+            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="block text-[.66rem] font-semibold text-[#746d79]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
+            <TimeLabels hourWindow={hourWindow} />
+            {weekdays.map((day) => <DayColumn key={day.toISOString()} day={day} lessons={lessons} colors={lessonColors} hourWindow={hourWindow} onOpen={setOpenLesson} />)}
           </div>
-          <div className="space-y-4 border-t border-[var(--line)] p-4 xl:hidden">
+          <div className="space-y-4 border-t border-[var(--line)] p-4 md:hidden">
             {weekdays.map((day, index) => {
               const dayLessons = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString()).sort((a,b) => a.startAt.localeCompare(b.startAt));
               return (
                 <div key={day.toISOString()}>
                   <h3 className="mb-2 flex items-center gap-2 text-xs font-bold"><span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[#625b68]"}`}>{day.getDate()}</span>{WEEKDAYS[index]}</h3>
                   <div className="space-y-2 pl-9">
-                    {dayLessons.map((lesson) => <AgendaLesson key={lesson.id} lesson={lesson} tone={lessonColors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} />)}
+                    {dayLessons.map((lesson) => <AgendaLesson key={lesson.id} lesson={lesson} tone={lessonColors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} onOpen={setOpenLesson} />)}
                     {!dayLessons.length && <p className="py-2 text-xs text-[#aaa3ad]">Planlanmış ders yok.</p>}
                   </div>
                 </div>
@@ -199,38 +238,114 @@ function WeeklySchedule({ weekStart, lessons, loading, onWeekChange }: { weekSta
           </div>
         </>
       )}
+
+      {openLesson && <LessonPopover lesson={openLesson} tone={lessonColors.get(openLesson.instrumentName) ?? INSTRUMENT_TONES[0]} onClose={() => setOpenLesson(null)} />}
     </section>
   );
 }
 
-function TimeLabels() {
-  return <div className="relative h-[21.5rem] border-r border-t border-[var(--line)] bg-[#fbfaf7]">{Array.from({ length: 11 }, (_, index) => <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[#aaa3ad]" style={{ top: `${index * 10}%` }}>{String(index + 9).padStart(2,"0")}:00</span>)}</div>;
+function TimeLabels({ hourWindow }: { hourWindow: { startHour: number; endHour: number } }) {
+  const totalHours = hourWindow.endHour - hourWindow.startHour;
+  return (
+    <div className="relative border-r border-t border-[var(--line)] bg-[#fbfaf7]" style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
+      {Array.from({ length: totalHours + 1 }, (_, index) => (
+        <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[#aaa3ad]" style={{ top: `${(index / totalHours) * 100}%` }}>
+          {String(hourWindow.startHour + index).padStart(2, "0")}:00
+        </span>
+      ))}
+    </div>
+  );
 }
 
-function DayColumn({ day, lessons, colors }: { day: Date; lessons: CalendarLesson[]; colors: Map<string, InstrumentTone> }) {
+function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; lessons: CalendarLesson[]; colors: Map<string, InstrumentTone>; hourWindow: { startHour: number; endHour: number }; onOpen: (lesson: CalendarLesson) => void }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
+  const layout = useMemo(() => layoutDayLessons(entries, hourWindow), [entries, hourWindow]);
   const isToday = day.toDateString() === new Date().toDateString();
+  const totalHours = hourWindow.endHour - hourWindow.startHour;
   return (
-    <div className={`relative h-[21.5rem] border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[#f2f1ff]" : "bg-[#fbfaf7]"}`}>
-      {Array.from({ length: 10 }, (_, index) => <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#ebe7e1]" style={{ top: `${(index + 1) * 10}%` }} />)}
+    <div className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fbfaf7]"}`} style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
+      {Array.from({ length: totalHours - 1 }, (_, index) => <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#ebe7e1]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />)}
       {entries.map((lesson) => {
         const start = new Date(lesson.startAt);
         const end = new Date(lesson.endAt);
-        const startMinutes = start.getHours() * 60 + start.getMinutes() - 9 * 60;
-        const duration = Math.max(30, (end.getTime() - start.getTime()) / 60000);
-        const top = Math.max(0, Math.min(96, startMinutes / 600 * 100));
-        const height = Math.max(6.5, Math.min(20, duration / 600 * 100));
+        const position = layout.get(lesson.id);
+        if (!position) return null;
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
-        return <Link key={lesson.id} href="/dashboard/calendar" title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`} className="pressable absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 shadow-sm hover:z-20 hover:shadow-md" style={{ top: `${top}%`, height: `${height}%`, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}><span className="block text-[.52rem] font-bold tabular-nums">{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span><span className="mt-0.5 block truncate text-[.57rem] font-bold">{lesson.studentName}</span><span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}</span></Link>;
+        const dot = rsvpDotTone(lesson);
+        const isCancelled = lesson.status === "Cancelled";
+        const gapPct = 1.5;
+        const width = `calc(${100 / position.columns}% - ${gapPct}px)`;
+        const left = `calc(${(position.column / position.columns) * 100}% + ${gapPct / 2}px)`;
+        return (
+          <button
+            key={lesson.id}
+            type="button"
+            onClick={() => onOpen(lesson)}
+            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`}
+            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm hover:z-20 hover:shadow-md ${isCancelled ? "opacity-55" : ""}`}
+            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
+          >
+            {dot.label && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
+            <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
+            <span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}</span>
+          </button>
+        );
       })}
     </div>
   );
 }
 
-function AgendaLesson({ lesson, tone }: { lesson: CalendarLesson; tone: InstrumentTone }) {
+function AgendaLesson({ lesson, tone, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; onOpen: (lesson: CalendarLesson) => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
-  return <Link href="/dashboard/calendar" className="pressable flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white p-2.5 shadow-sm"><span className="h-9 w-1 rounded-full" style={{ background: tone.border }} /><span className="w-20 shrink-0 text-[.65rem] font-bold tabular-nums" style={{ color: tone.text }}>{start.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}–{end.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}</span><span className="min-w-0"><span className="block truncate text-xs font-bold">{lesson.studentName}</span><span className="block truncate text-[.62rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span></span></Link>;
+  const dot = rsvpDotTone(lesson);
+  const isCancelled = lesson.status === "Cancelled";
+  return (
+    <button type="button" onClick={() => onOpen(lesson)} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white p-2.5 text-left shadow-sm ${isCancelled ? "opacity-60" : ""}`}>
+      <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: tone.border }} />
+      <span className={`w-20 shrink-0 text-[.65rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`} style={{ color: tone.text }}>{start.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}–{end.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}</span>
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate text-xs font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
+        <span className="block truncate text-[.62rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
+      </span>
+      {dot.label && <span className="shrink-0 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
+    </button>
+  );
+}
+
+function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone: InstrumentTone; onClose: () => void }) {
+  const start = new Date(lesson.startAt);
+  const end = new Date(lesson.endAt);
+  const dot = rsvpDotTone(lesson);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-[#171320]/35 p-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={`${lesson.studentName} ders detayı`} onClick={(event) => event.stopPropagation()} className="app-card w-full max-w-[22rem] overflow-hidden">
+        <div className="flex items-start justify-between gap-2 border-l-4 p-4" style={{ borderLeftColor: tone.border, background: tone.bg }}>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold" style={{ color: tone.text }}>{lesson.studentName}</p>
+            <p className="mt-0.5 text-[.7rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</p>
+          </div>
+          <button onClick={onClose} className="pressable grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-black/5" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-2 p-4 text-sm">
+          <p className="flex items-center gap-2 text-[var(--foreground)]"><Icon name="clock" className="h-4 w-4 text-[var(--muted)]" />{start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · {start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</p>
+          <p className="flex items-center gap-2 text-[var(--foreground)]"><Icon name="teachers" className="h-4 w-4 text-[var(--muted)]" />{lesson.teacherName}</p>
+          {dot.label && <p className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: dot.color }} />{dot.label}</p>}
+        </div>
+        <div className="border-t border-[var(--line)] p-3">
+          <Link href="/dashboard/calendar" onClick={onClose} className="pressable flex min-h-11 items-center justify-center rounded-xl bg-[var(--brand)] text-xs font-bold text-white">Takvimde aç</Link>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ScheduleSkeleton() {
@@ -265,10 +380,18 @@ function AdminAttentionRail({ lessons }: { lessons: CalendarLesson[] }) {
       </section>
 
       <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">İncelenecek Banka İşlemleri</h2><Link href="/dashboard/banking" className="text-[.62rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Gözden Geçirilmesi Gereken Banka İşlemleri</h2><Link href="/dashboard/banking" className="text-[.62rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
         {!bankItems?.items.length && <EmptyRail text="İncelenecek işlem yok." />}
         <div className="divide-y divide-[var(--line)]">
-          {bankItems?.items.map((item) => <Link key={item.id} href="/dashboard/banking" className="pressable flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"><span className="min-w-0"><span className="block truncate text-[.7rem] font-bold">{item.senderName ?? "İsimsiz gönderici"}</span><span className="mt-0.5 block truncate text-[.56rem] text-[var(--muted)]">{item.description ?? "Açıklama yok"}</span></span><span className="shrink-0 text-[.7rem] font-bold">{formatMoney(item.amount)} {item.currency}</span></Link>)}
+          {bankItems?.items.map((item) => (
+            <Link key={item.id} href="/dashboard/banking" className="pressable flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <span className="min-w-0">
+                <span className="block truncate text-[.7rem] font-bold tabular-nums">{formatMoney(item.amount)} {item.currency}</span>
+                <span className="mt-0.5 block truncate text-[.56rem] text-[var(--muted)]">{item.senderName ?? "İsimsiz gönderici"}{item.description ? ` · ${item.description}` : ""}</span>
+              </span>
+              <span className="pressable shrink-0 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[.62rem] font-bold text-[var(--brand)]">İncele</span>
+            </Link>
+          ))}
         </div>
       </section>
     </aside>
@@ -282,15 +405,24 @@ function TeacherDashboard({ email }: { email: string }) {
   const weekStart = weekStartFor(new Date());
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   return (
-    <div className="mx-auto max-w-[32rem] lg:max-w-3xl">
+    <div className="mx-auto max-w-[32rem] xl:max-w-5xl">
       <header className="mb-3 flex items-start justify-between gap-3">
         <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">Bugün</h1><p className="mt-0.5 text-[.65rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(new Date())}</p></div>
         <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.65rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
       </header>
-      <div className="mb-3 grid grid-cols-7 gap-1.5">
+      {/* Gün şeridi 390px'te taşarsa yatay kaydırılabilir (docs/14-ui-design-prompt.md C) - 7 gün
+          sabit grid-cols-7 ile önceden dar ekranda okunmaz hale sıkışıyordu. */}
+      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] sm:grid sm:grid-cols-7 sm:overflow-visible" style={{ scrollSnapType: "x proximity" }}>
         {weekDays.map((day) => {
           const active = day.toDateString() === selectedDate.toDateString();
-          return <button key={day.toISOString()} onClick={() => setSelectedDate(day)} className={`pressable flex min-h-[3.2rem] flex-col items-center justify-center rounded-xl border text-[.55rem] ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(74,55,143,.18)]" : "border-[var(--line)] bg-white text-[#746d79]"}`}><span>{day.toLocaleDateString("tr-TR", { weekday:"short" }).replace(".","")}</span><span className="mt-1 text-[.7rem] font-bold">{day.getDate()}</span></button>;
+          const isToday = day.toDateString() === new Date().toDateString();
+          return (
+            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} style={{ scrollSnapAlign: "start" }} className={`pressable relative flex min-h-[3.2rem] w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-[.55rem] sm:w-auto ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(74,55,143,.18)]" : "border-[var(--line)] bg-white text-[#746d79]"}`}>
+              <span>{day.toLocaleDateString("tr-TR", { weekday:"short" }).replace(".","")}</span>
+              <span className="mt-1 text-[.7rem] font-bold">{day.getDate()}</span>
+              {isToday && !active && <span className="absolute bottom-1.5 h-1 w-1 rounded-full bg-[var(--brand)]" />}
+            </button>
+          );
         })}
       </div>
       <TeacherTodayLessons date={selectedDate} />

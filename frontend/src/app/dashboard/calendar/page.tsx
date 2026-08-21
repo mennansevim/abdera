@@ -7,14 +7,14 @@ import { useRescheduleLesson } from "@/lib/attendance";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
+import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
 import { CreateSeriesForm } from "./create-series-form";
 
-// Dashboard önizlemesindeki (dashboard/page.tsx) TimeLabels/DayColumn ile aynı 09:00-19:00
-// penceresi - iki ekranda da aynı saat matematiği kullanılıyor.
-const GRID_START_HOUR = 9;
-const GRID_END_HOUR = 19;
-const GRID_WINDOW_MINUTES = (GRID_END_HOUR - GRID_START_HOUR) * 60;
-const GRID_HEIGHT_REM = (GRID_END_HOUR - GRID_START_HOUR) * 3.4;
+// Saat penceresi ve çakışma yerleşimi artık dashboard önizlemesiyle (dashboard/page.tsx) aynı
+// paylaşılan modülden (lib/week-grid-layout.ts) geliyor - sabit 09:00-19:00 önceden iki ekranda
+// da ayrı ayrı kopyalanmıştı ve pencere dışı/çakışan dersleri yanlış konumlandırıyordu
+// (docs/14-ui-design-prompt.md B3).
+const GRID_HEIGHT_REM_PER_HOUR = 3.4;
 const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
 // Haftanın Pazartesi'sini bulur - takvim her zaman Pazartesi'den başlar.
@@ -48,9 +48,15 @@ export default function CalendarPage() {
   const [showSeriesForm, setShowSeriesForm] = useState(false);
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
-  const { data: lessons, isLoading } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
+  const { data: rawLessons, isLoading } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
+  // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
+  // için ayrı bir satır açar (denetim izi - CLAUDE.md). Eski kaydı ızgarada göstermek aynı dersin
+  // iki yerde birden görünmesine yol açıyordu - değişiklik geçmişi `/dashboard/change-requests`'te
+  // zaten var, canlı takvimde tekrar göstermeye gerek yok.
+  const lessons = useMemo(() => (rawLessons ?? []).filter((lesson) => lesson.status !== "Rescheduled"), [rawLessons]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
-  const colors = useMemo(() => buildInstrumentColorMap((lessons ?? []).map((lesson) => lesson.instrumentName)), [lessons]);
+  const colors = useMemo(() => buildInstrumentColorMap(lessons.map((lesson) => lesson.instrumentName)), [lessons]);
+  const hourWindow = useMemo(() => computeHourWindow(lessons), [lessons]);
 
   return (
     <div className="space-y-5">
@@ -83,7 +89,7 @@ export default function CalendarPage() {
         </p>
       )}
 
-      <WeeklyGrid weekDays={weekDays} lessons={lessons ?? []} loading={isLoading} colors={colors} isAdmin={isAdmin} />
+      <WeeklyGrid weekDays={weekDays} lessons={lessons ?? []} loading={isLoading} colors={colors} isAdmin={isAdmin} hourWindow={hourWindow} />
     </div>
   );
 }
@@ -94,13 +100,16 @@ function WeeklyGrid({
   loading,
   colors,
   isAdmin,
+  hourWindow,
 }: {
   weekDays: Date[];
   lessons: CalendarLesson[];
   loading: boolean;
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
+  hourWindow: HourWindow;
 }) {
+  const windowMinutes = (hourWindow.endHour - hourWindow.startHour) * 60;
   const reschedule = useRescheduleLesson();
   const draggingRef = useRef<CalendarLesson | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -130,7 +139,7 @@ function WeeklyGrid({
   function minutesFromEvent(event: DragEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    return Math.round((ratio * GRID_WINDOW_MINUTES) / 15) * 15;
+    return Math.round((ratio * windowMinutes) / 15) * 15;
   }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>, day: Date) {
@@ -151,7 +160,7 @@ function WeeklyGrid({
     const minutes = minutesFromEvent(event);
     const newStart = new Date(day);
     newStart.setHours(0, 0, 0, 0);
-    newStart.setMinutes(GRID_START_HOUR * 60 + minutes);
+    newStart.setMinutes(hourWindow.startHour * 60 + minutes);
     const durationMs = new Date(lesson.endAt).getTime() - new Date(lesson.startAt).getTime();
     const newEnd = new Date(newStart.getTime() + durationMs);
 
@@ -195,7 +204,7 @@ function WeeklyGrid({
               <span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()} {day.toLocaleDateString("tr-TR", { month: "short" })}</span>
             </div>
           ))}
-          <GridTimeLabels />
+          <GridTimeLabels hourWindow={hourWindow} />
           {weekDays.map((day) => (
             <GridDayColumn
               key={day.toISOString()}
@@ -203,6 +212,7 @@ function WeeklyGrid({
               lessons={lessons}
               colors={colors}
               isAdmin={isAdmin}
+              hourWindow={hourWindow}
               draggingId={draggingId}
               movingId={movingId}
               hoverMinutes={hoverSlot?.day === day.toDateString() ? hoverSlot.minutes : null}
@@ -237,13 +247,13 @@ function WeeklyGrid({
   );
 }
 
-function GridTimeLabels() {
-  const totalHours = GRID_END_HOUR - GRID_START_HOUR;
+function GridTimeLabels({ hourWindow }: { hourWindow: HourWindow }) {
+  const totalHours = hourWindow.endHour - hourWindow.startHour;
   return (
-    <div className="relative border-r border-t border-[var(--line)] bg-[#fbfaf7]" style={{ height: `${GRID_HEIGHT_REM}rem` }}>
+    <div className="relative border-r border-t border-[var(--line)] bg-[#fbfaf7]" style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
         <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[#aaa3ad]" style={{ top: `${(index / totalHours) * 100}%` }}>
-          {String(GRID_START_HOUR + index).padStart(2, "0")}:00
+          {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}
     </div>
@@ -255,6 +265,7 @@ function GridDayColumn({
   lessons,
   colors,
   isAdmin,
+  hourWindow,
   draggingId,
   movingId,
   hoverMinutes,
@@ -267,6 +278,7 @@ function GridDayColumn({
   lessons: CalendarLesson[];
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
+  hourWindow: HourWindow;
   draggingId: string | null;
   movingId: string | null;
   hoverMinutes: number | null;
@@ -276,16 +288,17 @@ function GridDayColumn({
   onDropColumn: (event: DragEvent<HTMLDivElement>) => void;
 }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
+  const layout = useMemo(() => layoutDayLessons(entries, hourWindow), [entries, hourWindow]);
   const isToday = day.toDateString() === new Date().toDateString();
-  const totalHours = GRID_END_HOUR - GRID_START_HOUR;
+  const totalHours = hourWindow.endHour - hourWindow.startHour;
   const totalMinutes = totalHours * 60;
 
   return (
     <div
       onDragOver={onDragOverColumn}
       onDrop={onDropColumn}
-      className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[#f2f1ff]" : "bg-[#fbfaf7]"} ${hoverMinutes !== null ? "outline outline-2 -outline-offset-2 outline-[color:var(--brand)]" : ""}`}
-      style={{ height: `${GRID_HEIGHT_REM}rem` }}
+      className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fbfaf7]"} ${hoverMinutes !== null ? "outline outline-2 -outline-offset-2 outline-[color:var(--brand)]" : ""}`}
+      style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}
     >
       {Array.from({ length: totalHours - 1 }, (_, index) => (
         <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#ebe7e1]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />
@@ -298,12 +311,14 @@ function GridDayColumn({
       {entries.map((lesson) => {
         const start = new Date(lesson.startAt);
         const end = new Date(lesson.endAt);
-        const startMinutes = start.getHours() * 60 + start.getMinutes() - GRID_START_HOUR * 60;
-        const duration = Math.max(30, (end.getTime() - start.getTime()) / 60000);
-        const top = Math.max(0, Math.min(96, (startMinutes / totalMinutes) * 100));
-        const height = Math.max(6.5, Math.min(100 - top, (duration / totalMinutes) * 100));
+        const position = layout.get(lesson.id);
+        if (!position) return null;
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
         const draggable = isAdmin && lesson.status === "Normal";
+        const isCancelled = lesson.status === "Cancelled";
+        const gapPct = 1.5;
+        const width = `calc(${100 / position.columns}% - ${gapPct}px)`;
+        const left = `calc(${(position.column / position.columns) * 100}% + ${gapPct / 2}px)`;
         return (
           <div
             key={lesson.id}
@@ -311,11 +326,11 @@ function GridDayColumn({
             onDragStart={(event) => onDragStartLesson(event, lesson)}
             onDragEnd={onDragEndLesson}
             title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`}
-            className={`pressable absolute left-1.5 right-1.5 z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-35" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""}`}
-            style={{ top: `${top}%`, height: `${height}%`, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
+            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-35" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : ""}`}
+            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
-            <span className="block text-[.52rem] font-bold tabular-nums">{formatTime(start)}–{formatTime(end)}</span>
-            <span className="mt-0.5 block truncate text-[.57rem] font-bold">{lesson.studentName}</span>
+            <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{formatTime(start)}–{formatTime(end)}</span>
+            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
             <span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}{isAdmin ? ` · ${lesson.teacherName}` : ""}</span>
           </div>
         );

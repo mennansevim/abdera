@@ -1,21 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
+import { ApiError } from "@/lib/api";
 import { useRequireGuardianAuth } from "@/lib/guardian-auth";
-import { useGuardianCalendar, useGuardianStudents, useRespondRsvp, type GuardianLesson } from "@/lib/guardian";
+import {
+  useGuardianBilling,
+  useGuardianCalendar,
+  useGuardianMessages,
+  useGuardianStudents,
+  useRespondRsvp,
+  type GuardianBilling,
+  type GuardianLesson,
+  type GuardianMessage,
+  type GuardianStudent,
+} from "@/lib/guardian";
 import { useLogout } from "@/lib/use-auth";
 
 type ParentTab = "home" | "calendar" | "billing" | "messages";
-
-// docs/10-decisions.md Karar F reversal - kapsam bilinçli olarak dar: yalnızca kendi
-// öğrencisi/takvimi/RSVP'si gerçek veriden geliyor. Aidat ve bildirimler hâlâ mock - ayrı bir iş.
-const messages = [
-  { id: 1, text: "Ders hatırlatması — piyano dersin yarın 15:00’te. Katılım durumunuzu bildirir misiniz?", time: "Bugün, 14:02" },
-  { id: 2, text: "Eylül ayı aidat hatırlatması: ₺2.500, son ödeme 5 Eylül.", time: "Dün, 10:15" },
-  { id: 3, text: "Telafi dersi onaylandı — Ayşe Yılmaz ile.", time: "18 Ağustos" },
-];
 
 const WEEKDAY_SHORT_FALLBACK = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
@@ -30,6 +33,8 @@ export default function ParentPage() {
   const logout = useLogout();
   const { guardian, isLoading: guardianLoading } = useRequireGuardianAuth();
   const { data: students, isLoading: studentsLoading } = useGuardianStudents();
+  const { data: billing, isLoading: billingLoading } = useGuardianBilling();
+  const { data: messages, isLoading: messagesLoading } = useGuardianMessages();
   const [tab, setTab] = useState<ParentTab>("home");
   const [selectedDay, setSelectedDay] = useState(1);
   const [studentIndex, setStudentIndex] = useState(0);
@@ -41,7 +46,7 @@ export default function ParentPage() {
   const { data: lessons } = useGuardianCalendar(selectedStudent?.studentId, from, to);
 
   function handleLogout() {
-    logout.mutate(undefined, { onSuccess: () => router.push("/login") });
+    logout.mutate(undefined, { onSuccess: () => router.push("/parent/login") });
   }
 
   if (guardianLoading || studentsLoading || !guardian) {
@@ -66,20 +71,78 @@ export default function ParentPage() {
             ) : (
               <span className="min-w-0 flex-1 text-xs text-[var(--muted)]">Bağlı öğrenci bulunamadı</span>
             )}
-            {(students?.length ?? 0) > 1 && (
-              <button onClick={() => setStudentIndex((index) => index + 1)} className="pressable grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-white text-[.62rem] text-[var(--muted)]" aria-label="Diğer öğrenciyi göster">+{(students!.length - 1)}</button>
-            )}
-            <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-[var(--line)] bg-white text-[#756f7a] disabled:opacity-50" aria-label="Çıkış yap"><Icon name="logout" className="h-4 w-4" /></button>
+            <HeaderMenu
+              students={students}
+              studentIndex={studentIndex}
+              onSelectStudent={setStudentIndex}
+              onLogout={handleLogout}
+              loggingOut={logout.isPending}
+            />
           </header>
 
-          {tab === "home" && <HomeView lessons={lessons} today={today} />}
+          {tab === "home" && <HomeView lessons={lessons} today={today} studentId={selectedStudent?.studentId} billing={billing} messages={messages} />}
           {tab === "calendar" && <CalendarView lessons={lessons} today={today} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />}
-          {tab === "billing" && <BillingView />}
-          {tab === "messages" && <MessagesView />}
+          {tab === "billing" && <BillingView billing={billing} loading={billingLoading} studentId={selectedStudent?.studentId} />}
+          {tab === "messages" && <MessagesView messages={messages} loading={messagesLoading} />}
         </div>
         <ParentNavigation tab={tab} setTab={setTab} />
       </section>
     </main>
+  );
+}
+
+// Önceden ayrı bir "+N öğrenci" butonu ve ayrı bir çıkış butonu vardı; mockup'ta ikisi tek bir
+// "…" menüsünde toplanıyor (docs/14-ui-design-prompt.md D).
+function HeaderMenu({ students, studentIndex, onSelectStudent, onLogout, loggingOut }: {
+  students: GuardianStudent[] | undefined;
+  studentIndex: number;
+  onSelectStudent: (index: number) => void;
+  onLogout: () => void;
+  loggingOut: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  return (
+    <div className="relative shrink-0">
+      <button onClick={() => setOpen((value) => !value)} className="pressable grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-white text-[#756f7a]" aria-label="Menüyü aç" aria-expanded={open}>
+        <Icon name="more" className="h-4 w-4" />
+      </button>
+      {open && (
+        <>
+          <button aria-label="Menüyü kapat" onClick={() => setOpen(false)} className="fixed inset-0 z-40 cursor-default" />
+          <div role="menu" className="app-card absolute right-0 top-[calc(100%+.4rem)] z-50 w-56 overflow-hidden p-1.5">
+            {students && students.length > 1 && (
+              <>
+                <p className="px-3 pb-1 pt-2 text-[.58rem] font-bold uppercase tracking-[.06em] text-[var(--muted)]">Öğrenciler</p>
+                {students.map((student, index) => (
+                  <button
+                    key={student.studentId}
+                    role="menuitemradio"
+                    aria-checked={index === studentIndex % students.length}
+                    onClick={() => { onSelectStudent(index); setOpen(false); }}
+                    className={`pressable flex min-h-11 w-full items-center justify-between rounded-xl px-3 text-left text-xs font-semibold ${index === studentIndex % students.length ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[#514b59] hover:bg-black/[.035]"}`}
+                  >
+                    {student.firstName} {student.lastName}
+                    {index === studentIndex % students.length && <Icon name="check" className="h-3.5 w-3.5" />}
+                  </button>
+                ))}
+                <div className="my-1 border-t border-[var(--line)]" />
+              </>
+            )}
+            <button onClick={onLogout} disabled={loggingOut} className="pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-[#756f7a] hover:bg-black/[.035] disabled:opacity-50">
+              <Icon name="logout" className="h-4 w-4" /> Çıkış yap
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -89,19 +152,37 @@ function nextRsvpableLesson(lessons: GuardianLesson[] | undefined, today: Date) 
     .sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
 }
 
-function HomeView({ lessons, today }: { lessons: GuardianLesson[] | undefined; today: Date }) {
+function HomeView({ lessons, today, studentId, billing, messages }: {
+  lessons: GuardianLesson[] | undefined;
+  today: Date;
+  studentId: string | undefined;
+  billing: GuardianBilling | undefined;
+  messages: GuardianMessage[] | undefined;
+}) {
   const respondRsvp = useRespondRsvp();
   const [forceEditing, setForceEditing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const nextLesson = nextRsvpableLesson(lessons, today);
 
   async function respond(response: "Attending" | "NotAttending") {
     if (!nextLesson) return;
-    setForceEditing(false);
-    await respondRsvp.mutateAsync({ lessonId: nextLesson.id, response });
+    setError(null);
+    try {
+      await respondRsvp.mutateAsync({ lessonId: nextLesson.id, response });
+      setForceEditing(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Katılım yanıtı kaydedilemedi.");
+    }
   }
 
   const rsvp = nextLesson?.rsvpResponse;
   const showButtons = forceEditing || !rsvp || rsvp === "Unknown";
+  const studentBilling = billing?.enrollments.filter((item) => item.studentId === studentId);
+  const outstanding = (studentBilling ?? [])
+    .flatMap((item) => item.receivables)
+    .filter((item) => item.status !== "Paid" && item.status !== "Cancelled");
+  const outstandingTotal = outstanding.reduce((sum, item) => sum + Math.max(0, item.amount - item.totalPaid), 0);
+  const availableMakeups = billing?.makeupCredits.filter((credit) => credit.studentId === studentId) ?? [];
 
   return (
     <div className="space-y-3">
@@ -130,16 +211,32 @@ function HomeView({ lessons, today }: { lessons: GuardianLesson[] | undefined; t
         ) : (
           <p className="mt-2 text-xs text-[#776c60]">Şu an planlanmış yaklaşan bir ders yok.</p>
         )}
+        {error && <p role="alert" className="mt-3 rounded-xl bg-[#ffe8e5] p-3 text-xs font-semibold text-[#af4545]">{error}</p>}
       </section>
       <div className="grid grid-cols-2 gap-3">
-        {/* Aidat ve telafi hakkı kartları henüz mock - docs/10-decisions.md Karar F reversal
-            kapsamı yalnızca RSVP + takvim, aidat/bildirim ayrı bir iş. */}
-        <InfoCard icon="wallet" label="Eylül Aidatı" value="₺2.500" badge="Ödenmedi" badgeTone="red" detail="Son ödeme: 5 Eylül" />
-        <InfoCard icon="swap" label="Telafi Hakkı" value="2 ders" badge="Kullanılabilir" badgeTone="green" detail="Son kullanma: 15 Ekim" />
+        <InfoCard
+          icon="wallet"
+          label="Açık Aidat"
+          value={outstanding.length ? formatMoney(outstandingTotal, outstanding[0]!.currency) : "—"}
+          badge={outstanding.length ? "Ödenmedi" : "Güncel"}
+          badgeTone={outstanding.length ? "red" : "green"}
+          detail={outstanding[0] ? `Son vade: ${formatDate(outstanding[0].dueDate)}` : "Açık aidat bulunmuyor"}
+        />
+        <InfoCard
+          icon="swap"
+          label="Telafi Hakkı"
+          value={`${availableMakeups.length} ders`}
+          badge={availableMakeups.length ? "Kullanılabilir" : "Yok"}
+          badgeTone={availableMakeups.length ? "green" : "red"}
+          detail={availableMakeups[0] ? `Son kullanım: ${formatDateTime(availableMakeups[0].expiresAt)}` : "Kullanılabilir telafi yok"}
+        />
       </div>
       <section>
         <h2 className="mb-2 text-xs font-bold">Son Bildirimler</h2>
-        <div className="space-y-2">{messages.map((message) => <MessageCard key={message.id} message={message} />)}</div>
+        <div className="space-y-2">
+          {messages?.slice(0, 3).map((message) => <MessageCard key={message.id} message={message} compact />)}
+          {!messages?.length && <p className="app-card p-4 text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}
+        </div>
       </section>
     </div>
   );
@@ -205,22 +302,143 @@ function CalendarView({ lessons, today, selectedDay, setSelectedDay }: {
   );
 }
 
-// Mock - kapsam dışı (docs/10-decisions.md Karar F reversal yalnızca RSVP + takvim'i kapsıyor).
-function BillingView() {
-  return <div><h1 className="text-xl font-bold">Aidat</h1><p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p><div className="mt-4 space-y-3"><InfoCard icon="wallet" label="Eylül 2026" value="₺2.500" badge="Ödenmedi" badgeTone="red" detail="Son ödeme: 5 Eylül" /><article className="app-card p-4"><p className="text-xs font-bold">Ödeme bilgisi</p><p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">Sana özel sanal IBAN üzerinden yapılan havaleler aidatına otomatik işlenir.</p><button className="pressable mt-3 min-h-11 w-full rounded-xl bg-[var(--brand)] text-xs font-bold text-white" onClick={() => navigator.clipboard?.writeText("TR942036008341259")}>IBAN’ı kopyala</button></article></div></div>;
+function formatMoney(value: number, currency: string) {
+  return new Intl.NumberFormat("tr-TR", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
 }
 
-// Mock - kapsam dışı (docs/10-decisions.md Karar F reversal yalnızca RSVP + takvim'i kapsıyor).
-function MessagesView() {
-  return <div><h1 className="text-xl font-bold">Mesajlar</h1><p className="mt-1 text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-4 space-y-2">{messages.map((message)=><MessageCard key={message.id} message={message}/>)}</div></div>;
+function formatDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
+}
+
+function BillingView({ billing, loading, studentId }: {
+  billing: GuardianBilling | undefined;
+  loading: boolean;
+  studentId: string | undefined;
+}) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const enrollments = billing?.enrollments.filter((item) => item.studentId === studentId) ?? [];
+  const availableMakeups = billing?.makeupCredits.filter((credit) => credit.studentId === studentId) ?? [];
+
+  async function copyIban() {
+    const iban = billing?.virtualIban?.iban;
+    if (!iban) return;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(iban);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = iban;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        textarea.remove();
+        if (!copied) throw new Error("copy failed");
+      }
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 1800);
+    } catch {
+      setCopyState("error");
+    }
+  }
+
+  if (loading) {
+    return <div className="space-y-3"><div className="skeleton h-8 w-32 rounded-lg" /><div className="skeleton h-28 rounded-2xl" /><div className="skeleton h-40 rounded-2xl" /></div>;
+  }
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold">Aidat</h1>
+      <p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p>
+
+      <div className="mt-4 space-y-3">
+        {enrollments.map((enrollment) => (
+          <section key={enrollment.enrollmentId} className="app-card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div><h2 className="text-sm font-bold">{enrollment.instrumentName}</h2><p className="mt-1 text-[.62rem] text-[var(--muted)]">{enrollment.teacherName}</p></div>
+              <span className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[.55rem] font-bold text-[var(--brand)]">{enrollment.studentName}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {enrollment.receivables.map((receivable) => {
+                const remaining = Math.max(0, receivable.amount - receivable.totalPaid);
+                const paid = receivable.status === "Paid";
+                return <div key={receivable.id} className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white p-3">
+                  <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${paid ? "bg-[#ddf2e2] text-[#2e7d49]" : "bg-[#ffe0de] text-[#c94b4b]"}`}><Icon name={paid ? "check" : "wallet"} className="h-3.5 w-3.5" /></span>
+                  <span className="min-w-0 flex-1"><span className="block text-xs font-bold">{receivable.period}</span><span className="block text-[.58rem] text-[var(--muted)]">Vade: {formatDate(receivable.dueDate)} · {paid ? "Ödendi" : receivable.status === "Partial" ? "Kısmi ödeme" : "Açık"}</span></span>
+                  <span className={`shrink-0 text-xs font-bold ${paid ? "text-[#297a45]" : "text-[#b3403c]"}`}>{formatMoney(remaining, receivable.currency)}</span>
+                </div>;
+              })}
+              {!enrollment.receivables.length && <p className="rounded-xl bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted)]">Henüz bu kayıt için aidat oluşturulmadı.</p>}
+            </div>
+          </section>
+        ))}
+
+        {!enrollments.length && <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Bu öğrenci için henüz bir aidat kaydı yok.</p>}
+
+        <article className="app-card p-4">
+          <p className="text-xs font-bold">Ödeme bilgisi</p>
+          {billing?.virtualIban ? (
+            <>
+              <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">Havale yaparken açıklama alanına öğrenci adını ve dönem bilgisini ekle.</p>
+              <p className="mt-3 break-all rounded-xl bg-[var(--surface-muted)] px-3 py-2 text-xs font-bold tracking-wide">{billing.virtualIban.iban}</p>
+              <p className="mt-1 text-[.55rem] text-[var(--muted)]">Sağlayıcı: {billing.virtualIban.provider}</p>
+              <button className="pressable mt-3 min-h-11 w-full rounded-xl bg-[var(--brand)] text-xs font-bold text-white disabled:opacity-60" onClick={copyIban} disabled={copyState === "copied"}>
+                {copyState === "copied" ? "IBAN kopyalandı" : "IBAN’ı kopyala"}
+              </button>
+              {copyState === "error" && <p role="alert" className="mt-2 text-center text-[.62rem] text-[#b3403c]">IBAN kopyalanamadı; yukarıdaki numarayı seçip kopyalayabilirsin.</p>}
+            </>
+          ) : <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">Okul henüz sana özel bir sanal IBAN tanımlamamış.</p>}
+        </article>
+
+        <article className="app-card p-4">
+          <p className="text-xs font-bold">Telafi hakları</p>
+          <p className="mt-1 text-[.62rem] text-[var(--muted)]">Kullanılabilir telafi: {availableMakeups.length}</p>
+          {availableMakeups.map((credit) => <p key={credit.id} className="mt-2 rounded-xl bg-[#eaf8ed] px-3 py-2 text-[.62rem] font-semibold text-[#287747]">Son kullanım: {formatDateTime(credit.expiresAt)}</p>)}
+        </article>
+      </div>
+    </div>
+  );
+}
+
+function MessagesView({ messages, loading }: { messages: GuardianMessage[] | undefined; loading: boolean }) {
+  return <div><h1 className="text-xl font-bold">Mesajlar</h1><p className="mt-1 text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-4 space-y-2">{loading ? <div className="skeleton h-24 rounded-2xl" /> : messages?.length ? messages.map((message) => <MessageCard key={message.id} message={message} />) : <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}</div></div>;
 }
 
 function InfoCard({ icon, label, value, badge, badgeTone, detail }: { icon: IconName; label: string; value: string; badge: string; badgeTone: "red"|"green"; detail: string }) {
   return <article className="app-card min-h-[7.4rem] p-3"><p className="flex items-center gap-1.5 text-[.58rem] text-[var(--muted)]"><Icon name={icon} className="h-3.5 w-3.5" />{label}</p><p className={`mt-2 text-base font-bold ${badgeTone === "green" ? "text-[#297a45]" : "text-[#302b35]"}`}>{value}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[.5rem] font-bold ${badgeTone === "green" ? "bg-[#ddf2e2] text-[#2e7d49]" : "bg-[#ffe0de] text-[#c94b4b]"}`}>{badge}</span><p className="mt-1.5 text-[.5rem] text-[#a29ba5]">{detail}</p></article>;
 }
 
-function MessageCard({ message }: { message: typeof messages[number] }) {
-  return <article className="flex gap-2.5 rounded-xl border border-[var(--line)] bg-white p-3 shadow-sm"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="note" className="h-3.5 w-3.5" /></span><span><span className="block text-[.64rem] leading-relaxed text-[#554e59]">{message.text}</span><span className="mt-1 block text-[.52rem] text-[#a19aa5]">{message.time}</span></span></article>;
+// "2 saat önce" gibi göreli zaman - Son Bildirimler'de (Ana Sayfa) taramayı hızlandırır;
+// Mesajlar sekmesindeki tam geçmişte mutlak tarih daha faydalı, o yüzden orada değişmedi.
+function formatRelativeTime(value: string): string {
+  const diffMs = Date.now() - new Date(value).getTime();
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 1) return "az önce";
+  if (minutes < 60) return `${minutes} dakika önce`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} saat önce`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days} gün önce`;
+  return new Date(value).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
+}
+
+function MessageCard({ message, compact }: { message: GuardianMessage; compact?: boolean }) {
+  return (
+    <article className="flex gap-2.5 rounded-xl border border-[var(--line)] bg-white p-3 shadow-sm">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="note" className="h-3.5 w-3.5" /></span>
+      <span className="min-w-0">
+        <span className={`block text-[.64rem] leading-relaxed text-[#554e59] ${compact ? "line-clamp-2" : ""}`}>{message.body}</span>
+        <span className="mt-1 block text-[.52rem] text-[#a19aa5]">
+          {compact ? formatRelativeTime(message.createdAt) : new Date(message.createdAt).toLocaleString("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </span>
+    </article>
+  );
 }
 
 function ParentNavigation({ tab, setTab }: { tab: ParentTab; setTab: (tab: ParentTab) => void }) {

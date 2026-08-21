@@ -12,29 +12,29 @@ export default function TeachersPage() {
   const { data: instruments } = useInstruments();
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Öğretmenler</h1>
+    <div className="space-y-5">
+      <h1 className="text-display">Öğretmenler</h1>
 
       {isAdmin && <CreateTeacherForm instruments={instruments ?? []} />}
 
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
-        {isLoading && <p className="p-4 text-sm text-neutral-500">Yükleniyor…</p>}
-        {teachers?.length === 0 && <p className="p-4 text-sm text-neutral-500">Henüz öğretmen yok.</p>}
-        <ul className="divide-y divide-neutral-200">
+      <div className="app-card overflow-hidden">
+        {isLoading && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
+        {teachers?.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">Henüz öğretmen yok.</p>}
+        <ul className="divide-y divide-[var(--line)]">
           {teachers?.map((teacher) => (
-            <li id={`teacher-${teacher.id}`} key={teacher.id} className="scroll-mt-24 flex items-center justify-between px-4 py-3 text-sm target:bg-[#f0edff]">
-              <span>
-                {teacher.firstName} {teacher.lastName}
-                <span className="ml-2 text-neutral-400">
+            <li id={`teacher-${teacher.id}`} key={teacher.id} className="scroll-mt-24 flex min-h-14 items-center justify-between gap-3 px-4 py-3 target:bg-[var(--brand-soft)]">
+              <span className="min-w-0">
+                <span className="block text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>
+                <span className="text-meta mt-0.5 block truncate">
                   {teacher.instrumentIds
                     .map((id) => instruments?.find((i) => i.id === id)?.name)
                     .filter(Boolean)
                     .join(", ")}
                 </span>
               </span>
-              <span className="text-xs text-neutral-400">
-                {teacher.status === "Active" ? "aktif" : "pasif"}
-                {teacher.hasLoginAccount ? " · giriş hesabı var" : " · giriş hesabı yok"}
+              <span className="shrink-0 text-right">
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[.62rem] font-bold ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
+                <span className="text-meta mt-0.5 block">{teacher.hasLoginAccount ? "Giriş hesabı var" : "Giriş hesabı yok"}</span>
               </span>
             </li>
           ))}
@@ -81,51 +81,51 @@ function CreateTeacherForm({ instruments }: { instruments: { id: string; name: s
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Ad</label>
-          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+    <form onSubmit={handleSubmit} className="app-card space-y-3 p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-semibold text-[#625c68]">Ad</label>
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Soyad</label>
-          <input value={lastName} onChange={(e) => setLastName(e.target.value)} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-semibold text-[#625c68]">Soyad</label>
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">E-posta (giriş hesabı için, opsiyonel)</label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-semibold text-[#625c68]">E-posta (giriş hesabı için, opsiyonel)</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="field min-h-11 w-56 text-sm" />
         </div>
       </div>
 
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-neutral-600">Enstrümanlar</label>
+      <div className="space-y-1.5">
+        <label className="text-[.7rem] font-semibold text-[#625c68]">Enstrümanlar</label>
         <div className="flex flex-wrap gap-2">
-          {instruments.map((i) => (
-            <label key={i.id} className="flex items-center gap-1 text-sm">
-              <input
-                type="checkbox"
-                checked={selectedInstruments.includes(i.id)}
-                onChange={() => toggleInstrument(i.id)}
-              />
-              {i.name}
-            </label>
-          ))}
+          {instruments.map((i) => {
+            const checked = selectedInstruments.includes(i.id);
+            return (
+              <button
+                key={i.id}
+                type="button"
+                onClick={() => toggleInstrument(i.id)}
+                aria-pressed={checked}
+                className={`pressable min-h-9 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--line)] bg-white text-[#625c68] hover:border-[#d4ccc3]"}`}
+              >
+                {i.name}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <button type="submit" disabled={createTeacher.isPending}
-        className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+      <button type="submit" disabled={createTeacher.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
         {createTeacher.isPending ? "Ekleniyor…" : "Öğretmen ekle"}
       </button>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
 
       {temporaryPassword && (
-        <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
-          Geçici şifre: <code className="font-mono">{temporaryPassword}</code> — bunu öğretmene sözlü/WhatsApp ile
+        <p className="rounded-xl border border-[#e6c46e] bg-[#fff9e8] p-3 text-xs font-medium text-[#7f5d0d]">
+          Geçici şifre: <code className="font-mono font-bold">{temporaryPassword}</code> — bunu öğretmene sözlü/WhatsApp ile
           ilet, bir daha gösterilmeyecek.
         </p>
       )}

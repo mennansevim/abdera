@@ -22,11 +22,11 @@ const STATUS_LABELS: Record<NotificationJobStatus, string> = {
 };
 
 const STATUS_COLORS: Record<NotificationJobStatus, string> = {
-  Pending: "text-neutral-500",
-  Processing: "text-amber-600",
-  Sent: "text-green-700",
-  Failed: "text-red-600",
-  Cancelled: "text-neutral-400",
+  Pending: "text-[var(--muted)]",
+  Processing: "text-[var(--warning)]",
+  Sent: "text-[var(--success-strong)]",
+  Failed: "text-[var(--danger)]",
+  Cancelled: "text-[#a29ba5]",
 };
 
 const TYPE_LABELS: Record<NotificationJobType, string> = {
@@ -72,66 +72,68 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Bildirimler</h1>
-      <p className="text-sm text-neutral-500">
-        WhatsApp üzerinden gönderilen/gönderilecek bildirimlerin durumu. Başarısız olanlar en fazla deneme
-        sayısına ulaştıktan sonra burada kalır - elle yeniden denenebilir.
-      </p>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-display">Bildirimler</h1>
+        <p className="text-meta mt-1">
+          WhatsApp üzerinden gönderilen/gönderilecek bildirimlerin durumu. Başarısız olanlar en fazla deneme
+          sayısına ulaştıktan sonra burada kalır - elle yeniden denenebilir.
+        </p>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => handleFilterChange(f.value)}
-            className={
+            className={`pressable min-h-10 rounded-full px-3.5 text-xs font-bold ${
               filter === f.value
-                ? "rounded-md bg-neutral-900 px-3 py-1 text-sm text-white"
-                : "rounded-md border border-neutral-300 px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-100"
-            }
+                ? "bg-[var(--brand)] text-white"
+                : "border border-[var(--line)] bg-white text-[#625c68] hover:border-[#d4ccc3]"
+            }`}
           >
             {f.label}
           </button>
         ))}
       </div>
 
-      {retryError && <p className="text-sm text-red-600">{retryError}</p>}
-      {isLoading && <p className="text-sm text-neutral-500">Yükleniyor…</p>}
+      {retryError && <p role="alert" className="rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{retryError}</p>}
+      {isLoading && <div className="space-y-2">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-11 rounded-xl" />)}</div>}
 
-      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-        <table className="w-full text-sm">
+      <div className="app-card overflow-x-auto">
+        <table className="w-full min-w-[46rem] text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 text-left text-xs text-neutral-500">
-              <th className="px-3 py-2">Tip</th>
-              <th className="px-3 py-2">Alıcı</th>
-              <th className="px-3 py-2">Planlanan zaman</th>
-              <th className="px-3 py-2">Durum</th>
-              <th className="px-3 py-2">Deneme</th>
-              <th className="px-3 py-2">Hata</th>
-              <th className="px-3 py-2" />
+            <tr className="text-micro border-b border-[var(--line)] text-left">
+              <th className="px-3 py-3">Tip</th>
+              <th className="px-3 py-3">Alıcı</th>
+              <th className="px-3 py-3">Planlanan zaman</th>
+              <th className="px-3 py-3">Durum</th>
+              <th className="px-3 py-3">Deneme</th>
+              <th className="px-3 py-3">Hata</th>
+              <th className="px-3 py-3" />
             </tr>
           </thead>
           <tbody>
             {jobs?.map((job) => (
-              <tr key={job.id} className="border-b border-neutral-100 last:border-0">
-                <td className="px-3 py-2">{TYPE_LABELS[job.type] ?? job.type}</td>
-                <td className="px-3 py-2 text-neutral-500">{job.recipientPhoneNumber}</td>
-                <td className="px-3 py-2 text-neutral-500">
+              <tr key={job.id} className="border-b border-[var(--line)] last:border-0">
+                <td className="px-3 py-3 font-medium">{TYPE_LABELS[job.type] ?? job.type}</td>
+                <td className="text-meta px-3 py-3">{job.recipientPhoneNumber}</td>
+                <td className="text-meta px-3 py-3">
                   {new Date(job.scheduledAt).toLocaleString("tr-TR")}
                 </td>
-                <td className={`px-3 py-2 font-medium ${STATUS_COLORS[job.status]}`}>
+                <td className={`px-3 py-3 font-bold ${STATUS_COLORS[job.status]}`}>
                   {STATUS_LABELS[job.status]}
                 </td>
-                <td className="px-3 py-2 text-neutral-500">{job.attemptCount}</td>
-                <td className="max-w-xs truncate px-3 py-2 text-neutral-500" title={job.lastError ?? undefined}>
+                <td className="text-meta px-3 py-3">{job.attemptCount}</td>
+                <td className="text-meta max-w-xs truncate px-3 py-3" title={job.lastError ?? undefined}>
                   {job.lastError ?? "—"}
                 </td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-3">
                   {job.status === "Failed" && (
                     <button
                       onClick={() => handleRetry(job.id)}
                       disabled={retry.isPending}
-                      className="min-h-11 rounded-md border border-neutral-300 px-2 text-xs hover:bg-neutral-100 disabled:opacity-50"
+                      className="pressable min-h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-bold text-[var(--brand)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
                     >
                       Yeniden dene
                     </button>
@@ -141,7 +143,7 @@ export default function NotificationsPage() {
             ))}
             {jobs?.length === 0 && !isLoading && (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-neutral-400">
+                <td colSpan={7} className="px-3 py-8 text-center text-sm text-[var(--muted)]">
                   Bu filtrede bildirim yok.
                 </td>
               </tr>
@@ -151,22 +153,22 @@ export default function NotificationsPage() {
       </div>
 
       {data && data.totalCount > 0 && (
-        <div className="flex items-center justify-between text-sm text-neutral-500">
-          <span>
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-meta">
             Toplam {data.totalCount} kayıt - sayfa {data.page} / {totalPages}
           </span>
           <div className="flex gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="min-h-11 rounded-md border border-neutral-300 px-3 hover:bg-neutral-100 disabled:opacity-50"
+              className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               Önceki
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="min-h-11 rounded-md border border-neutral-300 px-3 hover:bg-neutral-100 disabled:opacity-50"
+              className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               Sonraki
             </button>

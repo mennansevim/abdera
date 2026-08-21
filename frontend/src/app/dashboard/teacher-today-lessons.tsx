@@ -1,30 +1,27 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useCreateChangeRequest, useCreateLessonNote, useMarkAttendance, type AttendanceStatus } from "@/lib/attendance";
+import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
-
-const LESSON_TONES = [
-  { bg: "#d9f0ee", text: "#277a76" },
-  { bg: "#f8e7c8", text: "#99610a" },
-  { bg: "#ffe0d7", text: "#ad5137" },
-  { bg: "#f5d9e8", text: "#a24474" },
-];
-
-function toneFor(value: string) {
-  const sum = Array.from(value).reduce((total, letter) => total + letter.charCodeAt(0), 0);
-  return LESSON_TONES[sum % LESSON_TONES.length];
-}
 
 export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
   const todayStart = new Date(date);
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date(todayStart);
   todayEnd.setDate(todayEnd.getDate() + 1);
-  const { data: lessons, isLoading } = useCalendar(todayStart.toISOString(), todayEnd.toISOString());
+  const { data: rawLessons, isLoading } = useCalendar(todayStart.toISOString(), todayEnd.toISOString());
+  // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
+  // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bugünden başka bir güne taşınan bir ders,
+  // bu filtre olmadan hâlâ "bugün" listesinde normal bir ders gibi görünüp yoklama/not almaya
+  // açık kalırdı.
+  const lessons = useMemo(() => rawLessons?.filter((lesson) => lesson.status !== "Rescheduled"), [rawLessons]);
   const [expanded, setExpanded] = useState<{ id: string; mode: "attendance" | "note" } | null>(null);
+  // Enstrüman renkleri artık dashboard'daki haftalık ızgara ile aynı paletten (lesson-colors.ts) -
+  // önceden burada ayrı, karakter-hash'ine dayalı bir renk kümesi kullanılıyordu (docs/14-ui-design-prompt.md C).
+  const colors = useMemo(() => buildInstrumentColorMap((lessons ?? []).map((lesson) => lesson.instrumentName)), [lessons]);
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-36 rounded-2xl" />)}</div>;
 
@@ -33,21 +30,22 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="grid gap-3 xl:grid-cols-2">
       {lessons.slice().sort((a,b) => a.startAt.localeCompare(b.startAt)).map((lesson) => {
-        const tone = toneFor(lesson.instrumentName);
+        const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
         const start = new Date(lesson.startAt);
         const end = new Date(lesson.endAt);
         return (
-          <article key={lesson.id} className="app-card overflow-hidden">
+          <article key={lesson.id} className="app-card relative overflow-hidden xl:self-start">
+            <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: tone.border }} aria-hidden="true" />
             <div className="flex items-center gap-3 p-3 sm:p-4">
-              <span className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl text-[.63rem] font-bold tabular-nums" style={{ background: tone.bg, color: tone.text }}>
-                <span>{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
-                <span className="mt-0.5 text-[.5rem] opacity-65">{end.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
+              <span className="flex h-14 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-[var(--surface-muted)] text-center">
+                <span className="text-title tabular-nums leading-none">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
+                <span className="mt-1 text-[.6rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</span>
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2"><h2 className="truncate text-sm font-bold">{lesson.studentName}</h2><StatusBadge lesson={lesson} /></div>
-                <span className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[.58rem] font-bold" style={{ background: tone.bg, color: tone.text }}>{lesson.instrumentName}</span>
+                <span className="text-meta mt-1 block">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">

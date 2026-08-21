@@ -1,6 +1,5 @@
 // Veli kendi kendine hizmet uçları - docs/10-decisions.md Karar F reversal. Kapsam bilinçli
-// olarak dar: yalnızca kendi öğrencisi/takvimi/RSVP'si. Aidat ve bildirim listesi burada YOK,
-// ayrı bir iş (bkz. GuardianPortal.cs üstündeki yorum).
+// olarak dar: yalnızca kendi öğrencisi/takvimi/RSVP'si ve salt-okunur aidat/mesaj görünümü.
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,5 +51,62 @@ export function useRespondRsvp() {
         `/api/guardian/me/lessons/${lessonId}/rsvp`, { response },
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guardian", "calendar"] }),
+  });
+}
+
+export type GuardianReceivableStatus = "Unpaid" | "Partial" | "Paid" | "Overdue" | "Cancelled";
+
+export interface GuardianReceivable {
+  id: string;
+  period: string;
+  amount: number;
+  currency: string;
+  dueDate: string;
+  status: GuardianReceivableStatus;
+  totalPaid: number;
+}
+
+export interface GuardianBillingEnrollment {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  instrumentName: string;
+  teacherName: string;
+  receivables: GuardianReceivable[];
+}
+
+export interface GuardianMakeupCredit {
+  id: string;
+  studentId: string;
+  earnedReason: "GuardianCancelled24H" | "SchoolCancelled";
+  earnedAt: string;
+  expiresAt: string;
+}
+
+export interface GuardianBilling {
+  enrollments: GuardianBillingEnrollment[];
+  makeupCredits: GuardianMakeupCredit[];
+  virtualIban: { iban: string; provider: string } | null;
+}
+
+export interface GuardianMessage {
+  id: string;
+  body: string;
+  direction: "Outbound" | "Inbound";
+  createdAt: string;
+  sentAt: string | null;
+}
+
+export function useGuardianBilling() {
+  return useQuery({
+    queryKey: ["guardian", "billing"],
+    queryFn: () => api.get<GuardianBilling>("/api/guardian/me/billing"),
+  });
+}
+
+export function useGuardianMessages() {
+  return useQuery({
+    queryKey: ["guardian", "messages"],
+    queryFn: () => api.get<GuardianMessage[]>("/api/guardian/me/messages"),
   });
 }

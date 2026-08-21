@@ -4,11 +4,11 @@ Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma gün
 
 ## Devam noktası (şu an)
 
-**Faz 6 — Banka entegrasyonu (sanal IBAN) tamamlandı, commit'lendi, push bekliyor.** Kod, testler (13 birim + 5 Testcontainers entegrasyon, tüm suite 141/141 yeşil), frontend "Banka" sayfası, doküman güncellemeleri (`docs/10-decisions.md` E1, yeni `docs/12-bank-integration.md`, `02/03/07/08/09-*.md` ve README güncellemeleri, CLAUDE.md'ye yeni bölüm) ve `docker compose` canlı doğrulaması hepsi bitti. Kullanıcının kendisi istedi (master prompt'ta yoktu) - bkz. "Faz 6" bölümü aşağıda.
+**Faz 6 — Banka entegrasyonu (sanal IBAN) tamamlandı; veli portalı veri bağlantıları ile sağlamlaştırıldı.** Veli panelindeki aidat/telafi/IBAN/mesaj alanları artık mock değil; `GuardianOnly` kapsamlı salt-okunur API'lerden geliyor. Veli veri izolasyonunu doğrulayan entegrasyon testi eklendi. Suite şu an 160/160 yeşil, frontend lint/build temiz.
 
 - [ ] Commit + push (push için kullanıcı onayı gerekiyor — public repo). Henüz commit edilmedi, bir sonraki adım bu.
 
-Commit sonrası sıradaki faz: **Phase 7 — Gelişim takibi ve hatırlatmalar** (Progress modülünün kalanı: `skill_definitions`/`skill_assessments`/`practice_assignments`, doğum günü ve paket bitiş bildirimleri — `NotificationJobType.Birthday`/`PackageEnding` enum'da tanımlı ama hiçbir use-case üretmiyor, `NotificationMessageBuilder.BuildAsync`'e henüz eklenmedi —, dashboard `GET /api/dashboard/today`). Başlarken önce `docker compose up` ile Faz 5-6'nın hâlâ ayakta olduğunu doğrula, sonra `docs/00-master-prompt.md` + `docs/02-modules.md`'nin Progress bölümünü oku.
+Sıradaki ürün fazı: **Phase 7 — Gelişim takibi ve hatırlatmalar** (Progress modülünün kalanı: `skill_definitions`/`skill_assessments`/`practice_assignments`, doğum günü ve paket bitiş bildirimleri). Bunlar bu turda canlıya hazır görünüyormuş gibi UI'a eklenmedi; mevcut LessonNote akışı çalışır durumda.
 
 **Gerçek sağlayıcı seçimi hâlâ açık soru** (`docs/10-decisions.md` E1) - kullanıcı henüz PayTR/Papara İşletme/banka ürünü arasında karar vermedi, `Banking__Provider=Fake` ile ilerleniyor. Gerçek sağlayıcı seçilince yalnızca `IBankPaymentProvider`'ın yeni bir implementasyonu + `Webhooks.cs`'deki `VerifySharedSecret`'ın o sağlayıcının gerçek imza şemasıyla değiştirilmesi gerekiyor - iş mantığının geri kalanı (eşleştirme, admin çözümleme, testler) değişmez.
 
@@ -435,3 +435,68 @@ Diğer 13 maddenin aksine bu değişiklik yerel `docker compose`/tarayıcı ile 
 ### Kalan iş
 
 Henüz commit yok - commit sonrası kullanıcı onayıyla push edilecek, push sonrası CI çalıştırması `gh run watch` ile izlenip sonuç raporlanacak.
+
+## UI tasarım uygulaması — `docs/14-ui-design-prompt.md`
+
+Kullanıcının paylaştığı 4 ekranlı mockup ("Abdera Müzik Okulu Yönetim Sistemi - Örnek Ekranlar") ile mevcut arayüz arasındaki farkı kapatmak için önce `docs/14-ui-design-prompt.md` yazıldı, sonra aynı oturumda uygulandı. Kapsam yalnızca `frontend/src` - backend endpoint'lerine ve `lib/*.ts` sözleşmelerine dokunulmadı.
+
+### Ölçüm
+
+`docker-compose` ile `db`+`api` ayağa kaldırılıp gerçek bir hafta programı seed edildi (2 öğretmen, 6 öğrenci, aynı gün/saatte çakışan 2 ders, geç/erken saatli 2 ders, 1 iptal edilmiş ders, 1 bekleyen değişiklik talebi, 1 `NeedsReview` banka işlemi, 1 veli+RSVP). `npm run dev` ile 390/834/1440px'te admin, öğretmen ve veli ekranlarının gerçek hâli görüldü; en görünür üç kusur doğrulandı: hafta ızgarası yalnızca ≥1280px'te açılıyordu (768-1279 arası ajanda görünümüne düşüyordu), saat penceresi sabit 09:00-19:00'a çakılıydı (pencere dışı ders `Math.min` clamp'iyle kenara yapışıyordu), aynı saatteki iki ders tam üst üste biniyordu (biri diğerini tamamen gizliyordu). KPI kartlarından biri (`"N kayıt · ₺X"`) 390px'te kırpılıyordu.
+
+### Yapılanlar
+
+- **Ortak yerleşim matematiği** — [week-grid-layout.ts](../frontend/src/lib/week-grid-layout.ts) (yeni): `computeHourWindow` (haftanın gerçek min/max ders saatinden pencere türetir, ders yoksa 09-19 varsayılanı) ve `layoutDayLessons` (klasik takvim çakışma algoritması: kümeleme + greedy sütun atama, çakışan dersleri yan yana yerleştirir). Hem [dashboard/page.tsx](../frontend/src/app/dashboard/page.tsx) hem [dashboard/calendar/page.tsx](../frontend/src/app/dashboard/calendar/page.tsx) buradan besleniyor - önceden iki ekranda ayrı kopyalanmış, ikisi de aynı üç kusuru taşıyan bir saat matematiği vardı. Sürükle-bırak state'i (calendar sayfasına özgü) ayrı kaldı; yalnızca konum/pencere hesabı ortaklaştırıldı.
+- **Hafta ızgarası kırılımı** — dashboard önizlemesinde grid artık `md:` (≥768px) itibarıyla açılıyor (önceden `xl:`); tam takvim sayfası `xl:` kaldı çünkü sürükle-bırak için daha geniş sütun genişliği gerekiyor (bilinçli fark, tek bileşene zorlanmadı).
+- **Katılım göstergesi** — enstrüman rengi zaten blok içinde metinle okunduğu için hafta ızgarası başlığındaki enstrüman-renk lejantı, RSVP durumunu gösteren bir lejanta (Geliyor/Cevap yok/Gelmiyor) çevrildi; her ders bloğunun sağ üstünde aynı üç renkten bir nokta var. İptal edilen dersler `line-through` + %55 opaklıkla ayrışıyor.
+- **Ders detay popover'ı** — dashboard ızgarasındaki bloğa tıklamak artık doğrudan `/dashboard/calendar`'a gitmiyor; öğrenci/enstrüman/saat/öğretmen/RSVP özetiyle ortalanmış bir modal açıyor (`Escape` ile kapanır, "Takvimde aç" bağlantısı var). Anchored bir popover yerine ortalanmış modal seçildi - taşma/konumlandırma riskini sıfıra indiriyor, işlevsel gereksinimi (detay + kapatma + geçiş) karşılıyor.
+- **KPI kartı** — ikincil değeri olan kart (`StatCard`'a yeni `secondaryValue` prop) iki satıra bölündü; sayı sözcük içerdiğinde (`"3 kayıt"`) `text-display` yerine `text-title` ölçeğine düşülüyor, çünkü tutar sınırsız büyüyebilir ve dar kartta kırpılıyordu (390px'te bulunup düzeltildi, bkz. altta).
+- **Tipografi/renk token'ları** — [globals.css](../frontend/src/app/globals.css)'e 5 kademeli metin ölçeği (`--text-display/title/body/meta/micro`) ve önceden kod içinde dağınık duran hex'ler için token (`--sidebar-from/to`, `--today-tint`, `--success/danger/warning-soft/strong`) eklendi.
+- **Öğretmen ders kartı** — [teacher-today-lessons.tsx](../frontend/src/app/dashboard/teacher-today-lessons.tsx): renkli kare blok yerine düz saat bloğu + sol kenarda 3px enstrüman şeridi; enstrüman rengi artık `lesson-colors.ts`'teki paylaşılan paletten (önceden karakter-hash'ine dayalı ayrı bir palet vardı, dashboard ızgarasıyla tutarsızdı). ≥1280px'te 2 sütun.
+- **Veli "…" menüsü** — [parent/page.tsx](../frontend/src/app/parent/page.tsx): ayrı "+N öğrenci" ve çıkış butonları tek bir `HeaderMenu`'de birleşti (öğrenci seçimi + çıkış, `Escape`/dış tıklamayla kapanır). Ana Sayfa'daki Son Bildirimler artık göreli zaman (`"2 saat önce"`) + `line-clamp-2` kullanıyor; Mesajlar sekmesindeki tam geçmiş mutlak tarihte kaldı (orada daha faydalı).
+- **Giriş ekranı** — seçili rol kartı artık `--brand-soft` zemin + 1.5px `--brand` kenarlıkla belirgin (önceki `ring/8` opaklığı mockup'a göre çok soluktu).
+- **OPS-1 takibi** — `npm run lint` artık temiz döndüğü için (önceki oturumun bıraktığı not artık geçerli değil) `.github/workflows/ci.yml`'deki `frontend-build-lint` job'ı açıldı.
+
+### Doğrulama
+
+`npm run build` ve `npm run lint` temiz. Admin/öğretmen/veli akışları gerçek seed veriyle 390/834/1440px'te tarayıcıda gezildi: çakışan dersler yan yana görünüyor, saat penceresi haftanın gerçek erken/geç dersine göre büyüyor (DOM ölçümüyle doğrulandı - 11:00-24:00), popover açılıp `Escape` ile kapanıyor, veli "…" menüsü açılıp kapanıyor, KPI kartı 390px'te artık kırpılmıyor. Konsolda yeni bir hata/uyarı yok. Backend'e dokunulmadığı için `dotnet test` çalıştırılmadı.
+
+### Bilerek atlanan/basitleştirilen
+
+- Hafta ızgarası popover'ı, mockup'ın imzalı anchored konumlandırması yerine ortalanmış modal olarak yapıldı (yukarıda gerekçelendirildi).
+- Tam takvim sayfasının sürükle-bırak ızgarası dashboard önizlemesiyle aynı bileşene birleştirilmedi, yalnızca yerleşim matematiği ortaklaştırıldı - sürükle-bırak state'i ekrana özgü kaldı.
+- API'de karşılığı olmayan hiçbir mockup detayı bulunmadı; tüm alanlar mevcut `lib/*.ts` sözleşmeleriyle karşılandı.
+
+### Kalan iş
+
+Henüz commit yok - kullanıcı onayı bekleniyor. Push için de ayrıca onay istenecek (repo public).
+
+## UI takip — gerçek hata bulguları ve genel tutarlılık taraması
+
+Kullanıcı canlı önizlemeyi denerken iki şey bildirdi: "sürükle bırak çalışmıyor" ve "taşıdığım ders eski yerinde de kalıyor, yeni yere de taşıyor" + "genel hatları düzelt".
+
+### Bulunan gerçek hata — ertelenen ders iki yerde görünüyor
+
+Kök neden: bir ders ertelendiğinde backend (`Lesson.CreateRescheduled`, `ChangeRequests.cs`) eski kaydı **silmiyor**, `Rescheduled` durumuna çevirip yeni saat için ayrı bir satır açıyor (denetim izi - CLAUDE.md kuralı, doğru davranış). Ama üç frontend listesi (`dashboard/page.tsx` haftalık ızgara, `dashboard/calendar/page.tsx` tam takvim, `teacher-today-lessons.tsx` öğretmen günlük listesi) `Rescheduled` durumundaki eski kaydı hâlâ normal bir ders gibi eski saatinde gösteriyordu - kullanıcının gördüğü "iki yerde ders" tam olarak buydu. Düzeltme: üçünde de kaynağa en yakın noktada `lesson.status !== "Rescheduled"` filtresi eklendi (değişiklik geçmişi zaten `/dashboard/change-requests`'te ayrıca var, canlı takvimde tekrarlanmasına gerek yok).
+
+Bu hatayı ararken kendi test sürüklemelerimden (bilerek geçmiş güne sürükleyip reddedildiğini doğrulamaya çalışırken, `computer` aracının fare tabanlı `left_click_drag`'inin native HTML5 drag event'lerini tetiklemediğini fark etmeden art arda denemeler) veritabanına 3 tane gerçek olmayan `Rescheduled`/yeni-ders çifti sızmıştı - hepsi SQL ile temizlendi, seed veri orijinal haline döndürüldü. Sürükle-bırak mekanizmasının kendisi (gerçek `DragEvent` dispatch'iyle test edildi) bozuk değildi; "çalışmıyor" hissi hem bu görsel çift-ders hatasından hem de geçmiş güne taşımanın sessizce reddedilmesinden kaynaklanıyordu.
+
+Ayrı bir not: bu tur sırasında `abdera-web-api-1` container'ı host RAM baskısı yüzünden SIGSEGV ile çöktü (kod hatası değil, `docker inspect` `OOMKilled=false` ama host'ta neredeyse boş RAM kalmamıştı) - yeniden başlatıldı, veri kaybı olmadı.
+
+### "Genel hatları düzelt" — rakip araştırması + tutarlılık taraması
+
+My Music Staff'ın pazarlama sayfaları incelendi (enstrümana göre renkli ders blokları, tıklayınca hızlı-ekle/detay paneli, ay/hafta/gün/ajanda görünüm geçişi - bkz. kaynak). Abdera'da enstrüman renk kodlaması ve tıkla-detay-aç zaten vardı (bu turun ilk yarısında eklendi); görünüm geçişi (ay/gün) kapsam dışı bırakıldı - master prompt'un "dashboard'u BI projesine çevirme" uyarısına ve mevcut ölçeğe (haftalık tek görünüm yeterli) göre.
+
+Asıl bulgu: `Öğrenciler`, `Öğretmenler`, `Ders Değişikliği Talepleri`, `Bildirimler` sayfaları hâlâ uygulamanın en eski, hiç tasarlanmamış hâlindeydi (`neutral-*` gri paleti, `rounded-md`, düz ASCII ▲▼ oku, `bg-neutral-900` siyah buton) - sidebar'dan bu sayfalara geçildiğinde tutarsız bir sıçrama oluyordu. Dördü de `app-card`/`.field`/`--brand` token sistemine, `Icon` bileşenine ve `--text-*` ölçeğine taşındı; hiçbir veri/mantık/endpoint değişmedi, yalnızca JSX/className.
+
+**Bilerek kapsam dışı bırakıldı:** `billing/*` (price-lists-section.tsx, student-billing-section.tsx) ve `banking/page.tsx` hâlâ eski stilde. İkisi de para hesaplarına dokunan, CLAUDE.md'nin `decimal`/audit kurallarının geçerli olduğu ekranlar - dar bir zaman penceresinde acele bir re-skin'in mantığı da bozma riski taşıması bilerek alınmadı. Ayrı bir görev olarak flag'lendi.
+
+### Doğrulama
+
+`npm run build` + `npm run lint` temiz. Rescheduled-filtre düzeltmesi gerçek `DragEvent` dispatch'iyle uçtan uca test edildi: bir ders geleceğe taşındı, eski slot boşaldı, yalnızca yeni slotta göründü. Öğrenci detay panelindeki veli/kayıt listesi (API container'ı yeniden başlattıktan sonra) doğru veriyle render olduğu doğrulandı. Backend'e dokunulmadı, `dotnet test` çalıştırılmadı.
+
+Sources: [My Music Staff - Calendar & Attendance](https://www.mymusicstaff.com/calendar-attendance/)
+
+### Kalan iş
+
+Henüz commit yok. Sıradaki: `billing`/`banking` sayfalarının aynı tutarlılık geçişi (ayrı görev olarak ele alınmalı - para hesabı içeriyor).

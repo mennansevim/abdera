@@ -84,14 +84,14 @@ export default function LoginPage() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => chooseRole(option.role)}
-                  className={`pressable flex min-h-[4rem] w-full items-center gap-3 rounded-xl border bg-white px-3 text-left shadow-[0_2px_8px_rgba(45,37,31,.025)] ${active ? "border-[#9c8dd1] ring-2 ring-[#6a54b3]/8" : "border-[var(--line)] hover:border-[#d4ccc3]"}`}
+                  className={`pressable flex min-h-[4rem] w-full items-center gap-3 rounded-xl border px-3 text-left shadow-[0_2px_8px_rgba(45,37,31,.025)] ${active ? "border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[#d4ccc3]"}`}
                 >
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ color: option.color, backgroundColor: `${option.color}18` }}>
                     <Icon name={option.icon} className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-bold">{option.title}</span>
-                    <span className="mt-0.5 block text-[.68rem] leading-snug text-[var(--muted)]">{option.description}</span>
+                    <span className="text-meta mt-0.5 block leading-snug">{option.description}</span>
                   </span>
                   <Icon name="chevron" className="h-4 w-4 text-[#aaa3ae]" />
                 </button>
