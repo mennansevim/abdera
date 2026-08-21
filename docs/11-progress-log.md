@@ -365,4 +365,25 @@ Saf performans refaktörü - davranış değişmedi. Mevcut `PricingAndBillingFl
 
 ### Kalan iş
 
+Push edildi (8a06211). Sıradaki madde: ARC-4 (FluentValidation kararı).
+
+## Denetim düzeltmeleri — ARC-4 (Orta): kullanılmayan FluentValidation paketi kaldırıldı
+
+`docs/13-audit-fix-prompt.md` madde 12. Paket `csproj`'da duruyordu ama kodda tek bir `AbstractValidator` yoktu - doğrulama her yerde elle `throw new ValidationFailedException(...)` ile yapılıyordu, iki desen bir arada durmak kafa karıştırıcıydı. Kullanıcıya iki seçenek soruldu (kaldır / gerçekten kullan) - kullanıcı **kaldır**'ı seçti.
+
+### Yapılanlar
+
+1. `Abdera.Api.csproj`'dan `FluentValidation` paket referansı kaldırıldı.
+2. `docs/10-decisions.md`'ye C6 kararı eklendi: "bu ölçekte ayrı bir doğrulama kütüphanesi gereksiz görülüp kaldırıldı, mevcut elle doğrulama deseni korundu."
+
+### Testler
+
+Saf bağımlılık kaldırma - davranış değişmedi. `dotnet restore` + `dotnet build` temiz, `dotnet test` → 155/155 yeşil (değişmedi).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+`db`+`api` paket kaldırıldıktan sonra sıfırdan build edildi, `/health` `Healthy`, gerçek admin girişi `200` döndü - paketin kaldırılması derleme veya çalışma zamanını bozmadı.
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.

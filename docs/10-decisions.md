@@ -74,6 +74,7 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 | C3 | `ProgressSummaryGenerator` AI arayüzü Phase 0'da açılması | Sıfır implementasyonlu arayüz spekülatif soyutlama — Phase 6'ya ertelendi |
 | C4 | Her testte Testcontainers | Yalnızca gerçek Postgres davranışı gerektiren ~8 testte (bkz. `docs/09-testing.md`) |
 | C5 | Dashboard'daki "upcoming recital" için ayrı entity | `SchoolCalendarDay`'e `EVENT` tipi olarak girdi, ayrı tablo açılmadı |
+| C6 | FluentValidation (denetim ARC-4, `docs/13-audit-fix-prompt.md`) | Paket `csproj`'da duruyordu ama kodda tek bir `AbstractValidator` yoktu - doğrulama her yerde elle `throw new ValidationFailedException(...)` ile yapılıyor. Bu ölçekte (69 endpoint, çoğu tek-iki alanlık kontrol) ayrı bir doğrulama kütüphanesi gereksiz görülüp paket kaldırıldı; mevcut elle doğrulama deseni tek tutarlı yaklaşım olarak korundu. |
 
 ## D — Risk ve operasyon notları
 
