@@ -40,18 +40,16 @@ jobs:
       - run: dotnet build backend/Abdera.slnx --no-restore
       - run: dotnet test backend/Abdera.slnx --no-build
 
-  # frontend-build-lint henuz acilmadi - npm run lint suan banking/page.tsx'teki
-  # onceden var olan bir react/no-unescaped-entities hatasindan dolayi kirmizi doner
-  # (ARC-3'ten once flag'lenmis ayri bir gorev, bu denetimin kapsaminda degil). O
-  # duzeltilince asagidaki blok acilabilir:
-  #
-  # frontend-build-lint:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '22'
-  #     - run: npm ci --prefix frontend
-  #     - run: npm run lint --prefix frontend
-  #     - run: npm run build --prefix frontend
+  # frontend-build-lint acildi (docs/14-ui-design-prompt.md) - banking/page.tsx'teki
+  # onceden flag'lenen react/no-unescaped-entities hatasi artik yok, `npm run lint`
+  # temiz donuyor (dogrulandi).
+  frontend-build-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --prefix frontend
+      - run: npm run lint --prefix frontend
+      - run: npm run build --prefix frontend
