@@ -62,11 +62,20 @@ public static class BulkUpdate
             .Join(db.Instruments, i => i.InstrumentId, ins => ins.Id, (i, ins) => new { Item = i, ins.Name })
             .ToListAsync();
 
+        // ARC-5 (docs/13-audit-fix-prompt.md): kalem başına ayrı bir CountAsync yerine
+        // döngü öncesi tek bir GroupBy sorgusuyla tüm sayılar toplanıyor.
+        var itemIds = items.Select(x => x.Item.Id).ToList();
+        var activeFeePlanCounts = await db.FeePlans
+            .Where(f => itemIds.Contains(f.PriceListItemId) && f.ActiveUntil == null)
+            .GroupBy(f => f.PriceListItemId)
+            .Select(g => new { PriceListItemId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.PriceListItemId, g => g.Count);
+
         var result = new List<ItemPreview>();
         foreach (var x in items)
         {
             var newAmount = Math.Round(x.Item.Amount * (1 + percentageChange / 100m), 2, MidpointRounding.AwayFromZero);
-            var activeFeePlanCount = await db.FeePlans.CountAsync(f => f.PriceListItemId == x.Item.Id && f.ActiveUntil == null);
+            var activeFeePlanCount = activeFeePlanCounts.GetValueOrDefault(x.Item.Id);
 
             result.Add(new ItemPreview(
                 x.Item.Id, x.Name, x.Item.DurationMinutes, x.Item.BillingType.ToString(),

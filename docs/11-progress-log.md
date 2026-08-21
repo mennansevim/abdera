@@ -344,4 +344,25 @@ Push edildi (11c9a4c). Sıradaki madde: ARC-3 (sayfalama yok, sessiz 200 kayıt 
 
 ### Kalan iş
 
+Push edildi (c69b68b). Sıradaki madde: ARC-5 (döngü içinde veritabanı sorgusu, N+1).
+
+## Denetim düzeltmeleri — ARC-5 (Düşük): döngü içinde veritabanı sorgusu (N+1)
+
+`docs/13-audit-fix-prompt.md` madde 11. `BulkUpdate.cs` kalem başına ayrı bir `CountAsync`, `PriceLists.cs` kalem başına ayrı bir `AnyAsync` çalıştırıyordu.
+
+### Yapılanlar
+
+1. `BulkUpdate.BuildPreviewAsync`: döngü öncesi tek bir `GroupBy` sorgusuyla tüm kalemlerin aktif ücret planı sayıları `Dictionary<Guid,int>`'e toplanıyor, döngü içinde `GetValueOrDefault` ile okunuyor.
+2. `PriceLists.CreateAsync`: döngü öncesi tek `db.Instruments.Where(ids.Contains(...)).Select(id).ToListAsync()` ile var olan enstrüman id'leri bir `HashSet`'e toplanıyor, döngü içinde `Contains` ile kontrol ediliyor.
+
+### Testler
+
+Saf performans refaktörü - davranış değişmedi. Mevcut `PricingAndBillingFlowTests.Bulk_price_update_does_not_retroactively_change_existing_receivables` testi (`ActiveFeePlanCount` doğrulaması dahil) değişmeden yeşil kaldı; bu, refaktörün "1 eşleşme" durumunu zaten kapsadığını doğruluyor. `dotnet test` → 155/155 yeşil (yeni test eklenmedi, mevcutlar yeterli).
+
+### `docker compose` ile canlı doğrulama (bu oturumda yapıldı)
+
+İki kalemli (Piyano + Gitar) bir fiyat listesi gerçekten oluşturuldu (`201`, her iki enstrüman tek sorguda doğrulandı), geçersiz bir enstrüman id'siyle deneme `404` döndü. Bulk-update önizlemesi her iki kalem için de `activeFeePlanCount: 0` döndürdü - bu, otomatik testin kapsamadığı "hiç eşleşme yok" (dictionary'de anahtar yok) durumunu da doğruluyor (`GetValueOrDefault` doğru şekilde 0'a düşüyor).
+
+### Kalan iş
+
 Henüz commit yok - bir sonraki adım commit + kullanıcı onayıyla push.

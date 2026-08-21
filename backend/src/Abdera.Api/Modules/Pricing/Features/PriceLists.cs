@@ -38,10 +38,19 @@ public static class PriceLists
 
         var priceList = PriceList.Create(request.Name, request.EffectiveFrom, request.EffectiveUntil, AuthContext.GetUserId(principal), clock.UtcNow);
 
+        // ARC-5 (docs/13-audit-fix-prompt.md): kalem başına ayrı bir AnyAsync yerine
+        // döngü öncesi tek bir sorguyla var olan enstrüman id'leri toplanıyor.
+        var requestedInstrumentIds = request.Items.Select(i => i.InstrumentId).Distinct().ToList();
+        var existingInstrumentIds = (await db.Instruments
+            .Where(i => requestedInstrumentIds.Contains(i.Id))
+            .Select(i => i.Id)
+            .ToListAsync())
+            .ToHashSet();
+
         var items = new List<PriceListItem>();
         foreach (var itemRequest in request.Items)
         {
-            if (!await db.Instruments.AnyAsync(i => i.Id == itemRequest.InstrumentId))
+            if (!existingInstrumentIds.Contains(itemRequest.InstrumentId))
                 throw new NotFoundException($"Enstrüman bulunamadı: {itemRequest.InstrumentId}");
 
             await EnsureNoOverlapAsync(itemRequest.InstrumentId, itemRequest.DurationMinutes, itemRequest.BillingType,
