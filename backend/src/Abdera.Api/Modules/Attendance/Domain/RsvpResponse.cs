@@ -13,4 +13,7 @@ public enum RsvpSource
 {
     WhatsApp,
     Admin,
+    // Veli, /parent portalına OTP ile giriş yapıp kendi RSVP'sini kendisi ayarladığında
+    // (Modules/People/Features/GuardianPortal.cs) - docs/10-decisions.md Karar F reversal.
+    GuardianWeb,
 }

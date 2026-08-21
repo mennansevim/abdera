@@ -112,9 +112,13 @@ Ayrıntılı akış/entity tasarımı: `docs/12-bank-integration.md`.
 
 Denetim UX-3 (`docs/13-audit-fix-prompt.md` madde 13): sistem veli verisini/RSVP'sini/aidat durumunu tutuyor ama velinin bakabileceği hiçbir web ekranı yoktu, yalnızca WhatsApp üzerinden etkileşim vardı - bu daha önce netleşmemiş bir belirsizlikti (ne yasak ne planlıydı). Kullanıcıya "ayrı bir faz olarak planlansın mı, yoksa WhatsApp tek kanal olarak mı kalsın" soruldu.
 
-**Karar: WhatsApp tek kanal olarak kalır, ayrı bir veli web paneli planlanmıyor.**
+**Karar (ilk hali): WhatsApp tek kanal olarak kalır, ayrı bir veli web paneli planlanmıyor.**
 
 Gerekçe: bir veli web paneli açmak yalnızca yeni ekranlar değil, yeni bir kimlik doğrulama modeli de gerektirir (veli nasıl giriş yapacak - e-posta yok, `docs/10-decisions.md` B4; telefon numarasıyla OTP mi, farklı bir mekanizma mı?) - bu, mevcut `User`/cookie-oturum modelinin dışında tamamen yeni bir yüzey. WhatsApp zaten RSVP, aidat hatırlatması, telafi ve opt-out akışlarını uçtan uca karşılıyor; veli tarafında ek bir kanal açmanın bu ölçekte (6-8 öğretmen, ~150 öğrenci) karşılığı şimdilik yok. Bu MVP sınırı bilinçli olarak korunuyor - ihtiyaç netleşirse ayrı bir faz olarak yeniden değerlendirilir.
+
+**Karar F reversal (2026-08-21):** kullanıcı `/parent` web ekranındaki "Geliyorum/Gelemiyorum" yanıtının gerçekten veritabanına kaydedilmesini istedi - bu, RSVP'yi "kime ait" diye işaretleyebilmek için gerçek bir veli kimliği/oturumu gerektirdiğinden yukarıdaki karar bilinçli olarak kısmen tersine çevrildi. Kimlik doğrulama yöntemi olarak **telefon numarası + WhatsApp OTP** seçildi (Guardian zaten telefonla tanımlı, WhatsApp gönderim altyapısı zaten var - yukarıdaki gerekçede sorulan "hangi mekanizma" sorusunun cevabı bu). `users` tablosuna dokunulmadı; Guardian oturumu ayrı bir `ClaimsPrincipal` (Role=Guardian) üzerinden kurulur, `User`/şifre modeliyle hiçbir ilgisi yok - bkz. `Modules/People/Features/GuardianAuth.cs`, `Modules/People/Features/GuardianPortal.cs`, migration `012_guardian_login_codes`.
+
+Kapsam bilinçli olarak dar tutuldu: veli yalnızca **kendi öğrencisinin listesini, kendi takvimini ve kendi RSVP'sini** görebilir/ayarlayabilir. Aidat (billing) ve bildirim listesi bu kapsamın **dışında** - frontend'de hâlâ mock veri (`frontend/src/app/parent/page.tsx`'teki `BillingView`/`MessagesView`), ayrı bir onay gerektirir. WhatsApp, zamanlanmış hatırlatmalar ve serbest-metin sohbet için birincil kanal olmaya devam ediyor - bu yalnızca velinin kendi verisine *bakabileceği* ek bir web erişimi, WhatsApp akışlarının yerini almıyor.
 
 ## Master prompt'un "Required First Response" listesiyle eşleme
 

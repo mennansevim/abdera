@@ -27,6 +27,7 @@ public class AbderaDbContext : DbContext
     public DbSet<Student> Students => Set<Student>();
     public DbSet<Guardian> Guardians => Set<Guardian>();
     public DbSet<StudentGuardian> StudentGuardians => Set<StudentGuardian>();
+    public DbSet<GuardianLoginCode> GuardianLoginCodes => Set<GuardianLoginCode>();
     public DbSet<Teacher> Teachers => Set<Teacher>();
     public DbSet<TeacherInstrument> TeacherInstruments => Set<TeacherInstrument>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();

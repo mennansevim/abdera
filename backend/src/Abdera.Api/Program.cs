@@ -10,6 +10,7 @@ using Abdera.Api.Modules.Messaging;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
 using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Pricing;
 using Abdera.Api.Modules.Progress;
 using Abdera.Api.Modules.Scheduling;
@@ -62,6 +63,8 @@ builder.Services.AddDbContext<AbderaDbContext>((sp, options) => options.UseNpgsq
 
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+// docs/10-decisions.md Karar F reversal - veli OTP girişi için ayrı bir hasher (GuardianAuth.cs).
+builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian>>();
 builder.Services.AddBillingModule();
 builder.Services.AddMessagingModule();
 
@@ -182,6 +185,21 @@ builder.Services.AddRateLimiter(options =>
             {
                 PermitLimit = config.GetValue("RateLimiting:LoginPermitLimit", 5),
                 Window = TimeSpan.FromMinutes(config.GetValue("RateLimiting:LoginWindowMinutes", 15)),
+                QueueLimit = 0,
+            });
+    });
+
+    // /api/guardian/otp/*: auth-login ile aynı desen - kaba kuvvetle kod tahmini veya bir
+    // veliyi OTP mesajlarıyla bombalamayı (WhatsApp maliyeti + rahatsızlık) önler.
+    options.AddPolicy("guardian-otp", httpContext =>
+    {
+        var config = httpContext.RequestServices.GetRequiredService<IConfiguration>();
+        return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetClientIp(httpContext),
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = config.GetValue("RateLimiting:GuardianOtpPermitLimit", 5),
+                Window = TimeSpan.FromMinutes(config.GetValue("RateLimiting:GuardianOtpWindowMinutes", 15)),
                 QueueLimit = 0,
             });
     });

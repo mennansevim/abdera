@@ -3,8 +3,11 @@ using Abdera.Api.Shared;
 namespace Abdera.Api.Modules.People.Domain;
 
 // docs/03-erd.md - People > guardians. conversation_window_expires_at (A7) ve
-// notification_consent (A8) Messaging modülünün ihtiyaç duyduğu alanlar - veli hesabı
-// olmadığı için bu bilgiler burada, People'da tutulur.
+// notification_consent (A8) Messaging modülünün ihtiyaç duyduğu alanlar - veli için ayrı bir
+// `users` satırı hâlâ yok (docs/10-decisions.md B4), bu bilgiler burada, People'da tutulur.
+// Karar F reversal: veli artık telefon + WhatsApp OTP ile oturum açabiliyor (bkz.
+// Modules/People/Features/GuardianAuth.cs) ama bu Guardian.Id üzerinden kurulur, `users`
+// tablosuna hiç dokunmaz.
 public class Guardian
 {
     public Guid Id { get; private set; }

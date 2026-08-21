@@ -3,17 +3,20 @@ using System;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Abdera.Api.Modules.Auth.Persistence.Migrations
+namespace Abdera.Api.Modules.People.Persistence.Migrations
 {
     [DbContext(typeof(AbderaDbContext))]
-    partial class AbderaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260821142053_GuardianLoginCodes")]
+    partial class GuardianLoginCodes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

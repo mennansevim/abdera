@@ -52,6 +52,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 // bırakılıyor - RateLimitingFlowTests kendi düşük limitli factory'sini
                 // WithWebHostBuilder ile kurup asıl davranışı doğruluyor.
                 ["RateLimiting:LoginPermitLimit"] = "10000",
+                ["RateLimiting:GuardianOtpPermitLimit"] = "10000",
             });
         });
     }

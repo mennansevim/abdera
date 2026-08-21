@@ -12,5 +12,7 @@ public static class PeopleModule
         app.MapLinkGuardianToStudent();
         app.MapTeachers();
         app.MapEnrollments();
+        app.MapGuardianAuth();
+        app.MapGuardianPortal();
     }
 }

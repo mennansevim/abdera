@@ -32,6 +32,11 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
 (AddOptimisticConcurrency)                xmin tabanlı concurrency token (ARC-1, Faz 6 sonrası
                                            denetim) - yeni kolon eklemez, yalnızca model
                                            snapshot'ı günceller (bkz. aşağıdaki not)
+012_guardian_login_codes                  guardian_login_codes - docs/10-decisions.md Karar F
+(GuardianLoginCodes)                      reversal: veli telefon+WhatsApp OTP ile giriş yapar
+                                           (Modules/People/Features/GuardianAuth.cs). users
+                                           tablosuna dokunmaz, Guardian oturumu ayrı bir
+                                           ClaimsPrincipal (Role=Guardian) üzerinden kurulur.
 ```
 
 Not: Messaging ve Banking, Progress'ten önce geldi çünkü kullanıcı bu ikisini Progress'ten önce istedi (Phase 5 ve Phase 6) - bu dosyanın önceki bölümü plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not"). Banking master prompt'ta hiç yoktu (`docs/10-decisions.md` E1) - Progress artık Phase 7'ye kaydı.
