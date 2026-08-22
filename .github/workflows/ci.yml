@@ -36,6 +36,11 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      # Faz 4: Integration/OpsFlowTests.cs gercek `pg_dump` calistiriyor (BackupService,
+      # Backup:Provider=Fake yalnizca depolama/e-postayi sahteler, pg_dump gercek calisir) -
+      # ubuntu-latest runner imajinda genelde hazir gelir ama acikca kurmak bu bagimliligi
+      # dokumante eder ve imaj varsayilanlarindaki degisikliklere karsi kirilgan olmaz.
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - run: dotnet restore backend/Abdera.slnx
       - run: dotnet build backend/Abdera.slnx --no-restore
       - run: dotnet test backend/Abdera.slnx --no-build

@@ -44,6 +44,12 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
                                            eksik olduğu için EF Core tarafından hiç keşfedilmiyordu
                                            (bkz. docs/11-progress-log.md "Devam noktası") -
                                            `dotnet ef migrations add` ile yeniden üretildi.
+014_notification_automation_settings      notification_automation_settings - Faz 3, ders
+(NotificationAutomationSettings)          hatırlatma süresi/aktiflik/3. RSVP seçeneği için
+(Modules/Messaging/Persistence/Migrations) admin panelden değiştirilebilir tek satırlık ayar.
+015_ops (Ops)                             backup_runs (her yedekleme denemesi, silinmez) +
+(Modules/Ops/Persistence/Migrations)      system_health_status (tek satırlık sağlık özeti) -
+                                           Faz 4 (docs/10-decisions.md G).
 ```
 
 Not: Messaging ve Banking, Progress'ten önce geldi çünkü kullanıcı bu ikisini Progress'ten önce istedi (Phase 5 ve Phase 6) - bu dosyanın önceki bölümü plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not"). Banking master prompt'ta hiç yoktu (`docs/10-decisions.md` E1) - Progress artık Phase 7'ye kaydı.

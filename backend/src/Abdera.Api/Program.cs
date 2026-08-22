@@ -9,6 +9,9 @@ using Abdera.Api.Modules.Dashboard;
 using Abdera.Api.Modules.Messaging;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Infrastructure;
+using Abdera.Api.Modules.Ops;
+using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Pricing;
@@ -67,6 +70,7 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian>>();
 builder.Services.AddBillingModule();
 builder.Services.AddMessagingModule();
+builder.Services.AddOpsModule();
 
 // --- Data Protection anahtarları kalıcı bir dizine yazılır ---
 // Aksi halde anahtarlar yalnızca bellekte tutulur ve her container yeniden başlatmasında
@@ -108,6 +112,31 @@ if (string.Equals(bankingProvider, "Fake", StringComparison.OrdinalIgnoreCase))
 else
 {
     throw new InvalidOperationException($"Bilinmeyen Banking:Provider değeri: '{bankingProvider}'. Henüz yalnızca 'Fake' destekleniyor (bkz. docs/12-bank-integration.md).");
+}
+
+// --- Yedekleme hedefi: docs/10-decisions.md G - kullanıcının kendi sunucusuna SFTP/SSH. ---
+builder.Services.Configure<SftpBackupStorageOptions>(builder.Configuration.GetSection("Backup:Sftp"));
+var backupProvider = builder.Configuration["Backup:Provider"] ?? "Fake";
+if (string.Equals(backupProvider, "Sftp", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IBackupStorage, SftpBackupStorage>();
+}
+else
+{
+    builder.Services.AddSingleton<IBackupStorage, FakeBackupStorage>();
+}
+
+// --- E-posta alarmı: docs/10-decisions.md G - en kolay kurulum Gmail SMTP + uygulama şifresi,
+// ama kod herhangi bir SMTP sağlayıcısıyla çalışır. ---
+builder.Services.Configure<SmtpEmailSenderOptions>(builder.Configuration.GetSection("Email:Smtp"));
+var emailProvider = builder.Configuration["Email:Provider"] ?? "Fake";
+if (string.Equals(emailProvider, "Smtp", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmailSender, FakeEmailSender>();
 }
 
 // --- Kimlik doğrulama: httpOnly cookie oturumu (docs/10-decisions.md B4 - JWT'nin
@@ -262,6 +291,7 @@ app.MapPricingModule();
 app.MapBillingModule();
 app.MapMessagingModule();
 app.MapBankingModule();
+app.MapOpsModule();
 
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);

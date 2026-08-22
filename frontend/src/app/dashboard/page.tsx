@@ -9,6 +9,7 @@ import { useReceivables } from "@/lib/billing";
 import { useDashboardToday } from "@/lib/dashboard";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useNotifications } from "@/lib/messaging";
+import { useSystemHealth } from "@/lib/ops";
 import { useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
@@ -87,6 +88,7 @@ function AdminDashboard({ email }: { email: string }) {
   return (
     <>
       <DashboardTopbar email={email} />
+      <SystemHealthBanner />
 
       <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Günün özeti">
         <StatCard icon="calendar" value={today?.todayLessons} label="Bugünkü Ders" loading={statsLoading} tone="purple" />
@@ -144,6 +146,32 @@ function DashboardTopbar({ email }: { email: string }) {
         </Link>
       </div>
     </header>
+  );
+}
+
+// Faz 4 (docs/15-product-phases.md): "ana ekranda göster, sorun varsa kırmızı ile uyar".
+// Sistem sağlıklıyken sessiz kalır (dikkat dağıtmaz), Degraded/Unhealthy'de belirgin bir
+// şerit gösterir - aynı sorun için ilgililere zaten e-posta gitmiştir (SystemHealthMonitor),
+// bu yalnızca panelde de görünür kılar.
+function SystemHealthBanner() {
+  const { data: health } = useSystemHealth();
+  if (!health || health.level === "Healthy") return null;
+
+  const tone = health.level === "Unhealthy"
+    ? { bg: "bg-[var(--danger-soft)]", text: "text-[var(--danger-strong)]", label: "Sistem sorunlu" }
+    : { bg: "bg-[var(--warning-soft)]", text: "text-[var(--warning-strong)]", label: "Dikkat gerekiyor" };
+  const lastBackup = health.lastSuccessfulBackupAt
+    ? new Date(health.lastSuccessfulBackupAt).toLocaleString("tr-TR")
+    : "hiç";
+
+  return (
+    <section role="alert" className={`app-card flex flex-wrap items-center gap-3 p-4 ${tone.bg}`}>
+      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/60 ${tone.text}`}><Icon name="shield" className="h-5 w-5" /></span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-bold ${tone.text}`}>{tone.label}{health.detail ? `: ${health.detail}` : ""}</p>
+        <p className="text-meta mt-0.5">Son başarılı yedekleme: {lastBackup}</p>
+      </div>
+    </section>
   );
 }
 

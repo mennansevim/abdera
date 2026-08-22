@@ -22,6 +22,7 @@ const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/costs", label: "Maliyet Takibi", icon: "bank" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true },
   { href: "/dashboard/change-requests", label: "Değişiklik Talepleri", icon: "swap" },
+  { href: "/dashboard/backups", label: "Yedekleme", icon: "shield" },
 ];
 
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings" };

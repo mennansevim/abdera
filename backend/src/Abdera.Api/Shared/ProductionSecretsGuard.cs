@@ -26,12 +26,42 @@ public static class ProductionSecretsGuard
             missing.Add("WhatsApp__PayloadSigningKey");
         }
 
+        // Faz 4 (docs/10-decisions.md G): Backup__Provider=Sftp/Email__Provider=Smtp
+        // Production'da seçiliyken ilgili kimlik bilgileri eksikse yedekleme/alarm sessizce
+        // hiç çalışmaz (WhatsApp__AppSecret ile aynı gerekçe - erken ve açık hata tercih edilir).
+        if (string.Equals(app.Configuration["Backup:Provider"], "Sftp", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(app.Configuration["Backup:EncryptionKey"]))
+            {
+                missing.Add("Backup__EncryptionKey");
+            }
+            if (string.IsNullOrEmpty(app.Configuration["Backup:Sftp:Host"]))
+            {
+                missing.Add("Backup__Sftp__Host");
+            }
+            if (string.IsNullOrEmpty(app.Configuration["Backup:Sftp:Password"]) && string.IsNullOrEmpty(app.Configuration["Backup:Sftp:PrivateKeyPath"]))
+            {
+                missing.Add("Backup__Sftp__Password veya Backup__Sftp__PrivateKeyPath");
+            }
+        }
+        if (string.Equals(app.Configuration["Email:Provider"], "Smtp", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(app.Configuration["Email:Smtp:Host"]))
+            {
+                missing.Add("Email__Smtp__Host");
+            }
+            if (string.IsNullOrEmpty(app.Configuration["Email:Smtp:Password"]))
+            {
+                missing.Add("Email__Smtp__Password");
+            }
+        }
+
         if (missing.Count > 0)
         {
             throw new InvalidOperationException(
                 $"Production ortamında zorunlu ortam değişkenleri tanımsız: {string.Join(", ", missing)}. " +
-                "Bunlar boşken webhook imza doğrulaması/RSVP buton imzası sessizce fail-closed olur " +
-                "(WhatsApp entegrasyonu tamamen işlevsiz kalır) - uygulama bu yüzden başlamayı reddediyor.");
+                "Bunlar boşken ilgili özellik (WhatsApp imza doğrulaması, yedekleme veya e-posta alarmı) " +
+                "sessizce fail-closed olur ya da hiç çalışmaz - uygulama bu yüzden başlamayı reddediyor.");
         }
     }
 }

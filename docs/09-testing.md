@@ -24,6 +24,8 @@
 4. Webhook idempotency — aynı `provider_event_id` iki kez POST edilince ikinci seferde iş etkisi tekrarlanmıyor
 5. Rol bazlı yetkilendirme — `TEACHER` başka öğretmenin dersine yazamıyor (`403`)
 
+**Ek önkoşul (Faz 4, `Integration/OpsFlowTests.cs`):** `BackupService` gerçek `pg_dump` çalıştırıyor (`Backup:Provider=Fake` yalnızca depolama/e-postayı sahteler, veritabanı dökümü her zaman gerçek). Bu testlerin çalıştığı makinede/CI runner'ında `pg_dump` PATH'te olmalı — yerel geliştirmede genelde `brew install libpq`/`postgresql` ile gelir, CI'da `.github/workflows/ci.yml`'e açıkça kurma adımı eklendi.
+
 ## Uçtan uca testler (master prompt'un asgari listesi)
 
 1. Yönetici öğrenci, veli, öğretmen ve ders serisi oluşturur
@@ -47,6 +49,14 @@ Bu 6 senaryo CI'da (`.github/workflows/ci.yml`, `backend-build-test` job'ı) ger
 `Unit/BankingDomainTests.cs` (13 test): `VirtualIban`/`BankIncomingTransaction` durum makinesi (çift eşleşme reddi, `Ignore`'un `Matched`'ten sonra reddi), `PaymentMatcher` (docs/12-bank-integration.md algoritmasının tamamı — tek net eşleşme, birden fazla eşleşme belirsiz kalır, açıklama-dönem eşleşmesi amount-only'e önceliklidir, açıklama eşleşmesi kalan bakiyeyi karşılamıyorsa reddedilir). `Integration/BankingFlowTests.cs` (5 test, Testcontainers): tek aktif sanal IBAN kısıtı, net tutar eşleşmesi otomatik `Payment` oluşturup `Receivable`'ı günceller (`CreatedBy=null`), belirsiz tutar hiçbir `Receivable`'a dokunmadan `NeedsReview`'da kalır, admin elle çözebilir (`CreatedBy`=admin), aynı `provider_transaction_id` iki kez işlenmez.
 
 **En önemli test:** `Incoming_transaction_with_ambiguous_amount_stays_needs_review_and_does_not_touch_receivable` — bu, docs/10-decisions.md E1'in "belirsizlikte otomatik davranma" kararının gerçekten uygulandığını doğrulayan test. Bu testin kırılması, para yanlış hesaba işlenebilir demektir.
+
+## Faz 4 notları — Sağlık, yedekleme, e-posta alarmı
+
+`Unit/OpsDomainTests.cs` (10 test): `BackupEncryption` round-trip (AES-GCM şifrele/çöz, yanlış anahtarla `AuthenticationTagMismatchException`), `SystemHealthMonitor.Evaluate` (saf karar fonksiyonu - DB down/hiç yedek yok/son yedek başarısız/yaşa göre kademeli Healthy→Degraded→Unhealthy), `SystemHealthStatus.ShouldSendAlert` (soğuma süresi/cooldown mantığı). `Integration/OpsFlowTests.cs` (4 test, Testcontainers): manuel tetiklemenin gerçek `pg_dump` + şifreleme + `FakeBackupStorage` ile başarılı bir `BackupRun` ürettiği, liste uç noktasının sayfalandığı/en yeniden eskiye sıralandığı, sağlık uç noktasının DB'deki durumu doğru yansıttığı, admin olmayan isteklerin `401` aldığı.
+
+**`docker compose`/gerçek Docker imajıyla canlı doğrulama (bu oturumda yapıldı):** `postgresql16-client` paketinin gerçek Alpine imajına eklendiği doğrulandı (`docker exec ... pg_dump --version` → 16.15). Gerçek admin oturumuyla `/api/backup-runs/trigger` çağrıldı → gerçek `pg_dump` (55KB'lık gerçek bir dökümü) çalıştı → AES-GCM ile şifrelendi → `FakeBackupStorage`'a "yüklendi" → `BackupRun.Succeeded` olarak kaydedildi, tüm bunlar ~1 saniyede. `SystemHealthMonitor`'ın bir sonraki turda durumu otomatik `Healthy`'ye çektiği, uyarı e-postasının (`Ops__AlertRecipients` doluyken, eşikler geçici olarak sıfırlanarak) gerçekten `FakeEmailSender` üzerinden gönderildiği ve panoda kırmızı/yeşil şeridin doğru göründüğü tarayıcıda teyit edildi.
+
+**Bilinçli boşluk — gerçek SFTP sunucusuna karşı `SftpBackupStorage` bu oturumda test edilmedi.** Kullanıcı henüz kendi sunucusunun bağlantı bilgilerini (host/kullanıcı/anahtar) paylaşmadı; `FakeBackupStorage` ile tüm akış (pg_dump → şifreleme → "yükleme" → retention → health) uçtan uca doğrulandı, yalnızca gerçek ağ transferi (SSH.NET → gerçek sunucu) doğrulanmadı. Kullanıcı sunucu bilgilerini `.env`'e (`Backup__Sftp__*`) girip `Backup__Provider=Sftp` yaptığında bu adım ayrıca doğrulanmalı.
 
 ## OPS-1 — CI (denetim, `docs/13-audit-fix-prompt.md` madde 14)
 

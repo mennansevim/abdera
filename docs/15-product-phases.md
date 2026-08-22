@@ -30,16 +30,18 @@ arayüz hazır görünse bile ilgili backend akışı ve audit kaydı olmadan ta
 - Otomasyon ayarları değiştiğinde bekleyen (henüz gönderilmemiş) `LessonReminder` job'ları dersin gerçek saatine göre yeniden hesaplanıyor; otomasyon kapatılırsa bekleyen job'lar iptal ediliyor (geçmişe dönük toparlama yok); gönderilmiş mesajlar hiçbir durumda değiştirilmiyor.
 - Mesaj gönderiminden önce veli rızası, sessiz saatler, WhatsApp template onayı ve tekrar deneme politikaları zaten mevcut `NotificationScheduler`/`NotificationDispatcher` içinde uygulanıyordu, bu fazda değişmedi.
 
-## Faz 4 — Sağlık, yedekleme ve geri dönüş
+## Faz 4 — Sağlık, yedekleme ve geri dönüş ✅ (SFTP hariç, aşağıya bak)
 
-- PostgreSQL health check ana ekranda yeşil/sarı/kırmızı durum kartına bağlanacak.
-- Günlük şifreli yedekleme, tutulma süresi, son başarılı yedekleme zamanı ve geri yükleme denemesi kaydedilecek.
-- Yedek alınamazsa kırmızı alarm, audit olayı ve yapılandırılmış e-posta bildirimi üretilecek.
-- Aidat, ödeme, gider, audit ve mesaj job verileri için geri yükleme sonrası tutarlılık kontrolü çalışacak.
-- Canlıya çıkmadan önce boş veritabanı migration testi ve örnek geri yükleme provası zorunlu kabul kriteri olacak.
+- PostgreSQL health check (`/health`) + son başarılı yedeklemenin yaşı `SystemHealthMonitor` tarafından periyodik hesaplanıp ana ekranda yeşil/sarı/kırmızı bir şeride bağlandı (`Healthy` iken sessiz kalır, `Degraded`/`Unhealthy`'de görünür). `/dashboard/backups` sayfası ayrıntılı geçmişi + manuel "şimdi yedek al" düğmesini gösterir.
+- Günlük şifreli (AES-256-GCM) yedekleme (`BackupService`), tutulma süresi (`Backup__RetentionDays`, varsayılan 30 gün, parametrik), her denemenin (başarılı/başarısız) `backup_runs` tablosunda kalıcı kaydı.
+- Yedek alınamazsa: `backup_runs`'a `Failed` + hata mesajı, `audit_log`'a `backup.failed` olayı, `Ops__AlertRecipients`'a e-posta - hepsi uygulandı ve canlı doğrulandı.
+- Geri yükleme sonrası tutarlılık kontrolü **uygulama içi otomatik bir özellik olarak değil**, elle çalıştırılan bir runbook olarak uygulandı (`docs/16-backup-restore.md`, `docs/10-decisions.md` G9) - bir "restore" düğmesinin arayüzden kazayla tetiklenebilecek geri dönüşsüz bir işlem olması bilinçli olarak bu kararı doğurdu.
+- Boş veritabanı migration testi zaten CI'da her push'ta çalışıyor (`MigrationTests.cs`). Örnek geri yükleme provası `docs/16-backup-restore.md`'deki adımlarla canlıya çıkmadan önce elle yapılmalı - bu bir kod teslimatı değil, operasyonel bir adım.
+
+**Kapsam dışı bırakılan tek parça — gerçek SFTP sunucusuna karşı canlı doğrulama.** Kullanıcı yedekleme hedefi olarak kendi sunucusuna SFTP/SSH'i seçti (`docs/10-decisions.md` G1), ama bu turda sunucu bağlantı bilgileri (host/kullanıcı/anahtar) paylaşılmadı. `SftpBackupStorage` (SSH.NET) yazıldı ve derlendi, ama `FakeBackupStorage` ile (pg_dump→şifreleme→retention→health zincirinin tamamı gerçek) doğrulandı - yalnızca gerçek ağ transferi test edilmedi. Kullanıcı sunucu bilgilerini girip `Backup__Provider=Sftp` yaptığında bu adım ayrıca canlı doğrulanmalı (bkz. `docs/09-testing.md` Faz 4 notları).
 
 ## Faz geçiş kuralı
 
 Bir faz; arayüz, API, veritabanı migration'ı, yetki kontrolü, audit kaydı ve testleri birlikte
 geçmeden tamamlanmış kabul edilmez. Faz 3 için WhatsApp sağlayıcı bilgileri (gerçek şablon onayı),
-Faz 4 için yedekleme hedefi ve e-posta sağlayıcısı ayrıca yapılandırılmalıdır.
+Faz 4 için gerçek SFTP sunucu bilgileri ve (istenirse) gerçek bir SMTP sağlayıcısı ayrıca yapılandırılmalıdır.

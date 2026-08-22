@@ -120,6 +120,22 @@ Gerekçe: bir veli web paneli açmak yalnızca yeni ekranlar değil, yeni bir ki
 
 Kapsam bilinçli olarak dar tutuldu: veli yalnızca **kendi öğrencisinin listesini, kendi takvimini ve kendi RSVP'sini** görebilir/ayarlayabilir. Aidat ve mesaj geçmişi de salt-okunur olarak veli oturumuna bağlandı; ödeme yapma, aidat oluşturma veya okul adına serbest mesaj gönderme yetkisi yoktur. WhatsApp, zamanlanmış hatırlatmalar ve serbest-metin sohbet için birincil kanal olmaya devam ediyor - bu yalnızca velinin kendi verisine *bakabileceği* ek bir web erişimi, WhatsApp akışlarının yerini almıyor.
 
+## G — Faz 4: sağlık kontrolü, yedekleme, e-posta alarmı
+
+Kullanıcının açık talebi ("aidatlar konusu çok önemli, burayı backup sistemi ile düşünmemiz gerekir... backup alma kısmını çok dikkate almalısın") — master prompt'ta yoktu, docs/15-product-phases.md Faz 4 olarak planlandı.
+
+| # | Konu | Karar |
+|---|---|---|
+| G1 | Yedekleme hedefi | Kullanıcıya üç seçenek sunuldu: S3 uyumlu depolama (Backblaze B2/R2 - en basit kurulum), Google Drive (OAuth/servis hesabı gerektirir, en karmaşık), kendi sunucusuna SFTP/SSH. Kullanıcı **kendi sunucusuna SFTP/SSH**'i seçti - zaten erişimi olan bir sunucu, yeni bir bulut hesabı açmasına gerek yok. |
+| G2 | SFTP kütüphanesi | CLI'daki `sftp`/`scp`'yi `Process.Start` ile çağırmak yerine **SSH.NET (Renci.SshNet)** eklendi - host-key doğrulama, kimlik bilgisi yönetimi, hata kodları CLI tarafında daha kırılgan olurdu; yedekleme veri güvenliği açısından kritik (kullanıcının kendi vurgusu), test edilebilir/olgun bir .NET kütüphanesi tercih edildi. Tek yeni bağımlılık. |
+| G3 | Şifreleme | AES-256-GCM, .NET'in yerleşik `System.Security.Cryptography.AesGcm`'i ile - ek bir kütüphane gerekmedi (CLAUDE.md "gereksiz bağımlılık ekleme"). Anahtar `Backup__EncryptionKey` (base64, 32 byte) - `openssl rand -base64 32` ile üretilir, asla commit edilmez. |
+| G4 | Saklama süresi | 1 ay (kullanıcının talebi), `Backup__RetentionDays` ile parametrik (varsayılan 30) - kullanıcı isterse .env'den değiştirebilir, kod değişikliği gerekmez. |
+| G5 | Yedekleme zamanlayıcısı | CLAUDE.md'nin Hangfire/Quartz yasağı nedeniyle (Faz 3'teki G/Hangfire kararıyla aynı gerekçe) mevcut `BackgroundService + PeriodicTimer` deseni (`NotificationDispatcher`/`OverdueReceivableSweeper` ile aynı) - OS cron'a bağımlı olmadan "bugün henüz çalışmadıysa ve saati geçtiyse çalıştır" mantığıyla günlük tetiklenir (`Backup__DailyRunTimeLocal`, varsayılan 03:00). |
+| G6 | E-posta sağlayıcısı | Kullanıcı "en kolay hangisiyse o olsun" dedi - **Gmail SMTP + Uygulama Şifresi** önerildi (çoğu kullanıcının zaten Gmail hesabı var, yeni bir servise kaydolmaya gerek yok, domain doğrulama istemiyor). Kod herhangi bir SMTP sağlayıcısına bağımlı değil (`Email__Smtp__Host` vb. konfigüre edilir). Gönderim için .NET'in yerleşik `System.Net.Mail.SmtpClient`'ı kullanıldı - düşük hacimli alarm e-postası için MailKit gibi ek bir bağımlılık gerekmedi. |
+| G7 | Sağlık durumu hesaplanması | Tek bir periyodik `SystemHealthMonitor` (BackgroundService, varsayılan 10 dk) hem DB bağlantısını (`HealthCheckService`, zaten var olan `/health` altyapısı) hem son başarılı yedeklemenin yaşını kontrol eder - `Healthy`/`Degraded` (`Ops__BackupStaleAfterHours`, varsayılan 30 saat)/`Unhealthy` (`Ops__BackupUnhealthyAfterHours`, varsayılan 48 saat, veya DB down, veya son yedekleme hiç başarılı olmadan başarısız oldu). Sonuç tek satırlık `SystemHealthStatus`'a yazılır (`NotificationAutomationSettings` ile aynı singleton desen), dashboard bunu okur. |
+| G8 | Alarm sıklığı | Sorun devam ettiği sürece e-posta her kontrol turunda tekrar gitmesin diye `Ops__AlertCooldownMinutes` (varsayılan 60 dk) soğuma süresi var. Durum tekrar `Healthy`'ye dönünce ayrıca bir "düzeldi" e-postası gider (soğuma süresine tabi değil - tek seferlik iyi haber). |
+| G9 | Geri yükleme | Uygulama içinde bir "restore" düğmesi **bilinçli olarak eklenmedi** - bir yedeği geri yüklemek mevcut veriyi yok edebilecek, tek yönlü bir işlem; bu, arayüzden kazayla tetiklenebilecek bir risk taşır. Bunun yerine `BackupEncryption.DecryptFileAsync` (manuel kurtarma için) yazıldı ve docs/15-product-phases.md'nin "örnek geri yükleme provası" kabul kriteri elle, `docker compose` ile bir doğrulama turu olarak yapılacak - kalıcı bir uygulama özelliği değil. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

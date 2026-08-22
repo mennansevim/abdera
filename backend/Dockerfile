@@ -19,7 +19,9 @@ WORKDIR /app
 # krb5-libs (Npgsql bağlantı sırasında libgssapi_krb5.so.2 arar, yoksa çöker),
 # icu-data-full (icu-libs'in İngilizce-dışı yerel ayarları içeren tam veri paketi -
 # okulun kendi yerel ayarı tr-TR olduğu için varsayılan icu-data-en yetersiz kalır).
-RUN apk add --no-cache tzdata krb5-libs icu-libs icu-data-full
+# postgresql16-client: BackupService.RunPgDumpAsync'in ihtiyaç duyduğu `pg_dump` binary'si
+# (Faz 4, docs/15-product-phases.md) - Postgres 16 sunucusuyla sürüm uyumlu istemci.
+RUN apk add --no-cache tzdata krb5-libs icu-libs icu-data-full postgresql16-client
 
 # Microsoft'un resmi aspnet:alpine imajı DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true'yu
 # VARSAYILAN olarak taşır (imaj boyutunu küçük tutmak için) - yukarıda icu-data-full'u

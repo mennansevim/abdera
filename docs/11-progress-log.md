@@ -4,6 +4,29 @@ Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma gün
 
 ## Devam noktası (şu an)
 
+**`redesign/sicak-atolye` dalı — Faz 1-4'ün tamamı tamamlandı (docs/15-product-phases.md). Faz 1-3 push edildi; Faz 4 bu turda eklendi, henüz commit edilmedi.**
+
+### Faz 4 — Sağlık kontrolü, yedekleme, e-posta alarmı
+
+Yeni `Modules/Ops/` modülü: `BackupRun`/`SystemHealthStatus` (domain), `IBackupStorage`/`IEmailSender` portları + `Fake`/gerçek ikili implementasyonları (WhatsApp/Banking ile aynı desen), `BackupService`/`SystemHealthMonitor` (`BackgroundService` - CLAUDE.md'nin Hangfire/Quartz yasağı nedeniyle, Faz 3'teki gibi mevcut zamanlayıcı deseni korundu), `GET/POST /api/backup-runs`, `GET /api/system/health`. Kullanıcı kararları: yedekleme hedefi **kendi sunucusuna SFTP/SSH** (Google Drive/S3 alternatifleri sunuldu, SFTP seçildi), saklama süresi **1 ay, parametrik** (`Backup__RetentionDays`), e-posta **"en kolay" - Gmail SMTP** önerildi. Ayrıntılı kararlar: `docs/10-decisions.md` G.
+
+**Teknik seçimler:** SFTP için SSH.NET (Renci.SshNet, tek yeni bağımlılık - CLI'ya `Process.Start` ile çağrı yapmak yerine test edilebilir bir kütüphane tercih edildi), şifreleme için .NET'in yerleşik `AesGcm`'i (AES-256-GCM, ek bağımlılık yok), e-posta için yerleşik `System.Net.Mail.SmtpClient` (düşük hacimli alarm postası için MailKit gereksiz görüldü). `pg_dump` gerçek çalıştırılıyor - API imajına `postgresql16-client` eklendi (Dockerfile), CI'a da kurulum adımı eklendi (`.github/workflows/ci.yml`).
+
+**Gerçek bir tasarım hatası bu oturumda bulunup düzeltildi:** `BackupService.RunPgDumpAsync` başta bağlantı bilgisini `Environment.GetEnvironmentVariable("ConnectionStrings__Default")` ile ham ortam değişkeninden okuyordu - bu, `WebApplicationFactory`'nin test-time `IConfiguration` override'ını (Testcontainers bağlantı dizesi) tamamen görmezden gelirdi, testlerde gerçek Postgres yerine boş/yanlış bir bağlantıya düşerdi. `IConfiguration.GetConnectionString("Default")` okuyacak şekilde düzeltildi (Program.cs'teki `ResolveConnectionString` ile aynı desen) - entegrasyon testi yazılırken fark edildi, canlıya hiç çıkmadı.
+
+**Bulunan ikinci bir gerçek durum (kod hatası değil, ortam):** Bu oturumda host disk'i (`/System/Volumes/Data`) 433GB/460GB dolulukla neredeyse tamamen doldu (~130MB boş kaldı), `npm run build`'in standalone kopyalama adımı `ENOSPC` ile patladı. `.next` klasörü silinip `docker image prune` ile geçici alan açıldı, sonrasında (muhtemelen macOS'un kendi arka plan temizliği ile) alan 3GB'a çıktı ve build/docker rebuild tamamlandı. Bu, projeyle ilgisiz ama gerçek bir Mac disk sorunu - kullanıcıya ayrıca bildirildi.
+
+**Testler:** `Unit/OpsDomainTests.cs` (10 test - şifreleme round-trip, sağlık karar mantığı `SystemHealthMonitor.Evaluate`, alarm soğuma süresi), `Integration/OpsFlowTests.cs` (4 test, Testcontainers - manuel tetikleme gerçek `pg_dump`+şifreleme+Fake depolamayla `Succeeded` üretiyor, liste sayfalanıyor, sağlık uç noktası DB'yi yansıtıyor, admin olmayan istek 401). `dotnet test` → 189/189 yeşil. `npm run build`/`lint` temiz.
+
+**`docker compose` ile canlı doğrulama (bu oturumda yapıldı):** `postgresql16-client`'ın gerçek imaja eklendiği doğrulandı (`pg_dump --version` → 16.15 konteyner içinde). Gerçek admin oturumuyla manuel yedekleme tetiklendi → gerçek pg_dump (55KB) → AES-GCM şifreleme → Fake depolamaya yükleme → `BackupRun.Succeeded`, hepsi ~1 saniyede. `SystemHealthMonitor`'ın bir sonraki turda `Healthy`'ye döndüğü, eşikler geçici sıfırlanarak zorlanan bir `Unhealthy` durumunda alarm e-postasının gerçekten `FakeEmailSender`'a düştüğü, `/dashboard` üzerindeki kırmızı/yeşil şeridin ve `/dashboard/backups` sayfasının (geçmiş tablo + "Şimdi yedek al" düğmesi) tarayıcıda doğru çalıştığı doğrulandı. Sıfır veritabanında 13 migration'ın tamamı (Ops dahil) hatasız uygulandı.
+
+**Kapsam dışı bırakılan tek parça:** gerçek SFTP sunucusuna karşı canlı doğrulama - kullanıcı henüz sunucu bağlantı bilgilerini paylaşmadı. `SftpBackupStorage` yazılıp derlendi ama yalnızca `FakeBackupStorage` ile uçtan uca test edildi. Kullanıcı `Backup__Sftp__*` bilgilerini girip `Backup__Provider=Sftp` yaptığında bu adım ayrıca doğrulanmalı - bkz. `docs/09-testing.md` Faz 4 notları, `docs/16-backup-restore.md` (yeni - geri yükleme runbook'u, uygulama içi "restore" düğmesi bilinçli olarak eklenmedi, `docs/10-decisions.md` G9).
+
+- [ ] Faz 4 commit edilecek (`abdera-commit` skill), push için ayrıca kullanıcı onayı istenecek.
+- [ ] Kullanıcı SFTP sunucu bilgilerini paylaştığında: `.env`'e `Backup__Provider=Sftp` + `Backup__Sftp__*` girilip gerçek bir yedekleme+geri yükleme provası (`docs/16-backup-restore.md`) yapılmalı.
+
+## Devam noktası (önceki)
+
 **`redesign/sicak-atolye` dalı — Faz 1-3 (`docs/15-product-phases.md`) tamamlandı. Faz 1-2 doğrulaması commit `e04d1e5` ile kaydedildi; Faz 3 bu turda eklendi, henüz commit edilmedi. Push için ayrıca kullanıcı onayı gerekiyor (repo public).**
 
 ### Faz 1-2 doğrulaması (commit `e04d1e5`)

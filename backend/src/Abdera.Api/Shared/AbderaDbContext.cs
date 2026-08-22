@@ -3,6 +3,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Pricing.Domain;
 using Abdera.Api.Modules.Progress.Domain;
@@ -61,6 +62,9 @@ public class AbderaDbContext : DbContext
 
     public DbSet<VirtualIban> VirtualIbans => Set<VirtualIban>();
     public DbSet<BankIncomingTransaction> BankIncomingTransactions => Set<BankIncomingTransaction>();
+
+    public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
+    public DbSet<SystemHealthStatus> SystemHealthStatuses => Set<SystemHealthStatus>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

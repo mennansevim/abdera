@@ -111,6 +111,10 @@ GET    /api/guardian/me/billing                  ✅ yalnızca bağlı öğrenci
 GET    /api/guardian/me/messages                 ✅ yalnızca velinin giden WhatsApp bildirim geçmişi (son 50)
 
 GET    /api/dashboard/today                     ✅ rol bazlı kapsam (docs/04-permissions.md) - denetim E2/ARC-6
+
+GET    /api/system/health                       ✅ Faz 4 - DB + yedekleme tazeliğine dayalı Healthy/Degraded/Unhealthy özeti
+GET    /api/backup-runs                         ✅ Faz 4 - ?page=&pageSize= (varsayılan 20) - yanıt {items,totalCount,page,pageSize} zarfında
+POST   /api/backup-runs/trigger                 ✅ Faz 4 - manuel yedeklemeyi arka planda başlatır, hemen 202 döner
 ```
 
 ## `GET /api/dashboard/today` örnek yanıt
