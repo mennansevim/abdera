@@ -10,7 +10,10 @@ public static class Notifications
 {
     public record NotificationJobResponse(
         Guid Id, NotificationJobType Type, string RecipientPhoneNumber, string ReferenceType, Guid ReferenceId,
-        DateTimeOffset ScheduledAt, NotificationJobStatus Status, int AttemptCount, string? LastError, DateTimeOffset? SentAt);
+        DateTimeOffset ScheduledAt, NotificationJobStatus Status, int AttemptCount, string? LastError, DateTimeOffset? SentAt,
+        string? GuardianName, string? StudentName, string? LessonType);
+
+    private record LessonDisplay(Guid LessonId, string StudentName, string LessonType);
 
     public static void MapNotifications(this IEndpointRouteBuilder app)
     {
@@ -33,8 +36,25 @@ public static class Notifications
             .Take(normalizedPageSize)
             .ToListAsync();
 
+        var lessonIds = jobs.Where(j => j.ReferenceType == "lesson").Select(j => j.ReferenceId).Distinct().ToList();
+        var lessonDisplays = await db.Lessons
+            .Where(l => lessonIds.Contains(l.Id))
+            .Join(db.Students, lesson => lesson.StudentId, student => student.Id, (lesson, student) => new { lesson.Id, lesson.StudentId, StudentName = student.FirstName + " " + student.LastName, lesson.InstrumentId })
+            .Join(db.Instruments, row => row.InstrumentId, instrument => instrument.Id, (row, instrument) => new LessonDisplay(row.Id, row.StudentName, instrument.Name))
+            .ToDictionaryAsync(row => row.LessonId);
+
+        var recipientPhones = jobs.Select(j => j.RecipientPhoneNumber).Distinct().ToList();
+        var guardianNames = await db.Guardians
+            .Where(g => recipientPhones.Contains(g.PhoneNumber))
+            .ToDictionaryAsync(g => g.PhoneNumber, g => g.FirstName + " " + g.LastName);
+
         return Results.Ok(new PagedResponse<NotificationJobResponse>(
-            jobs.Select(ToResponse).ToList(), totalCount, normalizedPage, normalizedPageSize));
+            jobs.Select(job =>
+            {
+                lessonDisplays.TryGetValue(job.ReferenceId, out var lesson);
+                guardianNames.TryGetValue(job.RecipientPhoneNumber, out var guardianName);
+                return ToResponse(job, guardianName, lesson?.StudentName, lesson?.LessonType);
+            }).ToList(), totalCount, normalizedPage, normalizedPageSize));
     }
 
     private static async Task<IResult> RetryAsync(Guid jobId, AbderaDbContext db, IClock clock)
@@ -45,10 +65,10 @@ public static class Notifications
         job.RetryManually(clock.UtcNow);
         await db.SaveChangesAsync();
 
-        return Results.Ok(ToResponse(job));
+        return Results.Ok(ToResponse(job, null, null, null));
     }
 
-    private static NotificationJobResponse ToResponse(NotificationJob job) => new(
+    private static NotificationJobResponse ToResponse(NotificationJob job, string? guardianName, string? studentName, string? lessonType) => new(
         job.Id, job.Type, job.RecipientPhoneNumber, job.ReferenceType, job.ReferenceId,
-        job.ScheduledAt, job.Status, job.AttemptCount, job.LastError, job.SentAt);
+        job.ScheduledAt, job.Status, job.AttemptCount, job.LastError, job.SentAt, guardianName, studentName, lessonType);
 }

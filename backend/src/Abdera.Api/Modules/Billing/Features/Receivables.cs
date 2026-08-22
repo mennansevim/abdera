@@ -10,9 +10,10 @@ namespace Abdera.Api.Modules.Billing.Features;
 public static class Receivables
 {
     public record CreateRequest(Guid EnrollmentId, string Period);
+    public record PaymentSummary(Guid Id, decimal Amount, DateOnly PaymentDate, PaymentMethod Method, string? Reference, string? Note);
     public record ReceivableResponse(
         Guid Id, Guid EnrollmentId, string Period, decimal Amount, string Currency,
-        DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid);
+        DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid, List<PaymentSummary> Payments);
 
     public static void MapReceivables(this IEndpointRouteBuilder app)
     {
@@ -29,8 +30,9 @@ public static class Receivables
 
         var receivables = await query.OrderByDescending(r => r.DueDate).ToListAsync();
         var totals = await ComputeTotalsPaidAsync(receivables.Select(r => r.Id), db);
+        var payments = await ComputePaymentsAsync(receivables.Select(r => r.Id), db);
 
-        return Results.Ok(receivables.Select(r => ToResponse(r, totals.GetValueOrDefault(r.Id))));
+        return Results.Ok(receivables.Select(r => ToResponse(r, totals.GetValueOrDefault(r.Id), payments.GetValueOrDefault(r.Id) ?? [])));
     }
 
     private static async Task<IResult> CreateAsync(CreateRequest request, AbderaDbContext db, IClock clock)
@@ -52,7 +54,7 @@ public static class Receivables
         db.Receivables.Add(receivable);
         await db.SaveChangesAsync();
 
-        return Results.Created($"/api/receivables/{receivable.Id}", ToResponse(receivable, 0));
+        return Results.Created($"/api/receivables/{receivable.Id}", ToResponse(receivable, 0, []));
     }
 
     private static async Task<IResult> CancelAsync(Guid receivableId, AbderaDbContext db, IClock clock)
@@ -64,7 +66,8 @@ public static class Receivables
         await db.SaveChangesAsync();
 
         var totalPaid = await db.Payments.Where(p => p.ReceivableId == receivableId).SumAsync(p => (decimal?)p.Amount) ?? 0;
-        return Results.Ok(ToResponse(receivable, totalPaid));
+        var payments = await ComputePaymentsAsync([receivableId], db);
+        return Results.Ok(ToResponse(receivable, totalPaid, payments.GetValueOrDefault(receivableId) ?? []));
     }
 
     // docs/03-erd.md period: "2026-09 gibi dönem etiketi". MONTHLY için ayın FeePlan.DueDay'i,
@@ -97,6 +100,19 @@ public static class Receivables
             .ToDictionaryAsync(x => x.ReceivableId, x => x.Total);
     }
 
-    internal static ReceivableResponse ToResponse(Receivable r, decimal totalPaid) =>
-        new(r.Id, r.EnrollmentId, r.Period, r.Amount, r.Currency, r.DueDate, r.Status, totalPaid);
+    internal static async Task<Dictionary<Guid, List<PaymentSummary>>> ComputePaymentsAsync(IEnumerable<Guid> receivableIds, AbderaDbContext db)
+    {
+        var ids = receivableIds.ToList();
+        var payments = await db.Payments
+            .Where(p => ids.Contains(p.ReceivableId))
+            .OrderByDescending(p => p.PaymentDate)
+            .ThenByDescending(p => p.CreatedAt)
+            .ToListAsync();
+        return payments
+            .GroupBy(p => p.ReceivableId)
+            .ToDictionary(g => g.Key, g => g.Select(p => new PaymentSummary(p.Id, p.Amount, p.PaymentDate, p.Method, p.Reference, p.Note)).ToList());
+    }
+
+    internal static ReceivableResponse ToResponse(Receivable r, decimal totalPaid, List<PaymentSummary> payments) =>
+        new(r.Id, r.EnrollmentId, r.Period, r.Amount, r.Currency, r.DueDate, r.Status, totalPaid, payments);
 }

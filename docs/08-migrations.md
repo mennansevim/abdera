@@ -37,6 +37,13 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
                                            (Modules/People/Features/GuardianAuth.cs). users
                                            tablosuna dokunmaz, Guardian oturumu ayrı bir
                                            ClaimsPrincipal (Role=Guardian) üzerinden kurulur.
+013_expenses (Expenses)                   expenses - Maliyet Takibi'nin gider defteri
+(Modules/Billing/Persistence/Migrations)  (maaş/elektrik-su/kira/diğer), CK_expenses_amount
+                                           (amount > 0) kısıtıyla - `redesign/sicak-atolye`
+                                           dalı Faz 2. İlk hâli elle yazılmış, .Designer.cs'i
+                                           eksik olduğu için EF Core tarafından hiç keşfedilmiyordu
+                                           (bkz. docs/11-progress-log.md "Devam noktası") -
+                                           `dotnet ef migrations add` ile yeniden üretildi.
 ```
 
 Not: Messaging ve Banking, Progress'ten önce geldi çünkü kullanıcı bu ikisini Progress'ten önce istedi (Phase 5 ve Phase 6) - bu dosyanın önceki bölümü plan aşamasında yazılmıştı, gerçek uygulama sırası planlanan numaralandırmayı bozdu (numaralar zaten yalnızca kavramsal, bkz. yukarıdaki "Not"). Banking master prompt'ta hiç yoktu (`docs/10-decisions.md` E1) - Progress artık Phase 7'ye kaydı.

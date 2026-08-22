@@ -25,11 +25,12 @@ public static class StudentBilling
             .ToListAsync();
 
         var totals = await Receivables.ComputeTotalsPaidAsync(receivables.Select(r => r.Id), db);
+        var payments = await Receivables.ComputePaymentsAsync(receivables.Select(r => r.Id), db);
 
         var result = enrollments.Select(e => new StudentBillingResponse(
             e.Id, e.InstrumentId,
-            receivables.Where(r => r.EnrollmentId == e.Id)
-                .Select(r => Receivables.ToResponse(r, totals.GetValueOrDefault(r.Id)))
+                receivables.Where(r => r.EnrollmentId == e.Id)
+                .Select(r => Receivables.ToResponse(r, totals.GetValueOrDefault(r.Id), payments.GetValueOrDefault(r.Id) ?? []))
                 .ToList()));
 
         return Results.Ok(result);

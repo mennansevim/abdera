@@ -26,6 +26,17 @@ export interface NotificationJob {
   attemptCount: number;
   lastError: string | null;
   sentAt: string | null;
+  guardianName?: string | null;
+  studentName?: string | null;
+  lessonType?: string | null;
+}
+
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  language: string;
+  body: string;
+  isActive: boolean;
 }
 
 // ARC-3 (docs/13-audit-fix-prompt.md): liste artık Take(200) ile sessizce kesilmiyor,
@@ -51,5 +62,21 @@ export function useRetryNotification() {
   return useMutation({
     mutationFn: (jobId: string) => api.post<NotificationJob>(`/api/notifications/${jobId}/retry`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export function useMessageTemplates() {
+  return useQuery({
+    queryKey: ["message-templates"],
+    queryFn: () => api.get<MessageTemplate[]>("/api/message-templates"),
+  });
+}
+
+export function useUpdateMessageTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; name: string; body: string; language?: string; isActive: boolean }) =>
+      api.patch<MessageTemplate>(`/api/message-templates/${id}`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["message-templates"] }),
   });
 }

@@ -48,6 +48,7 @@ public class AbderaDbContext : DbContext
     public DbSet<FeePlan> FeePlans => Set<FeePlan>();
     public DbSet<Receivable> Receivables => Set<Receivable>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<Expense> Expenses => Set<Expense>();
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();

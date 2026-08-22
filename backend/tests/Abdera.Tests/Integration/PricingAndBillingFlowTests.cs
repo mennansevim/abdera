@@ -188,4 +188,90 @@ public class PricingAndBillingFlowTests : IClassFixture<AbderaWebApplicationFact
 
         Assert.Equal(HttpStatusCode.Conflict, overlapping.StatusCode);
     }
+
+    // Faz 2: toplu ödeme (10/12 aylık) - seçilen aydan başlayarak istenen ay sayısı kadar
+    // Receivable oluşturup/tutup tek transaction'da ödemeyi dağıtır (BulkPayments.cs).
+    [Fact]
+    public async Task Bulk_payment_distributes_amount_across_requested_months_and_marks_them_paid()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var drums = instruments!.Single(i => i.Code == "DRUMS");
+
+        var priceListResponse = await admin.PostAsJsonAsync("/api/price-lists", new PriceLists.CreateRequest(
+            "Toplu Ödeme Sezonu", new DateOnly(2026, 1, 1), null,
+            [new PriceLists.CreateItemRequest(drums.Id, 45, BillingType.Monthly, 1000m, "TRY", null)]));
+        var priceList = (await priceListResponse.Content.ReadFromJsonAsync<PriceLists.PriceListResponse>(TestJson.Options))!;
+        var item = priceList.Items.Single();
+
+        var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Toplu", "Öğretmen", [drums.Id], null)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Toplu", "Öğrenci", new DateOnly(2014, 1, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
+                new Enrollments.CreateRequest(teacher.Id, drums.Id, new DateOnly(2026, 1, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+
+        await admin.PostAsJsonAsync($"/api/enrollments/{enrollment.Id}/fee-plan",
+            new FeePlans.CreateRequest(item.Id, DueDay: 1, new DateOnly(2026, 1, 1)));
+
+        // 3 aylık (3000 TRY) toplu ödeme - bu ayların hiçbirinin Receivable'ı henüz yok,
+        // BulkPayments bunları kendisi oluşturmalı.
+        var bulkResponse = await admin.PostAsJsonAsync($"/api/enrollments/{enrollment.Id}/bulk-payments",
+            new BulkPayments.CreateRequest(enrollment.Id, "2026-09", 3, 3000m, new DateOnly(2026, 9, 1), PaymentMethod.Transfer, "toplu-1", null));
+        var bulkBody = await bulkResponse.Content.ReadAsStringAsync();
+        Assert.True(bulkResponse.StatusCode == HttpStatusCode.OK, $"Beklenmeyen durum: {bulkResponse.StatusCode}, gövde: {bulkBody}");
+        var receivables = await bulkResponse.Content.ReadFromJsonAsync<List<Receivables.ReceivableResponse>>(TestJson.Options);
+        Assert.Equal(3, receivables!.Count);
+        Assert.All(receivables, r => Assert.Equal(ReceivableStatus.Paid, r.Status));
+        Assert.Equal(["2026-09", "2026-10", "2026-11"], receivables.Select(r => r.Period).OrderBy(p => p));
+
+        var storedReceivables = await db.Receivables.AsNoTracking()
+            .Where(r => r.EnrollmentId == enrollment.Id).ToListAsync();
+        Assert.Equal(3, storedReceivables.Count);
+        Assert.All(storedReceivables, r => Assert.Equal(ReceivableStatus.Paid, r.Status));
+        // Fiyat snapshot'ı korunmalı - her Receivable feePlan'ın o anki tutarını taşımalı.
+        Assert.All(storedReceivables, r => Assert.Equal(1000m, r.Amount));
+    }
+
+    [Fact]
+    public async Task Bulk_payment_exceeding_outstanding_balance_of_requested_months_is_rejected()
+    {
+        var admin = await CreateAdminClientAsync();
+
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var drums = instruments!.Single(i => i.Code == "DRUMS");
+
+        var priceListResponse = await admin.PostAsJsonAsync("/api/price-lists", new PriceLists.CreateRequest(
+            "Toplu Ödeme Hata Sezonu", new DateOnly(2026, 1, 1), null,
+            [new PriceLists.CreateItemRequest(drums.Id, 60, BillingType.Monthly, 1000m, "TRY", null)]));
+        var priceList = (await priceListResponse.Content.ReadFromJsonAsync<PriceLists.PriceListResponse>(TestJson.Options))!;
+        var item = priceList.Items.Single();
+
+        var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Hata", "Öğretmen", [drums.Id], null)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Hata", "Öğrenci", new DateOnly(2014, 1, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
+                new Enrollments.CreateRequest(teacher.Id, drums.Id, new DateOnly(2026, 1, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+
+        await admin.PostAsJsonAsync($"/api/enrollments/{enrollment.Id}/fee-plan",
+            new FeePlans.CreateRequest(item.Id, DueDay: 1, new DateOnly(2026, 1, 1)));
+
+        // 1 aylık borç (1000 TRY) için 5000 TRY gönderiliyor - fazlası hiçbir aidata sayılmamalı,
+        // istek reddedilmeli (BulkPayments.cs: "remaining > 0.01m" kontrolü).
+        var bulkResponse = await admin.PostAsJsonAsync($"/api/enrollments/{enrollment.Id}/bulk-payments",
+            new BulkPayments.CreateRequest(enrollment.Id, "2026-09", 1, 5000m, new DateOnly(2026, 9, 1), PaymentMethod.Transfer, null, null));
+
+        Assert.Equal(HttpStatusCode.Conflict, bulkResponse.StatusCode);
+    }
 }

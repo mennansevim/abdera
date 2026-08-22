@@ -18,10 +18,13 @@ const CORE_LINKS: NavItem[] = [
 
 const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet" },
-  { href: "/dashboard/notifications", label: "Bildirimler", icon: "bell", alert: true },
+  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", alert: true },
+  { href: "/dashboard/costs", label: "Maliyet Takibi", icon: "bank" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true },
   { href: "/dashboard/change-requests", label: "Değişiklik Talepleri", icon: "swap" },
 ];
+
+const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings" };
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -41,9 +44,9 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const router = useRouter();
   const logout = useLogout();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const links = me.role === "Admin" ? [...CORE_LINKS, ...ADMIN_LINKS] : CORE_LINKS;
+  const links = me.role === "Admin" ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS, SETTINGS_LINK];
   const mobilePrimary: NavItem[] = me.role === "Admin"
-    ? [links[0]!, links[3]!, links[4]!, links[5]!]
+    ? [CORE_LINKS[0]!, CORE_LINKS[3]!, ADMIN_LINKS[0]!, ADMIN_LINKS[1]!]
     : [
         { ...CORE_LINKS[0], label: "Bugün" },
         { ...CORE_LINKS[3], label: "Takvimim" },

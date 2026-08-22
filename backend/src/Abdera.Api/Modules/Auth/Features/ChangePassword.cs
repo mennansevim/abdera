@@ -15,6 +15,21 @@ public static class ChangePassword
     public static void MapChangePassword(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/change-password", HandleAsync).RequireAuthorization();
+        app.MapPost("/api/auth/verify-password", VerifyAsync).RequireAuthorization();
+    }
+
+    private static async Task<IResult> VerifyAsync(
+        Request request,
+        ClaimsPrincipal principal,
+        AbderaDbContext db,
+        IPasswordHasher<User> passwordHasher)
+    {
+        var userId = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var user = await db.Users.SingleAsync(u => u.Id == userId);
+        var result = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword);
+        return result == PasswordVerificationResult.Failed
+            ? Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "Doğrulama başarısız", detail: "Şifre hatalı.")
+            : Results.NoContent();
     }
 
     private static async Task<IResult> HandleAsync(

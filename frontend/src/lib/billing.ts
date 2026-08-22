@@ -124,6 +124,58 @@ export interface Receivable {
   dueDate: string;
   status: ReceivableStatus;
   totalPaid: number;
+  payments: PaymentRecord[];
+}
+
+export interface PaymentRecord {
+  id: string;
+  amount: number;
+  paymentDate: string;
+  method: PaymentMethod;
+  reference: string | null;
+  note: string | null;
+}
+
+export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other";
+export interface Expense {
+  id: string;
+  category: ExpenseCategory;
+  description: string;
+  amount: number;
+  currency: string;
+  expenseDate: string;
+  note: string | null;
+}
+
+export function useExpenses() {
+  return useQuery({ queryKey: ["expenses"], queryFn: () => api.get<Expense[]>("/api/expenses") });
+}
+
+export function useCreateExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { category: ExpenseCategory; description: string; amount: number; currency?: string; expenseDate: string; note?: string }) => api.post<Expense>("/api/expenses", body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["expenses"] }),
+  });
+}
+
+export type MakeupCreditStatus = "Available" | "Used" | "Expired";
+export interface MakeupCredit {
+  id: string;
+  studentId: string;
+  earnedReason: "GuardianCancelled24H" | "SchoolCancelled";
+  earnedAt: string;
+  expiresAt: string;
+  status: MakeupCreditStatus;
+  usedLessonId: string | null;
+}
+
+export function useMakeupCredits(studentId: string) {
+  return useQuery({
+    queryKey: ["makeup-credits", studentId],
+    queryFn: () => api.get<MakeupCredit[]>(`/api/students/${studentId}/makeup-credits`),
+    enabled: !!studentId,
+  });
 }
 
 export function useReceivables(status?: ReceivableStatus) {
@@ -156,5 +208,17 @@ export function useRecordPayment(studentId: string) {
     mutationFn: ({ receivableId, ...body }: { receivableId: string; amount: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string }) =>
       api.post(`/api/receivables/${receivableId}/payments`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] }),
+  });
+}
+
+export function useBulkPayment(studentId: string, enrollmentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { startPeriod: string; months: number; amount: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string }) =>
+      api.post<Receivable[]>(`/api/enrollments/${enrollmentId}/bulk-payments`, { enrollmentId, ...body }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    },
   });
 }

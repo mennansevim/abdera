@@ -14,8 +14,9 @@ import { CreateSeriesForm } from "./create-series-form";
 // paylaşılan modülden (lib/week-grid-layout.ts) geliyor - sabit 09:00-19:00 önceden iki ekranda
 // da ayrı ayrı kopyalanmıştı ve pencere dışı/çakışan dersleri yanlış konumlandırıyordu
 // (docs/14-ui-design-prompt.md B3).
-const GRID_HEIGHT_REM_PER_HOUR = 3.4;
+const GRID_HEIGHT_REM_PER_HOUR = 3.8;
 const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+const INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
 
 // Haftanın Pazartesi'sini bulur - takvim her zaman Pazartesi'den başlar.
 function startOfWeek(date: Date): Date {
@@ -41,6 +42,15 @@ function formatTime(date: Date) {
   return date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function studentInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR"))
+    .join("");
+}
+
 // Gece yarısından itibaren dakika -> "HH:MM". Sürükleme sırasında bırakılacak saat aralığını
 // göstermek için (docs/14-ui-design-prompt.md sonrası kullanıcı geri bildirimi: "hangi saat
 // aralığına bıraktığımı göremiyorum").
@@ -55,6 +65,7 @@ export default function CalendarPage() {
   const isAdmin = me?.role === "Admin";
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [showSeriesForm, setShowSeriesForm] = useState(false);
+  const [instrumentFilter, setInstrumentFilter] = useState<(typeof INSTRUMENT_FILTERS)[number]>("Hepsi");
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: rawLessons, isLoading } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
@@ -63,9 +74,13 @@ export default function CalendarPage() {
   // iki yerde birden görünmesine yol açıyordu - değişiklik geçmişi `/dashboard/change-requests`'te
   // zaten var, canlı takvimde tekrar göstermeye gerek yok.
   const lessons = useMemo(() => (rawLessons ?? []).filter((lesson) => lesson.status !== "Rescheduled"), [rawLessons]);
+  const visibleLessons = useMemo(
+    () => instrumentFilter === "Hepsi" ? lessons : lessons.filter((lesson) => lesson.instrumentName.toLocaleLowerCase("tr-TR") === instrumentFilter.toLocaleLowerCase("tr-TR")),
+    [instrumentFilter, lessons],
+  );
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const colors = useMemo(() => buildInstrumentColorMap(lessons.map((lesson) => lesson.instrumentName)), [lessons]);
-  const hourWindow = useMemo(() => computeHourWindow(lessons), [lessons]);
+  const hourWindow = useMemo(() => computeHourWindow(visibleLessons), [visibleLessons]);
 
   return (
     <div className="space-y-5">
@@ -98,7 +113,22 @@ export default function CalendarPage() {
         </p>
       )}
 
-      <WeeklyGrid weekDays={weekDays} lessons={lessons ?? []} loading={isLoading} colors={colors} isAdmin={isAdmin} hourWindow={hourWindow} />
+      <div className="app-card flex flex-wrap items-center gap-2 p-3 sm:p-4">
+        <span className="mr-1 text-xs font-bold text-[var(--muted)]">Ders türü</span>
+        {INSTRUMENT_FILTERS.map((filter) => (
+          <button
+            key={filter}
+            type="button"
+            onClick={() => setInstrumentFilter(filter)}
+            aria-pressed={instrumentFilter === filter}
+            className={`pressable min-h-9 rounded-full border px-3 text-xs font-bold ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
+
+      <WeeklyGrid weekDays={weekDays} lessons={visibleLessons} loading={isLoading} colors={colors} isAdmin={isAdmin} hourWindow={hourWindow} />
     </div>
   );
 }
@@ -125,13 +155,14 @@ function WeeklyGrid({
   const [movingId, setMovingId] = useState<string | null>(null);
   const [hoverSlot, setHoverSlot] = useState<{ day: string; minutes: number; label: string; heightPercent: number } | null>(null);
   const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [openLesson, setOpenLesson] = useState<CalendarLesson | null>(null);
 
   function showToast(tone: "success" | "error", text: string) {
     setToast({ tone, text });
     window.setTimeout(() => setToast((current) => (current?.text === text ? null : current)), 4000);
   }
 
-  function handleDragStart(event: DragEvent<HTMLDivElement>, lesson: CalendarLesson) {
+  function handleDragStart(event: DragEvent<HTMLElement>, lesson: CalendarLesson) {
     draggingRef.current = lesson;
     setDraggingId(lesson.id);
     event.dataTransfer.effectAllowed = "move";
@@ -238,6 +269,7 @@ function WeeklyGrid({
               onDragEndLesson={handleDragEnd}
               onDragOverColumn={(event) => handleDragOver(event, day)}
               onDropColumn={(event) => handleDrop(event, day)}
+              onOpenLesson={setOpenLesson}
             />
           ))}
         </div>
@@ -254,13 +286,14 @@ function WeeklyGrid({
                 {WEEK_DAYS_TR[index]}
               </h3>
               <div className="space-y-2 pl-9">
-                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} />)}
+                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} onOpen={() => setOpenLesson(lesson)} />)}
                 {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
               </div>
             </div>
           );
         })}
       </div>
+      {openLesson && <LessonDetailsDialog lesson={openLesson} onClose={() => setOpenLesson(null)} />}
     </section>
   );
 }
@@ -291,6 +324,7 @@ function GridDayColumn({
   onDragEndLesson,
   onDragOverColumn,
   onDropColumn,
+  onOpenLesson,
 }: {
   day: Date;
   lessons: CalendarLesson[];
@@ -300,10 +334,11 @@ function GridDayColumn({
   draggingId: string | null;
   movingId: string | null;
   hoverSlot: { minutes: number; label: string; heightPercent: number } | null;
-  onDragStartLesson: (event: DragEvent<HTMLDivElement>, lesson: CalendarLesson) => void;
+  onDragStartLesson: (event: DragEvent<HTMLElement>, lesson: CalendarLesson) => void;
   onDragEndLesson: () => void;
   onDragOverColumn: (event: DragEvent<HTMLDivElement>) => void;
   onDropColumn: (event: DragEvent<HTMLDivElement>) => void;
+  onOpenLesson: (lesson: CalendarLesson) => void;
 }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
   const layout = useMemo(() => layoutDayLessons(entries, hourWindow), [entries, hourWindow]);
@@ -346,30 +381,33 @@ function GridDayColumn({
         const width = `calc(${100 / position.columns}% - ${gapPct}px)`;
         const left = `calc(${(position.column / position.columns) * 100}% + ${gapPct / 2}px)`;
         return (
-          <div
+          <button
+            type="button"
             key={lesson.id}
             draggable={draggable}
             onDragStart={(event) => onDragStartLesson(event, lesson)}
             onDragEnd={onDragEndLesson}
+            onClick={() => onOpenLesson(lesson)}
             title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`}
-            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-35" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : ""}`}
+            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}. Detayları aç`}
+            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-35" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : ""}`}
             style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
             <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{formatTime(start)}–{formatTime(end)}</span>
-            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
+            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
             <span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}{isAdmin ? ` · ${lesson.teacherName}` : ""}</span>
-          </div>
+          </button>
         );
       })}
     </div>
   );
 }
 
-function AgendaLessonCard({ lesson, tone, showTeacher }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean }) {
+function AgendaLessonCard({ lesson, tone, showTeacher, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; onOpen: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   return (
-    <article className="flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white p-2.5 shadow-sm">
+    <button type="button" onClick={onOpen} className="pressable flex min-h-14 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white p-2.5 text-left shadow-sm hover:border-[var(--brand)]">
       <span className="h-9 w-1 rounded-full" style={{ background: tone.border }} />
       <span className="w-20 shrink-0 text-[.65rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
       <span className="min-w-0 flex-1">
@@ -377,7 +415,7 @@ function AgendaLessonCard({ lesson, tone, showTeacher }: { lesson: CalendarLesso
         <span className="block truncate text-[.62rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
       </span>
       <LessonStatusChip lesson={lesson} />
-    </article>
+    </button>
   );
 }
 
@@ -391,4 +429,41 @@ function LessonStatusChip({ lesson }: { lesson: CalendarLesson }) {
   };
   const { label, className } = config[lesson.status];
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.56rem] font-bold ${className}`}>{label}</span>;
+}
+
+function LessonDetailsDialog({ lesson, onClose }: { lesson: CalendarLesson; onClose: () => void }) {
+  const start = new Date(lesson.startAt);
+  const end = new Date(lesson.endAt);
+  const duration = Math.round((end.getTime() - start.getTime()) / 60000);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
+      <button type="button" onClick={onClose} aria-label="Ders detay penceresini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
+      <section className="app-card relative z-10 w-full max-w-md overflow-hidden">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] p-5">
+          <div>
+            <p className="text-micro text-[var(--brand-strong)]">Ders ayrıntısı</p>
+            <h2 className="mt-1 font-serif text-xl font-bold italic">{lesson.studentName}</h2>
+            <p className="text-meta mt-1">{lesson.instrumentName} · {lesson.status === "Makeup" ? "Telafi dersi" : "Düzenli ders"}</p>
+          </div>
+          <button type="button" onClick={onClose} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--muted)]" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
+        </div>
+        <dl className="grid gap-3 p-5 sm:grid-cols-2">
+          <DetailItem label="Tarih" value={start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} />
+          <DetailItem label="Saat" value={`${formatTime(start)} – ${formatTime(end)}`} />
+          <DetailItem label="Süre" value={`${duration} dakika`} />
+          <DetailItem label="Öğretmen" value={lesson.teacherName} />
+          <DetailItem label="Katılım" value={lesson.rsvpResponse === "Attending" ? "Geliyor" : lesson.rsvpResponse === "NotAttending" ? "Gelmiyor" : "Cevap bekleniyor"} />
+          <DetailItem label="Durum" value={lesson.status === "Cancelled" ? "İptal edildi" : lesson.status === "Completed" ? "Tamamlandı" : lesson.status === "Makeup" ? "Telafi" : "Planlandı"} />
+        </dl>
+        <div className="flex justify-end border-t border-[var(--line)] p-4">
+          <button type="button" onClick={onClose} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-sm font-bold text-white">Kapat</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border border-[var(--line)] bg-white px-3 py-2.5"><dt className="text-micro text-[var(--muted)]">{label}</dt><dd className="mt-1 text-sm font-semibold">{value}</dd></div>;
 }

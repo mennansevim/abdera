@@ -15,6 +15,7 @@ public static class MessagingModule
     {
         app.MapWebhooks();
         app.MapNotifications();
+        app.MapMessageTemplates();
 
         if (app.Environment.IsDevelopment())
         {

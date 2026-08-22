@@ -16,6 +16,8 @@ public static class BillingModule
         app.MapFeePlans();
         app.MapReceivables();
         app.MapPayments();
+        app.MapBulkPayments();
+        app.MapExpenses();
         app.MapStudentBilling();
         app.MapSendPaymentReminder();
     }

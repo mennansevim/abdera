@@ -21,6 +21,15 @@ public class MessageTemplate
         IsActive = true,
     };
 
+    public void Update(string name, string body, string language = "tr")
+    {
+        Name = name.Trim();
+        Body = body;
+        Language = language.Trim();
+    }
+
+    public void SetActive(bool isActive) => IsActive = isActive;
+
     // {{key}} placeholder'larını verilen değerlerle değiştirir - basit, regex'siz.
     public string Render(IReadOnlyDictionary<string, string> parameters)
     {

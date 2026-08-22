@@ -1,18 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import {
+  useMessageTemplates,
   useNotifications,
   useRetryNotification,
+  useUpdateMessageTemplate,
+  type MessageTemplate,
   type NotificationJobStatus,
   type NotificationJobType,
 } from "@/lib/messaging";
 
-// docs/04-permissions.md: WhatsApp bildirim durumu tamamen Admin - app-header.tsx
-// ADMIN_ONLY_LINKS'e bak. abdera-notification skill madde 10: "FAILED durumuna düşerse
-// yönetici panelinde görünüyor mu, 'yeniden dene' uç noktası çalışıyor mu?" - bu sayfa
-// tam olarak o kontrolü sağlıyor.
 const STATUS_LABELS: Record<NotificationJobStatus, string> = {
   Pending: "bekliyor",
   Processing: "işleniyor",
@@ -38,29 +37,49 @@ const TYPE_LABELS: Record<NotificationJobType, string> = {
   PackageEnding: "Paket bitiyor",
 };
 
-const FILTERS: { value: NotificationJobStatus | "all"; label: string }[] = [
-  { value: "all", label: "Tümü" },
-  { value: "Pending", label: "Bekliyor" },
-  { value: "Sent", label: "Gönderildi" },
-  { value: "Failed", label: "Başarısız" },
-  { value: "Cancelled", label: "İptal" },
+const PLACEHOLDERS = [
+  { key: "guardian_name", label: "Veli adı" },
+  { key: "student_name", label: "Öğrenci adı" },
+  { key: "instrument", label: "Ders türü" },
+  { key: "lesson_time", label: "Ders saati" },
+  { key: "teacher_name", label: "Öğretmen adı" },
+  { key: "due_date", label: "Son ödeme tarihi" },
+  { key: "amount", label: "Tutar" },
 ];
 
-const PAGE_SIZE = 50;
-
 export default function NotificationsPage() {
+  const [activeTab, setActiveTab] = useState<"activity" | "templates">("activity");
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-micro text-[var(--brand-strong)]">WhatsApp ve otomasyon</p>
+        <h1 className="text-display mt-1 font-serif italic">Mesaj Merkezi</h1>
+        <p className="text-meta mt-2 max-w-3xl">Ders türü, veli ve öğrenci bilgilerini görünür tut; hazır mesajlarını düzenle, önizle ve zamanlanmış gönderimleri buradan takip et.</p>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-[var(--line)] pb-1">
+        <button type="button" onClick={() => setActiveTab("activity")} className={`pressable min-h-11 rounded-t-xl px-4 text-sm font-bold ${activeTab === "activity" ? "border-b-2 border-[var(--brand)] text-[var(--brand-strong)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}>
+          Gönderim kayıtları
+        </button>
+        <button type="button" onClick={() => setActiveTab("templates")} className={`pressable min-h-11 rounded-t-xl px-4 text-sm font-bold ${activeTab === "templates" ? "border-b-2 border-[var(--brand)] text-[var(--brand-strong)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}>
+          Şablonlar ve otomasyon
+        </button>
+      </div>
+
+      {activeTab === "activity" ? <ActivityPanel /> : <TemplatesPanel />}
+    </div>
+  );
+}
+
+function ActivityPanel() {
   const [filter, setFilter] = useState<NotificationJobStatus | "all">("all");
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useNotifications(filter === "all" ? undefined : filter, page, PAGE_SIZE);
+  const { data, isLoading } = useNotifications(filter === "all" ? undefined : filter, page, 50);
   const jobs = data?.items;
   const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
   const retry = useRetryNotification();
   const [retryError, setRetryError] = useState<string | null>(null);
-
-  function handleFilterChange(next: NotificationJobStatus | "all") {
-    setFilter(next);
-    setPage(1); // filtre değişince sayfa sıfırlanır - aksi halde boş bir sayfada kalınabilir.
-  }
 
   async function handleRetry(jobId: string) {
     setRetryError(null);
@@ -72,43 +91,28 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-display font-serif italic">Bildirimler</h1>
-        <p className="text-meta mt-1">
-          WhatsApp üzerinden gönderilen/gönderilecek bildirimlerin durumu. Başarısız olanlar en fazla deneme
-          sayısına ulaştıktan sonra burada kalır - elle yeniden denenebilir.
-        </p>
-      </div>
-
+    <section className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => handleFilterChange(f.value)}
-            className={`pressable min-h-10 rounded-full px-3.5 text-xs font-bold ${
-              filter === f.value
-                ? "bg-[var(--brand)] text-white"
-                : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"
-            }`}
-          >
-            {f.label}
+        {(["all", "Pending", "Sent", "Failed", "Cancelled"] as const).map((status) => (
+          <button key={status} type="button" onClick={() => { setFilter(status); setPage(1); }} className={`pressable min-h-10 rounded-full px-3.5 text-xs font-bold ${filter === status ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}>
+            {status === "all" ? "Tümü" : STATUS_LABELS[status]}
           </button>
         ))}
       </div>
 
       {retryError && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{retryError}</p>}
-      {isLoading && <div className="space-y-2">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-11 rounded-xl" />)}</div>}
+      {isLoading && <div className="space-y-2">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-14 rounded-xl" />)}</div>}
 
       <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[46rem] text-sm">
+        <table className="w-full min-w-[68rem] text-sm">
           <thead>
             <tr className="text-micro border-b border-[var(--line)] text-left">
-              <th className="px-3 py-3">Tip</th>
-              <th className="px-3 py-3">Alıcı</th>
+              <th className="px-3 py-3">Mesaj tipi</th>
+              <th className="px-3 py-3">Ders türü</th>
+              <th className="px-3 py-3">Veli</th>
+              <th className="px-3 py-3">Öğrenci</th>
               <th className="px-3 py-3">Planlanan zaman</th>
               <th className="px-3 py-3">Durum</th>
-              <th className="px-3 py-3">Deneme</th>
               <th className="px-3 py-3">Hata</th>
               <th className="px-3 py-3" />
             </tr>
@@ -116,65 +120,125 @@ export default function NotificationsPage() {
           <tbody>
             {jobs?.map((job) => (
               <tr key={job.id} className="border-b border-[var(--line)] last:border-0">
-                <td className="px-3 py-3 font-medium">{TYPE_LABELS[job.type] ?? job.type}</td>
-                <td className="text-meta px-3 py-3">{job.recipientPhoneNumber}</td>
-                <td className="text-meta px-3 py-3">
-                  {new Date(job.scheduledAt).toLocaleString("tr-TR")}
-                </td>
-                <td className={`px-3 py-3 font-bold ${STATUS_COLORS[job.status]}`}>
-                  {STATUS_LABELS[job.status]}
-                </td>
-                <td className="text-meta px-3 py-3">{job.attemptCount}</td>
-                <td className="text-meta max-w-xs truncate px-3 py-3" title={job.lastError ?? undefined}>
-                  {job.lastError ?? "—"}
-                </td>
-                <td className="px-3 py-3">
-                  {job.status === "Failed" && (
-                    <button
-                      onClick={() => handleRetry(job.id)}
-                      disabled={retry.isPending}
-                      className="pressable min-h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-bold text-[var(--brand)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
-                    >
-                      Yeniden dene
-                    </button>
-                  )}
-                </td>
+                <td className="px-3 py-3 font-semibold">{TYPE_LABELS[job.type] ?? job.type}</td>
+                <td className="px-3 py-3">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")}</td>
+                <td className="px-3 py-3">{job.guardianName ?? job.recipientPhoneNumber}</td>
+                <td className="px-3 py-3">{job.studentName ?? "—"}</td>
+                <td className="text-meta px-3 py-3">{new Date(job.scheduledAt).toLocaleString("tr-TR")}</td>
+                <td className={`px-3 py-3 font-bold ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</td>
+                <td className="text-meta max-w-xs truncate px-3 py-3" title={job.lastError ?? undefined}>{job.lastError ?? "—"}</td>
+                <td className="px-3 py-3">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="pressable min-h-11 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-bold text-[var(--brand)] disabled:opacity-50">Yeniden dene</button>}</td>
               </tr>
             ))}
-            {jobs?.length === 0 && !isLoading && (
-              <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-sm text-[var(--muted)]">
-                  Bu filtrede bildirim yok.
-                </td>
-              </tr>
-            )}
+            {jobs?.length === 0 && !isLoading && <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-[var(--muted)]">Bu filtrede gönderim yok.</td></tr>}
           </tbody>
         </table>
       </div>
 
       {data && data.totalCount > 0 && (
         <div className="flex items-center justify-between text-sm">
-          <span className="text-meta">
-            Toplam {data.totalCount} kayıt - sayfa {data.page} / {totalPages}
-          </span>
+          <span className="text-meta">Toplam {data.totalCount} kayıt · sayfa {data.page} / {totalPages}</span>
           <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
-            >
-              Önceki
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
-            >
-              Sonraki
-            </button>
+            <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Önceki</button>
+            <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Sonraki</button>
           </div>
         </div>
       )}
-    </div>
+    </section>
+  );
+}
+
+function TemplatesPanel() {
+  const { data: templates, isLoading } = useMessageTemplates();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = templates?.find((template) => template.id === selectedId) ?? templates?.[0];
+
+  return (
+    <section className="space-y-5">
+      <div className="grid gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]">
+        <div className="app-card h-fit p-2">
+          <p className="text-micro px-3 py-2 text-[var(--muted)]">Hazır şablonlar</p>
+          {isLoading && <div className="space-y-2 p-2">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
+          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{template.name.replaceAll("_", " ")}</span><span className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /></button>)}
+        </div>
+
+        {selected && <TemplateEditor key={selected.id} template={selected} />}
+      </div>
+
+      <AutomationSettings />
+    </section>
+  );
+}
+
+function TemplateEditor({ template }: { template: MessageTemplate }) {
+  // Şablon anahtarı sabit - NotificationMessageBuilder'ın switch'i buna göre eşleşiyor,
+  // formda salt-okunur gösteriliyor, bu yüzden bir setter'a ihtiyaç yok.
+  const name = template.name;
+  const [body, setBody] = useState(template.body);
+  const [isActive, setIsActive] = useState(template.isActive);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const update = useUpdateMessageTemplate();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const preview = useMemo(() => {
+    const samples: Record<string, string> = { guardian_name: "Ayşe Hanım", student_name: "Deniz Kaya", instrument: "Piyano", lesson_time: "23 Ağustos 13:00", teacher_name: "Can Öğretmen", due_date: "1 Eylül 2026", amount: "2.400 TL" };
+    return body.replace(/{{\s*([^}]+)\s*}}/g, (_match, key: string) => samples[key] ?? `{{${key}}}`);
+  }, [body]);
+
+  function insertPlaceholder(key: string, position?: number | null) {
+    const textarea = textareaRef.current;
+    const token = `{{${key}}}`;
+    const start = position ?? textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? start;
+    const nextBody = `${body.slice(0, start)}${token}${body.slice(end)}`;
+    setBody(nextBody);
+    window.requestAnimationFrame(() => { textarea?.focus(); textarea?.setSelectionRange(start + token.length, start + token.length); });
+  }
+
+  async function saveTemplate(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSaved(false);
+    try {
+      await update.mutateAsync({ id: template.id, name, body, isActive });
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Şablon kaydedilemedi.");
+    }
+  }
+
+  return (
+    <form onSubmit={saveTemplate} className="grid gap-4 lg:grid-cols-2">
+      <div className="app-card space-y-4 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Düzenleyici</p><h2 className="mt-1 text-title">Mesaj şablonu</h2></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Aktif</label></div>
+        <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Şablon anahtarı<input value={name} readOnly className="field bg-[var(--surface-muted)] text-sm text-[var(--muted)]" /><span className="block text-[.65rem] font-medium">Otomatik gönderimlerin bozulmaması için anahtar sabittir.</span></label>
+        <div className="space-y-2"><p className="text-xs font-semibold text-[var(--muted)]">Placeholder ekle</p><div className="flex flex-wrap gap-1.5">{PLACEHOLDERS.map((placeholder) => <button key={placeholder.key} type="button" draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", placeholder.key)} onClick={() => insertPlaceholder(placeholder.key)} className="pressable min-h-8 rounded-full border border-[var(--line)] bg-white px-2.5 text-[.68rem] font-bold text-[var(--brand)] hover:border-[var(--brand)]">{placeholder.label}</button>)}</div></div>
+        <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Mesaj gövdesi<textarea ref={textareaRef} value={body} onChange={(event) => setBody(event.target.value)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); insertPlaceholder(event.dataTransfer.getData("text/plain"), textareaRef.current?.selectionStart); }} rows={13} className="field resize-y font-mono text-sm leading-relaxed" /></label>
+        {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
+        {saved && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-xs font-medium text-[var(--success-strong)]">Şablon kaydedildi.</p>}
+        <button type="submit" disabled={update.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{update.isPending ? "Kaydediliyor…" : "Şablonu kaydet"}</button>
+      </div>
+      <div className="app-card h-fit overflow-hidden p-4 sm:p-5"><div className="mb-4 flex items-center justify-between"><div><p className="text-micro text-[var(--brand-strong)]">Canlı örnek</p><h2 className="mt-1 text-title">Önizleme</h2></div><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.65rem] font-bold text-[var(--success-strong)]">WhatsApp</span></div><div className="rounded-2xl bg-[#e8f5df] p-3.5 text-sm leading-relaxed text-[#2d4c28] shadow-inner"><p className="mb-2 text-[.65rem] font-bold uppercase tracking-[.08em] text-[#6a8a5f]">Abdera Müzik Okulu</p><p className="whitespace-pre-wrap">{preview || "Mesaj gövdesi burada görünecek."}</p></div><p className="text-meta mt-4">Veli ve öğrenci bilgileri gönderim anında gerçek kayıtlarla değiştirilir.</p></div>
+    </form>
+  );
+}
+
+function AutomationSettings() {
+  const [enabled, setEnabled] = useState(true);
+  const [minutes, setMinutes] = useState("30");
+  const [responses, setResponses] = useState({ attending: true, late: true, notAttending: true });
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <section className="app-card space-y-4 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Ders hatırlatması</p><h2 className="mt-1 text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Otomatik gönder</label></div>
+      <div className="grid gap-4 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
+        <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Dersden ne kadar önce?<select value={minutes} onChange={(event) => setMinutes(event.target.value)} className="field text-sm"><option value="15">15 dakika önce</option><option value="30">30 dakika önce</option><option value="45">45 dakika önce</option><option value="60">60 dakika önce</option></select></label>
+        <div className="space-y-2"><p className="text-xs font-semibold text-[var(--muted)]">Çoktan seçmeli cevaplar</p><div className="flex flex-wrap gap-2">{([{ key: "attending", label: "Evet, katılıyorum." }, { key: "late", label: "Evet ama biraz gecikeceğim" }, { key: "notAttending", label: "Hayır, katılamıyorum." }] as const).map((item) => <label key={item.key} className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs"><input type="checkbox" checked={responses[item.key]} onChange={(event) => setResponses((current) => ({ ...current, [item.key]: event.target.checked }))} />{item.label}</label>)}</div></div>
+        <button type="button" onClick={() => setSaved(true)} disabled={!enabled} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Ayarları kaydet</button>
+      </div>
+      {saved && <p role="status" className="text-sm font-semibold text-[var(--success-strong)]">Otomasyon tercihi kaydedildi. Sunucu tarafı zamanlayıcı bağlantısı Faz 3’te etkinleştirilecek.</p>}
+    </section>
   );
 }
