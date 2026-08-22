@@ -17,7 +17,7 @@ export default function StudentsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-display">Öğrenciler</h1>
+      <h1 className="text-display font-serif italic">Öğrenciler</h1>
 
       {isAdmin && <CreateStudentForm />}
 
@@ -70,21 +70,21 @@ function CreateStudentForm() {
   return (
     <form onSubmit={handleSubmit} className="app-card flex flex-wrap items-end gap-3 p-4">
       <div className="space-y-1.5">
-        <label className="text-[.7rem] font-semibold text-[#625c68]">Ad</label>
+        <label className="text-[.7rem] font-semibold text-[var(--muted)]">Ad</label>
         <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
       </div>
       <div className="space-y-1.5">
-        <label className="text-[.7rem] font-semibold text-[#625c68]">Soyad</label>
+        <label className="text-[.7rem] font-semibold text-[var(--muted)]">Soyad</label>
         <input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
       </div>
       <div className="space-y-1.5">
-        <label className="text-[.7rem] font-semibold text-[#625c68]">Doğum tarihi</label>
+        <label className="text-[.7rem] font-semibold text-[var(--muted)]">Doğum tarihi</label>
         <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} required className="field min-h-11 text-sm" />
       </div>
-      <button type="submit" disabled={createStudent.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
+      <button type="submit" disabled={createStudent.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
         {createStudent.isPending ? "Ekleniyor…" : "Öğrenci ekle"}
       </button>
-      {error && <p role="alert" className="w-full rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+      {error && <p role="alert" className="w-full rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
 }

@@ -50,13 +50,13 @@ export function CreateSeriesForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-neutral-700">Yeni ders serisi</h2>
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Öğrenci</label>
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <h2 className="font-serif text-sm font-bold italic text-[var(--foreground)]">Yeni ders serisi</h2>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Öğrenci</label>
           <select value={studentId} onChange={(e) => { setStudentId(e.target.value); setEnrollmentId(""); }} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            className="field min-h-11 text-sm">
             <option value="">Seç</option>
             {students?.map((s) => (
               <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
@@ -64,10 +64,10 @@ export function CreateSeriesForm() {
           </select>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Kayıt (öğretmen · enstrüman)</label>
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Kayıt (öğretmen · enstrüman)</label>
           <select value={enrollmentId} onChange={(e) => setEnrollmentId(e.target.value)} required disabled={!studentId}
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            className="field min-h-11 text-sm">
             <option value="">Seç</option>
             {activeEnrollments.map((e) => {
               const teacher = teachers?.find((t) => t.id === e.teacherId);
@@ -81,43 +81,43 @@ export function CreateSeriesForm() {
           </select>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Gün</label>
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Gün</label>
           <select value={dayOfWeek} onChange={(e) => setDayOfWeek(e.target.value)}
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm">
+            className="field min-h-11 text-sm">
             {DAYS.map((d) => (
               <option key={d} value={d}>{DAY_NAMES_TR[d]}</option>
             ))}
           </select>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Saat</label>
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Saat</label>
           <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            className="field min-h-11 text-sm" />
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Süre (dk)</label>
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Süre (dk)</label>
           <input type="number" min={15} step={15} value={durationMinutes}
             onChange={(e) => setDurationMinutes(Number(e.target.value))} required
-            className="block w-20 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            className="field min-h-11 w-20 text-sm" />
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Başlangıç tarihi</label>
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Başlangıç tarihi</label>
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            className="field min-h-11 text-sm" />
         </div>
 
         <button type="submit" disabled={createSeries.isPending || !enrollmentId}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+          className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
           {createSeries.isPending ? "Oluşturuluyor…" : "Seriyi oluştur"}
         </button>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {summary && <p className="text-sm text-green-700">{summary}</p>}
+      {error && <p className="text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
+      {summary && <p className="text-sm font-medium text-[var(--success-strong)]">{summary}</p>}
     </form>
   );
 }

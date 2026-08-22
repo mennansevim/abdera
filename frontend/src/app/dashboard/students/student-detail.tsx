@@ -91,7 +91,7 @@ function AddGuardianForm({ studentId }: { studentId: string }) {
       <input placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="field min-h-10 w-32 text-xs" />
       <input placeholder="Yakınlık (anne/baba)" value={relationship} onChange={(e) => setRelationship(e.target.value)} className="field min-h-10 w-36 text-xs" />
       <button type="submit" disabled={createAndLink.isPending} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-3 text-xs font-bold text-white disabled:opacity-50">Ekle</button>
-      {error && <p role="alert" className="w-full text-xs font-medium text-[#b84545]">{error}</p>}
+      {error && <p role="alert" className="w-full text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
 }
@@ -143,7 +143,7 @@ function AddEnrollmentForm({
       </select>
       <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} required className="field min-h-10 w-auto text-xs" />
       <button type="submit" disabled={createEnrollment.isPending} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-3 text-xs font-bold text-white disabled:opacity-50">Kaydet</button>
-      {error && <p role="alert" className="w-full text-xs font-medium text-[#b84545]">{error}</p>}
+      {error && <p role="alert" className="w-full text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
 }

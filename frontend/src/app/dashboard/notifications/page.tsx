@@ -26,7 +26,7 @@ const STATUS_COLORS: Record<NotificationJobStatus, string> = {
   Processing: "text-[var(--warning)]",
   Sent: "text-[var(--success-strong)]",
   Failed: "text-[var(--danger)]",
-  Cancelled: "text-[#a29ba5]",
+  Cancelled: "text-[var(--muted)]",
 };
 
 const TYPE_LABELS: Record<NotificationJobType, string> = {
@@ -74,7 +74,7 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-display">Bildirimler</h1>
+        <h1 className="text-display font-serif italic">Bildirimler</h1>
         <p className="text-meta mt-1">
           WhatsApp üzerinden gönderilen/gönderilecek bildirimlerin durumu. Başarısız olanlar en fazla deneme
           sayısına ulaştıktan sonra burada kalır - elle yeniden denenebilir.
@@ -89,7 +89,7 @@ export default function NotificationsPage() {
             className={`pressable min-h-10 rounded-full px-3.5 text-xs font-bold ${
               filter === f.value
                 ? "bg-[var(--brand)] text-white"
-                : "border border-[var(--line)] bg-white text-[#625c68] hover:border-[#d4ccc3]"
+                : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"
             }`}
           >
             {f.label}
@@ -97,7 +97,7 @@ export default function NotificationsPage() {
         ))}
       </div>
 
-      {retryError && <p role="alert" className="rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{retryError}</p>}
+      {retryError && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{retryError}</p>}
       {isLoading && <div className="space-y-2">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-11 rounded-xl" />)}</div>}
 
       <div className="app-card overflow-x-auto">

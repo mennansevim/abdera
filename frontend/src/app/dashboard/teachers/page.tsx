@@ -13,7 +13,7 @@ export default function TeachersPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-display">Öğretmenler</h1>
+      <h1 className="text-display font-serif italic">Öğretmenler</h1>
 
       {isAdmin && <CreateTeacherForm instruments={instruments ?? []} />}
 
@@ -84,21 +84,21 @@ function CreateTeacherForm({ instruments }: { instruments: { id: string; name: s
     <form onSubmit={handleSubmit} className="app-card space-y-3 p-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
-          <label className="text-[.7rem] font-semibold text-[#625c68]">Ad</label>
+          <label className="text-[.7rem] font-semibold text-[var(--muted)]">Ad</label>
           <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
         </div>
         <div className="space-y-1.5">
-          <label className="text-[.7rem] font-semibold text-[#625c68]">Soyad</label>
+          <label className="text-[.7rem] font-semibold text-[var(--muted)]">Soyad</label>
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field min-h-11 w-32 text-sm" />
         </div>
         <div className="space-y-1.5">
-          <label className="text-[.7rem] font-semibold text-[#625c68]">E-posta (giriş hesabı için, opsiyonel)</label>
+          <label className="text-[.7rem] font-semibold text-[var(--muted)]">E-posta (giriş hesabı için, opsiyonel)</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="field min-h-11 w-56 text-sm" />
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[.7rem] font-semibold text-[#625c68]">Enstrümanlar</label>
+        <label className="text-[.7rem] font-semibold text-[var(--muted)]">Enstrümanlar</label>
         <div className="flex flex-wrap gap-2">
           {instruments.map((i) => {
             const checked = selectedInstruments.includes(i.id);
@@ -108,7 +108,7 @@ function CreateTeacherForm({ instruments }: { instruments: { id: string; name: s
                 type="button"
                 onClick={() => toggleInstrument(i.id)}
                 aria-pressed={checked}
-                className={`pressable min-h-9 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--line)] bg-white text-[#625c68] hover:border-[#d4ccc3]"}`}
+                className={`pressable min-h-9 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}
               >
                 {i.name}
               </button>
@@ -117,14 +117,14 @@ function CreateTeacherForm({ instruments }: { instruments: { id: string; name: s
         </div>
       </div>
 
-      <button type="submit" disabled={createTeacher.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
+      <button type="submit" disabled={createTeacher.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
         {createTeacher.isPending ? "Ekleniyor…" : "Öğretmen ekle"}
       </button>
 
-      {error && <p role="alert" className="rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 
       {temporaryPassword && (
-        <p className="rounded-xl border border-[#e6c46e] bg-[#fff9e8] p-3 text-xs font-medium text-[#7f5d0d]">
+        <p className="rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)] p-3 text-xs font-medium text-[var(--warning-strong)]">
           Geçici şifre: <code className="font-mono font-bold">{temporaryPassword}</code> — bunu öğretmene sözlü/WhatsApp ile
           ilet, bir daha gösterilmeyecek.
         </p>

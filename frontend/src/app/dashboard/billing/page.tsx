@@ -7,8 +7,8 @@ import { StudentBillingSection } from "./student-billing-section";
 // AppHeader'dan Teacher'a hiç gösterilmiyor (bkz. app-header.tsx ADMIN_ONLY_LINKS).
 export default function BillingPage() {
   return (
-    <div className="space-y-10">
-      <h1 className="text-2xl font-semibold">Aidat ve Fiyatlandırma</h1>
+    <div className="space-y-8">
+      <h1 className="text-display font-serif italic">Aidat ve Fiyatlandırma</h1>
       <PriceListsSection />
       <StudentBillingSection />
     </div>

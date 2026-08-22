@@ -16,7 +16,7 @@ import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
 import { ChangePasswordForm } from "./change-password-form";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 
-const HOUR_HEIGHT_REM = 3.25;
+const HOUR_HEIGHT_REM = 3.6;
 
 // Ders bloklarındaki katılım noktası ve haftalık ızgara başlığındaki gösterge için ortak sözlük -
 // teacher-today-lessons.tsx'teki StatusBadge ile aynı terimler (Geliyor/Cevap yok/Gelmiyor).
@@ -48,6 +48,10 @@ function userName(email: string) {
   return first ? first.charAt(0).toLocaleUpperCase("tr-TR") + first.slice(1) : "";
 }
 
+function studentInitials(name: string) {
+  return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toLocaleUpperCase("tr-TR")).join("");
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(value);
 }
@@ -59,8 +63,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-5">
       {me.mustChangePassword && (
-        <section className="app-card border-[#e6c46e] bg-[#fff9e8] p-4">
-          <p className="text-sm font-bold text-[#7f5d0d]">Güvenliğin için önce kalıcı bir şifre belirle.</p>
+        <section className="app-card border-[var(--warning)]/40 bg-[var(--warning-soft)] p-4">
+          <p className="text-sm font-bold text-[var(--warning-strong)]">Güvenliğin için önce kalıcı bir şifre belirle.</p>
           <ChangePasswordForm onDone={() => refetch()} />
         </section>
       )}
@@ -114,14 +118,14 @@ function DashboardTopbar({ email }: { email: string }) {
   return (
     <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div>
-        <h1 className="text-[1.45rem] font-bold tracking-[-0.035em] sm:text-[1.7rem]">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
+        <h1 className="font-serif text-[1.45rem] font-bold italic tracking-[-0.02em] sm:text-[1.7rem]">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
         <p className="mt-1 text-xs text-[var(--muted)]">
           {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())} · Okulun bugünkü akışı burada
         </p>
       </div>
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1 xl:w-[19rem] xl:flex-none">
-          <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#a59fab]" />
+          <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} className="field min-h-11 pl-10 pr-4 text-xs" placeholder="Öğrenci veya öğretmen ara…" aria-label="Öğrenci veya öğretmen ara" />
           {normalized && (
             <div className="app-card absolute right-0 top-[calc(100%+.45rem)] z-20 w-full min-w-[17rem] overflow-hidden p-1.5">
@@ -133,9 +137,9 @@ function DashboardTopbar({ email }: { email: string }) {
             </div>
           )}
         </div>
-        <Link href="/dashboard/notifications" className="pressable relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[var(--line)] bg-white text-[#756f7a] shadow-sm" aria-label="Bildirimleri aç">
+        <Link href="/dashboard/notifications" className="pressable relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 border-[var(--line)] bg-white text-[var(--brand-strong)] shadow-sm" aria-label="Bildirimleri aç">
           <Icon name="bell" className="h-[1.1rem] w-[1.1rem]" />
-          {!!failedNotifications?.totalCount && <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[#e55955] ring-2 ring-white" />}
+          {!!failedNotifications?.totalCount && <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--danger)] ring-2 ring-white" />}
         </Link>
       </div>
     </header>
@@ -144,10 +148,10 @@ function DashboardTopbar({ email }: { email: string }) {
 
 type StatTone = "purple" | "amber" | "red" | "rose";
 const STAT_TONES: Record<StatTone, { icon: string; iconBg: string; value: string }> = {
-  purple: { icon: "#5e4caf", iconBg: "#eeebff", value: "#2d2934" },
-  amber: { icon: "#b1760b", iconBg: "#f9ecd4", value: "#8b5b05" },
-  red: { icon: "#c94848", iconBg: "#ffe5e2", value: "#ad3434" },
-  rose: { icon: "#ca5b61", iconBg: "#ffe8e7", value: "#a63c43" },
+  purple: { icon: "var(--brand-strong)", iconBg: "var(--brand-soft)", value: "#3a2a1f" },
+  amber: { icon: "var(--warning-strong)", iconBg: "var(--warning-soft)", value: "var(--warning-strong)" },
+  red: { icon: "var(--danger-strong)", iconBg: "var(--danger-soft)", value: "var(--danger-strong)" },
+  rose: { icon: "#a13c2f", iconBg: "#fbe3da", value: "#8a3423" },
 };
 
 function StatCard({ icon, value, secondaryValue, label, loading, tone, href }: { icon: IconName; value?: number | string; secondaryValue?: string; label: string; loading: boolean; tone: StatTone; href?: string }) {
@@ -169,7 +173,7 @@ function StatCard({ icon, value, secondaryValue, label, loading, tone, href }: {
         )}
         <span className="text-meta mt-2 block leading-snug">{label}</span>
       </span>
-      {href && <Icon name="chevron" className="ml-auto mt-2 h-3.5 w-3.5 shrink-0 text-[#b5afb8]" />}
+      {href && <Icon name="chevron" className="ml-auto mt-2 h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />}
     </div>
   );
   return href ? <Link href={href} className="app-card pressable min-h-[6.8rem] overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(38,31,24,.08)]">{content}</Link> : <article className="app-card min-h-[6.8rem] overflow-hidden">{content}</article>;
@@ -218,7 +222,7 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange 
               açılıyordu, 768-1279 arasında istenmeyen bir ajanda görünümüne düşüyordu. */}
           <div className="hidden grid-cols-[3.2rem_repeat(5,minmax(0,1fr))] border-t border-[var(--line)] md:grid">
             <div className="border-r border-[var(--line)]" />
-            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="block text-[.66rem] font-semibold text-[#746d79]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
+            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="block text-[.66rem] font-semibold text-[var(--muted)]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
             <TimeLabels hourWindow={hourWindow} />
             {weekdays.map((day) => <DayColumn key={day.toISOString()} day={day} lessons={lessons} colors={lessonColors} hourWindow={hourWindow} onOpen={setOpenLesson} />)}
           </div>
@@ -227,10 +231,10 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange 
               const dayLessons = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString()).sort((a,b) => a.startAt.localeCompare(b.startAt));
               return (
                 <div key={day.toISOString()}>
-                  <h3 className="mb-2 flex items-center gap-2 text-xs font-bold"><span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[#625b68]"}`}>{day.getDate()}</span>{WEEKDAYS[index]}</h3>
+                  <h3 className="mb-2 flex items-center gap-2 text-xs font-bold"><span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{day.getDate()}</span>{WEEKDAYS[index]}</h3>
                   <div className="space-y-2 pl-9">
                     {dayLessons.map((lesson) => <AgendaLesson key={lesson.id} lesson={lesson} tone={lessonColors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} onOpen={setOpenLesson} />)}
-                    {!dayLessons.length && <p className="py-2 text-xs text-[#aaa3ad]">Planlanmış ders yok.</p>}
+                    {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
                   </div>
                 </div>
               );
@@ -247,9 +251,9 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange 
 function TimeLabels({ hourWindow }: { hourWindow: { startHour: number; endHour: number } }) {
   const totalHours = hourWindow.endHour - hourWindow.startHour;
   return (
-    <div className="relative border-r border-t border-[var(--line)] bg-[#fbfaf7]" style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
+    <div className="relative border-r border-t border-[var(--line)] bg-[#fdf9f2]" style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[#aaa3ad]" style={{ top: `${(index / totalHours) * 100}%` }}>
+        <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[var(--muted)]" style={{ top: `${(index / totalHours) * 100}%` }}>
           {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}
@@ -263,8 +267,8 @@ function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; le
   const isToday = day.toDateString() === new Date().toDateString();
   const totalHours = hourWindow.endHour - hourWindow.startHour;
   return (
-    <div className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fbfaf7]"}`} style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
-      {Array.from({ length: totalHours - 1 }, (_, index) => <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#ebe7e1]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />)}
+    <div className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fdf9f2]"}`} style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
+      {Array.from({ length: totalHours - 1 }, (_, index) => <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#f3e4cd]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />)}
       {entries.map((lesson) => {
         const start = new Date(lesson.startAt);
         const end = new Date(lesson.endAt);
@@ -287,7 +291,7 @@ function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; le
           >
             {dot.label && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
             <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
-            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
+            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
             <span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}</span>
           </button>
         );
@@ -326,7 +330,7 @@ function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-[#171320]/35 p-4 backdrop-blur-[2px]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-[#2b1a10]/40 p-4 backdrop-blur-[2px]" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={`${lesson.studentName} ders detayı`} onClick={(event) => event.stopPropagation()} className="app-card w-full max-w-[22rem] overflow-hidden">
         <div className="flex items-start justify-between gap-2 border-l-4 p-4" style={{ borderLeftColor: tone.border, background: tone.bg }}>
           <div className="min-w-0">
@@ -374,7 +378,7 @@ function AdminAttentionRail({ lessons }: { lessons: CalendarLesson[] }) {
         <div className="divide-y divide-[var(--line)]">
           {requests?.slice(0, 3).map((request) => {
             const lesson = lessons.find((item) => item.id === request.lessonId);
-            return <div key={request.id} className="flex items-center gap-2 py-3 first:pt-0 last:pb-0"><span className="min-w-0 flex-1"><span className="block truncate text-[.7rem] font-bold">{lesson?.studentName ?? "Ders değişikliği"}</span><span className="mt-0.5 block text-[.56rem] text-[var(--muted)]">{new Date(request.proposedStartAt).toLocaleString("tr-TR", { weekday:"short", hour:"2-digit", minute:"2-digit" })}</span></span><button disabled={busyId === request.id} onClick={() => act(request.id,"approve")} className="pressable grid h-8 w-8 place-items-center rounded-lg bg-[#d8f3df] text-[#23834b] disabled:opacity-50" aria-label="Talebi onayla"><Icon name="check" className="h-4 w-4" /></button><button disabled={busyId === request.id} onClick={() => act(request.id,"reject")} className="pressable grid h-8 w-8 place-items-center rounded-lg bg-[#ffe2df] text-[#c94848] disabled:opacity-50" aria-label="Talebi reddet"><Icon name="x" className="h-4 w-4" /></button></div>;
+            return <div key={request.id} className="flex items-center gap-2 py-3 first:pt-0 last:pb-0"><span className="min-w-0 flex-1"><span className="block truncate text-[.7rem] font-bold">{lesson?.studentName ?? "Ders değişikliği"}</span><span className="mt-0.5 block text-[.56rem] text-[var(--muted)]">{new Date(request.proposedStartAt).toLocaleString("tr-TR", { weekday:"short", hour:"2-digit", minute:"2-digit" })}</span></span><button disabled={busyId === request.id} onClick={() => act(request.id,"approve")} className="pressable grid h-8 w-8 place-items-center rounded-lg bg-[var(--success-soft)] text-[var(--success-strong)] disabled:opacity-50" aria-label="Talebi onayla"><Icon name="check" className="h-4 w-4" /></button><button disabled={busyId === request.id} onClick={() => act(request.id,"reject")} className="pressable grid h-8 w-8 place-items-center rounded-lg bg-[var(--danger-soft)] text-[var(--danger-strong)] disabled:opacity-50" aria-label="Talebi reddet"><Icon name="x" className="h-4 w-4" /></button></div>;
           })}
         </div>
       </section>
@@ -417,7 +421,7 @@ function TeacherDashboard({ email }: { email: string }) {
           const active = day.toDateString() === selectedDate.toDateString();
           const isToday = day.toDateString() === new Date().toDateString();
           return (
-            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} style={{ scrollSnapAlign: "start" }} className={`pressable relative flex min-h-[3.2rem] w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-[.55rem] sm:w-auto ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(74,55,143,.18)]" : "border-[var(--line)] bg-white text-[#746d79]"}`}>
+            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} style={{ scrollSnapAlign: "start" }} className={`pressable relative flex min-h-[3.2rem] w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-[.55rem] sm:w-auto ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(168,78,31,.2)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>
               <span>{day.toLocaleDateString("tr-TR", { weekday:"short" }).replace(".","")}</span>
               <span className="mt-1 text-[.7rem] font-bold">{day.getDate()}</span>
               {isToday && !active && <span className="absolute bottom-1.5 h-1 w-1 rounded-full bg-[var(--brand)]" />}

@@ -65,7 +65,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
 
   return (
     <div className="min-h-dvh bg-[var(--background)] lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(180deg,#493690_0%,#281e5c_100%)] px-3 py-5 text-white lg:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] px-3 py-5 text-white lg:flex">
         <Link href="/dashboard" className="mb-6 px-2 text-white"><BrandMark /></Link>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Ana menü">
           {links.map((link) => (
@@ -73,28 +73,28 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               key={link.href}
               href={link.href}
               aria-current={isActive(pathname, link.href) ? "page" : undefined}
-              className={`pressable group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium ${
+              className={`pressable group flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm font-bold ${
                 isActive(pathname, link.href)
-                  ? "bg-white/17 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.1)]"
-                  : "text-white/70 hover:bg-white/8 hover:text-white"
+                  ? "bg-white text-[var(--brand-strong)] shadow-[0_4px_14px_rgba(0,0,0,.12)]"
+                  : "text-white/85 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Icon name={link.icon} className="h-[1.1rem] w-[1.1rem] shrink-0" />
               <span className="truncate">{link.label}</span>
-              {link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#ff665e]" aria-label="Dikkat gereken kayıtlar olabilir" />}
+              {link.alert && <span className="ml-auto h-2 w-2 rounded-full bg-[#ffe27a] ring-1 ring-black/10" aria-label="Dikkat gereken kayıtlar olabilir" />}
             </Link>
           ))}
         </nav>
-        <div className="mt-4 border-t border-white/10 pt-4">
+        <div className="mt-4 border-t border-white/25 pt-4">
           <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-bold">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold">
               {displayName(me.email).slice(0, 2).toLocaleUpperCase("tr-TR")}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-semibold">{displayName(me.email) || me.email}</span>
-              <span className="block text-[.65rem] text-white/55">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
+              <span className="block truncate text-xs font-bold">{displayName(me.email) || me.email}</span>
+              <span className="block text-[.65rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
             </span>
-            <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white" aria-label="Çıkış yap">
+            <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap">
               <Icon name="logout" className="h-4 w-4" />
             </button>
           </div>
@@ -131,15 +131,15 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             </div>
             <nav className="flex-1 space-y-1 overflow-y-auto p-3">
               {links.map((link) => (
-                <Link key={link.href} href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand)]" : "text-[#514b59] hover:bg-black/[.035]"}`}>
-                  <Icon name={link.icon} className="h-5 w-5" /><span>{link.label}</span>{link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#e75b55]" />}
+                <Link key={link.href} href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[#5c4d3f] hover:bg-black/[.035]"}`}>
+                  <Icon name={link.icon} className="h-5 w-5" /><span>{link.label}</span>{link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />}
                 </Link>
               ))}
             </nav>
             <div className="border-t border-[var(--line)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <p className="truncate text-sm font-semibold">{displayName(me.email) || me.email}</p>
               <p className="mt-0.5 text-xs text-[var(--muted)]">{me.email} · {me.role === "Admin" ? "Yönetici" : "Öğretmen"}</p>
-              <button onClick={handleLogout} className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-sm font-semibold text-[#5b5362] hover:border-[#cfc6bc]">
+              <button onClick={handleLogout} className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-sm font-semibold text-[#5c4d3f] hover:border-[#e0c39d]">
                 <Icon name="logout" className="h-4 w-4" /> Çıkış yap
               </button>
             </div>

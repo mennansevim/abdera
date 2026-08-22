@@ -9,7 +9,7 @@ import { useLogin } from "@/lib/use-auth";
 type LoginRole = "Admin" | "Teacher" | "Guardian";
 
 const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon: IconName; color: string }[] = [
-  { role: "Admin", title: "Yöneticiyim", description: "Okulu, aidatı ve programı düzenlerim", icon: "bank", color: "#5b47ae" },
+  { role: "Admin", title: "Yöneticiyim", description: "Okulu, aidatı ve programı düzenlerim", icon: "bank", color: "#a84e1f" },
   { role: "Teacher", title: "Öğretmenim", description: "Derslerimi görür, yoklama alırım", icon: "teachers", color: "#d76e4d" },
   { role: "Guardian", title: "Veliyim", description: "Ders ve ödeme bildirimlerini takip ederim", icon: "students", color: "#2b918d" },
 ];
@@ -62,8 +62,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#efede6] sm:p-6">
-      <section className="min-h-dvh w-full max-w-[420px] overflow-hidden border-[#ddd7ce] bg-[#fbf8f3] shadow-[0_8px_28px_rgba(46,37,30,.07)] sm:min-h-0 sm:border">
+    <main className="flex min-h-dvh items-center justify-center bg-[var(--background)] sm:p-6">
+      <section className="min-h-dvh w-full max-w-[420px] overflow-hidden border-[var(--line)] bg-[var(--surface)] shadow-[0_8px_28px_rgba(90,55,20,.08)] sm:min-h-0 sm:border">
         <div className="px-4 pb-5 pt-8 sm:px-6 sm:pb-6 sm:pt-9">
           <div className="mb-8 flex justify-center text-[var(--brand-strong)]">
             <BrandMark />
@@ -84,7 +84,7 @@ export default function LoginPage() {
                   role="radio"
                   aria-checked={active}
                   onClick={() => chooseRole(option.role)}
-                  className={`pressable flex min-h-[4rem] w-full items-center gap-3 rounded-xl border px-3 text-left shadow-[0_2px_8px_rgba(45,37,31,.025)] ${active ? "border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[#d4ccc3]"}`}
+                  className={`pressable flex min-h-[4rem] w-full items-center gap-3 rounded-xl border px-3 text-left shadow-[0_2px_8px_rgba(45,37,31,.025)] ${active ? "border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[#e0c39d]"}`}
                 >
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ color: option.color, backgroundColor: `${option.color}18` }}>
                     <Icon name={option.icon} className="h-5 w-5" />
@@ -93,7 +93,7 @@ export default function LoginPage() {
                     <span className="block text-sm font-bold">{option.title}</span>
                     <span className="text-meta mt-0.5 block leading-snug">{option.description}</span>
                   </span>
-                  <Icon name="chevron" className="h-4 w-4 text-[#aaa3ae]" />
+                  <Icon name="chevron" className="h-4 w-4 text-[var(--muted)]" />
                 </button>
               );
             })}
@@ -101,19 +101,19 @@ export default function LoginPage() {
 
           {selectedRole !== "Guardian" && (
             <form onSubmit={handleSubmit} className="mt-7">
-              <div className="mb-5 flex items-center gap-3 text-[.65rem] text-[#aaa3ae] before:h-px before:flex-1 before:bg-[var(--line)] after:h-px after:flex-1 after:bg-[var(--line)]">
+              <div className="mb-5 flex items-center gap-3 text-[.65rem] text-[var(--muted)] before:h-px before:flex-1 before:bg-[var(--line)] after:h-px after:flex-1 after:bg-[var(--line)]">
                 e-posta ile giriş yap
               </div>
 
-              <label htmlFor="email" className="mb-1.5 block text-[.7rem] font-semibold text-[#625c68]">E-posta</label>
+              <label htmlFor="email" className="mb-1.5 block text-[.7rem] font-semibold text-[var(--muted)]">E-posta</label>
               <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
 
-              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.7rem] font-semibold text-[#625c68]">Şifre</label>
+              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.7rem] font-semibold text-[var(--muted)]">Şifre</label>
               <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="field text-sm tracking-[.18em]" />
 
-              {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+              {error && <p role="alert" className="mt-3 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 
-              <button type="submit" disabled={login.isPending} className="pressable mt-5 min-h-12 w-full rounded-lg bg-[#5948aa] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[#4d3c9b] disabled:cursor-wait disabled:opacity-60">
+              <button type="submit" disabled={login.isPending} className="pressable mt-5 min-h-12 w-full rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60">
                 {login.isPending ? "Giriş yapılıyor…" : "Giriş yap"}
               </button>
             </form>

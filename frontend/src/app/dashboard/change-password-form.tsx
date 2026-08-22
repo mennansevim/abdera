@@ -23,35 +23,35 @@ export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="mt-3 flex flex-wrap items-end gap-3">
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-amber-900">Geçici şifre</label>
+      <div className="space-y-1.5">
+        <label className="text-[.7rem] font-bold text-[var(--warning-strong)]">Mevcut şifre</label>
         <input
           type="password"
           required
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
-          className="rounded-md border border-amber-300 bg-white px-2 py-1 text-sm"
+          className="field min-h-11 w-40 border-[var(--warning)]/50 text-sm"
         />
       </div>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-amber-900">Yeni şifre (en az 8 karakter)</label>
+      <div className="space-y-1.5">
+        <label className="text-[.7rem] font-bold text-[var(--warning-strong)]">Yeni şifre (en az 8 karakter)</label>
         <input
           type="password"
           required
           minLength={8}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
-          className="rounded-md border border-amber-300 bg-white px-2 py-1 text-sm"
+          className="field min-h-11 w-48 border-[var(--warning)]/50 text-sm"
         />
       </div>
       <button
         type="submit"
         disabled={changePassword.isPending}
-        className="rounded-md bg-amber-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+        className="pressable min-h-11 rounded-xl bg-[var(--warning-strong)] px-4 text-sm font-bold text-white disabled:opacity-50"
       >
         {changePassword.isPending ? "Kaydediliyor…" : "Şifreyi değiştir"}
       </button>
-      {error && <p className="w-full text-sm text-red-700">{error}</p>}
+      {error && <p className="w-full text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
 }

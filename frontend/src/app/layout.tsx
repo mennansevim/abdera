@@ -1,11 +1,23 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Figtree, Geist_Mono, Lora } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// "Sıcak Atölye" yön değişimi (redesign/sicak-atolye): gövde fontu nötr Geist Sans'tan
+// daha sıcak/insancıl Figtree'ye, başlık/marka fontu ise Lora italik serife geçti - bkz.
+// docs/14-ui-design-prompt.md. Geist Mono aynen kalıyor (tabular-nums zaten Figtree üzerinde çalışıyor,
+// mono hiçbir yerde kullanılmıyor - bu redesign'ın kapsamı değil).
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
+});
+
+const lora = Lora({
+  variable: "--font-lora",
+  subsets: ["latin"],
+  style: ["italic", "normal"],
+  weight: ["600", "700"],
 });
 
 const geistMono = Geist_Mono({
@@ -25,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="tr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${figtree.variable} ${lora.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>

@@ -19,40 +19,37 @@ export function PriceListsSection() {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-lg font-semibold">Fiyat Listeleri</h2>
+      <h2 className="text-micro text-[var(--brand-strong)]">Fiyat Listeleri</h2>
       <CreatePriceListForm instruments={instruments ?? []} />
 
-      {isLoading && <p className="text-sm text-neutral-500">Yükleniyor…</p>}
-      <div className="space-y-3">
+      {isLoading && <div className="space-y-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="skeleton h-24 rounded-2xl" />)}</div>}
+      <div className="space-y-4">
         {priceLists?.map((list) => (
-          <div key={list.id} className="rounded-lg border border-neutral-200 bg-white p-4">
-            <div className="mb-2 flex items-center justify-between">
+          <div key={list.id} className="app-card overflow-hidden">
+            <div className="flex items-baseline justify-between border-b-2 border-[var(--line)] px-5 py-4">
               <div>
-                <h3 className="font-medium">{list.name}</h3>
-                <p className="text-xs text-neutral-500">
+                <h3 className="font-serif text-lg font-bold italic">{list.name}</h3>
+                <p className="text-meta mt-0.5">
                   {list.effectiveFrom} – {list.effectiveUntil ?? "süresiz"}
                 </p>
               </div>
             </div>
-            <div className="mb-3 overflow-x-auto rounded-lg border border-neutral-100">
-              <table className="w-full text-sm">
-                <tbody>
-                  {list.items.map((item) => (
-                    <tr key={item.id} className="border-t border-neutral-100 first:border-t-0">
-                      <td className="px-3 py-1">{instruments?.find((i) => i.id === item.instrumentId)?.name ?? "?"}</td>
-                      <td className="px-3 py-1 text-neutral-500">{item.durationMinutes} dk</td>
-                      <td className="px-3 py-1 text-neutral-500">{item.billingType === "Monthly" ? "Aylık" : "Paket"}</td>
-                      <td className="px-3 py-1 text-right font-medium">
-                        {item.amount.toLocaleString("tr-TR")} {item.currency}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-[var(--line)]">
+              {list.items.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 px-5 py-3 text-sm font-semibold">
+                  <span className="w-32 shrink-0">{instruments?.find((i) => i.id === item.instrumentId)?.name ?? "?"}</span>
+                  <span className="w-24 shrink-0 text-[var(--muted)]">{item.durationMinutes} dk</span>
+                  <span className="flex-1 text-[var(--muted)]">{item.billingType === "Monthly" ? "Aylık" : "Paket"}</span>
+                  <span className="font-bold text-[var(--brand-strong)]">
+                    {item.amount.toLocaleString("tr-TR")} {item.currency}
+                  </span>
+                </div>
+              ))}
             </div>
             <BulkUpdateForm priceListId={list.id} />
           </div>
         ))}
+        {priceLists?.length === 0 && !isLoading && <p className="text-meta">Henüz fiyat listesi yok.</p>}
       </div>
     </section>
   );
@@ -84,25 +81,25 @@ function CreatePriceListForm({ instruments }: { instruments: { id: string; name:
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Liste adı</label>
+    <form onSubmit={handleSubmit} className="app-card space-y-3 p-4 sm:p-5">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Liste adı</label>
           <input value={name} onChange={(e) => setName(e.target.value)} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" placeholder="2026-2027 Sezonu" />
+            className="field min-h-11 text-sm" placeholder="2026-2027 Sezonu" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-neutral-600">Başlangıç tarihi</label>
+        <div className="space-y-1.5">
+          <label className="text-[.7rem] font-bold text-[var(--muted)]">Başlangıç tarihi</label>
           <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} required
-            className="block rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+            className="field min-h-11 text-sm" />
         </div>
       </div>
 
       <div className="space-y-2">
         {items.map((item, index) => (
-          <div key={index} className="flex flex-wrap items-end gap-2 rounded-md border border-neutral-100 bg-neutral-50 p-2">
+          <div key={index} className="flex flex-wrap items-end gap-2 rounded-xl bg-[var(--surface-muted)] p-2.5">
             <select value={item.instrumentId} onChange={(e) => updateItem(index, { instrumentId: e.target.value })} required
-              className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+              className="field min-h-10 w-auto text-sm">
               <option value="">Enstrüman</option>
               {instruments.map((i) => (
                 <option key={i.id} value={i.id}>{i.name}</option>
@@ -110,23 +107,23 @@ function CreatePriceListForm({ instruments }: { instruments: { id: string; name:
             </select>
             <input type="number" min={15} step={15} value={item.durationMinutes}
               onChange={(e) => updateItem(index, { durationMinutes: Number(e.target.value) })}
-              className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-sm" title="Süre (dk)" />
+              className="field min-h-10 w-20 text-sm" title="Süre (dk)" />
             <select value={item.billingType} onChange={(e) => updateItem(index, { billingType: e.target.value as BillingType })}
-              className="rounded-md border border-neutral-300 px-2 py-1 text-sm">
+              className="field min-h-10 w-auto text-sm">
               <option value="Monthly">Aylık</option>
               <option value="Package">Paket</option>
             </select>
             {item.billingType === "Package" && (
               <input type="number" min={1} placeholder="Ders sayısı" value={item.packageLessonCount ?? ""}
                 onChange={(e) => updateItem(index, { packageLessonCount: Number(e.target.value) })}
-                className="w-28 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+                className="field min-h-10 w-28 text-sm" />
             )}
             <input type="number" min={0} step={0.01} placeholder="Tutar (TRY)" value={item.amount || ""}
               onChange={(e) => updateItem(index, { amount: Number(e.target.value) })} required
-              className="w-32 rounded-md border border-neutral-300 px-2 py-1 text-sm" />
+              className="field min-h-10 w-32 text-sm" />
             {items.length > 1 && (
               <button type="button" onClick={() => setItems((prev) => prev.filter((_, i) => i !== index))}
-                className="text-sm text-red-600">
+                className="pressable min-h-10 rounded-lg px-2 text-sm font-bold text-[var(--danger-strong)]">
                 Sil
               </button>
             )}
@@ -134,16 +131,16 @@ function CreatePriceListForm({ instruments }: { instruments: { id: string; name:
         ))}
         <button type="button"
           onClick={() => setItems((prev) => [...prev, { instrumentId: "", durationMinutes: 45, billingType: "Monthly", amount: 0 }])}
-          className="text-sm text-neutral-500 underline">
+          className="text-sm font-bold text-[var(--brand)] hover:text-[var(--brand-strong)]">
           + Kalem ekle
         </button>
       </div>
 
       <button type="submit" disabled={createPriceList.isPending}
-        className="min-h-11 rounded-md bg-neutral-900 px-3 text-sm text-white disabled:opacity-50">
+        className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
         {createPriceList.isPending ? "Oluşturuluyor…" : "Fiyat listesi oluştur"}
       </button>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
 }
@@ -179,28 +176,28 @@ function BulkUpdateForm({ priceListId }: { priceListId: string }) {
   }
 
   return (
-    <div className="border-t border-neutral-100 pt-3">
+    <div className="border-t-2 border-[var(--line)] bg-[var(--surface-muted)] px-5 py-3.5">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-neutral-600">Toplu zam/indirim:</span>
+        <span className="font-semibold text-[var(--muted)]">Toplu zam/indirim:</span>
         <input type="number" value={percentage} onChange={(e) => setPercentage(Number(e.target.value))}
-          className="w-20 rounded-md border border-neutral-300 px-2 py-1" />
-        <span className="text-neutral-500">%</span>
-        <button onClick={handlePreview} className="rounded-md border border-neutral-300 px-3 py-1 hover:bg-neutral-100">
+          className="field min-h-9 w-20 text-sm" />
+        <span className="text-[var(--muted)]">%</span>
+        <button onClick={handlePreview} className="pressable min-h-9 rounded-lg border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)]">
           Önizle
         </button>
         {previewResult && (
-          <button onClick={handleApply} className="min-h-11 rounded-md bg-neutral-900 px-3 text-white">
+          <button onClick={handleApply} className="pressable min-h-9 rounded-lg bg-[var(--foreground)] px-3 text-xs font-bold text-white">
             Uygula
           </button>
         )}
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      {applied && <p className="mt-2 text-sm text-green-700">Uygulandı - geçmiş aidatlar etkilenmedi.</p>}
+      {error && <p className="mt-2 text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
+      {applied && <p className="mt-2 text-sm font-medium text-[var(--success-strong)]">Uygulandı - geçmiş aidatlar etkilenmedi.</p>}
       {previewResult && (
         <ul className="mt-2 space-y-1 text-sm">
           {previewResult.map((p) => (
-            <li key={p.itemId} className="rounded bg-amber-50 px-2 py-1 text-amber-900">
+            <li key={p.itemId} className="rounded-lg bg-[var(--warning-soft)] px-2.5 py-1.5 text-[var(--warning-strong)]">
               {p.instrumentName} ({p.durationMinutes} dk): {p.oldAmount.toLocaleString("tr-TR")} → {p.newAmount.toLocaleString("tr-TR")} TRY
               {p.activeFeePlanCount > 0 && ` · ${p.activeFeePlanCount} aktif kayıt etkilenecek`}
             </li>

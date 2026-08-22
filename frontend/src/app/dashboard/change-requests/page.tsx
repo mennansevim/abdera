@@ -40,9 +40,9 @@ export default function ChangeRequestsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-display">Ders Değişikliği Talepleri</h1>
+      <h1 className="text-display font-serif italic">Ders Değişikliği Talepleri</h1>
 
-      {error && <p role="alert" className="rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+      {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 
       {isLoading && <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-24 rounded-2xl" />)}</div>}
 
@@ -76,14 +76,14 @@ export default function ChangeRequestsPage() {
               <button
                 onClick={() => handleApprove(request.id)}
                 disabled={busyId === request.id}
-                className="pressable flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)] disabled:opacity-50"
+                className="pressable flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50"
               >
                 <Icon name="check" className="h-4 w-4" /> Onayla
               </button>
               <button
                 onClick={() => handleReject(request.id)}
                 disabled={busyId === request.id}
-                className="pressable flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 text-xs font-bold text-[#756f7a] hover:bg-[var(--surface-muted)] disabled:opacity-50"
+                className="pressable flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 text-xs font-bold text-[var(--muted)] hover:bg-[var(--surface-muted)] disabled:opacity-50"
               >
                 <Icon name="x" className="h-4 w-4" /> Reddet
               </button>

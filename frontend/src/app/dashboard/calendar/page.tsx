@@ -71,7 +71,7 @@ export default function CalendarPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-[1.45rem] font-bold tracking-[-0.035em] sm:text-[1.7rem]">Takvim</h1>
+          <h1 className="font-serif text-[1.45rem] font-bold italic tracking-[-0.02em] sm:text-[1.7rem]">Takvim</h1>
           <p className="mt-1 text-xs text-[var(--muted)]">{formatDateOnly(weekStart)} – {formatDateOnly(addDays(weekEnd, -1))}</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -79,7 +79,7 @@ export default function CalendarPage() {
           <button onClick={() => setWeekStart(startOfWeek(new Date()))} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:bg-[var(--surface-muted)]">Bu hafta</button>
           <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
           {isAdmin && (
-            <button onClick={() => setShowSeriesForm((value) => !value)} className="pressable ml-1 min-h-10 rounded-xl bg-[var(--brand)] px-3.5 text-[.68rem] font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[var(--brand-strong)]">
+            <button onClick={() => setShowSeriesForm((value) => !value)} className="pressable ml-1 min-h-10 rounded-xl bg-[var(--brand)] px-3.5 text-[.68rem] font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)]">
               {showSeriesForm ? "Formu kapat" : "+ Yeni ders serisi"}
             </button>
           )}
@@ -206,7 +206,7 @@ function WeeklyGrid({
   return (
     <section className="app-card min-w-0 overflow-hidden">
       {toast && (
-        <div role="status" className={`flex items-center gap-2 border-b px-4 py-2.5 text-[.68rem] font-semibold ${toast.tone === "success" ? "border-[#cdeed8] bg-[#eafbf0] text-[#237247]" : "border-[#f5d4d0] bg-[#fff1ef] text-[#b8453f]"}`}>
+        <div role="status" className={`flex items-center gap-2 border-b px-4 py-2.5 text-[.68rem] font-semibold ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
           <Icon name={toast.tone === "success" ? "check" : "x"} className="h-3.5 w-3.5 shrink-0" />
           {toast.text}
         </div>
@@ -217,8 +217,8 @@ function WeeklyGrid({
         <div className="grid min-w-[64rem] grid-cols-[3.4rem_repeat(7,minmax(8rem,1fr))] border-t border-[var(--line)]">
           <div className="border-r border-[var(--line)]" />
           {weekDays.map((day, index) => (
-            <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[#f0efff]" : ""}`}>
-              <span className="block text-[.66rem] font-semibold text-[#746d79]">{WEEK_DAYS_TR[index]}</span>
+            <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}>
+              <span className="block text-[.66rem] font-semibold text-[var(--muted)]">{WEEK_DAYS_TR[index]}</span>
               <span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()} {day.toLocaleDateString("tr-TR", { month: "short" })}</span>
             </div>
           ))}
@@ -250,12 +250,12 @@ function WeeklyGrid({
           return (
             <div key={day.toISOString()}>
               <h3 className="mb-2 flex items-center gap-2 text-xs font-bold">
-                <span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[#625b68]"}`}>{day.getDate()}</span>
+                <span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{day.getDate()}</span>
                 {WEEK_DAYS_TR[index]}
               </h3>
               <div className="space-y-2 pl-9">
                 {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} />)}
-                {!dayLessons.length && <p className="py-2 text-xs text-[#aaa3ad]">Planlanmış ders yok.</p>}
+                {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
               </div>
             </div>
           );
@@ -268,9 +268,9 @@ function WeeklyGrid({
 function GridTimeLabels({ hourWindow }: { hourWindow: HourWindow }) {
   const totalHours = hourWindow.endHour - hourWindow.startHour;
   return (
-    <div className="relative border-r border-t border-[var(--line)] bg-[#fbfaf7]" style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}>
+    <div className="relative border-r border-t border-[var(--line)] bg-[#fdf9f2]" style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[#aaa3ad]" style={{ top: `${(index / totalHours) * 100}%` }}>
+        <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[var(--muted)]" style={{ top: `${(index / totalHours) * 100}%` }}>
           {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}
@@ -315,11 +315,11 @@ function GridDayColumn({
     <div
       onDragOver={onDragOverColumn}
       onDrop={onDropColumn}
-      className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fbfaf7]"} ${hoverSlot ? "outline outline-2 -outline-offset-2 outline-[color:var(--brand)]" : ""}`}
+      className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fdf9f2]"} ${hoverSlot ? "outline outline-2 -outline-offset-2 outline-[color:var(--brand)]" : ""}`}
       style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}
     >
       {Array.from({ length: totalHours - 1 }, (_, index) => (
-        <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#ebe7e1]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />
+        <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#f3e4cd]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />
       ))}
 
       {/* Sürüklerken bırakılacak saat aralığını gösteren etiket - önceden yalnızca boş, saat
@@ -383,11 +383,11 @@ function AgendaLessonCard({ lesson, tone, showTeacher }: { lesson: CalendarLesso
 
 function LessonStatusChip({ lesson }: { lesson: CalendarLesson }) {
   const config: Record<CalendarLesson["status"], { label: string; className: string }> = {
-    Normal: { label: "Planlandı", className: "bg-[#e5f6e9] text-[#348351]" },
-    Rescheduled: { label: "Ertelendi", className: "bg-[#fbefd7] text-[#98630b]" },
-    Cancelled: { label: "İptal", className: "bg-[#ffe4e1] text-[#bf4949]" },
-    Completed: { label: "Tamamlandı", className: "bg-[#ece9f8] text-[#625298]" },
-    Makeup: { label: "Telafi", className: "bg-[#e3f2f4] text-[#357a83]" },
+    Normal: { label: "Planlandı", className: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+    Rescheduled: { label: "Ertelendi", className: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
+    Cancelled: { label: "İptal", className: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
+    Completed: { label: "Tamamlandı", className: "bg-[#e6dcf6] text-[#4b3777]" },
+    Makeup: { label: "Telafi", className: "bg-[#e0dbc4] text-[#48521f]" },
   };
   const { label, className } = config[lesson.status];
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.56rem] font-bold ${className}`}>{label}</span>;

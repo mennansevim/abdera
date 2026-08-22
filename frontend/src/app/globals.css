@@ -1,34 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8f6f1;
-  --foreground: #25222c;
-  --surface: #fffdf9;
-  --surface-muted: #f4f1ec;
-  --line: #e8e2da;
-  --muted: #7e7985;
-  --brand: #4a378f;
-  --brand-strong: #2b215f;
-  --brand-soft: #efedff;
+  /* "Sıcak Atölye" yön değişimi (redesign/sicak-atolye) - mor/krem kimlikten sıcak
+     terrakota/erik kimliğine geçiş. Veli portalının zaten kullandığı turuncu vurgu
+     (öğrenci baş harfi rozeti) buradan tüm admin kabuğuna yayıldı - bkz. docs/14-ui-design-prompt.md. */
+  --background: #fdf3e7;
+  --foreground: #3a2a1f;
+  --surface: #ffffff;
+  --surface-muted: #fbeadb;
+  --line: #f0ddc4;
+  --muted: #9c8570;
+  --brand: #d9662a;
+  --brand-strong: #a84e1f;
+  --brand-soft: #fce4d0;
   --on-brand: #ffffff;
-  --success: #2f9b5c;
-  --success-soft: #e5f6e9;
-  --success-strong: #267844;
-  --danger: #ce5454;
-  --danger-soft: #ffe4e1;
-  --danger-strong: #ad4141;
-  --warning: #b8780b;
-  --warning-soft: #fbefd5;
-  --warning-strong: #865a09;
-  --shadow-card: 0 1px 2px rgba(38, 31, 24, 0.04), 0 8px 28px rgba(38, 31, 24, 0.055);
+  --success: #3f9142;
+  --success-soft: #e3f3df;
+  --success-strong: #2f6f30;
+  --danger: #c94f3f;
+  --danger-soft: #fce2dc;
+  --danger-strong: #a13c2f;
+  --warning: #c98a1f;
+  --warning-soft: #fbeed0;
+  --warning-strong: #96660f;
+  --shadow-card: 0 2px 4px rgba(120, 70, 30, 0.05), 0 14px 34px rgba(120, 70, 30, 0.08);
 
-  /* Yönetici/öğretmen kabuğunun koyu mor gradyan sidebar'ı - önceden app-header.tsx içinde
-     çıplak hex olarak yazılıyordu (docs/14-ui-design-prompt.md §2). */
-  --sidebar-from: #493690;
-  --sidebar-to: #281e5c;
-  /* Bugünü vurgulayan hafif mor zemin - ızgara sütunu ve haftalık ajanda rozetinde kullanılır. */
-  --today-tint: #f0efff;
-  --today-tint-strong: #f2f1ff;
+  /* Yönetici/öğretmen kabuğunun sıcak turuncu->erik gradyan sidebar'ı. */
+  --sidebar-from: #e2793c;
+  --sidebar-to: #7d3a56;
+  /* Bugünü vurgulayan hafif turuncu zemin - ızgara sütunu ve haftalık ajanda rozetinde kullanılır. */
+  --today-tint: #fdeee0;
+  --today-tint-strong: #fce4d0;
 
   /* Tipografi ölçeği - beş kademe, ekranlar arası tutarlılık için (docs/14-ui-design-prompt.md §2).
      Serbest rem değerleri (.5rem-1.7rem) yerine yeni metin daima bu beşten birini kullanmalı. */
@@ -42,7 +44,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-figtree);
+  --font-serif: var(--font-lora);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -52,19 +55,19 @@ body {
   /* UX-2 (docs/13-audit-fix-prompt.md): layout.tsx Geist Sans'ı Google Fonts'tan
      yükleyip --font-geist-sans değişkenini tanımlıyordu ama burada hiç kullanılmıyordu -
      tarayıcı iki font dosyasını boşuna indirip Arial ile render ediyordu. */
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-figtree), Arial, Helvetica, sans-serif;
   font-optical-sizing: auto;
   text-rendering: optimizeLegibility;
 }
 
 * {
-  scrollbar-color: #c9c3d4 transparent;
+  scrollbar-color: #d9c3a8 transparent;
   scrollbar-width: thin;
 }
 
 ::selection {
-  background: #dcd5ff;
-  color: #241a55;
+  background: #fbd3ac;
+  color: #5c2f0f;
 }
 
 button,
@@ -85,7 +88,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(91, 71, 174, 0.26);
+  outline: 3px solid rgba(217, 102, 42, 0.3);
   outline-offset: 2px;
 }
 
@@ -95,16 +98,16 @@ textarea:focus-visible {
   width: 2.2rem;
   align-items: center;
   justify-content: center;
-  border-radius: 0.7rem;
+  border-radius: 0.9rem;
   color: white;
-  background: linear-gradient(145deg, #6651b6, #392678);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 8px 20px rgba(52,36,113,.2);
+  background: linear-gradient(145deg, #ea8a4c, #a84e1f);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 8px 20px rgba(168,78,31,.22);
 }
 
 .app-card {
   border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--surface) 96%, white);
+  border-radius: 1.35rem;
+  background: color-mix(in srgb, var(--surface) 97%, white);
   box-shadow: var(--shadow-card);
 }
 
@@ -119,17 +122,17 @@ textarea:focus-visible {
 .field {
   min-height: 2.75rem;
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: .75rem;
-  background: rgba(255,255,255,.84);
+  border: 2px solid var(--line);
+  border-radius: 1rem;
+  background: rgba(255,255,255,.9);
   padding: .65rem .8rem;
   color: var(--foreground);
-  box-shadow: inset 0 1px 2px rgba(44,37,31,.025);
+  box-shadow: inset 0 1px 2px rgba(120,70,30,.02);
   transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
-.field:hover { border-color: #d5cec4; }
-.field:focus { border-color: #7764bd; box-shadow: 0 0 0 3px rgba(91,71,174,.11); outline: none; background: white; }
+.field:hover { border-color: #e0c39d; }
+.field:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,102,42,.14); outline: none; background: white; }
 
 .text-display { font-size: var(--text-display); font-weight: 700; letter-spacing: -0.035em; line-height: 1.15; }
 .text-title { font-size: var(--text-title); font-weight: 700; line-height: 1.3; }
@@ -169,6 +172,6 @@ textarea:focus-visible {
 }
 
 @media (prefers-contrast: more) {
-  :root { --line: #b8b1aa; --muted: #57515c; }
+  :root { --line: #b89c72; --muted: #6b543f; }
   .app-card { box-shadow: none; }
 }

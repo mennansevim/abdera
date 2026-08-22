@@ -1,12 +1,13 @@
 // Ders bloğu renkleri - enstrümana göre pastel ton ataması. Aynı harita hem dashboard'daki
 // haftalık önizlemede (dashboard/page.tsx) hem tam takvim sayfasında (dashboard/calendar/page.tsx)
 // kullanılır, böylece bir enstrüman uygulamanın her yerinde aynı renkte görünür.
+// "Sıcak Atölye" yön değişimi: pastel ton yerine daha doygun/sıcak bir palet - redesign/sicak-atolye.
 export const INSTRUMENT_TONES = [
-  { bg: "#f9e5c3", border: "#c48212", text: "#654107" },
-  { bg: "#ffdcd2", border: "#d45e3e", text: "#71301f" },
-  { bg: "#f6d8e7", border: "#b95788", text: "#642a48" },
-  { bg: "#cfecea", border: "#2e918c", text: "#225b58" },
-  { bg: "#dfddf8", border: "#6555ad", text: "#3d3470" },
+  { bg: "#fde3b8", border: "#c98a1f", text: "#7a4a09" },
+  { bg: "#ffd8c2", border: "#d9662a", text: "#8a3a1c" },
+  { bg: "#f6d3e3", border: "#b0507a", text: "#7a2f52" },
+  { bg: "#e0dbc4", border: "#7d8a4a", text: "#48521f" },
+  { bg: "#e6dcf6", border: "#7d3a56", text: "#4b3777" },
 ] as const;
 
 export type InstrumentTone = (typeof INSTRUMENT_TONES)[number];
