@@ -19,7 +19,10 @@ export function PriceListsSection() {
 
   return (
     <section className="space-y-4">
-      <h2 className="text-micro text-[var(--brand-strong)]">Fiyat Listeleri</h2>
+      <div>
+        <h2 className="text-title">Kurs Bedeli</h2>
+        <p className="text-meta mt-1">Enstrüman ve ders süresine göre birim fiyatlar - aidatlar buradan hesaplanır.</p>
+      </div>
       <CreatePriceListForm instruments={instruments ?? []} />
 
       {isLoading && <div className="space-y-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="skeleton h-24 rounded-2xl" />)}</div>}
