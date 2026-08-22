@@ -7,10 +7,13 @@ namespace Abdera.Api.Modules.Messaging.Domain;
 // için kullanılır - dinamik içerik olduğu için önceden onaylı bir şablona sığmaz.
 public interface IWhatsAppClient
 {
+    // buttonPayloads: yalnızca quick-reply butonlu şablonlar (lesson_reminder_rsvp) için
+    // doldurulur - sırayla buton index'lerine (0/1/2) karşılık gelen imzalı/opak payload.
     Task<WhatsAppSendResult> SendTemplateAsync(
         string toPhoneNumber,
         string templateName,
         IReadOnlyDictionary<string, string> parameters,
+        IReadOnlyList<string>? buttonPayloads = null,
         CancellationToken cancellationToken = default);
 
     Task<WhatsAppSendResult> SendFreeTextAsync(

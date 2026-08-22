@@ -80,7 +80,19 @@ POST   /api/notifications/{notificationId}/retry ✅ yalnızca FAILED durumundan
 GET    /api/webhooks/whatsapp                    ✅ Meta abonelik doğrulama handshake'i
 POST   /api/webhooks/whatsapp                    ✅ imza doğrulama + idempotency + RSVP/opt-out/intent yönlendirme
 POST   /api/dev/whatsapp/simulate-text           ✅ yalnızca Development - serbest metin/opt-out testi
-POST   /api/dev/whatsapp/simulate-rsvp           ✅ yalnızca Development - imzalı RSVP butonu testi
+POST   /api/dev/whatsapp/simulate-rsvp           ✅ yalnızca Development - imzalı RSVP butonu testi ("Faz 3'ten itibaren rsvp_attending_late de kabul eder)
+
+GET    /api/message-templates                    ✅ Faz 1 - Mesaj Merkezi şablon editörü (redesign/sicak-atolye)
+POST   /api/message-templates                    ✅ yeni şablon ekler
+PATCH  /api/message-templates/{templateId}       ✅ gövde/dil/aktiflik günceller - şablon anahtarı (Name) sabit kalır
+
+GET    /api/notification-automation-settings     ✅ Faz 3 - hatırlatma süresi/aktiflik/3. RSVP seçeneği (tek satırlık kurum ayarı)
+PUT    /api/notification-automation-settings     ✅ günceller; bekleyen LessonReminder job'larını yeniden hesaplar veya (kapatılırsa) iptal eder, audit_log'a yazar
+
+POST   /api/enrollments/{enrollmentId}/bulk-payments  ✅ Faz 2 - seçilen aydan başlayarak 1-24 ay arası toplu tahsilat, eksik Receivable'ları kendisi oluşturur
+
+GET    /api/expenses                             ✅ Faz 2 - Maliyet Takibi gider defteri, ?from=&to= filtresiyle
+POST   /api/expenses                             ✅ maaş/elektrik-su/kira/diğer - kayıtlar silinmez
 
 POST   /api/guardians/{guardianId}/virtual-iban  ✅ Phase 6 (E1) - veliye sanal IBAN atar, aktifken tekrar atanamaz
 GET    /api/guardians/{guardianId}/virtual-iban  ✅ atanmışsa döner, yoksa 404

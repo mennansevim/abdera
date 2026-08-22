@@ -57,6 +57,7 @@ public class AbderaDbContext : DbContext
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppWebhookEvent> WhatsAppWebhookEvents => Set<WhatsAppWebhookEvent>();
     public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();
+    public DbSet<NotificationAutomationSettings> NotificationAutomationSettings => Set<NotificationAutomationSettings>();
 
     public DbSet<VirtualIban> VirtualIbans => Set<VirtualIban>();
     public DbSet<BankIncomingTransaction> BankIncomingTransactions => Set<BankIncomingTransaction>();

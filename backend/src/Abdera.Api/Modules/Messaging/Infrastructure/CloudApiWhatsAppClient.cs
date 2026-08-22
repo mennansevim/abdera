@@ -25,8 +25,35 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
         string toPhoneNumber,
         string templateName,
         IReadOnlyDictionary<string, string> parameters,
+        IReadOnlyList<string>? buttonPayloads = null,
         CancellationToken cancellationToken = default)
     {
+        var components = new List<object>
+        {
+            new
+            {
+                type = "body",
+                parameters = parameters.Select(p => new { type = "text", text = p.Value }),
+            },
+        };
+
+        // Quick-reply butonlarının payload'ı gönderim anında override edilir - buton metni
+        // (görünen "Evet"/"Geç kalacağım"/"Hayır") Meta'da onaylı şablonun kendisinde sabit,
+        // yalnızca tıklandığında webhook'a dönecek payload burada per-ders imzalanıyor.
+        if (buttonPayloads is { Count: > 0 })
+        {
+            for (var index = 0; index < buttonPayloads.Count; index++)
+            {
+                components.Add(new
+                {
+                    type = "button",
+                    sub_type = "quick_reply",
+                    index = index.ToString(),
+                    parameters = new object[] { new { type = "payload", payload = buttonPayloads[index] } },
+                });
+            }
+        }
+
         var payload = new
         {
             messaging_product = "whatsapp",
@@ -36,14 +63,7 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
             {
                 name = templateName,
                 language = new { code = "tr" },
-                components = new object[]
-                {
-                    new
-                    {
-                        type = "body",
-                        parameters = parameters.Select(p => new { type = "text", text = p.Value }),
-                    },
-                },
+                components,
             },
         };
 

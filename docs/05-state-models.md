@@ -50,12 +50,17 @@ Kural: `PARENT_REJECTED` durumunda sistem **sessizce** takvimi tekrar değiştir
 stateDiagram-v2
     [*] --> UNKNOWN
     UNKNOWN --> ATTENDING: WhatsApp "✅ Geliyorum"
+    UNKNOWN --> ATTENDING_LATE: WhatsApp "🕒 Geç kalacağım"
     UNKNOWN --> NOT_ATTENDING: WhatsApp "❌ Gelemiyorum"
+    ATTENDING --> ATTENDING_LATE: veli fikir değiştirdi
     ATTENDING --> NOT_ATTENDING: veli fikir değiştirdi
+    ATTENDING_LATE --> ATTENDING: veli fikir değiştirdi
+    ATTENDING_LATE --> NOT_ATTENDING: veli fikir değiştirdi
     NOT_ATTENDING --> ATTENDING: veli fikir değiştirdi
+    NOT_ATTENDING --> ATTENDING_LATE: veli fikir değiştirdi
 ```
 
-`ATTENDING`/`NOT_ATTENDING` velinin **niyetini** ifade eder, gerçek yoklamayı değil — bu ikisi asla birleştirilmez (master prompt'un açık kuralı).
+`ATTENDING`/`ATTENDING_LATE`/`NOT_ATTENDING` velinin **niyetini** ifade eder, gerçek yoklamayı değil — bunlar `LessonAttendance` ile asla birleştirilmez (master prompt'un açık kuralı). `ATTENDING_LATE` (Faz 3, `redesign/sicak-atolye`) admin panelden kapatılabilir bir üçüncü seçenek (`NotificationAutomationSettings.AllowAttendingLateResponse`) - kapalıyken WhatsApp'ta yalnızca ilk iki buton (Geliyorum/Gelemiyorum) gönderilir, ama veli web portalından (GuardianWeb) veya admin'den bu değer yine de elle girilebilir; kapalı olması yalnızca WhatsApp buton üretimini etkiler, `RsvpResponse` enum'unda her zaman geçerli bir değerdir.
 
 ## LessonAttendance.status
 

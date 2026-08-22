@@ -75,8 +75,11 @@ public static class Dashboard
     }
 
     // Bir ders birden fazla veliye bağlı olabilir (UNIQUE(lesson_id, guardian_id)) - en az bir
-    // veli "geliyorum" dediyse Attending, hiçbiri gelmiyorsa NotAttending, hiç RSVP yoksa
-    // (veya yalnızca Unknown) NoResponse sayılır. todayLessons = attending+notAttending+noResponse.
+    // veli "geliyorum" (Attending veya AttendingLate - geç de olsa geliyor) dediyse Attending,
+    // hiçbiri gelmiyorsa NotAttending, hiç RSVP yoksa (veya yalnızca Unknown) NoResponse sayılır.
+    // AttendingLate bu özet düzeyinde ayrı bir kova değil - "geç kalacağım" bilgisi ders bazlı
+    // detayda (takvim popup'ı) gösteriliyor, KPI kartı bu inceliği taşımıyor (bilinçli sadeleştirme).
+    // todayLessons = attending+notAttending+noResponse.
     private static async Task<(int Attending, int NotAttending, int NoResponse)> SummarizeRsvpsAsync(
         List<Guid> lessonIds, AbderaDbContext db)
     {
@@ -88,7 +91,7 @@ public static class Dashboard
             .Select(g => new
             {
                 LessonId = g.Key,
-                HasAttending = g.Any(r => r.Response == RsvpResponse.Attending),
+                HasAttending = g.Any(r => r.Response == RsvpResponse.Attending || r.Response == RsvpResponse.AttendingLate),
                 HasNotAttending = g.Any(r => r.Response == RsvpResponse.NotAttending),
             })
             .ToListAsync();

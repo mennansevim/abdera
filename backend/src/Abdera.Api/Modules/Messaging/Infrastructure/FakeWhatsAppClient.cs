@@ -12,12 +12,14 @@ public class FakeWhatsAppClient(ILogger<FakeWhatsAppClient> logger) : IWhatsAppC
         string toPhoneNumber,
         string templateName,
         IReadOnlyDictionary<string, string> parameters,
+        IReadOnlyList<string>? buttonPayloads = null,
         CancellationToken cancellationToken = default)
     {
         var paramSummary = string.Join(", ", parameters.Select(p => $"{p.Key}={p.Value}"));
+        var buttonSummary = buttonPayloads is { Count: > 0 } ? $" | butonlar={string.Join(" | ", buttonPayloads)}" : "";
         logger.LogInformation(
-            "[FakeWhatsApp] şablon -> {Phone} | şablon={Template} | {Params}",
-            toPhoneNumber, templateName, paramSummary);
+            "[FakeWhatsApp] şablon -> {Phone} | şablon={Template} | {Params}{Buttons}",
+            toPhoneNumber, templateName, paramSummary, buttonSummary);
 
         return Task.FromResult(new WhatsAppSendResult(
             Success: true,

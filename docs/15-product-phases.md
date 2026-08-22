@@ -22,12 +22,13 @@ arayüz hazır görünse bile ilgili backend akışı ve audit kaydı olmadan ta
 - Bekleyen ödeme, toplanan aidat, gelir ve gider özetleri eklenir.
 - Maaş, elektrik/su, kira ve diğer giderler kalıcı `expenses` tablosuna yazılır ve audit kaydı oluşturulur.
 
-## Faz 3 — Mesaj otomasyonu ve operasyon politikaları
+## Faz 3 — Mesaj otomasyonu ve operasyon politikaları ✅
 
-- Hatırlatma ayarı (`15/30/45/60` dakika), aktif/pasif durum ve RSVP seçenekleri kalıcı kurum ayarına taşınacak.
-- Mevcut `INotificationScheduler`/`NotificationDispatcher` (`BackgroundService`) mimarisi **korunacak** — CLAUDE.md'nin "Yapılmayacaklar" listesi Hangfire/Quartz gibi ek zamanlayıcı kütüphanesi eklenmesini `docs/10-decisions.md` üzerinden açık onay olmadan yasaklıyor; bu onay verilmedi. Yeni gereksinim (admin panelden değiştirilebilir hatırlatma süresi) mevcut porta DB-destekli bir ayar okuma noktası eklenerek karşılanacak, altyapı değişmeyecek. Her ders için idempotency anahtarı zaten korunuyor (`UNIQUE(type, reference_type, reference_id)`).
-- Mesaj gönderiminden önce veli rızası, sessiz saatler, WhatsApp template onayı ve tekrar deneme politikaları zorunlu kontrol olacak (bunların çoğu zaten mevcut `NotificationScheduler`/`NotificationDispatcher` içinde uygulanıyor).
-- Otomasyon ayarları değiştiğinde eski bekleyen job'lar yeniden hesaplanacak; gönderilmiş mesajlar değiştirilmeyecek.
+- Hatırlatma ayarı (`15/30/45/60` dakika), aktif/pasif durum ve üçüncü RSVP seçeneğinin açık/kapalı olması kalıcı kurum ayarına taşındı (`NotificationAutomationSettings`, `GET/PUT /api/notification-automation-settings`). Mesaj Merkezi'ndeki "Otomatik gönderim ayarları" paneli artık gerçek bu uca bağlı.
+- Mevcut `INotificationScheduler`/`NotificationDispatcher` (`BackgroundService`) mimarisi **korundu** — CLAUDE.md'nin "Yapılmayacaklar" listesi Hangfire/Quartz gibi ek zamanlayıcı kütüphanesi eklenmesini `docs/10-decisions.md` üzerinden açık onay olmadan yasaklıyor; bu onay verilmedi. Hatırlatma süresi artık DB'den okunuyor (`LessonSeriesFeatures`, `ChangeRequests.ApproveAsync`), altyapı değişmedi. Her ders için idempotency anahtarı korunuyor (`UNIQUE(type, reference_type, reference_id)`).
+- Üçüncü RSVP seçeneği ("Evet ama biraz geç kalacağım") eklendi: `RsvpResponse.AttendingLate`, WhatsApp quick-reply butonu (`rsvp_attending_late`, imzalı payload, Meta Cloud API'de per-ders `components` override'ıyla gönderiliyor), takvim detay popup'ında "Geç kalacak" olarak gösteriliyor, veli web portalında üçüncü buton olarak da mevcut.
+- Otomasyon ayarları değiştiğinde bekleyen (henüz gönderilmemiş) `LessonReminder` job'ları dersin gerçek saatine göre yeniden hesaplanıyor; otomasyon kapatılırsa bekleyen job'lar iptal ediliyor (geçmişe dönük toparlama yok); gönderilmiş mesajlar hiçbir durumda değiştirilmiyor.
+- Mesaj gönderiminden önce veli rızası, sessiz saatler, WhatsApp template onayı ve tekrar deneme politikaları zaten mevcut `NotificationScheduler`/`NotificationDispatcher` içinde uygulanıyordu, bu fazda değişmedi.
 
 ## Faz 4 — Sağlık, yedekleme ve geri dönüş
 

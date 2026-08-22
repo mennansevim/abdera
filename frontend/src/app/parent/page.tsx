@@ -164,7 +164,7 @@ function HomeView({ lessons, today, studentId, billing, messages }: {
   const [error, setError] = useState<string | null>(null);
   const nextLesson = nextRsvpableLesson(lessons, today);
 
-  async function respond(response: "Attending" | "NotAttending") {
+  async function respond(response: "Attending" | "AttendingLate" | "NotAttending") {
     if (!nextLesson) return;
     setError(null);
     try {
@@ -194,15 +194,16 @@ function HomeView({ lessons, today, studentId, billing, messages }: {
             <p className="mt-1 text-[.65rem] text-[#776c60]">{formatLessonWhen(nextLesson.startAt, nextLesson.endAt, today)}</p>
             <p className="mt-0.5 text-[.62rem] text-[#9a8d7e]">{nextLesson.teacherName} ile</p>
             {showButtons ? (
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button onClick={() => respond("Attending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#36a561] text-xs font-bold text-white disabled:opacity-60"><Icon name="check" className="h-4 w-4" /> Geliyorum</button>
-                <button onClick={() => respond("NotAttending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-xs font-bold text-[#b84c4c] disabled:opacity-60"><Icon name="x" className="h-4 w-4" /> Gelemiyorum</button>
+              <div className="mt-4 grid grid-cols-3 gap-1.5">
+                <button onClick={() => respond("Attending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#36a561] px-1 text-[.62rem] font-bold text-white disabled:opacity-60"><Icon name="check" className="h-4 w-4" /> Geliyorum</button>
+                <button onClick={() => respond("AttendingLate")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#d99a2b] px-1 text-[.62rem] font-bold text-white disabled:opacity-60"><Icon name="clock" className="h-4 w-4" /> Geç kalacağım</button>
+                <button onClick={() => respond("NotAttending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-white px-1 text-[.62rem] font-bold text-[#b84c4c] disabled:opacity-60"><Icon name="x" className="h-4 w-4" /> Gelemiyorum</button>
               </div>
             ) : (
               <>
-                <p className={`mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold ${rsvp === "Attending" ? "bg-[#dcf3e4] text-[#227a49]" : "bg-[#ffe2df] text-[#b3403c]"}`}>
-                  <Icon name={rsvp === "Attending" ? "check" : "x"} className="h-4 w-4" />
-                  {rsvp === "Attending" ? "Geliyorum olarak işaretlendi" : "Gelemiyorum olarak işaretlendi"}
+                <p className={`mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold ${rsvp === "Attending" ? "bg-[#dcf3e4] text-[#227a49]" : rsvp === "AttendingLate" ? "bg-[#fbead0] text-[#9a6a1a]" : "bg-[#ffe2df] text-[#b3403c]"}`}>
+                  <Icon name={rsvp === "Attending" ? "check" : rsvp === "AttendingLate" ? "clock" : "x"} className="h-4 w-4" />
+                  {rsvp === "Attending" ? "Geliyorum olarak işaretlendi" : rsvp === "AttendingLate" ? "Geç kalacağım olarak işaretlendi" : "Gelemiyorum olarak işaretlendi"}
                 </p>
                 <button onClick={() => setForceEditing(true)} className="pressable mt-2 w-full text-center text-[.62rem] font-semibold text-[var(--muted)] underline">Yanıtını değiştir</button>
               </>

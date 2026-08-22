@@ -36,7 +36,12 @@ public static class DevWhatsAppSimulator
         var signingKey = config["WhatsApp:PayloadSigningKey"] ?? "";
         var normalizedFrom = PhoneNumberNormalizer.Normalize(request.FromPhoneNumber);
         var payload = RsvpButtonPayload.Sign(request.Action, request.LessonId, signingKey);
-        var buttonText = request.Action == RsvpButtonPayload.AttendingAction ? "✅ Geliyorum" : "❌ Gelemiyorum";
+        var buttonText = request.Action switch
+        {
+            RsvpButtonPayload.AttendingAction => "✅ Geliyorum",
+            RsvpButtonPayload.AttendingLateAction => "🕒 Geç kalacağım",
+            _ => "❌ Gelemiyorum",
+        };
         var rawBody = BuildMetaButtonPayload(normalizedFrom, payload, buttonText);
         await Webhooks.ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient);
         return Results.Ok();

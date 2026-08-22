@@ -85,7 +85,7 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
 
             foreach (var job in claimedJobs)
             {
-                await SendOneAsync(job, db, clock, whatsAppClient, maxAttempts, logger, cancellationToken);
+                await SendOneAsync(job, db, clock, config, whatsAppClient, maxAttempts, logger, cancellationToken);
             }
 
             if (claimedJobs.Count > 0)
@@ -101,14 +101,14 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
     }
 
     private static async Task SendOneAsync(
-        NotificationJob job, AbderaDbContext db, IClock clock, IWhatsAppClient whatsAppClient,
+        NotificationJob job, AbderaDbContext db, IClock clock, IConfiguration config, IWhatsAppClient whatsAppClient,
         int maxAttempts, ILogger logger, CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
         BuiltMessage? message;
         try
         {
-            message = await NotificationMessageBuilder.BuildAsync(job, db, clock);
+            message = await NotificationMessageBuilder.BuildAsync(job, db, clock, config);
         }
         catch (NotImplementedNotificationTypeException)
         {
@@ -138,7 +138,7 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
             return;
         }
 
-        var result = await whatsAppClient.SendTemplateAsync(job.RecipientPhoneNumber, template.Name, message.Parameters, cancellationToken);
+        var result = await whatsAppClient.SendTemplateAsync(job.RecipientPhoneNumber, template.Name, message.Parameters, message.ButtonPayloads, cancellationToken);
         if (result.Success)
         {
             job.MarkSent(now);

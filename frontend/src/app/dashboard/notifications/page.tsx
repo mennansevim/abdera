@@ -3,9 +3,11 @@
 import { useMemo, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import {
+  useAutomationSettings,
   useMessageTemplates,
   useNotifications,
   useRetryNotification,
+  useUpdateAutomationSettings,
   useUpdateMessageTemplate,
   type MessageTemplate,
   type NotificationJobStatus,
@@ -225,20 +227,53 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
 }
 
 function AutomationSettings() {
+  const { data: settings, isLoading } = useAutomationSettings();
+  const update = useUpdateAutomationSettings();
+
   const [enabled, setEnabled] = useState(true);
-  const [minutes, setMinutes] = useState("30");
-  const [responses, setResponses] = useState({ attending: true, late: true, notAttending: true });
+  const [minutes, setMinutes] = useState("60");
+  const [allowLate, setAllowLate] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadedOnce, setLoadedOnce] = useState(false);
+
+  // Sunucudan gelen değerler yerel state'e yalnızca bir kez (ilk yüklemede) yansıtılır -
+  // sonrasında admin form üzerinde düzenlerken sunucu yeniden fetch olursa üzerine yazmasın.
+  if (settings && !loadedOnce) {
+    setEnabled(settings.isEnabled);
+    setMinutes(String(settings.lessonReminderMinutesBefore));
+    setAllowLate(settings.allowAttendingLateResponse);
+    setLoadedOnce(true);
+  }
+
+  async function save() {
+    setError(null);
+    setSaved(false);
+    try {
+      await update.mutateAsync({ lessonReminderMinutesBefore: Number(minutes), isEnabled: enabled, allowAttendingLateResponse: allowLate });
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Otomasyon ayarı kaydedilemedi.");
+    }
+  }
 
   return (
     <section className="app-card space-y-4 p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Ders hatırlatması</p><h2 className="mt-1 text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Otomatik gönder</label></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Ders hatırlatması</p><h2 className="mt-1 text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} disabled={isLoading} /> Otomatik gönder</label></div>
       <div className="grid gap-4 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
-        <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Dersden ne kadar önce?<select value={minutes} onChange={(event) => setMinutes(event.target.value)} className="field text-sm"><option value="15">15 dakika önce</option><option value="30">30 dakika önce</option><option value="45">45 dakika önce</option><option value="60">60 dakika önce</option></select></label>
-        <div className="space-y-2"><p className="text-xs font-semibold text-[var(--muted)]">Çoktan seçmeli cevaplar</p><div className="flex flex-wrap gap-2">{([{ key: "attending", label: "Evet, katılıyorum." }, { key: "late", label: "Evet ama biraz gecikeceğim" }, { key: "notAttending", label: "Hayır, katılamıyorum." }] as const).map((item) => <label key={item.key} className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs"><input type="checkbox" checked={responses[item.key]} onChange={(event) => setResponses((current) => ({ ...current, [item.key]: event.target.checked }))} />{item.label}</label>)}</div></div>
-        <button type="button" onClick={() => setSaved(true)} disabled={!enabled} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Ayarları kaydet</button>
+        <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Dersden ne kadar önce?<select value={minutes} onChange={(event) => setMinutes(event.target.value)} disabled={isLoading} className="field text-sm"><option value="15">15 dakika önce</option><option value="30">30 dakika önce</option><option value="45">45 dakika önce</option><option value="60">60 dakika önce</option></select></label>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-[var(--muted)]">Çoktan seçmeli cevaplar</p>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">Evet, katılıyorum.</span>
+            <label className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs"><input type="checkbox" checked={allowLate} onChange={(event) => setAllowLate(event.target.checked)} disabled={isLoading} /> Evet ama biraz gecikeceğim</label>
+            <span className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">Hayır, katılamıyorum.</span>
+          </div>
+        </div>
+        <button type="button" onClick={save} disabled={isLoading || update.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{update.isPending ? "Kaydediliyor…" : "Ayarları kaydet"}</button>
       </div>
-      {saved && <p role="status" className="text-sm font-semibold text-[var(--success-strong)]">Otomasyon tercihi kaydedildi. Sunucu tarafı zamanlayıcı bağlantısı Faz 3’te etkinleştirilecek.</p>}
+      {error && <p role="alert" className="text-sm font-semibold text-[var(--danger-strong)]">{error}</p>}
+      {saved && <p role="status" className="text-sm font-semibold text-[var(--success-strong)]">Otomasyon ayarı kaydedildi. {enabled ? "Bekleyen ders hatırlatmaları buna göre güncellendi." : "Bekleyen ders hatırlatmaları iptal edildi."}</p>}
     </section>
   );
 }

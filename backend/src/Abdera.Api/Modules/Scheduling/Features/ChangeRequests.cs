@@ -70,7 +70,7 @@ public static class ChangeRequests
     }
 
     private static async Task<IResult> ApproveAsync(
-        Guid requestId, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
+        Guid requestId, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
     {
         var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
             ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
@@ -92,7 +92,8 @@ public static class ChangeRequests
         var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, lesson.StudentId);
         if (primaryGuardianId is { } guardianId)
         {
-            var reminderMinutesBefore = config.GetValue("Notifications:LessonReminderMinutesBefore", 60);
+            var automationSettings = await NotificationAutomationSettings.GetCurrentAsync(db);
+            var reminderMinutesBefore = automationSettings.LessonReminderMinutesBefore;
             await scheduler.ScheduleAsync(
                 NotificationJobType.LessonReminder, "lesson", newLesson.Id, guardianId,
                 newLesson.StartAt.AddMinutes(-reminderMinutesBefore));

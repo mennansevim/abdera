@@ -22,7 +22,7 @@ sequenceDiagram
     Meta-->>WA: message_id
     WA-->>Worker: ok
     Worker->>Job: status=SENT, sent_at=now()
-    Meta-->>G: 🎹 Ders Hatırlatması ... ✅ Geliyorum / ❌ Gelemiyorum
+    Meta-->>G: 🎹 Ders Hatırlatması ... ✅ Geliyorum / 🕒 Geç kalacağım / ❌ Gelemiyorum
 ```
 
 ## Gelen RSVP — webhook akışı
@@ -70,18 +70,35 @@ Merhaba {{guardian_name}},
 
 Katılım durumunuzu bildirir misiniz?
 
-Hızlı yanıtlar: ✅ Geliyorum   ❌ Gelemiyorum
+Hızlı yanıtlar (quick-reply buton, index 0/1/2):
+0: ✅ Geliyorum
+1: 🕒 Geç kalacağım
+2: ❌ Gelemiyorum
 ```
 
-Meta kısıtı: quick-reply buton metni ≤20 karakter, en fazla 3 buton — ikisi de sınırın altında.
+Meta kısıtı: quick-reply buton metni ≤20 karakter, en fazla 3 buton — üçü de sınırın altında
+("Geç kalacağım" 14 karakter). Üçüncü buton admin panelden (Mesaj Merkezi > Şablonlar ve
+otomasyon) kapatılabilir (`NotificationAutomationSettings.AllowAttendingLateResponse`) - kapalıyken
+yalnızca ilk iki buton (index 0/1) gönderilir, üçüncüsü şablonun kendisinde tanımlı kalsa bile
+payload override edilmediği için tıklanırsa imza doğrulaması zaten geçersiz olur.
 
 ## Buton payload güvenliği
 
 Payload'da tahmin edilebilir dahili id kullanılmaz (`lesson_id=42` gibi). Bunun yerine imzalı/opak referans:
 
 ```
-rsvp_attending:e0b5c3a9f2...   (HMAC ile WhatsApp__PayloadSigningKey kullanılarak imzalanmış)
+rsvp_attending:e0b5c3a9f2...        (Evet)
+rsvp_attending_late:e0b5c3a9f2...   (Geç kalacağım - Faz 3)
+rsvp_not_attending:e0b5c3a9f2...    (Hayır)
 ```
+
+(hepsi HMAC ile `WhatsApp__PayloadSigningKey` kullanılarak imzalanmış)
+
+Bu payload'lar Meta'nın onaylı şablonundaki **sabit** buton metninin (görünen "Geliyorum" vb.)
+altına, gönderim anında `components: [{type: "button", sub_type: "quick_reply", index, parameters:
+[{type: "payload", payload: "..."}]}]` ile per-ders override edilir (`CloudApiWhatsAppClient.
+SendTemplateAsync`, `NotificationMessageBuilder.BuildLessonMessageAsync`) - böylece her ders için
+farklı, tahmin edilemez bir payload gider ama buton metni şablon onayında sabitlenen hâliyle kalır.
 
 Sunucu, gelen payload'ı doğrulamadan hiçbir lesson/guardian eşlemesi yapmaz — imza tutmuyorsa istek `422` ile reddedilir ve olay `FAILED` olarak loglanır.
 

@@ -21,7 +21,7 @@ export function useGuardianStudents() {
   });
 }
 
-export type GuardianRsvpResponse = "Unknown" | "Attending" | "NotAttending";
+export type GuardianRsvpResponse = "Unknown" | "Attending" | "AttendingLate" | "NotAttending";
 
 export interface GuardianLesson {
   id: string;
@@ -46,7 +46,7 @@ export function useGuardianCalendar(studentId: string | undefined, from: string,
 export function useRespondRsvp() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ lessonId, response }: { lessonId: string; response: "Attending" | "NotAttending" }) =>
+    mutationFn: ({ lessonId, response }: { lessonId: string; response: "Attending" | "AttendingLate" | "NotAttending" }) =>
       api.post<{ lessonId: string; response: GuardianRsvpResponse; respondedAt: string }>(
         `/api/guardian/me/lessons/${lessonId}/rsvp`, { response },
       ),

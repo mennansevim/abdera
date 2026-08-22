@@ -122,7 +122,7 @@ public class MessagingDomainTests
         var job = NotificationJob.Create(type, "+905551234567", "guardian", Guid.NewGuid(), Now.AddHours(1), Now);
 
         await Assert.ThrowsAsync<NotImplementedNotificationTypeException>(
-            () => NotificationMessageBuilder.BuildAsync(job, null!, null!));
+            () => NotificationMessageBuilder.BuildAsync(job, null!, null!, null!));
     }
 
     [Theory]
@@ -256,5 +256,31 @@ public class MessagingDomainTests
                 System.Text.Encoding.UTF8.GetBytes(""), System.Text.Encoding.UTF8.GetBytes(body)));
 
         Assert.False(WebhookSignatureVerifier.IsValid(body, $"sha256={expectedHexWithEmptySecret}", ""));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(20)]
+    [InlineData(61)]
+    [InlineData(0)]
+    public void NotificationAutomationSettings_Update_rejects_minutes_outside_the_allowed_set(int minutes)
+    {
+        var settings = NotificationAutomationSettings.CreateDefault(Now);
+
+        Assert.Throws<ValidationFailedException>(() => settings.Update(minutes, true, true, null, Now));
+    }
+
+    [Theory]
+    [InlineData(15)]
+    [InlineData(30)]
+    [InlineData(45)]
+    [InlineData(60)]
+    public void NotificationAutomationSettings_Update_accepts_the_allowed_minute_values(int minutes)
+    {
+        var settings = NotificationAutomationSettings.CreateDefault(Now);
+
+        settings.Update(minutes, true, true, null, Now);
+
+        Assert.Equal(minutes, settings.LessonReminderMinutesBefore);
     }
 }

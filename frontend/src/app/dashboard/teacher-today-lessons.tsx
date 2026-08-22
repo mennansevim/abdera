@@ -70,11 +70,13 @@ function StatusBadge({ lesson }: { lesson: CalendarLesson }) {
   };
   const rsvp = lesson.status === "Normal" && lesson.rsvpResponse === "Attending"
     ? { label: "Geliyor", className: "bg-[var(--success-soft)] text-[var(--success-strong)]" }
-    : lesson.status === "Normal" && lesson.rsvpResponse === "NotAttending"
-      ? { label: "Gelmiyor", className: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" }
-      : lesson.status === "Normal"
-        ? { label: "Cevap yok", className: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" }
-        : config[lesson.status];
+    : lesson.status === "Normal" && lesson.rsvpResponse === "AttendingLate"
+      ? { label: "Geç kalacak", className: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" }
+      : lesson.status === "Normal" && lesson.rsvpResponse === "NotAttending"
+        ? { label: "Gelmiyor", className: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" }
+        : lesson.status === "Normal"
+          ? { label: "Cevap yok", className: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" }
+          : config[lesson.status];
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.56rem] font-bold ${rsvp.className}`}>{rsvp.label}</span>;
 }
 

@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Messaging.Features;
 
-public record BuiltMessage(string TemplateName, IReadOnlyDictionary<string, string> Parameters);
+// ButtonPayloads yalnızca lesson_reminder_rsvp için doldurulur (imzalı/opak referans -
+// docs/06-whatsapp.md "Buton payload güvenliği"). Meta Cloud API'de quick-reply butonlarının
+// payload'ı gönderim anında template'in "button" component'i üzerinden override edilir; sıra
+// önemlidir (index 0/1/2 = Evet / Geç kalacağım / Hayır).
+public record BuiltMessage(string TemplateName, IReadOnlyDictionary<string, string> Parameters, IReadOnlyList<string>? ButtonPayloads = null);
 
 // NotificationJob'ın tipine ve reference_id'sine bakarak hangi şablonun hangi parametrelerle
 // gönderileceğini çözer. docs/06-whatsapp.md lesson_reminder_rsvp'nin tam gövdesini veriyor;
@@ -12,13 +16,13 @@ public record BuiltMessage(string TemplateName, IReadOnlyDictionary<string, stri
 // Fake ile geliştirilip Meta onayını paralel bekleyen - kendi şablonlarımız.
 public static class NotificationMessageBuilder
 {
-    public static async Task<BuiltMessage?> BuildAsync(NotificationJob job, AbderaDbContext db, IClock clock)
+    public static async Task<BuiltMessage?> BuildAsync(NotificationJob job, AbderaDbContext db, IClock clock, IConfiguration config)
     {
         return job.Type switch
         {
-            NotificationJobType.LessonReminder => await BuildLessonMessageAsync(job, "lesson_reminder_rsvp", db, clock),
-            NotificationJobType.LessonRescheduled => await BuildLessonMessageAsync(job, "lesson_rescheduled", db, clock),
-            NotificationJobType.MakeupApproved => await BuildLessonMessageAsync(job, "makeup_approved", db, clock),
+            NotificationJobType.LessonReminder => await BuildLessonMessageAsync(job, "lesson_reminder_rsvp", db, clock, config),
+            NotificationJobType.LessonRescheduled => await BuildLessonMessageAsync(job, "lesson_rescheduled", db, clock, config),
+            NotificationJobType.MakeupApproved => await BuildLessonMessageAsync(job, "makeup_approved", db, clock, config),
             NotificationJobType.PaymentReminder => await BuildPaymentMessageAsync(job, db, clock),
             // ARC-2: Birthday/PackageEnding tanımlı ama hiçbir use-case tarafından
             // üretilmiyor (Faz 7'ye kaldı) - sessizce null dönüp yanıltıcı bir "kayıt
@@ -30,7 +34,7 @@ public static class NotificationMessageBuilder
         };
     }
 
-    private static async Task<BuiltMessage?> BuildLessonMessageAsync(NotificationJob job, string templateName, AbderaDbContext db, IClock clock)
+    private static async Task<BuiltMessage?> BuildLessonMessageAsync(NotificationJob job, string templateName, AbderaDbContext db, IClock clock, IConfiguration config)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == job.ReferenceId);
         if (lesson is null) return null;
@@ -51,7 +55,18 @@ public static class NotificationMessageBuilder
             ["teacher_name"] = $"{teacher.FirstName} {teacher.LastName}",
         };
 
-        return new BuiltMessage(templateName, parameters);
+        IReadOnlyList<string>? buttonPayloads = null;
+        if (templateName == "lesson_reminder_rsvp")
+        {
+            var signingKey = config["WhatsApp:PayloadSigningKey"] ?? "";
+            var settings = await NotificationAutomationSettings.GetCurrentAsync(db);
+            var actions = settings.AllowAttendingLateResponse
+                ? new[] { RsvpButtonPayload.AttendingAction, RsvpButtonPayload.AttendingLateAction, RsvpButtonPayload.NotAttendingAction }
+                : new[] { RsvpButtonPayload.AttendingAction, RsvpButtonPayload.NotAttendingAction };
+            buttonPayloads = actions.Select(action => RsvpButtonPayload.Sign(action, lesson.Id, signingKey)).ToList();
+        }
+
+        return new BuiltMessage(templateName, parameters, buttonPayloads);
     }
 
     private static async Task<BuiltMessage?> BuildPaymentMessageAsync(NotificationJob job, AbderaDbContext db, IClock clock)

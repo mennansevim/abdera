@@ -265,6 +265,28 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(RsvpSource.WhatsApp, rsvp.Source);
     }
 
+    // Faz 3: üçüncü RSVP seçeneği ("Evet ama biraz geç kalacağım").
+    [Fact]
+    public async Task Rsvp_button_webhook_records_attending_late_response()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "rsvpwhlate");
+
+        var client = _factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/dev/whatsapp/simulate-rsvp", new
+        {
+            fromPhoneNumber = seeded.GuardianPhone,
+            action = RsvpButtonPayload.AttendingLateAction,
+            lessonId = seeded.LessonId,
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var rsvp = await db.LessonRsvps.SingleAsync(r => r.LessonId == seeded.LessonId && r.GuardianId == seeded.GuardianId);
+        Assert.Equal(RsvpResponse.AttendingLate, rsvp.Response);
+        Assert.Equal(RsvpSource.WhatsApp, rsvp.Source);
+    }
+
     [Theory]
     [InlineData("ders", "sonraki")]
     [InlineData("okula yaz", "yönetimine iletildi")]
@@ -421,5 +443,98 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         var inboundCount = await db.WhatsAppMessages.CountAsync(m => m.GuardianId == seeded.GuardianId && m.BodySnapshot == "aidat");
         Assert.Equal(1, inboundCount);
+    }
+
+    // Faz 3: otomasyon ayarı değişince bekleyen (henüz gönderilmemiş) LessonReminder job'larının
+    // scheduled_at'i dersin gerçek başlangıç saatine göre yeniden hesaplanmalı.
+    [Fact]
+    public async Task Updating_reminder_minutes_reschedules_pending_lesson_reminder_jobs()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        // Ayar tüm test sınıfının paylaştığı gerçek bir singleton satır (NotificationAutomationSettings) -
+        // başka bir testin bıraktığı değere bağımlı olmamak için önce bilinen bir temel duruma
+        // (60 dk, açık) sıfırlanır, ondan sonra ders üretilir.
+        await admin.PutAsJsonAsync("/api/notification-automation-settings",
+            new AutomationSettings.UpdateRequest(LessonReminderMinutesBefore: 60, IsEnabled: true, AllowAttendingLateResponse: true));
+        var seeded = await SeedLessonAsync(admin, "automin");
+
+        var jobBefore = await db.NotificationJobs.AsNoTracking()
+            .SingleAsync(j => j.Type == NotificationJobType.LessonReminder && j.ReferenceId == seeded.LessonId);
+        var lesson = await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId);
+        Assert.Equal(lesson.StartAt.AddMinutes(-60), jobBefore.ScheduledAt);
+
+        var updateResponse = await admin.PutAsJsonAsync("/api/notification-automation-settings",
+            new AutomationSettings.UpdateRequest(LessonReminderMinutesBefore: 15, IsEnabled: true, AllowAttendingLateResponse: true));
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+
+        var jobAfter = await db.NotificationJobs.AsNoTracking()
+            .SingleAsync(j => j.Type == NotificationJobType.LessonReminder && j.ReferenceId == seeded.LessonId);
+        Assert.Equal(lesson.StartAt.AddMinutes(-15), jobAfter.ScheduledAt);
+        Assert.Equal(NotificationJobStatus.Pending, jobAfter.Status);
+
+        // Sıradaki ders üretimi de artık yeni süreyi kullanmalı (kalıcı ayar, tek seferlik değil).
+        var secondSeriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+            seeded.EnrollmentId, DayOfWeek.Friday, new TimeOnly(9, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
+        Assert.Equal(HttpStatusCode.Created, secondSeriesResponse.StatusCode);
+        var created = (await secondSeriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+        var newLessonIds = await db.Lessons.AsNoTracking()
+            .Where(l => l.LessonSeriesId == created.Series.Id).Select(l => l.Id).ToListAsync();
+        var newJobs = await db.NotificationJobs.AsNoTracking()
+            .Where(j => j.Type == NotificationJobType.LessonReminder && newLessonIds.Contains(j.ReferenceId))
+            .ToListAsync();
+        var newLessons = await db.Lessons.AsNoTracking().Where(l => newLessonIds.Contains(l.Id)).ToDictionaryAsync(l => l.Id);
+        Assert.All(newJobs, job => Assert.Equal(newLessons[job.ReferenceId].StartAt.AddMinutes(-15), job.ScheduledAt));
+    }
+
+    // Faz 3: otomasyon kapatılınca bekleyen hatırlatmalar iptal edilir, yeniden açılana kadar
+    // yeni ders üretimi de reminder job'ı kurmaz.
+    [Fact]
+    public async Task Disabling_automation_cancels_pending_jobs_and_blocks_new_lesson_reminders()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        // Bkz. yukarıdaki test - paylaşılan singleton ayarı bilinen bir temel duruma (açık)
+        // sıfırlanır ki seed sırasında gerçekten bir hatırlatma job'ı kurulsun.
+        await admin.PutAsJsonAsync("/api/notification-automation-settings",
+            new AutomationSettings.UpdateRequest(LessonReminderMinutesBefore: 60, IsEnabled: true, AllowAttendingLateResponse: true));
+        var seeded = await SeedLessonAsync(admin, "autooff");
+
+        var disableResponse = await admin.PutAsJsonAsync("/api/notification-automation-settings",
+            new AutomationSettings.UpdateRequest(LessonReminderMinutesBefore: 30, IsEnabled: false, AllowAttendingLateResponse: true));
+        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+
+        var seededLessonIds = await db.Lessons.AsNoTracking().Where(l => l.StudentId == seeded.StudentId).Select(l => l.Id).ToListAsync();
+        var existingJobs = await db.NotificationJobs.AsNoTracking()
+            .Where(j => j.Type == NotificationJobType.LessonReminder && seededLessonIds.Contains(j.ReferenceId))
+            .ToListAsync();
+        Assert.NotEmpty(existingJobs);
+        Assert.All(existingJobs, j => Assert.Equal(NotificationJobStatus.Cancelled, j.Status));
+
+        var newSeriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+            seeded.EnrollmentId, DayOfWeek.Saturday, new TimeOnly(11, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
+        Assert.Equal(HttpStatusCode.Created, newSeriesResponse.StatusCode);
+        var created = (await newSeriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+        var newLessonIds = await db.Lessons.AsNoTracking()
+            .Where(l => l.LessonSeriesId == created.Series.Id).Select(l => l.Id).ToListAsync();
+        var newJobCount = await db.NotificationJobs.CountAsync(j => j.Type == NotificationJobType.LessonReminder && newLessonIds.Contains(j.ReferenceId));
+        Assert.Equal(0, newJobCount);
+
+        // Yeniden açılınca yeni üretilen dersler tekrar hatırlatma job'ı almalı (geçmişe dönük
+        // toparlama yapılmadığı için mevcut iptal edilmiş job'lar geri gelmez).
+        var enableResponse = await admin.PutAsJsonAsync("/api/notification-automation-settings",
+            new AutomationSettings.UpdateRequest(LessonReminderMinutesBefore: 30, IsEnabled: true, AllowAttendingLateResponse: true));
+        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+
+        var reEnabledSeriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+            seeded.EnrollmentId, DayOfWeek.Sunday, new TimeOnly(11, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
+        Assert.Equal(HttpStatusCode.Created, reEnabledSeriesResponse.StatusCode);
+        var reEnabledCreated = (await reEnabledSeriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+        var reEnabledLessonIds = await db.Lessons.AsNoTracking()
+            .Where(l => l.LessonSeriesId == reEnabledCreated.Series.Id).Select(l => l.Id).ToListAsync();
+        var reEnabledJobCount = await db.NotificationJobs.CountAsync(j => j.Type == NotificationJobType.LessonReminder && reEnabledLessonIds.Contains(j.ReferenceId));
+        Assert.Equal(reEnabledLessonIds.Count, reEnabledJobCount);
     }
 }

@@ -135,6 +135,7 @@ public static class Webhooks
         var response = action switch
         {
             RsvpButtonPayload.AttendingAction => RsvpResponse.Attending,
+            RsvpButtonPayload.AttendingLateAction => RsvpResponse.AttendingLate,
             RsvpButtonPayload.NotAttendingAction => RsvpResponse.NotAttending,
             _ => throw new InvalidOperationException($"Bilinmeyen RSVP aksiyonu: {action}"),
         };

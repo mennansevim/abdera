@@ -122,10 +122,12 @@ public static class LessonSeriesFeatures
 
         var plan = LessonGenerator.Plan(series, windowStart, windowEnd, existingDates, holidayDates, timeOffRanges);
 
-        // docs/06-whatsapp.md: her üretilen ders için dersten Notifications__LessonReminderMinutesBefore
-        // (varsayılan 60 dk) önce bir LESSON_REMINDER job'ı kurulur - yalnızca öğrencinin birincil velisine.
+        // docs/06-whatsapp.md: her üretilen ders için dersten (admin panelden ayarlanabilir,
+        // varsayılan 60 dk - bkz. NotificationAutomationSettings, Faz 3) önce bir LESSON_REMINDER
+        // job'ı kurulur - yalnızca öğrencinin birincil velisine.
         var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, enrollment.StudentId);
-        var reminderMinutesBefore = config.GetValue("Notifications:LessonReminderMinutesBefore", 60);
+        var automationSettings = await NotificationAutomationSettings.GetCurrentAsync(db);
+        var reminderMinutesBefore = automationSettings.LessonReminderMinutesBefore;
 
         foreach (var occurrence in plan.ToCreate)
         {

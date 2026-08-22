@@ -79,12 +79,18 @@ public static class Calendar
             {
                 LessonId = group.Key,
                 HasAttending = group.Any(r => r.Response == RsvpResponse.Attending),
+                HasAttendingLate = group.Any(r => r.Response == RsvpResponse.AttendingLate),
                 HasNotAttending = group.Any(r => r.Response == RsvpResponse.NotAttending),
             })
             .ToListAsync();
+        // Birden fazla veli farklı cevap verirse en olumlu olan öne çıkar: Attending >
+        // AttendingLate > NotAttending > Unknown (hiç yanıt yok).
         var rsvpByLesson = rsvpRows.ToDictionary(
             row => row.LessonId,
-            row => row.HasAttending ? RsvpResponse.Attending : row.HasNotAttending ? RsvpResponse.NotAttending : RsvpResponse.Unknown);
+            row => row.HasAttending ? RsvpResponse.Attending
+                : row.HasAttendingLate ? RsvpResponse.AttendingLate
+                : row.HasNotAttending ? RsvpResponse.NotAttending
+                : RsvpResponse.Unknown);
 
         return Results.Ok(lessons.Select(lesson => lesson with
         {

@@ -12,6 +12,7 @@ namespace Abdera.Api.Modules.Messaging.Domain;
 public static class RsvpButtonPayload
 {
     public const string AttendingAction = "rsvp_attending";
+    public const string AttendingLateAction = "rsvp_attending_late";
     public const string NotAttendingAction = "rsvp_not_attending";
 
     public static string Sign(string action, Guid lessonId, string signingKey)

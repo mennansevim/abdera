@@ -453,7 +453,7 @@ function LessonDetailsDialog({ lesson, onClose }: { lesson: CalendarLesson; onCl
           <DetailItem label="Saat" value={`${formatTime(start)} – ${formatTime(end)}`} />
           <DetailItem label="Süre" value={`${duration} dakika`} />
           <DetailItem label="Öğretmen" value={lesson.teacherName} />
-          <DetailItem label="Katılım" value={lesson.rsvpResponse === "Attending" ? "Geliyor" : lesson.rsvpResponse === "NotAttending" ? "Gelmiyor" : "Cevap bekleniyor"} />
+          <DetailItem label="Katılım" value={lesson.rsvpResponse === "Attending" ? "Geliyor" : lesson.rsvpResponse === "AttendingLate" ? "Geç kalacak" : lesson.rsvpResponse === "NotAttending" ? "Gelmiyor" : "Cevap bekleniyor"} />
           <DetailItem label="Durum" value={lesson.status === "Cancelled" ? "İptal edildi" : lesson.status === "Completed" ? "Tamamlandı" : lesson.status === "Makeup" ? "Telafi" : "Planlandı"} />
         </dl>
         <div className="flex justify-end border-t border-[var(--line)] p-4">

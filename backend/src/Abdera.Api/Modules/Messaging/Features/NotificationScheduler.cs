@@ -26,6 +26,15 @@ public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotifica
         // docs/06-whatsapp.md A8: rızası kapalı veliye asla job açılmaz.
         if (guardian is null || !guardian.NotificationConsent) return false;
 
+        // Faz 3: ders hatırlatması otomasyonu admin panelden kapatılabilir - kapalıyken
+        // yeni LessonReminder job'ı açılmaz (mevcut bekleyen job'lar ayrıca ayar değişince
+        // Features/AutomationSettings.cs tarafından iptal edilir).
+        if (type == NotificationJobType.LessonReminder)
+        {
+            var settings = await NotificationAutomationSettings.GetCurrentAsync(db);
+            if (!settings.IsEnabled) return false;
+        }
+
         // A5 idempotency: aynı referans için zaten bekleyen/gönderilmiş bir job varsa tekrar açma.
         // (İptal edilmiş bir job'ın yerine yenisi açılabilmeli - A4'ün "yenisi kurulur" kuralı.)
         var alreadyExists = await db.NotificationJobs.AnyAsync(j =>

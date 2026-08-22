@@ -23,6 +23,7 @@ const HOUR_HEIGHT_REM = 3.6;
 function rsvpDotTone(lesson: CalendarLesson): { color: string; label: string } {
   if (lesson.status !== "Normal") return { color: "transparent", label: "" };
   if (lesson.rsvpResponse === "Attending") return { color: "var(--success)", label: "Geliyor" };
+  if (lesson.rsvpResponse === "AttendingLate") return { color: "var(--warning)", label: "Geç kalacak" };
   if (lesson.rsvpResponse === "NotAttending") return { color: "var(--danger)", label: "Gelmiyor" };
   return { color: "var(--warning)", label: "Cevap yok" };
 }
