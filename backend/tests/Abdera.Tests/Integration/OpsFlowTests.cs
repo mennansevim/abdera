@@ -34,6 +34,11 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         await using var db = await _factory.CreateDbContextAsync();
         var admin = await CreateAdminClientAsync();
 
+        // Sınıfın paylaştığı DB'de başka testlerin (ör. sayfalama testi) kendi BackupRun
+        // satırları olabilir - "en yeni" satırı StartedAt'e göre aramak yerine, tetiklemeden
+        // ÖNCEKİ id kümesini alıp sonra oluşan YENİ satırı buluyoruz (sıra bağımsız).
+        var idsBefore = await db.BackupRuns.Select(r => r.Id).ToListAsync();
+
         var triggerResponse = await admin.PostAsync("/api/backup-runs/trigger", null);
         Assert.Equal(HttpStatusCode.Accepted, triggerResponse.StatusCode);
 
@@ -43,7 +48,7 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         for (var attempt = 0; attempt < 30 && run?.Status != BackupRunStatus.Succeeded; attempt++)
         {
             await Task.Delay(500);
-            run = await db.BackupRuns.AsNoTracking().OrderByDescending(r => r.StartedAt).FirstOrDefaultAsync();
+            run = await db.BackupRuns.AsNoTracking().Where(r => !idsBefore.Contains(r.Id)).FirstOrDefaultAsync();
         }
 
         Assert.NotNull(run);
@@ -60,11 +65,15 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         await using var db = await _factory.CreateDbContextAsync();
         var admin = await CreateAdminClientAsync();
 
-        var now = DateTimeOffset.UtcNow;
-        var older = BackupRun.Start(triggeredManually: false, now.AddDays(-2));
-        older.MarkSucceeded("older.sql.enc", 100, now.AddDays(-2));
-        var newer = BackupRun.Start(triggeredManually: false, now.AddDays(-1));
-        newer.MarkSucceeded("newer.sql.enc", 200, now.AddDays(-1));
+        // Diğer testler (ör. manuel tetikleme testi) aynı paylaşılan factory/DB'de gerçek
+        // BackupRun satırları oluşturabiliyor - "en yeni" iddiasının gerçekten doğru olması
+        // için burada uzak bir GELECEK tarih kullanılıyor, aksi halde sınıf içindeki başka
+        // bir testin "şu an" zaman damgalı gerçek kaydı bunu geçebilir (sıra bağımlılığı).
+        var farFuture = DateTimeOffset.UtcNow.AddYears(1);
+        var older = BackupRun.Start(triggeredManually: false, farFuture);
+        older.MarkSucceeded("older.sql.enc", 100, farFuture);
+        var newer = BackupRun.Start(triggeredManually: false, farFuture.AddMinutes(1));
+        newer.MarkSucceeded("newer.sql.enc", 200, farFuture.AddMinutes(1));
         db.BackupRuns.AddRange(older, newer);
         await db.SaveChangesAsync();
 
