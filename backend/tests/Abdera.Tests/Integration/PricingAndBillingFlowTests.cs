@@ -91,9 +91,26 @@ public class PricingAndBillingFlowTests : IClassFixture<AbderaWebApplicationFact
         var finalPayment = await admin.PostAsJsonAsync($"/api/receivables/{receivable.Id}/payments",
             new Payments.CreateRequest(1200m, new DateOnly(2026, 9, 10), PaymentMethod.Transfer, "TR123", null));
         Assert.Equal(HttpStatusCode.Created, finalPayment.StatusCode);
+        var finalPaymentRecord = (await finalPayment.Content.ReadFromJsonAsync<Payments.PaymentResponse>(TestJson.Options))!;
 
         var afterFull = await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == receivable.Id);
         Assert.Equal(ReceivableStatus.Paid, afterFull.Status);
+
+        // Düzeltme özgün ödemeyi silmez; ayrı history/audit kaydı oluşturur ve bakiye
+        // etkin tutara göre yeniden hesaplanır.
+        var correctionResponse = await admin.PostAsJsonAsync(
+            $"/api/payments/{finalPaymentRecord.Id}/corrections",
+            new PaymentCorrections.CreateRequest(1000m, "Banka dekontundaki tutar düzeltildi"));
+        Assert.Equal(HttpStatusCode.Created, correctionResponse.StatusCode);
+        db.ChangeTracker.Clear();
+        Assert.Equal(ReceivableStatus.Partial, (await db.Receivables.SingleAsync(r => r.Id == receivable.Id)).Status);
+        Assert.Equal(1200m, (await db.Payments.SingleAsync(item => item.Id == finalPaymentRecord.Id)).Amount);
+        Assert.True(await db.PaymentCorrections.AnyAsync(item => item.PaymentId == finalPaymentRecord.Id && item.CorrectedAmount == 1000m));
+        Assert.True(await db.AuditLogs.AnyAsync(item => item.Action == "payment.corrected" && item.EntityId == finalPaymentRecord.Id));
+
+        var replacementPayment = await admin.PostAsJsonAsync($"/api/receivables/{receivable.Id}/payments",
+            new Payments.CreateRequest(200m, new DateOnly(2026, 9, 11), PaymentMethod.Transfer, "TR124", "düzeltme sonrası kalan"));
+        Assert.Equal(HttpStatusCode.Created, replacementPayment.StatusCode);
 
         // Ödenmiş bir aidata yeni ödeme kabul edilmemeli.
         var extraPayment = await admin.PostAsJsonAsync($"/api/receivables/{receivable.Id}/payments",
@@ -104,6 +121,14 @@ public class PricingAndBillingFlowTests : IClassFixture<AbderaWebApplicationFact
         var billing = await (await admin.GetAsync($"/api/students/{student.Id}/billing"))
             .Content.ReadFromJsonAsync<List<StudentBilling.StudentBillingResponse>>(TestJson.Options);
         Assert.Single(billing!.Single().Receivables);
+
+        var dueList = await (await admin.GetAsync("/api/billing/dues"))
+            .Content.ReadFromJsonAsync<List<StudentBilling.DueListItemResponse>>(TestJson.Options);
+        var listedDue = dueList!.Single(item => item.Id == receivable.Id);
+        Assert.Equal("Bill Student", listedDue.StudentName);
+        Assert.Equal("Piyano", listedDue.InstrumentName);
+        Assert.Equal(2000m, listedDue.TotalPaid);
+        Assert.Contains(listedDue.Payments, item => item.Kind == "Correction" && item.CorrectsPaymentId == finalPaymentRecord.Id);
     }
 
     [Fact]

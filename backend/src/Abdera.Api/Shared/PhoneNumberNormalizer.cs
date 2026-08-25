@@ -11,8 +11,18 @@ public static partial class PhoneNumberNormalizer
     [GeneratedRegex(@"[^\d+]")]
     private static partial Regex NonDigitOrPlus();
 
-    public static string Normalize(string rawInput)
+    public static string Normalize(string? rawInput)
     {
+        // Null/bos girdi de "gecersiz numara" demektir - ayri bir hata turu degil.
+        // Bu kontrol olmadan, govdesinde phoneNumber eksik gelen bir istek burada
+        // NullReferenceException firlatiyor ve kontrollu bir dogrulama hatasi yerine
+        // unhandled 500 uretiyordu (gercek bir bug olarak /api/guardian/otp/request
+        // uzerinde bulundu). Cagiranlar zaten ArgumentException'i 400'e ceviriyor.
+        if (string.IsNullOrWhiteSpace(rawInput))
+        {
+            throw new ArgumentException("Telefon numarasi bos olamaz. Ornek: 0555 123 45 67.");
+        }
+
         var cleaned = NonDigitOrPlus().Replace(rawInput.Trim(), "");
 
         var normalized = cleaned switch

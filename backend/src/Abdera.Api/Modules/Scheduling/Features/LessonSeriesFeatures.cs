@@ -50,6 +50,8 @@ public static class LessonSeriesFeatures
 
         var endTime = request.StartTime.AddMinutes(request.DurationMinutes);
 
+        await EnsureStudentWeeklyLimitAsync(
+            enrollment.StudentId, request.EffectiveFrom, request.EffectiveUntil, db);
         await EnsureWithinAvailabilityAsync(enrollment.TeacherId, request.DayOfWeek, request.StartTime, endTime, db);
         await EnsureNoConflictAsync(enrollment, request.DayOfWeek, request.StartTime, endTime, request.EffectiveFrom, request.EffectiveUntil, db);
 
@@ -192,6 +194,28 @@ public static class LessonSeriesFeatures
             var conflictType = candidate.Enrollment.TeacherId == enrollment.TeacherId ? "öğretmenin" : "öğrencinin";
             throw new ConflictException(
                 $"Bu saat aralığı {conflictType} başka bir ders serisiyle çakışıyor ({candidate.Series.DayOfWeek} {candidate.Series.StartTime}).");
+        }
+    }
+
+    private static async Task EnsureStudentWeeklyLimitAsync(
+        Guid studentId, DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db)
+    {
+        var existingSeries = await db.LessonSeries
+            .Where(s => s.Status == LessonSeriesStatus.Active)
+            .Join(db.Enrollments, s => s.EnrollmentId, e => e.Id, (series, enrollment) => new { Series = series, Enrollment = enrollment })
+            .Where(x => x.Enrollment.StudentId == studentId)
+            .Select(x => x.Series)
+            .ToListAsync();
+
+        var overlappingSeriesCount = existingSeries.Count(series => DateRangesOverlap(
+            effectiveFrom, effectiveUntil, series.EffectiveFrom, series.EffectiveUntil));
+
+        if (overlappingSeriesCount >= StudentWeeklyLessonPolicy.MaximumLessons)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["enrollmentId"] = [$"Bir öğrenci haftada en fazla {StudentWeeklyLessonPolicy.MaximumLessons} düzenli ders alabilir."],
+            });
         }
     }
 

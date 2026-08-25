@@ -2,6 +2,16 @@
 
 `CLAUDE.md`'deki kural: gerçek Postgres yalnızca gerçekten gerektiğinde. Testcontainers testi 3–5 saniyeden başlar; her testte kullanılırsa paket dakikalar sürer ve kimse çalıştırmaz olur (`docs/10-decisions.md` C4).
 
+## Progress tamamlama ve WhatsApp sertleştirme kapsamı
+
+- `CloudApiWhatsAppClientTests`: Meta template/free-text JSON sözleşmesi, Bearer başlığı, quick-reply sırası, HTTP hata eşlemesi, ağ hatası, iptal sinyali ve `2xx` içinde mesaj kimliği gelmemesi.
+- `ProgressDomainTests`: ders notu normalizasyonu, 1–5 zorluk/puan sınırları, yetenek kodu normalizasyonu, çalışma ödevi durum geçişi ve pazartesi başlangıçlı hafta hesabının ay/yıl sınırları.
+- `ProgressFlowTests` (gerçek PostgreSQL): migration/seed, ortak + enstrümana özel yetenek filtresi, öğretmen öğrenci/ders scope'u, admin salt-okuma, yetenek-enstrüman uyumu, gelişim sıralaması ve çalışma ödevi yaşam döngüsü.
+- `GuardianOtpFlowTests`: tek kullanımlı OTP, beş hatada kilitlenme, en yeni kod kuralı, bilinmeyen ve bozuk telefon numaralarının bilgi sızdırmayan davranışı.
+- `MessagingFlowTests`: Meta webhook abonelik handshake'i, bilinmeyen veli olayı ve değiştirilmiş RSVP payload'ının iş etkisi üretmeden `FAILED` kaydedilmesi.
+- Bu bölüm yazıldığında paket `260/260` idi; Faz 7–12 kapanışındaki güncel sonuç
+  aşağıdaki “25 Ağustos 2026 kalite kapısı” bölümünde kayıtlıdır.
+
 ## Birim testleri (xUnit, veritabanı yok)
 
 - Ders üretimi: rolling window (8–12 hafta), idempotency — iki kez çalıştırınca mükerrer satır olmamalı
@@ -64,5 +74,65 @@ Altı fazdır `.github/workflows/ci.yml`'de yalnızca `guard-secrets` (`.env` co
 
 - `backend-build-test` job'ı açıldı. Testcontainers.PostgreSql kendi Postgres container'ını doğrudan Docker daemon'ı üzerinden başlatıyor (`AbderaWebApplicationFactory`) - `ubuntu-latest` runner'ında Docker zaten hazır çalıştığından ayrı bir `services: postgres` bloğuna **gerek yok**, eklenmedi (ikisi aynı iş için çakışan/gereksiz bir ikinci Postgres olurdu).
 - Birim/entegrasyon testleri tek `dotnet test` çağrısında birlikte kalıyor (ayrı job'lara bölünmedi) - suite yerel olarak ~15-25 saniyede bitiyor, bu ölçekte ayırmanın getirisi yok.
-- `frontend-build-lint` **hâlâ yorumda** - `npm run lint` şu an `banking/page.tsx`'teki önceden var olan (bu denetimin kapsamı dışında, ayrı bir görev olarak flag'lenmiş) bir `react/no-unescaped-entities` hatasından dolayı kırmızı döner. O düzeltilmeden açılırsa CI ilk çalıştığı andan itibaren kırmızı kalır - o yüzden düzeltme ayrı görev tamamlanana kadar bilinçli olarak açılmadı.
+- `frontend-build-lint` daha sonraki UI düzeltmesinde açıldı; hem lint hem production build
+  artık yerel kalite kapısında ve CI workflow'unda çalışır.
 - **Eksik/kullanıcı eylemi gerektiren adım:** bu job'ın `main`'e push/PR'da **zorunlu (required) status check** olması bir workflow dosyası değişikliğiyle değil, GitHub repo ayarlarından yapılır (Settings → Branches → Branch protection rules → "Require status checks to pass" → `backend-build-test` seç). Bu, kod değişikliği kapsamının dışında - repo sahibinin GitHub arayüzünden yapması gerekiyor.
+
+## 25 Ağustos 2026 — Faz 7–12 kalite kapısı
+
+Tekrarlanabilir yerel komutlar:
+
+```bash
+cd backend && dotnet test Abdera.slnx --no-restore
+cd frontend && npm run lint
+cd frontend && npm run build
+docker-compose up --build -d
+cd frontend && E2E_ADMIN_EMAIL=<admin> E2E_ADMIN_PASSWORD=<secret> npm run test:e2e
+```
+
+Son temiz koşunun sonucu:
+
+- Backend: `284 passed, 0 failed, 0 skipped` (`192` unit + `92` gerçek PostgreSQL integration).
+- Frontend: lint temiz; Next.js production build 19 sayfanın tamamını üretti.
+- Playwright: `3 passed` — yönetici 14:30 boş hücre çift-tıklama, ders oluşturma,
+  öğretmen/saat/süre/durum düzenleme, gerçek sürükle-bırak + reload, beşinci haftalık
+  serinin 400 reddi ve kısmi ödeme; öğretmen eser/not/veli yorumu onayı; veli
+  OTP/takvim/aidat/onaylı yorum/pratik günlüğü.
+- Compose: `db`, `api`, `web` çalışır; `/health` `Healthy`, giriş sayfası HTTP `200`.
+- Migration: mevcut veritabanı 19 migration ile son sürüme yükseldi; ayrı boş
+  `abdera_clean_validation_20260825` veritabanında 0→19 zinciri ayrıca geçti.
+
+Playwright paketi çalışan Compose uygulamasına karşı koşar. Art arda çok sayıda giriş
+denemesinde ürünün login rate-limit'i `429` döndürebilir; kalite kapısında temiz bir servis
+başlangıcı kullanılır. Testler hız sınırını gevşetmez veya production davranışını değiştirmez.
+
+## Browser E2E'yi yerelde çalıştırma (Playwright)
+
+```bash
+docker compose up -d
+E2E_ADMIN_EMAIL=admin@example.com E2E_ADMIN_PASSWORD=<.env'deki> npm run test:e2e --prefix frontend
+```
+
+Spec'ler:
+
+| Dosya | Kapsam |
+|---|---|
+| `e2e/critical-roles.spec.ts` | Üç rol: admin (ders oluştur/düzenle/sürükle-bırak/kısmi ödeme), öğretmen (repertuvar notu + veli yorumu onayı), veli (takvim/aidat/onaylı yorum/pratik günlüğü). |
+| `e2e/data-isolation.spec.ts` | Veli veri izolasyonu — yabancı öğrenci id'si, yönetici uçları ve ham öğretmen notu sızıntısı. Diğer spec'ten **bağımsız**. |
+
+### Arka arkaya koşarken: hız sınırı
+
+`/api/auth/login` ve `/api/guardian/otp/*` kaba kuvvete karşı **IP başına 15 dakikada 5
+istekle** sınırlı. Suite tek koşuda 2 admin girişi + 2 OTP tüketir; art arda birkaç kez
+çalıştırırsan sınıra takılır ve testler **ürün hatası olmadan** kırmızı döner.
+
+Sıfırlamak için (limiter bellekte tutulur):
+
+```bash
+docker compose restart api
+```
+
+Bu kural test için gevşetilmez. CI'da her koşu temiz bir container ile başladığı için sorun
+olmaz; yalnızca `retries: 1` yeniden denemesine yer bırakmak üzere smoke ortamının `.env`'inde
+eşik yükseltilir (bkz. `.github/workflows/ci.yml`) — mekanizma yine çalışır, yalnızca eşik
+farklıdır. Kuralın kendisi backend testlerinde kendi düşük limitli factory'siyle doğrulanır.

@@ -1,5 +1,9 @@
+using System.Security.Claims;
+using System.Text.Json;
+using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +25,7 @@ public static class CancelLesson
     }
 
     private static async Task<IResult> HandleAsync(
-        Guid lessonId, Request request, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
+        Guid lessonId, Request request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -54,6 +58,20 @@ public static class CancelLesson
 
             db.MakeupCredits.Add(MakeupCredit.Earn(lesson.StudentId, lesson.Id, reason, now, validDays));
         }
+
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal),
+            "lesson.cancelled",
+            nameof(Lesson),
+            lesson.Id,
+            now,
+            JsonSerializer.Serialize(new { Status = LessonStatus.Normal.ToString() }),
+            JsonSerializer.Serialize(new
+            {
+                Status = lesson.Status.ToString(),
+                CancelledBy = request.CancelledBy.ToString(),
+                MakeupCreditEarned = earnsCredit,
+            })));
 
         await db.SaveChangesAsync();
         return Results.Ok(new Response(lesson.Id, earnsCredit));

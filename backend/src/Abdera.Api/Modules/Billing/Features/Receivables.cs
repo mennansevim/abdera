@@ -10,7 +10,17 @@ namespace Abdera.Api.Modules.Billing.Features;
 public static class Receivables
 {
     public record CreateRequest(Guid EnrollmentId, string Period);
-    public record PaymentSummary(Guid Id, decimal Amount, DateOnly PaymentDate, PaymentMethod Method, string? Reference, string? Note);
+    public record PaymentSummary(
+        Guid Id,
+        decimal Amount,
+        DateOnly PaymentDate,
+        PaymentMethod Method,
+        string? Reference,
+        string? Note,
+        string Kind = "Payment",
+        Guid? CorrectsPaymentId = null,
+        decimal? PreviousAmount = null,
+        DateTimeOffset? RecordedAt = null);
     public record ReceivableResponse(
         Guid Id, Guid EnrollmentId, string Period, decimal Amount, string Currency,
         DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid, List<PaymentSummary> Payments);
@@ -65,7 +75,7 @@ public static class Receivables
         receivable.Cancel(clock.UtcNow);
         await db.SaveChangesAsync();
 
-        var totalPaid = await db.Payments.Where(p => p.ReceivableId == receivableId).SumAsync(p => (decimal?)p.Amount) ?? 0;
+        var totalPaid = (await ComputeTotalsPaidAsync([receivableId], db)).GetValueOrDefault(receivableId);
         var payments = await ComputePaymentsAsync([receivableId], db);
         return Results.Ok(ToResponse(receivable, totalPaid, payments.GetValueOrDefault(receivableId) ?? []));
     }
@@ -93,11 +103,29 @@ public static class Receivables
     internal static async Task<Dictionary<Guid, decimal>> ComputeTotalsPaidAsync(IEnumerable<Guid> receivableIds, AbderaDbContext db)
     {
         var ids = receivableIds.ToList();
-        return await db.Payments
-            .Where(p => ids.Contains(p.ReceivableId))
-            .GroupBy(p => p.ReceivableId)
-            .Select(g => new { ReceivableId = g.Key, Total = g.Sum(p => p.Amount) })
-            .ToDictionaryAsync(x => x.ReceivableId, x => x.Total);
+        var payments = await db.Payments.Where(payment => ids.Contains(payment.ReceivableId)).ToListAsync();
+        var effectiveAmounts = await ComputeEffectivePaymentAmountsAsync(payments.Select(payment => payment.Id), db);
+        return payments
+            .GroupBy(payment => payment.ReceivableId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Sum(payment => effectiveAmounts.GetValueOrDefault(payment.Id, payment.Amount)));
+    }
+
+    internal static async Task<Dictionary<Guid, decimal>> ComputeEffectivePaymentAmountsAsync(
+        IEnumerable<Guid> paymentIds,
+        AbderaDbContext db)
+    {
+        var ids = paymentIds.Distinct().ToList();
+        var payments = await db.Payments.Where(payment => ids.Contains(payment.Id)).ToListAsync();
+        var corrections = await db.PaymentCorrections
+            .Where(correction => ids.Contains(correction.PaymentId))
+            .OrderBy(correction => correction.CreatedAt)
+            .ThenBy(correction => correction.Id)
+            .ToListAsync();
+        return payments.ToDictionary(
+            payment => payment.Id,
+            payment => corrections.LastOrDefault(correction => correction.PaymentId == payment.Id)?.CorrectedAmount ?? payment.Amount);
     }
 
     internal static async Task<Dictionary<Guid, List<PaymentSummary>>> ComputePaymentsAsync(IEnumerable<Guid> receivableIds, AbderaDbContext db)
@@ -108,9 +136,35 @@ public static class Receivables
             .OrderByDescending(p => p.PaymentDate)
             .ThenByDescending(p => p.CreatedAt)
             .ToListAsync();
+        var paymentIds = payments.Select(payment => payment.Id).ToList();
+        var corrections = await db.PaymentCorrections
+            .Where(correction => paymentIds.Contains(correction.PaymentId))
+            .OrderByDescending(correction => correction.CreatedAt)
+            .ThenByDescending(correction => correction.Id)
+            .ToListAsync();
         return payments
             .GroupBy(p => p.ReceivableId)
-            .ToDictionary(g => g.Key, g => g.Select(p => new PaymentSummary(p.Id, p.Amount, p.PaymentDate, p.Method, p.Reference, p.Note)).ToList());
+            .ToDictionary(g => g.Key, g => g.SelectMany(payment =>
+            {
+                var history = new List<PaymentSummary>
+                {
+                    new(payment.Id, payment.Amount, payment.PaymentDate, payment.Method, payment.Reference, payment.Note, RecordedAt: payment.CreatedAt),
+                };
+                history.AddRange(corrections
+                    .Where(correction => correction.PaymentId == payment.Id)
+                    .Select(correction => new PaymentSummary(
+                        correction.Id,
+                        correction.CorrectedAmount,
+                        DateOnly.FromDateTime(correction.CreatedAt.UtcDateTime),
+                        payment.Method,
+                        payment.Reference,
+                        correction.Reason,
+                        "Correction",
+                        payment.Id,
+                        correction.PreviousAmount,
+                        correction.CreatedAt)));
+                return history;
+            }).OrderByDescending(item => item.RecordedAt).ToList());
     }
 
     internal static ReceivableResponse ToResponse(Receivable r, decimal totalPaid, List<PaymentSummary> payments) =>

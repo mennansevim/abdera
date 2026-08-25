@@ -7,5 +7,9 @@ public static class ProgressModule
     public static void MapProgressModule(this WebApplication app)
     {
         app.MapLessonNotes();
+        app.MapStudentProgress();
+        app.MapSkillAssessments();
+        app.MapPracticeAssignments();
+        app.MapPracticeJournal();
     }
 }

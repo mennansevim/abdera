@@ -7,10 +7,16 @@ import type { LoginResponse, Me } from "./api";
 const ME_QUERY_KEY = ["auth", "me"] as const;
 
 export function useMe() {
-  return useQuery<Me>({
+  return useQuery<Me, ApiError>({
     queryKey: ME_QUERY_KEY,
     queryFn: () => api.get<Me>("/api/auth/me"),
-    retry: false,
+    // Kısa süreli API/container kesintisi oturumu düşürmüş gibi görünmemeli.
+    // Gerçek yetkisiz yanıtlarda ise yeniden denemek yerine giriş ekranına dönülür.
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return false;
+      return failureCount < 4;
+    },
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
 }
 

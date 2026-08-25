@@ -15,5 +15,7 @@ public static class PeopleModule
         app.MapGuardianAuth();
         app.MapGuardianPortal();
         app.MapGuardianPortalData();
+        app.MapAttentionNeededStudents();
+        app.MapInstrumentMaintenance();
     }
 }

@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+/* Yönetim panelinin yoğunluğu, kullanıcıların tarayıcıyı yaklaşık %85'e
+   küçülttüğünde oluşan dengeli yerleşime göre ayarlandı. Rem tabanlı tipografi,
+   aralıklar, kartlar ve form kontrolleri birlikte küçülür; responsive kırılma
+   noktaları da aynı ölçeği izler. */
+html {
+  font-size: 85%;
+}
+
+/* Ayarlar > Yazı boyutu seçimi. Ölçek rem tabanlı olduğu için responsive
+   kırılımları ve yerleşim korunur; yalnızca tipografi ve ona bağlı aralıklar
+   kullanıcının tercihine göre büyür veya küçülür. */
+html[data-font-size="small"] { font-size: 78%; }
+html[data-font-size="standard"] { font-size: 85%; }
+html[data-font-size="large"] { font-size: 94%; }
+
 :root {
   /* "Sıcak Atölye" yön değişimi (redesign/sicak-atolye) - mor/krem kimlikten sıcak
      terrakota/erik kimliğine geçiş. Veli portalının zaten kullandığı turuncu vurgu

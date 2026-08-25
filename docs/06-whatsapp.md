@@ -102,7 +102,7 @@ farklı, tahmin edilemez bir payload gider ama buton metni şablon onayında sab
 
 Sunucu, gelen payload'ı doğrulamadan hiçbir lesson/guardian eşlemesi yapmaz — imza tutmuyorsa istek `422` ile reddedilir ve olay `FAILED` olarak loglanır.
 
-**Boş anahtar fail-closed'dır (denetim SEC-1/SEC-2, bkz. `docs/13-audit-fix-prompt.md`):** `WhatsApp__AppSecret` ve `WhatsApp__PayloadSigningKey` boş/tanımsızsa `WebhookSignatureVerifier.IsValid` ve `RsvpButtonPayload.TryVerify` doğrudan `false` döner — boş anahtarla HMAC hesaplayıp deterministik/tahmin edilebilir bir sonuçla karşılaştırmaz. Ayrıca `Program.cs`'teki `ProductionSecretsGuard`, `Production` ortamında bu iki değişken tanımsızsa uygulamanın başlamasını tamamen engeller (Development'ta zorunlu değil — `Fake` sağlayıcı bunları hiç kullanmaz).
+**Boş anahtar fail-closed'dır (denetim SEC-1/SEC-2, bkz. `docs/13-audit-fix-prompt.md`):** `WhatsApp__AppSecret` ve `WhatsApp__PayloadSigningKey` boş/tanımsızsa `WebhookSignatureVerifier.IsValid` ve `RsvpButtonPayload.TryVerify` doğrudan `false` döner — boş anahtarla HMAC hesaplayıp deterministik/tahmin edilebilir bir sonuçla karşılaştırmaz. Ayrıca `Program.cs`'teki `ProductionSecretsGuard`, `Production` ortamında bu iki değişken tanımsızsa uygulamanın başlamasını tamamen engeller. `WhatsApp__Provider=Cloud` seçildiyse `WhatsApp__PhoneNumberId`, `WhatsApp__AccessToken` ve `WhatsApp__WebhookVerifyToken` da başlangıçta zorunlu doğrulanır; eksik Cloud ayarıyla uygulama yanıltıcı biçimde sağlıklı görünmez. Development'ta bu guard zorunlu değildir; `Fake` sağlayıcı Meta kimlik bilgilerini kullanmaz.
 
 ## Konuşma penceresi (24 saat) — A7
 

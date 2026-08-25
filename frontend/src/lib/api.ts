@@ -53,6 +53,7 @@ export const api = {
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
 // docs/07-api.md sözleşmesiyle eşleşen minimal tipler - modüller büyüdükçe genişler.
@@ -63,6 +64,10 @@ export interface Me {
   email: string;
   role: UserRole;
   mustChangePassword: boolean;
+  // Okulda bir AI sağlayıcısı (Ai__Provider/Ai__ApiKey) yapılandırılmış mı? Gelişim
+  // ekranındaki "yapıcı metne dönüştür" butonu buna göre açılır - yapılandırılmamışken
+  // buton kapalı kalır ve manuel yorum akışı aynen çalışır.
+  aiRewriteAvailable: boolean;
 }
 
 export interface LoginResponse {

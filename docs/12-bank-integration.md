@@ -92,3 +92,26 @@ Gerçek sağlayıcı (PayTR/Papara İşletme/banka Sanal IBAN ürünü) seçildi
 ## `Payment.CreatedBy` nullable oldu
 
 Otomatik eşleşen ödemelerde bir admin yok. `AuditLog.ActorUserId` zaten nullable ve sistem-kaynaklı olayları (`guardian.opted_out` gibi) `null` ile işaretliyor — `Payment.CreatedBy` aynı kurala uyumlu hale getirildi (migration: kolonu nullable'a çeviren additive bir değişiklik, veri kaybı riski yok).
+
+## `Banking__Provider` modları
+
+| Değer | Ne yapar | Nerede kullanılır |
+|---|---|---|
+| `Fake` | Sahte ama gerçekçi görünen bir TR IBAN üretir. `POST /api/dev/bank/simulate-transaction` ile eşleştirme mantığı test edilir. | **Yalnızca Development/test.** `ProductionSecretsGuard` production'da reddeder. |
+| `Manual` | Sanal IBAN tahsisini açık bir hata mesajıyla reddeder. Otomatik havale eşleştirme kapalıdır; admin ödemeyi elle girer. | **Production'da geçerli.** Gerçek sağlayıcı seçilene kadar okulun canlıya çıkmasını bloke etmez. |
+| *(gerçek sağlayıcı)* | Henüz seçilmedi. | — |
+
+Neden `Fake` production'da yasak: ürettiği IBAN gerçekçi görünür ama sahtedir. Bir veliye
+verilirse para hiçbir yere gitmez ve bu sessizce fark edilmeden sürebilir. `Manual` bunun
+yerine **görünür ret** üretir — sessiz başarısızlık yerine açık hata.
+
+Geçerli değerler tek bir yerde, `Modules/Banking/Domain/BankingProviderModes.cs` içinde
+tanımlıdır. Bunun nedeni gerçek bir hata: `ProductionSecretsGuard` "`Fake` olmasın" derken
+`Program.cs` "`Fake` dışında her şeye `throw`" ediyordu — yani Production'da hiçbir değer
+çalışmıyor, uygulama hiç ayağa kalkamıyordu. Guard'ı izole test eden birim testi bunu
+göremiyordu; artık `BankingProviderModesTests` iki taraf arasındaki tutarlılığı bekçiliyor.
+
+Gerçek sağlayıcı seçildiğinde: yeni bir `IBankPaymentProvider` implementasyonu eklenir,
+`BankingProviderModes`'a tek satır girer ve `Webhooks.cs`'deki `VerifySharedSecret` o
+sağlayıcının gerçek imza şemasıyla değiştirilir. Eşleştirme, admin çözümleme ve testler
+değişmez.

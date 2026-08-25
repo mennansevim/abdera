@@ -51,3 +51,11 @@ pgdata/
 logs/
 *.log
 npm-debug.log*
+
+# Playwright kosum ciktilari (trace/video/screenshot) - repoya girmez
+frontend/.playwright-artifacts/
+frontend/playwright-report/
+frontend/test-results/
+
+# Ajan/arac scratch ciktilari (sunum render'lari, ekran goruntuleri) - kaynak degil
+.codex-artifacts/

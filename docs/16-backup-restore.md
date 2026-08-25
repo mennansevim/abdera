@@ -51,3 +51,28 @@ provası" kabul kriterinin nasıl yerine getirileceğini tarif eder.
 
 Canlıya çıkmadan önce en az bir kez (docs/15 kabul kriteri), sonrasında üç ayda bir önerilir -
 yedek dosyasının var olması onun **geri yüklenebilir** olduğunu kanıtlamaz.
+
+## Gerçekleştirilen prova — 25 Ağustos 2026
+
+Compose PostgreSQL veritabanından `pg_dump` ile alınan döküm ayrı ve boş
+`abdera_restore_drill_20260825` veritabanına `ON_ERROR_STOP=1` ile geri yüklendi. Kaynak
+ve geri yüklenen veritabanındaki kritik sayılar birebir eşleşti:
+
+| Kontrol | Kaynak | Geri yüklenen |
+|---|---:|---:|
+| Migration geçmişi | 19 | 19 |
+| Öğrenci | 23 | 23 |
+| Aidat alacağı | 30 | 30 |
+| Ödeme | 25 | 25 |
+| Audit kaydı | 55 | 55 |
+| Bildirim işi | 22 | 22 |
+| Gelişim/ders notu | 269 | 269 |
+
+Tutarlılık sorguları `Paid` olup etkin ödeme/düzeltme toplamı yetersiz kalan alacak için
+`0`, aynı öğrenci-öğretmen-enstrüman üçlüsünde birden çok aktif enrollment için `0`
+döndürdü. Prova başarıyla tamamlandı; geçici doğrulama veritabanı ve yerel SQL dökümü
+sonrasında silindi.
+
+Bu prova dump/restore prosedürünü ve veri tutarlılığını doğrular. Gerçek SFTP'ye şifreli
+yükleme, sunucu kimlik bilgileri paylaşılmadığı için hâlâ dış bağımlılıktır; bu adım
+`Backup__Provider=Sftp` ile gerçek hedef üzerinde ayrıca uygulanmalıdır.

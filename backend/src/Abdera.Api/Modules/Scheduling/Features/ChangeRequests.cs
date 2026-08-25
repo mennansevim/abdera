@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text.Json;
+using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People;
@@ -55,6 +57,18 @@ public static class ChangeRequests
             request.ProposedStartAt, request.ProposedEndAt, clock.UtcNow);
 
         db.LessonChangeRequests.Add(changeRequest);
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal),
+            "lesson.change_requested",
+            nameof(LessonChangeRequest),
+            changeRequest.Id,
+            clock.UtcNow,
+            afterJson: JsonSerializer.Serialize(new
+            {
+                changeRequest.LessonId,
+                changeRequest.ProposedStartAt,
+                changeRequest.ProposedEndAt,
+            })));
         await db.SaveChangesAsync();
 
         return Results.Created($"/api/change-requests/{changeRequest.Id}", ToResponse(changeRequest));
@@ -70,7 +84,7 @@ public static class ChangeRequests
     }
 
     private static async Task<IResult> ApproveAsync(
-        Guid requestId, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
+        Guid requestId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
     {
         var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
             ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
@@ -101,16 +115,44 @@ public static class ChangeRequests
                 NotificationJobType.LessonRescheduled, "lesson", newLesson.Id, guardianId, clock.UtcNow);
         }
 
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal),
+            "lesson.change_approved",
+            nameof(LessonChangeRequest),
+            changeRequest.Id,
+            clock.UtcNow,
+            JsonSerializer.Serialize(new
+            {
+                lesson.StudentId,
+                lesson.TeacherId,
+                lesson.StartAt,
+                lesson.EndAt,
+                Status = LessonStatus.Normal.ToString(),
+            }),
+            JsonSerializer.Serialize(new
+            {
+                NewLessonId = newLesson.Id,
+                newLesson.StartAt,
+                newLesson.EndAt,
+                Status = newLesson.Status.ToString(),
+            })));
+
         await db.SaveChangesAsync();
         return Results.Ok(new ApproveResponse(ToResponse(changeRequest), newLesson.Id));
     }
 
-    private static async Task<IResult> RejectAsync(Guid requestId, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> RejectAsync(Guid requestId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
         var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
             ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
 
         changeRequest.Reject(clock.UtcNow);
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal),
+            "lesson.change_rejected",
+            nameof(LessonChangeRequest),
+            changeRequest.Id,
+            clock.UtcNow));
         await db.SaveChangesAsync();
 
         return Results.Ok(ToResponse(changeRequest));

@@ -1,79 +1,107 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { useEnrollments, useInstruments, useStudents } from "@/lib/people";
+import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import {
   useCreateFeePlan,
   useCreateReceivable,
   useFeePlan,
   useBulkPayment,
+  useCorrectPayment,
   usePriceLists,
   useRecordPayment,
   useStudentBilling,
-  useMakeupCredits,
   type PaymentMethod,
+  type PaymentRecord,
   type Receivable,
+  type StudentBillingRow,
 } from "@/lib/billing";
 
-export function StudentBillingSection() {
+export function StudentBillingSection({ initialStudentId = "", showStudentPicker = true, onClose }: { initialStudentId?: string; showStudentPicker?: boolean; onClose?: () => void }) {
   const { data: students } = useStudents();
-  const [studentId, setStudentId] = useState("");
+  const [studentId, setStudentId] = useState(initialStudentId);
   const { data: enrollments } = useEnrollments(studentId);
+  const { data: teachers } = useTeachers();
   const { data: billing } = useStudentBilling(studentId);
   const { data: instruments } = useInstruments();
   const { data: priceLists } = usePriceLists();
+  const activeEnrollments = enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [];
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-micro text-[var(--brand-strong)]">Öğrenci Aidatları</h2>
+    <section className="app-card overflow-hidden">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line)] bg-[var(--surface-muted)]/45 p-4 sm:p-5">
+        <div><p className="text-micro text-[var(--brand-strong)]">Öğrenci hesabı</p><h2 className="mt-1 text-title">Hesap ayrıntısı</h2><p className="text-meta mt-1">Dönem aidatları, ödemeler ve ücret planı.</p></div>
+        <div className="flex w-full items-end gap-2 sm:w-auto">{showStudentPicker ? <label className="min-w-0 flex-1 space-y-1.5 sm:w-72"><span className="text-[.68rem] font-bold text-[var(--muted)]">Öğrenci</span><select value={studentId} onChange={(e) => setStudentId(e.target.value)} className="field min-h-11 text-sm">
+          <option value="">Öğrenci seçin…</option>
+          {students?.map((s) => (<option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>))}
+        </select></label> : <p className="text-meta">Seçilen öğrencinin ücret planı ve dönem aidatları</p>}{onClose && <button type="button" onClick={onClose} className="pressable grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--muted)]" aria-label="Hesap ayrıntısını kapat"><Icon name="close" className="h-4 w-4" /></button>}</div>
+      </div>
 
-      <select value={studentId} onChange={(e) => setStudentId(e.target.value)} className="field min-h-11 w-full max-w-xs text-sm">
-        <option value="">Öğrenci seçin…</option>
-        {students?.map((s) => (
-          <option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>
-        ))}
-      </select>
+      {!studentId && <div className="grid min-h-56 place-items-center p-8 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-xl" aria-hidden="true">₺</span><p className="mt-4 text-sm font-bold">Öğrenci hesabı seçilmedi</p><p className="text-meta mt-1">Borç, tahsilat ve ödeme geçmişi burada gösterilecek.</p></div></div>}
 
-      {studentId && enrollments?.map((enrollment) => (
+      <div className="space-y-4 p-4 sm:p-5">
+      {studentId && <StudentAccountHistory billing={billing} instruments={instruments ?? []} />}
+      {studentId && activeEnrollments.map((enrollment) => (
         <EnrollmentBillingCard
           key={enrollment.id}
           studentId={studentId}
           enrollmentId={enrollment.id}
           instrumentName={instruments?.find((i) => i.id === enrollment.instrumentId)?.name ?? "?"}
+          teacherName={teachers?.find((teacher) => teacher.id === enrollment.teacherId) ? `${teachers.find((teacher) => teacher.id === enrollment.teacherId)!.firstName} ${teachers.find((teacher) => teacher.id === enrollment.teacherId)!.lastName}` : "Öğretmen atanmadı"}
           receivables={billing?.find((b) => b.enrollmentId === enrollment.id)?.receivables ?? []}
           priceListItems={(priceLists ?? []).flatMap((l) => l.items).filter((i) => i.instrumentId === enrollment.instrumentId)}
         />
       ))}
-      {studentId && <MakeupCreditsCard studentId={studentId} />}
+      {studentId && activeEnrollments.length === 0 && <p className="rounded-xl bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">Bu öğrencinin aktif kaydı bulunmuyor.</p>}
+      </div>
     </section>
   );
 }
 
-function MakeupCreditsCard({ studentId }: { studentId: string }) {
-  const { data: credits } = useMakeupCredits(studentId);
-  const available = credits?.filter((credit) => credit.status === "Available") ?? [];
-  return (
-    <section className="app-card p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-micro text-[var(--brand-strong)]">Telafi hakkı</p><h3 className="mt-1 text-title">Öğrencinin telafi dersleri</h3></div><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-xs font-bold text-[var(--success-strong)]">{available.length} kullanılabilir</span></div>
-      <div className="mt-3 space-y-2">
-        {available.map((credit) => <div key={credit.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-sm"><span>{credit.earnedReason === "SchoolCancelled" ? "Okul iptali" : "24 saatten önce veli iptali"}</span><span className="text-meta">Son kullanım: {new Date(credit.expiresAt).toLocaleDateString("tr-TR")}</span></div>)}
-        {!available.length && <p className="text-meta">Kullanılabilir telafi hakkı yok.</p>}
-      </div>
-    </section>
-  );
+function StudentAccountHistory({ billing, instruments }: { billing: StudentBillingRow[] | undefined; instruments: { id: string; name: string }[] }) {
+  const periods = (billing ?? []).flatMap((row) => row.receivables.map((receivable) => ({
+    ...receivable,
+    instrumentName: instruments.find((instrument) => instrument.id === row.instrumentId)?.name ?? "Ders",
+  }))).sort((a, b) => b.period.localeCompare(a.period) || a.instrumentName.localeCompare(b.instrumentName, "tr-TR"));
+
+  const statusLabel: Record<Receivable["status"], string> = {
+    Unpaid: "Ödenmedi", Partial: "Kısmi ödendi", Paid: "Ödendi", Overdue: "Vadesi geçti", Cancelled: "İptal",
+  };
+  const statusTone: Record<Receivable["status"], string> = {
+    Unpaid: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
+    Partial: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
+    Paid: "bg-[var(--success-soft)] text-[var(--success-strong)]",
+    Overdue: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
+    Cancelled: "bg-[var(--surface-muted)] text-[var(--muted)]",
+  };
+
+  return <article className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white">
+    <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--brand-soft)]/35 p-4"><div><p className="text-micro text-[var(--brand-strong)]">Dönem takibi</p><h3 className="mt-1 text-title">Dönem aidatları</h3><p className="text-meta mt-1">Tanımlı aylar ve ödeme durumları.</p></div><span className="rounded-full bg-white px-2.5 py-1 text-[.65rem] font-bold text-[var(--brand-strong)]">{periods.length} dönem</span></div>
+    <div className="divide-y divide-[var(--line)]">
+      {periods.map((receivable) => {
+        const remaining = Math.max(0, receivable.amount - receivable.totalPaid);
+        const latestPayment = [...receivable.payments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate))[0];
+        return <div key={receivable.id} className="flex flex-wrap items-center gap-3 p-3.5 sm:px-4"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--brand-strong)]"><Icon name="calendar" className="h-4 w-4" /></span><span className="min-w-0 flex-1"><span className="block text-xs font-bold capitalize">{new Date(`${receivable.period}-01T00:00:00`).toLocaleDateString("tr-TR", { month: "long", year: "numeric" })}</span><span className="mt-0.5 block truncate text-[.62rem] text-[var(--muted)]">{receivable.instrumentName} · Vade {receivable.dueDate}{latestPayment ? ` · ${latestPayment.paymentDate} tarihinde ödendi` : ""}</span></span><span className="text-right"><strong className="block text-xs tabular-nums">{receivable.amount.toLocaleString("tr-TR")} {receivable.currency}</strong><span className="mt-0.5 block text-[.62rem] tabular-nums text-[var(--muted)]">{remaining ? `${remaining.toLocaleString("tr-TR")} kaldı` : "Tamamı ödendi"}</span></span><span className={`rounded-full px-2 py-1 text-[.58rem] font-bold ${statusTone[receivable.status]}`}>{statusLabel[receivable.status]}</span></div>;
+      })}
+      {!periods.length && <div className="grid min-h-40 place-items-center p-6 text-center"><div><span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="wallet" className="h-4 w-4" /></span><p className="mt-3 text-xs font-bold">Tanımlı dönem bulunmuyor</p><p className="text-meta mt-1">Aidat oluşturulduğunda aylar burada listelenecek.</p></div></div>}
+    </div>
+  </article>;
 }
 
 function EnrollmentBillingCard({
   studentId,
   enrollmentId,
   instrumentName,
+  teacherName,
   receivables,
   priceListItems,
 }: {
   studentId: string;
   enrollmentId: string;
   instrumentName: string;
+  teacherName: string;
   receivables: Receivable[];
   priceListItems: { id: string; durationMinutes: number; billingType: string; amount: number; currency: string }[];
 }) {
@@ -84,8 +112,8 @@ function EnrollmentBillingCard({
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="app-card p-4 sm:p-5">
-      <h3 className="mb-2 font-serif text-base font-bold italic">{instrumentName}</h3>
+    <div className="rounded-2xl border border-[var(--line)] bg-white p-4 sm:p-5">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2"><h3 className="font-serif text-base font-bold italic">{instrumentName}</h3><span className="text-meta">{teacherName}</span></div>
 
       {!feePlanLoading && !feePlan && (
         <CreateFeePlanForm
@@ -284,10 +312,39 @@ function ReceivableRow({ studentId, receivable }: { studentId: string; receivabl
         <details className="w-full rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs">
           <summary className="cursor-pointer font-bold text-[var(--brand-strong)]">Ödeme geçmişi · {receivable.payments.length} kayıt</summary>
           <div className="mt-2 space-y-1.5">
-            {receivable.payments.map((payment) => <div key={payment.id} className="flex flex-wrap justify-between gap-2"><span>{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}</span><strong>{payment.amount.toLocaleString("tr-TR")} {receivable.currency}</strong></div>)}
+            {receivable.payments.map((payment) => <PaymentHistoryRow key={payment.id} studentId={studentId} payment={payment} currency={receivable.currency} />)}
           </div>
         </details>
       )}
     </div>
   );
+}
+
+function PaymentHistoryRow({ studentId, payment, currency }: { studentId: string; payment: PaymentRecord; currency: string }) {
+  const correctPayment = useCorrectPayment(studentId);
+  const [editing, setEditing] = useState(false);
+  const [correctedAmount, setCorrectedAmount] = useState(payment.amount);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await correctPayment.mutateAsync({ paymentId: payment.id, correctedAmount, reason });
+      setEditing(false);
+      setReason("");
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ödeme düzeltilemedi.");
+    }
+  }
+
+  if (payment.kind === "Correction") {
+    return <div className="rounded-lg border border-[var(--warning-soft)] bg-white px-2.5 py-2"><div className="flex flex-wrap justify-between gap-2"><span><strong>Düzeltme</strong> · {payment.paymentDate}{payment.note ? ` · ${payment.note}` : ""}</span><strong>{payment.previousAmount?.toLocaleString("tr-TR")} → {payment.amount.toLocaleString("tr-TR")} {currency}</strong></div></div>;
+  }
+
+  return <div className="rounded-lg bg-white px-2.5 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-2"><span>{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} className="font-bold text-[var(--brand)]">Düzelt</button></span></div>
+    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-9 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" className="field min-h-9 text-xs" /><button disabled={correctPayment.isPending} className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-3 text-xs font-bold text-white disabled:opacity-50">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
+  </div>;
 }

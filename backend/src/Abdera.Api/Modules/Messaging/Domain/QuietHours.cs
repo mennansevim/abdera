@@ -10,6 +10,7 @@ public static class QuietHours
         NotificationJobType.PaymentReminder,
         NotificationJobType.Birthday,
         NotificationJobType.PackageEnding,
+        NotificationJobType.InstrumentMaintenance,
     };
 
     public static bool AppliesTo(NotificationJobType type) => CronTriggeredTypes.Contains(type);

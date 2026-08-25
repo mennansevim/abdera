@@ -22,6 +22,66 @@ export interface Student {
   status: StudentStatus;
 }
 
+export interface StudentSearchResult {
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentId: string;
+  instrumentName: string;
+  guardianPhoneMasked: string | null;
+}
+
+export interface AttentionNeededStudent {
+  studentId: string;
+  studentName: string;
+  recentAbsenceCount: number;
+  reasons: string[];
+}
+
+export function useAttentionNeededStudents() {
+  return useQuery({
+    queryKey: ["students", "attention-needed"],
+    queryFn: () => api.get<AttentionNeededStudent[]>("/api/students/attention-needed"),
+  });
+}
+
+export interface InstrumentMaintenanceSetting {
+  id: string;
+  instrumentId: string;
+  instrumentName: string;
+  maintenanceType: string;
+  periodDays: number;
+  isEnabled: boolean;
+  notificationPreference: "None" | "WhatsApp";
+  nextReminderAt: string;
+  consentingGuardianCount: number;
+}
+
+export function useInstrumentMaintenanceSettings() {
+  return useQuery({
+    queryKey: ["instrument-maintenance-settings"],
+    queryFn: () => api.get<InstrumentMaintenanceSetting[]>("/api/instrument-maintenance-settings"),
+  });
+}
+
+export function useSaveInstrumentMaintenanceSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instrumentId, ...body }: { instrumentId: string; maintenanceType: string; periodDays: number; isEnabled: boolean; notificationPreference: "None" | "WhatsApp"; nextReminderAt: string }) =>
+      api.put<InstrumentMaintenanceSetting>(`/api/instruments/${instrumentId}/maintenance-setting`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["instrument-maintenance-settings"] }),
+  });
+}
+
+export function useRunDueMaintenanceReminders() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ dueSettingCount: number; scheduledCount: number }>("/api/instrument-maintenance-settings/run-due"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["instrument-maintenance-settings"] }),
+  });
+}
+
 export interface Guardian {
   id: string;
   firstName: string;
@@ -37,6 +97,21 @@ export interface Teacher {
   status: TeacherStatus;
   instrumentIds: string[];
   hasLoginAccount: boolean;
+}
+
+export interface TeacherStudentEnrollment {
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  enrollmentId: string;
+  instrumentId: string;
+  instrumentName: string;
+  startedAt: string;
+}
+
+export interface TeacherOverview {
+  teacher: Teacher;
+  students: TeacherStudentEnrollment[];
 }
 
 export interface Enrollment {
@@ -55,6 +130,16 @@ export function useInstruments() {
 
 export function useStudents() {
   return useQuery({ queryKey: ["students"], queryFn: () => api.get<Student[]>("/api/students") });
+}
+
+export function useStudentAutocomplete(query: string) {
+  const normalized = query.trim();
+  return useQuery({
+    queryKey: ["student-search", normalized],
+    queryFn: () => api.get<StudentSearchResult[]>(`/api/students/search?query=${encodeURIComponent(normalized)}`),
+    enabled: normalized.length >= 2,
+    staleTime: 30_000,
+  });
 }
 
 export function useCreateStudent() {
@@ -139,6 +224,14 @@ export function useTeachers() {
   return useQuery({ queryKey: ["teachers"], queryFn: () => api.get<Teacher[]>("/api/teachers") });
 }
 
+export function useTeacherOverviews(enabled = true) {
+  return useQuery({
+    queryKey: ["teacher-overviews"],
+    queryFn: () => api.get<TeacherOverview[]>("/api/teachers/overview"),
+    enabled,
+  });
+}
+
 export interface CreateTeacherResponse {
   teacher: Teacher;
   temporaryPassword: string | null;
@@ -149,7 +242,22 @@ export function useCreateTeacher() {
   return useMutation({
     mutationFn: (body: { firstName: string; lastName: string; instrumentIds: string[]; email?: string }) =>
       api.post<CreateTeacherResponse>("/api/teachers", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["teachers"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teachers"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+    },
+  });
+}
+
+export function useCreateStudentForTeacher(teacherId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { firstName: string; lastName: string; birthDate: string; instrumentId: string; startedAt: string }) =>
+      api.post<TeacherStudentEnrollment>(`/api/teachers/${teacherId}/students`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+    },
   });
 }
 
@@ -166,6 +274,22 @@ export function useCreateEnrollment(studentId: string) {
   return useMutation({
     mutationFn: (body: { teacherId: string; instrumentId: string; startedAt: string }) =>
       api.post<Enrollment>(`/api/students/${studentId}/enrollments`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+    },
+  });
+}
+
+export function useEndEnrollment(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enrollmentId: string) =>
+      api.delete(`/api/students/${studentId}/enrollments/${enrollmentId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+    },
   });
 }

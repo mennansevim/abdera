@@ -258,4 +258,61 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var paymentCount = await db.Payments.CountAsync(p => p.ReceivableId == seeded.ReceivableId);
         Assert.Equal(1, paymentCount);
     }
+
+    [Fact]
+    public async Task Bank_webhook_rejects_invalid_auth_and_payload_then_processes_valid_event_idempotently()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedReceivableAsync(admin, "webhook", amount: 650m, period: "2026-10");
+        var iban = await AssignVirtualIbanAsync(admin, seeded.GuardianId);
+        var providerTransactionId = $"webhook-{Guid.NewGuid()}";
+        var client = _factory.CreateClient();
+
+        var invalidAuth = await SendWebhookAsync(client, "wrong-secret", new
+        {
+            providerTransactionId,
+            virtualIban = iban,
+            amount = 650m,
+            currency = "TRY",
+        });
+        var invalidPayload = await SendWebhookAsync(client, "test-bank-webhook-secret", new
+        {
+            providerTransactionId = "invalid-amount",
+            virtualIban = iban,
+            amount = 0m,
+            currency = "TRY",
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidAuth.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidPayload.StatusCode);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var response = await SendWebhookAsync(client, "test-bank-webhook-secret", new
+            {
+                providerTransactionId,
+                virtualIban = iban,
+                amount = 650m,
+                currency = "TRY",
+                senderName = "Webhook Veli",
+                receivedAt = DateTimeOffset.UtcNow,
+            });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.Equal(1, await db.BankIncomingTransactions.CountAsync(item =>
+            item.Provider == "generic" && item.ProviderTransactionId == providerTransactionId));
+        Assert.Equal(1, await db.Payments.CountAsync(item => item.ReceivableId == seeded.ReceivableId));
+    }
+
+    private static async Task<HttpResponseMessage> SendWebhookAsync(HttpClient client, string secret, object payload)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/webhooks/bank")
+        {
+            Content = JsonContent.Create(payload),
+        };
+        request.Headers.Add("X-Bank-Webhook-Secret", secret);
+        return await client.SendAsync(request);
+    }
 }

@@ -32,6 +32,8 @@ public class AbderaDbContext : DbContext
     public DbSet<Teacher> Teachers => Set<Teacher>();
     public DbSet<TeacherInstrument> TeacherInstruments => Set<TeacherInstrument>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
+    public DbSet<InstrumentMaintenanceSetting> InstrumentMaintenanceSettings => Set<InstrumentMaintenanceSetting>();
+    public DbSet<InstrumentMaintenanceReminder> InstrumentMaintenanceReminders => Set<InstrumentMaintenanceReminder>();
 
     public DbSet<TeacherAvailability> TeacherAvailabilities => Set<TeacherAvailability>();
     public DbSet<TeacherTimeOff> TeacherTimeOffs => Set<TeacherTimeOff>();
@@ -44,11 +46,16 @@ public class AbderaDbContext : DbContext
     public DbSet<LessonAttendance> LessonAttendances => Set<LessonAttendance>();
 
     public DbSet<LessonNote> LessonNotes => Set<LessonNote>();
+    public DbSet<SkillDefinition> SkillDefinitions => Set<SkillDefinition>();
+    public DbSet<SkillAssessment> SkillAssessments => Set<SkillAssessment>();
+    public DbSet<PracticeAssignment> PracticeAssignments => Set<PracticeAssignment>();
+    public DbSet<PracticeJournalEntry> PracticeJournalEntries => Set<PracticeJournalEntry>();
 
     public DbSet<MakeupCredit> MakeupCredits => Set<MakeupCredit>();
     public DbSet<FeePlan> FeePlans => Set<FeePlan>();
     public DbSet<Receivable> Receivables => Set<Receivable>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentCorrection> PaymentCorrections => Set<PaymentCorrection>();
     public DbSet<Expense> Expenses => Set<Expense>();
 
     public DbSet<PriceList> PriceLists => Set<PriceList>();

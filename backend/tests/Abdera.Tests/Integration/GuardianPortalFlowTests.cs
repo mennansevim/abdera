@@ -4,7 +4,10 @@ using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
+using Abdera.Api.Modules.Progress.Domain;
+using Abdera.Api.Modules.Progress.Features;
 using Abdera.Api.Modules.Scheduling.Features;
 using Microsoft.EntityFrameworkCore;
 
@@ -155,6 +158,17 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
         db.VirtualIbans.Add(VirtualIban.Create(mine.GuardianId, "TR000000000000000000000001", "FakeBank", "test", now));
         db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(null, mine.GuardianId, null, "Sadece benim bildirimin", null, now));
         db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(null, someoneElses.GuardianId, null, "Başka velinin bildirimi", null, now));
+        var ownLesson = await db.Lessons.SingleAsync(lesson => lesson.Id == mine.LessonId);
+        var otherLesson = await db.Lessons.SingleAsync(lesson => lesson.Id == someoneElses.LessonId);
+        var ownNote = LessonNote.Create(
+            ownLesson.Id, ownLesson.TeacherId, "Gam", "VELİYE_SIZMAMASI_GEREKEN_HAM_NOT", "15 dakika", "Tempo", "Minuet", 3, now);
+        ownNote.SetParentCommentDraft("Sadece benim onaylı gelişim yorumum", now);
+        ownNote.ApproveParentComment(ownLesson.TeacherId, now);
+        db.LessonNotes.Add(ownNote);
+        db.LessonNotes.Add(LessonNote.Create(
+            otherLesson.Id, otherLesson.TeacherId, null, "Başka öğrencinin gelişim notu", null, null, null, null, now));
+        db.LessonAttendances.Add(LessonAttendance.Create(
+            ownLesson.Id, AttendanceStatus.Present, ownLesson.TeacherId, null, now));
         await db.SaveChangesAsync();
 
         using var guardianClient = await LoginAsGuardianAsync(_factory, mine.GuardianPhone);
@@ -170,6 +184,85 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
             .Content.ReadFromJsonAsync<List<GuardianPortalData.GuardianMessageResponse>>(TestJson.Options);
         Assert.Contains(messages!, message => message.Body == "Sadece benim bildirimin");
         Assert.DoesNotContain(messages!, message => message.Body == "Başka velinin bildirimi");
+
+        var progressResponse = await guardianClient.GetAsync($"/api/guardian/me/students/{mine.StudentId}/progress");
+        Assert.Equal(HttpStatusCode.OK, progressResponse.StatusCode);
+        var rawProgressJson = await progressResponse.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("VELİYE_SIZMAMASI_GEREKEN_HAM_NOT", rawProgressJson);
+        var progress = (await progressResponse.Content.ReadFromJsonAsync<GuardianPortalData.GuardianProgressResponse>(TestJson.Options))!;
+        Assert.Equal(mine.StudentId, progress.StudentId);
+        Assert.Equal(1, progress.PresentCount);
+        Assert.Equal(0, progress.AbsentCount);
+        Assert.Equal(0, progress.ExcusedCount);
+        Assert.Contains(progress.Entries, entry => entry.ParentComment == "Sadece benim onaylı gelişim yorumum" && entry.PieceDifficulty == 3);
+        Assert.DoesNotContain(progress.Entries, entry => entry.ParentComment == "Başka öğrencinin gelişim notu");
+
+        var forbiddenProgress = await guardianClient.GetAsync(
+            $"/api/guardian/me/students/{someoneElses.StudentId}/progress");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenProgress.StatusCode);
+    }
+
+    [Fact]
+    public async Task Guardian_practice_journal_is_validated_approved_and_object_scoped()
+    {
+        var admin = await CreateAdminClientAsync();
+        var mine = await SeedLessonAsync(admin, "journal-own");
+        var someoneElses = await SeedLessonAsync(admin, "journal-other");
+        using var guardianClient = await LoginAsGuardianAsync(_factory, mine.GuardianPhone);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var createdResponse = await guardianClient.PostAsJsonAsync(
+            $"/api/guardian/me/students/{mine.StudentId}/practice-journal",
+            new PracticeJournal.Request(today, 35, "Gam ve metronom", "80 BPM"));
+
+        Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+        var created = (await createdResponse.Content.ReadFromJsonAsync<PracticeJournal.EntryResponse>(TestJson.Options))!;
+        Assert.True(created.ParentApproved);
+        Assert.Equal(35, created.DurationMinutes);
+
+        var journal = await guardianClient.GetFromJsonAsync<PracticeJournal.JournalResponse>(
+            $"/api/guardian/me/students/{mine.StudentId}/practice-journal", TestJson.Options);
+        Assert.Contains(journal!.Entries, item => item.Id == created.Id);
+        Assert.Contains("İlk adım", journal.Badges);
+
+        var invalidDuration = await guardianClient.PostAsJsonAsync(
+            $"/api/guardian/me/students/{mine.StudentId}/practice-journal",
+            new PracticeJournal.Request(today, 0, "Geçersiz", null));
+        var forbiddenOtherStudent = await guardianClient.GetAsync(
+            $"/api/guardian/me/students/{someoneElses.StudentId}/practice-journal");
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidDuration.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenOtherStudent.StatusCode);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.True(await db.AuditLogs.AnyAsync(item => item.Action == "practice_journal.created" && item.EntityId == created.Id));
+    }
+
+    [Fact]
+    public async Task Due_instrument_maintenance_schedules_only_consent_eligible_guardians_and_advances_period()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "maintenance");
+        var instruments = await admin.GetFromJsonAsync<List<Instruments.InstrumentResponse>>("/api/instruments", TestJson.Options);
+        var piano = instruments!.Single(item => item.Code == "PIANO");
+
+        var saveResponse = await admin.PutAsJsonAsync(
+            $"/api/instruments/{piano.Id}/maintenance-setting",
+            new InstrumentMaintenance.UpsertRequest(
+                "Piyano akordu", 180, true, MaintenanceNotificationPreference.WhatsApp, DateTimeOffset.UtcNow.AddMinutes(-5)));
+        Assert.Equal(HttpStatusCode.OK, saveResponse.StatusCode);
+
+        var runResponse = await admin.PostAsync("/api/instrument-maintenance-settings/run-due", null);
+        Assert.Equal(HttpStatusCode.OK, runResponse.StatusCode);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var reminder = await db.InstrumentMaintenanceReminders
+            .SingleOrDefaultAsync(item => item.GuardianId == seeded.GuardianId);
+        Assert.NotNull(reminder);
+        Assert.True(await db.NotificationJobs.AnyAsync(job =>
+            job.Type == NotificationJobType.InstrumentMaintenance && job.ReferenceId == reminder.Id));
+        var setting = await db.InstrumentMaintenanceSettings.SingleAsync(item => item.InstrumentId == piano.Id);
+        Assert.True(setting.NextReminderAt > DateTimeOffset.UtcNow);
     }
 
     [Fact]

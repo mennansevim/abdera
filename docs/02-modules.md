@@ -44,15 +44,15 @@ Kural: bir modül başka modülün **iç** entity'sine EF navigation property il
 
 İstisna 2 — **yazma tarafı**: bir modülün Feature'ı, başka bir modülün Domain entity'sini kendi genel (public) factory metoduyla oluşturup tek `AbderaDbContext` üzerinden ekleyebilir — bu okuma tarafındaki navigation-property yasağının kapsamı dışında. İki örnek: `People/Features/Teachers.cs` bir `Auth.Domain.User` oluşturur (öğretmen giriş hesabı); `Scheduling/Features/CancelLesson.cs` bir `Billing.Domain.MakeupCredit` oluşturur (telafi kredisi). Bu, tek `DbContext`'li modüler monolitin doğal bir sonucu — mikroservis gibi API çağrısı simüle etmek burada anlamsız olurdu.
 
-## Kısmi açılan modüller
+## Fazlara bölünerek açılan modüller
 
-`Billing` Phase 4 ile tamamlandı (`makeup_credits` Phase 3'te, `fee_plans`/`receivables`/`payments` Phase 4'te). `Progress` hâlâ kısmi:
+`Billing` Phase 4 ile tamamlandı (`makeup_credits` Phase 3'te, `fee_plans`/`receivables`/`payments` Phase 4'te). `Progress` de önce ders notu, sonra ölçülebilir gelişim kayıtları şeklinde tamamlandı:
 
 | Modül | Açılan | Kalan |
 |---|---|---|
-| Progress | `lesson_notes` (Phase 3) | `skill_definitions`, `skill_assessments`, `practice_assignments` (Phase 6) |
+| Progress | `lesson_notes` (Phase 3); `skill_definitions`, `skill_assessments`, `practice_assignments` (Phase 6) | — |
 
-Bu, "modülü fazın sırasına göre bütün olarak aç" kuralının bilinçli bir istisnası — `MakeupCredit` ve `LessonNote` doğrudan Phase 3'ün kendi kapsamında (master prompt: "make-up lessons", "lesson notes") gerekliydi, geri kalan Progress tabloları henüz hiçbir use-case tarafından ihtiyaç duyulmuyor.
+Bu, "modülü fazın sırasına göre bütün olarak aç" kuralının bilinçli bir istisnasıydı — `MakeupCredit` ve `LessonNote` doğrudan Phase 3'ün kendi kapsamında (master prompt: "make-up lessons", "lesson notes") gerekliydi; Progress'in kalan tabloları ölçümlü gelişim akışı açıldığında eklendi.
 
 ## Modül başına tablolar
 

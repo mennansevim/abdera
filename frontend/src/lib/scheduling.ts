@@ -75,3 +75,37 @@ export function useCalendar(from: string, to: string) {
     queryFn: () => api.get<CalendarLesson[]>(`/api/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   });
 }
+
+export function useUpdateLesson() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lessonId, ...body }: {
+      lessonId: string;
+      studentId: string;
+      teacherId: string;
+      startAt: string;
+      durationMinutes: number;
+      status: "Normal" | "Cancelled";
+    }) => api.patch<{ lessonId: string; replacedLessonId: string | null; status: LessonStatus }>(`/api/lessons/${lessonId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["change-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
+    },
+  });
+}
+
+export interface TeacherAvailability {
+  id: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+}
+
+export function useTeacherAvailability(teacherId: string) {
+  return useQuery({
+    queryKey: ["teacher-availability", teacherId],
+    queryFn: () => api.get<TeacherAvailability[]>(`/api/teachers/${teacherId}/availability`),
+    enabled: !!teacherId,
+  });
+}

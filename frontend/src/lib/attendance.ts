@@ -26,7 +26,7 @@ export function useMarkAttendance(lessonId: string) {
 
 export function useCreateLessonNote(lessonId: string) {
   return useMutation({
-    mutationFn: (body: { practiced?: string; note?: string; homework?: string; nextGoal?: string }) =>
+    mutationFn: (body: { practiced?: string; note?: string; homework?: string; nextGoal?: string; pieceTitle?: string; pieceDifficulty?: number }) =>
       api.post(`/api/lessons/${lessonId}/notes`, body),
   });
 }

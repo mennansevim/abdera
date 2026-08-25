@@ -14,12 +14,13 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
   { role: "Guardian", title: "Veliyim", description: "Ders ve ödeme bildirimlerini takip ederim", icon: "students", color: "#2b918d" },
 ];
 
-// Şimdilik geliştirme kolaylığı: AdminBootstrapper.cs'nin oluşturduğu ilk yönetici hesabıyla
-// eşleşir (.env / .env.example - Bootstrap__AdminEmail=admin@example.com,
-// Bootstrap__AdminPassword=DevAdmin123!). Yalnızca production build'e sızmasın diye env
-// kontrolü var - gerçek bir dağıtımda bu alanlar boş kalır.
+// Şimdilik geliştirme kolaylığı: AdminBootstrapper.cs'nin oluşturduğu demo hesaplarla
+// eşleşir. Yalnızca production build'e sızmasın diye env kontrolü var - gerçek bir
+// dağıtımda bu alanlar boş kalır.
 const DEV_ADMIN_EMAIL = process.env.NODE_ENV !== "production" ? "admin@example.com" : "";
 const DEV_ADMIN_PASSWORD = process.env.NODE_ENV !== "production" ? "DevAdmin123!" : "";
+const DEV_TEACHER_EMAIL = process.env.NODE_ENV !== "production" ? "teacher@example.com" : "";
+const DEV_TEACHER_PASSWORD = process.env.NODE_ENV !== "production" ? "DevTeacher123!" : "";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,8 +42,8 @@ export default function LoginPage() {
       setEmail(DEV_ADMIN_EMAIL);
       setPassword(DEV_ADMIN_PASSWORD);
     } else {
-      setEmail("");
-      setPassword("");
+      setEmail(DEV_TEACHER_EMAIL);
+      setPassword(DEV_TEACHER_PASSWORD);
     }
     requestAnimationFrame(() => emailRef.current?.focus());
   }
@@ -55,7 +56,7 @@ export default function LoginPage() {
       if (result.role !== selectedRole) {
         setSelectedRole(result.role);
       }
-      router.push(result.mustChangePassword ? "/dashboard?changePassword=1" : "/dashboard");
+      router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");
     }

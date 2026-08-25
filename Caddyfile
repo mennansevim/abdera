@@ -1,0 +1,43 @@
+# Abdera - production reverse proxy.
+#
+# Tek domain altında hem API hem arayüz yayınlanır. Bu bilinçli bir tercih: aynı origin
+# olduğu için oturum çerezi üçüncü-taraf cookie kısıtlarına takılmaz ve CORS pratikte
+# devre dışı kalır (Frontend__Origin yine de aynı domain'e ayarlanır).
+#
+# Caddy sertifikayı Let's Encrypt'ten kendisi alır ve yeniler - ayrı bir certbot/cron
+# kurulumu yoktur. 80 ve 443 portlarının dışarıdan erişilebilir olması ve PUBLIC_DOMAIN'in
+# bu sunucuya çözülmesi yeterlidir.
+#
+# Kullanım: docker compose --profile prod up -d
+# (profil olmadan geliştirme akışı bugünkü gibi 3000/8080 üzerinden çalışmaya devam eder)
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+
+	# API ve sağlık kontrolü backend'e. handle_path DEĞİL handle: /api ön eki
+	# backend'in route tanımlarının bir parçası, soyulmamalı.
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+	handle /health {
+		reverse_proxy api:8080
+	}
+
+	# Geri kalan her şey Next.js'e.
+	handle {
+		reverse_proxy web:3000
+	}
+
+	# Tarayıcı tarafı sertleştirme. HSTS'i Caddy zaten HTTPS'te ekliyor;
+	# buradakiler uygulamaya özel olanlar.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

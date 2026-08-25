@@ -556,6 +556,51 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.PaymentCorrection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("CorrectedAmount")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("corrected_amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_id");
+
+                    b.Property<decimal>("PreviousAmount")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("previous_amount");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentId", "CreatedAt");
+
+                    b.ToTable("payment_corrections", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_payment_corrections_corrected_amount", "corrected_amount >= 0");
+
+                            t.HasCheckConstraint("CK_payment_corrections_previous_amount", "previous_amount >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.Receivable", b =>
                 {
                     b.Property<Guid>("Id")
@@ -999,6 +1044,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
 
                     b.HasIndex("TeacherId");
 
+                    b.HasIndex("StudentId", "TeacherId", "InstrumentId")
+                        .IsUnique()
+                        .HasFilter("status = 'Active'");
+
                     b.ToTable("enrollments", (string)null);
                 });
 
@@ -1136,6 +1185,80 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("instruments", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.People.Domain.InstrumentMaintenanceReminder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("GuardianId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("guardian_id");
+
+                    b.Property<Guid>("SettingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("setting_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuardianId");
+
+                    b.HasIndex("SettingId", "GuardianId", "CreatedAt");
+
+                    b.ToTable("instrument_maintenance_reminders", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.People.Domain.InstrumentMaintenanceSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_enabled");
+
+                    b.Property<string>("MaintenanceType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("maintenance_type");
+
+                    b.Property<DateTimeOffset>("NextReminderAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_reminder_at");
+
+                    b.Property<string>("NotificationPreference")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("notification_preference");
+
+                    b.Property<int>("PeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("period_days");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstrumentId")
+                        .IsUnique();
+
+                    b.ToTable("instrument_maintenance_settings", (string)null);
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.People.Domain.Student", b =>
@@ -1387,9 +1510,196 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
+                    b.Property<string>("ParentComment")
+                        .HasColumnType("text")
+                        .HasColumnName("parent_comment");
+
+                    b.Property<DateTimeOffset?>("ParentCommentApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("parent_comment_approved_at");
+
+                    b.Property<Guid?>("ParentCommentApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_comment_approved_by");
+
+                    b.Property<string>("PieceComposer")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("piece_composer");
+
+                    b.Property<int?>("PieceDifficulty")
+                        .HasColumnType("integer")
+                        .HasColumnName("piece_difficulty");
+
+                    b.Property<string>("PieceResourceUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("piece_resource_url");
+
+                    b.Property<bool>("PieceResourceVisibleToGuardian")
+                        .HasColumnType("boolean")
+                        .HasColumnName("piece_resource_visible_to_guardian");
+
+                    b.Property<string>("PieceStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("piece_status");
+
+                    b.Property<DateOnly?>("PieceTargetDate")
+                        .HasColumnType("date")
+                        .HasColumnName("piece_target_date");
+
+                    b.Property<string>("PieceTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("piece_title");
+
                     b.Property<string>("Practiced")
                         .HasColumnType("text")
                         .HasColumnName("practiced");
+
+                    b.Property<Guid>("TeacherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("teacher_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessonId");
+
+                    b.ToTable("lesson_notes", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.PracticeAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Completed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("completed");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<Guid>("LessonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lesson_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessonId");
+
+                    b.ToTable("practice_assignments", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.PracticeJournalEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<string>("Goal")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("goal");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("note");
+
+                    b.Property<DateTimeOffset?>("ParentApprovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("parent_approved_at");
+
+                    b.Property<Guid?>("ParentApprovedByGuardianId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_approved_by_guardian_id");
+
+                    b.Property<DateOnly>("PracticeDate")
+                        .HasColumnType("date")
+                        .HasColumnName("practice_date");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentApprovedByGuardianId");
+
+                    b.HasIndex("StudentId", "PracticeDate");
+
+                    b.ToTable("practice_journal_entries", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.SkillAssessment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AssessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assessed_at");
+
+                    b.Property<Guid?>("LessonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lesson_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("integer")
+                        .HasColumnName("score");
+
+                    b.Property<Guid>("SkillDefinitionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("skill_definition_id");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
 
                     b.Property<Guid>("TeacherId")
                         .HasColumnType("uuid")
@@ -1399,7 +1709,49 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
 
                     b.HasIndex("LessonId");
 
-                    b.ToTable("lesson_notes", (string)null);
+                    b.HasIndex("SkillDefinitionId");
+
+                    b.HasIndex("TeacherId");
+
+                    b.HasIndex("StudentId", "AssessedAt");
+
+                    b.ToTable("skill_assessments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_skill_assessments_score", "score BETWEEN 1 AND 5");
+                        });
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.SkillDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<Guid?>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("label");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("InstrumentId");
+
+                    b.ToTable("skill_definitions", (string)null);
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.Scheduling.Domain.Lesson", b =>
@@ -1672,6 +2024,15 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.PaymentCorrection", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.Billing.Domain.Payment", null)
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.People.Domain.Enrollment", b =>
                 {
                     b.HasOne("Abdera.Api.Modules.People.Domain.Instrument", null)
@@ -1689,6 +2050,30 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.HasOne("Abdera.Api.Modules.People.Domain.Teacher", null)
                         .WithMany()
                         .HasForeignKey("TeacherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.People.Domain.InstrumentMaintenanceReminder", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Guardian", null)
+                        .WithMany()
+                        .HasForeignKey("GuardianId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Abdera.Api.Modules.People.Domain.InstrumentMaintenanceSetting", null)
+                        .WithMany()
+                        .HasForeignKey("SettingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.People.Domain.InstrumentMaintenanceSetting", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -1730,6 +2115,63 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasForeignKey("PriceListId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.PracticeAssignment", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.Scheduling.Domain.Lesson", null)
+                        .WithMany()
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.PracticeJournalEntry", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Guardian", null)
+                        .WithMany()
+                        .HasForeignKey("ParentApprovedByGuardianId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.SkillAssessment", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.Scheduling.Domain.Lesson", null)
+                        .WithMany()
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Abdera.Api.Modules.Progress.Domain.SkillDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("SkillDefinitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Teacher", null)
+                        .WithMany()
+                        .HasForeignKey("TeacherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.SkillDefinition", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 #pragma warning restore 612, 618
         }

@@ -8,6 +8,8 @@ namespace Abdera.Api.Modules.Scheduling.Domain;
 // docs/05-state-models.md - durum makinesi burada uygulanır.
 public class Lesson
 {
+    public const int MinimumDurationMinutes = 15;
+    public const int MaximumDurationMinutes = 180;
     public Guid Id { get; private set; }
     public Guid? LessonSeriesId { get; private set; }
     public Guid StudentId { get; private set; }
@@ -92,6 +94,48 @@ public class Lesson
             LessonSeriesId = original.LessonSeriesId,
             StudentId = original.StudentId,
             TeacherId = original.TeacherId,
+            InstrumentId = original.InstrumentId,
+            StartAt = newStartAt,
+            EndAt = newEndAt,
+            Status = LessonStatus.Normal,
+            OriginalLessonId = original.Id,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+    }
+
+    public static Lesson CreateEditedCopy(
+        Lesson original,
+        Guid studentId,
+        Guid teacherId,
+        DateTimeOffset newStartAt,
+        DateTimeOffset newEndAt,
+        DateTimeOffset now)
+    {
+        if (original.Status != LessonStatus.Normal)
+            throw new ConflictException("Yalnızca NORMAL durumundaki bir ders düzenlenebilir.");
+        if (newEndAt <= newStartAt)
+            throw new ArgumentException("Bitiş zamanı başlangıçtan sonra olmalı.", nameof(newEndAt));
+
+        var durationMinutes = (newEndAt - newStartAt).TotalMinutes;
+        if (durationMinutes is < MinimumDurationMinutes or > MaximumDurationMinutes)
+            throw new ArgumentOutOfRangeException(nameof(newEndAt), $"Ders süresi {MinimumDurationMinutes}–{MaximumDurationMinutes} dakika arasında olmalı.");
+
+        var participantsChanged = original.StudentId != studentId || original.TeacherId != teacherId;
+        var originalSeriesId = original.LessonSeriesId;
+        original.Status = LessonStatus.Rescheduled;
+        original.UpdatedAt = now;
+        // Yalnız süre değiştiğinde iki satırın aynı seri + başlangıç anahtarını paylaşması
+        // DB tekillik kısıtını ihlal eder. Seri güncel kopyada kalır; tarihsel satır
+        // OriginalLessonId zinciriyle izlenmeye devam eder.
+        if (!participantsChanged) original.LessonSeriesId = null;
+
+        return new Lesson
+        {
+            Id = Guid.NewGuid(),
+            LessonSeriesId = participantsChanged ? null : originalSeriesId,
+            StudentId = studentId,
+            TeacherId = teacherId,
             InstrumentId = original.InstrumentId,
             StartAt = newStartAt,
             EndAt = newEndAt,

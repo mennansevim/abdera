@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,11 +36,24 @@ public static class GuardianPortalData
     public record GuardianMessageResponse(
         Guid Id, string Body, MessageDirection Direction, DateTimeOffset CreatedAt, DateTimeOffset? SentAt);
 
+    public record GuardianProgressEntryResponse(
+        Guid Id, DateTimeOffset LessonStartAt, string TeacherName, string InstrumentName,
+        string? Practiced, string? ParentComment, string? Homework, string? NextGoal,
+        string? PieceTitle, int? PieceDifficulty, string? PieceComposer,
+        RepertoireStatus? PieceStatus, DateOnly? PieceTargetDate, string? PieceResourceUrl,
+        DateTimeOffset CreatedAt);
+
+    public record GuardianProgressResponse(
+        Guid StudentId, int PresentCount, int AbsentCount, int ExcusedCount,
+        List<GuardianProgressEntryResponse> Entries);
+
     public static void MapGuardianPortalData(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/guardian/me/billing", BillingAsync)
             .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
         app.MapGet("/api/guardian/me/messages", MessagesAsync)
+            .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+        app.MapGet("/api/guardian/me/students/{studentId:guid}/progress", ProgressAsync)
             .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
     }
 
@@ -79,11 +94,7 @@ public static class GuardianPortalData
             .ToListAsync();
 
         var receivableIds = receivables.Select(receivable => receivable.Id).ToList();
-        var paidTotals = await db.Payments
-            .Where(payment => receivableIds.Contains(payment.ReceivableId))
-            .GroupBy(payment => payment.ReceivableId)
-            .Select(group => new { ReceivableId = group.Key, Total = group.Sum(payment => payment.Amount) })
-            .ToDictionaryAsync(row => row.ReceivableId, row => row.Total);
+        var paidTotals = await Receivables.ComputeTotalsPaidAsync(receivableIds, db);
 
         var billing = enrollmentRows.Select(enrollment => new GuardianEnrollmentBillingResponse(
             enrollment.Id,
@@ -134,5 +145,52 @@ public static class GuardianPortalData
             .ToListAsync();
 
         return Results.Ok(messages);
+    }
+
+    private static async Task<IResult> ProgressAsync(
+        Guid studentId, ClaimsPrincipal principal, AbderaDbContext db)
+    {
+        var guardianId = AuthContext.GetUserId(principal);
+        var isLinked = await db.StudentGuardians
+            .AnyAsync(link => link.GuardianId == guardianId && link.StudentId == studentId);
+        if (!isLinked) throw new ForbiddenException("Bu öğrencinin gelişim bilgilerine erişemezsiniz.");
+
+        var entries = await (
+            from note in db.LessonNotes
+            join lesson in db.Lessons on note.LessonId equals lesson.Id
+            join teacher in db.Teachers on note.TeacherId equals teacher.Id
+            join instrument in db.Instruments on lesson.InstrumentId equals instrument.Id
+            where lesson.StudentId == studentId
+            orderby note.CreatedAt descending
+            select new GuardianProgressEntryResponse(
+                note.Id, lesson.StartAt, teacher.FirstName + " " + teacher.LastName, instrument.Name,
+                note.Practiced,
+                note.ParentCommentApprovedAt != null ? note.ParentComment : null,
+                note.Homework,
+                note.NextGoal,
+                note.PieceTitle,
+                note.PieceDifficulty,
+                note.PieceComposer,
+                note.PieceStatus,
+                note.PieceTargetDate,
+                note.PieceResourceVisibleToGuardian ? note.PieceResourceUrl : null,
+                note.CreatedAt))
+            .Take(20)
+            .ToListAsync();
+
+        var attendance = await (
+            from record in db.LessonAttendances
+            join lesson in db.Lessons on record.LessonId equals lesson.Id
+            where lesson.StudentId == studentId
+            group record by record.Status into statusGroup
+            select new { Status = statusGroup.Key, Count = statusGroup.Count() })
+            .ToListAsync();
+
+        return Results.Ok(new GuardianProgressResponse(
+            studentId,
+            attendance.Where(item => item.Status == Modules.Attendance.Domain.AttendanceStatus.Present).Sum(item => item.Count),
+            attendance.Where(item => item.Status == Modules.Attendance.Domain.AttendanceStatus.Absent).Sum(item => item.Count),
+            attendance.Where(item => item.Status == Modules.Attendance.Domain.AttendanceStatus.Excused).Sum(item => item.Count),
+            entries));
     }
 }

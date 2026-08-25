@@ -78,4 +78,57 @@ public class LessonStateTransitionTests
         Assert.Null(makeup.LessonSeriesId);
         Assert.Equal(LessonStatus.Makeup, makeup.Status);
     }
+
+    [Fact]
+    public void CreateEditedCopy_preserves_history_and_detaches_series_when_participants_change()
+    {
+        var original = CreateNormalLesson();
+        var studentId = Guid.NewGuid();
+        var teacherId = Guid.NewGuid();
+        var start = Now.AddDays(3);
+
+        var edited = Lesson.CreateEditedCopy(original, studentId, teacherId, start, start.AddMinutes(60), Now);
+
+        Assert.Equal(LessonStatus.Rescheduled, original.Status);
+        Assert.Equal(LessonStatus.Normal, edited.Status);
+        Assert.Equal(original.Id, edited.OriginalLessonId);
+        Assert.Null(edited.LessonSeriesId);
+        Assert.Equal(studentId, edited.StudentId);
+        Assert.Equal(teacherId, edited.TeacherId);
+        Assert.Equal(start.AddMinutes(60), edited.EndAt);
+    }
+
+    [Fact]
+    public void CreateEditedCopy_keeps_series_on_current_copy_and_detaches_historical_row_when_only_duration_changes()
+    {
+        var seriesId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        var teacherId = Guid.NewGuid();
+        var start = Now.AddDays(3);
+        var original = Lesson.CreateFromSeries(seriesId, studentId, teacherId, Guid.NewGuid(), start, start.AddMinutes(45), Now);
+
+        var edited = Lesson.CreateEditedCopy(original, studentId, teacherId, start, start.AddMinutes(60), Now.AddMinutes(1));
+
+        Assert.Null(original.LessonSeriesId);
+        Assert.Equal(seriesId, edited.LessonSeriesId);
+        Assert.Equal(original.Id, edited.OriginalLessonId);
+        Assert.Equal(60, (edited.EndAt - edited.StartAt).TotalMinutes);
+    }
+
+    [Theory]
+    [InlineData(14)]
+    [InlineData(181)]
+    public void CreateEditedCopy_rejects_unreasonable_duration(int durationMinutes)
+    {
+        var original = CreateNormalLesson();
+        var start = Now.AddDays(3);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => Lesson.CreateEditedCopy(
+            original,
+            original.StudentId,
+            original.TeacherId,
+            start,
+            start.AddMinutes(durationMinutes),
+            Now));
+    }
 }

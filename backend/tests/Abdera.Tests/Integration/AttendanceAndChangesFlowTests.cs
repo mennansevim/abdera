@@ -100,8 +100,21 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
 
         // Ders notu da ekleyebilmeli (aynı öğretmen, kendi dersi).
         var noteResponse = await teacherClient.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/notes",
-            new Abdera.Api.Modules.Progress.Features.LessonNotes.CreateRequest("gam çalışması", "iyi", "günde 15 dk", "hızlanma"));
+            new Abdera.Api.Modules.Progress.Features.LessonNotes.CreateRequest(
+                "gam çalışması",
+                "iyi",
+                "günde 15 dk",
+                "hızlanma",
+                "Bach · Minuet in G",
+                4));
         Assert.Equal(HttpStatusCode.Created, noteResponse.StatusCode);
+
+        var progressResponse = await teacherClient.GetAsync($"/api/students/{seeded.StudentId}/progress");
+        Assert.Equal(HttpStatusCode.OK, progressResponse.StatusCode);
+        var progress = (await progressResponse.Content.ReadFromJsonAsync<Abdera.Api.Modules.Progress.Features.StudentProgress.ProgressResponse>(TestJson.Options))!;
+        Assert.Equal(1, progress.EntryCount);
+        Assert.Equal("Bach · Minuet in G", progress.Entries.Single().PieceTitle);
+        Assert.Equal(4, progress.Entries.Single().PieceDifficulty);
     }
 
     [Fact]
@@ -179,17 +192,82 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
     }
 
     [Fact]
+    public async Task Admin_edits_lesson_detail_with_conflict_check_persistence_notification_and_audit()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "detail-edit");
+        var original = await db.Lessons.AsNoTracking().SingleAsync(item => item.Id == seeded.LessonId);
+        var newStart = original.StartAt.AddDays(2).AddMinutes(30);
+
+        var response = await admin.PatchAsJsonAsync(
+            $"/api/lessons/{seeded.LessonId}",
+            new UpdateLesson.Request(
+                seeded.StudentId,
+                seeded.TeacherId,
+                newStart,
+                60,
+                LessonStatus.Normal));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = (await response.Content.ReadFromJsonAsync<UpdateLesson.Response>(TestJson.Options))!;
+
+        db.ChangeTracker.Clear();
+        Assert.Equal(LessonStatus.Rescheduled, (await db.Lessons.SingleAsync(item => item.Id == seeded.LessonId)).Status);
+        var edited = await db.Lessons.SingleAsync(item => item.Id == result.LessonId);
+        Assert.Equal(newStart, edited.StartAt);
+        Assert.Equal(newStart.AddMinutes(60), edited.EndAt);
+        Assert.Equal(seeded.StudentId, edited.StudentId);
+        Assert.True(await db.AuditLogs.AnyAsync(item => item.Action == "lesson.updated" && item.EntityId == edited.Id));
+        Assert.True(await db.NotificationJobs.AnyAsync(item =>
+            item.ReferenceType == "lesson" && item.ReferenceId == edited.Id &&
+            item.Type == Abdera.Api.Modules.Messaging.Domain.NotificationJobType.LessonReminder));
+    }
+
+    [Fact]
+    public async Task Admin_lesson_detail_edit_rejects_invalid_duration_and_conflicting_slot()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var first = await SeedLessonAsync(admin, "detail-conflict-a");
+        var second = await SeedLessonAsync(admin, "detail-conflict-b");
+        var firstLesson = await db.Lessons.AsNoTracking().SingleAsync(item => item.Id == first.LessonId);
+
+        var invalid = await admin.PatchAsJsonAsync(
+            $"/api/lessons/{second.LessonId}",
+            new UpdateLesson.Request(second.StudentId, second.TeacherId, firstLesson.StartAt.AddDays(2), 0, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        // Aynı öğretmenin başka bir öğrencisi için aktif kayıt açıp doğrudan ilk dersin
+        // aralığına taşımayı deneriz; UI gizlese bile API bu çakışmayı reddetmelidir.
+        var pianoId = await GetPianoIdAsync(admin);
+        var enrollment = await admin.PostAsJsonAsync(
+            $"/api/students/{second.StudentId}/enrollments",
+            new Enrollments.CreateRequest(first.TeacherId, pianoId, new DateOnly(2026, 8, 1)));
+        Assert.Equal(HttpStatusCode.Created, enrollment.StatusCode);
+
+        var conflict = await admin.PatchAsJsonAsync(
+            $"/api/lessons/{second.LessonId}",
+            new UpdateLesson.Request(second.StudentId, first.TeacherId, firstLesson.StartAt, 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+    }
+
+    [Fact]
     public async Task Cancelling_at_least_24_hours_before_earns_makeup_credit_and_credit_can_be_used()
     {
         await using var db = await _factory.CreateDbContextAsync();
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "cxl1");
 
-        var lesson = await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId);
-        // Test verisi en az birkaç gün ileride üretildiği için (rolling window) ≥24 saat garanti.
+        // Serinin ilk dersi ertesi gün ve 24 saatten yakın olabilir; kuralı takvim gününe
+        // bağımlı/flaky yapmamak için aynı seride garantili biçimde daha ilerideki dersi seç.
+        var lesson = await db.Lessons.AsNoTracking()
+            .Where(item => item.StudentId == seeded.StudentId && item.StartAt >= DateTimeOffset.UtcNow.AddHours(24))
+            .OrderBy(item => item.StartAt)
+            .FirstAsync();
         Assert.True((lesson.StartAt - DateTimeOffset.UtcNow).TotalHours >= 24);
 
-        var cancelResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/cancel",
+        var cancelResponse = await admin.PostAsJsonAsync($"/api/lessons/{lesson.Id}/cancel",
             new CancelLesson.Request(CancelLesson.CancelledBy.Guardian, "hasta"));
         Assert.Equal(HttpStatusCode.OK, cancelResponse.StatusCode);
         var cancelResult = (await cancelResponse.Content.ReadFromJsonAsync<CancelLesson.Response>(TestJson.Options))!;

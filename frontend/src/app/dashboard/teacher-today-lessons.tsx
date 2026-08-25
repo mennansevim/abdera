@@ -89,20 +89,22 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   const [note, setNote] = useState("");
   const [homework, setHomework] = useState("");
   const [nextGoal, setNextGoal] = useState("");
+  const [pieceTitle, setPieceTitle] = useState("");
+  const [pieceDifficulty, setPieceDifficulty] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showChangeForm, setShowChangeForm] = useState(false);
   const disabled = lesson.status === "Cancelled" || lesson.status === "Completed";
 
   async function handleSave() {
-    if (!status && !practiced && !note && !homework && !nextGoal) {
+    if (!status && !practiced && !note && !homework && !nextGoal && !pieceTitle) {
       setError(initialMode === "attendance" ? "Yoklama durumu seçmelisin." : "Kaydetmek için kısa bir not eklemelisin.");
       return;
     }
     setError(null);
     try {
       if (status) await markAttendance.mutateAsync({ status, note: note || undefined });
-      if (practiced || note || homework || nextGoal) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined });
+      if (practiced || note || homework || nextGoal || pieceTitle) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined, pieceTitle: pieceTitle || undefined, pieceDifficulty: pieceDifficulty ? Number(pieceDifficulty) : undefined });
       setSaved(true);
       window.setTimeout(onDone, 650);
     } catch (err) {
@@ -130,6 +132,8 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
             <label className="sm:col-span-2"><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Kısa ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
             <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
             <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Ödev</span><input value={homework} onChange={(event) => setHomework(event.target.value)} className="field text-xs" placeholder="Bir sonraki derse kadar" /></label>
+            <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-xs" placeholder="Örn. Bach · Minuet in G" /></label>
+            <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Eser zorluğu</span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-xs"><option value="">Belirtme</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5</option>)}</select></label>
             <label className="sm:col-span-2"><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Sonraki hedef</span><input value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} className="field text-xs" placeholder="Bir sonraki dersin odağı" /></label>
           </div>
           {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] p-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}

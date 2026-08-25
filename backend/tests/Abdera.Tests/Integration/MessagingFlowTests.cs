@@ -381,6 +381,99 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Webhook_subscription_handshake_returns_challenge_only_for_matching_verify_token()
+    {
+        var client = _factory.CreateClient();
+
+        var valid = await client.GetAsync(
+            "/api/webhooks/whatsapp?hub.mode=subscribe" +
+            "&hub.verify_token=test-webhook-verify-token" +
+            "&hub.challenge=challenge-123");
+        var wrongToken = await client.GetAsync(
+            "/api/webhooks/whatsapp?hub.mode=subscribe" +
+            "&hub.verify_token=wrong" +
+            "&hub.challenge=challenge-123");
+        var wrongMode = await client.GetAsync(
+            "/api/webhooks/whatsapp?hub.mode=unsubscribe" +
+            "&hub.verify_token=test-webhook-verify-token" +
+            "&hub.challenge=challenge-123");
+
+        Assert.Equal(HttpStatusCode.OK, valid.StatusCode);
+        Assert.Equal("text/plain", valid.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("challenge-123", await valid.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Forbidden, wrongToken.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, wrongMode.StatusCode);
+    }
+
+    [Fact]
+    public async Task Validly_signed_webhook_from_unknown_guardian_is_recorded_as_failed_without_business_effect()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var messageId = $"wamid.unknown-{Guid.NewGuid():N}";
+        var body = BuildTextWebhook(messageId, "905559999998", "ders");
+
+        var response = await PostSignedWebhookAsync(body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode); // Meta tekrar denemesin.
+        var webhookEvent = await db.WhatsAppWebhookEvents.AsNoTracking()
+            .SingleAsync(item => item.ProviderEventId == messageId);
+        Assert.Equal(WebhookEventStatus.Failed, webhookEvent.Status);
+        Assert.Contains("veli bulunamadı", webhookEvent.ProcessingError, StringComparison.OrdinalIgnoreCase);
+        Assert.False(await db.WhatsAppMessages.AnyAsync(item => item.ProviderMessageId == messageId));
+    }
+
+    [Fact]
+    public async Task Tampered_RSVP_payload_is_failed_closed_and_does_not_create_response()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "webhook-tampered-rsvp");
+        var messageId = $"wamid.tampered-{Guid.NewGuid():N}";
+        var body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            entry = new[]
+            {
+                new
+                {
+                    changes = new[]
+                    {
+                        new
+                        {
+                            value = new
+                            {
+                                messages = new[]
+                                {
+                                    new
+                                    {
+                                        id = messageId,
+                                        from = "90" + seeded.GuardianPhone[1..],
+                                        type = "button",
+                                        button = new
+                                        {
+                                            text = "Geliyorum",
+                                            payload = "rsvp_attending.tampered-reference.tampered-signature",
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        var response = await PostSignedWebhookAsync(body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode); // Geçersiz payload kalıcıdır; retry yararsız.
+        var webhookEvent = await db.WhatsAppWebhookEvents.AsNoTracking()
+            .SingleAsync(item => item.ProviderEventId == messageId);
+        Assert.Equal(WebhookEventStatus.Failed, webhookEvent.Status);
+        Assert.Contains("imzası geçersiz", webhookEvent.ProcessingError, StringComparison.OrdinalIgnoreCase);
+        Assert.False(await db.LessonRsvps.AnyAsync(item =>
+            item.LessonId == seeded.LessonId && item.GuardianId == seeded.GuardianId));
+    }
+
+    [Fact]
     public async Task Webhook_does_not_reprocess_a_duplicate_provider_event_id()
     {
         await using var db = await _factory.CreateDbContextAsync();
@@ -537,4 +630,48 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var reEnabledJobCount = await db.NotificationJobs.CountAsync(j => j.Type == NotificationJobType.LessonReminder && reEnabledLessonIds.Contains(j.ReferenceId));
         Assert.Equal(reEnabledLessonIds.Count, reEnabledJobCount);
     }
+
+    private async Task<HttpResponseMessage> PostSignedWebhookAsync(string body)
+    {
+        var signature = "sha256=" + Convert.ToHexStringLower(
+            HMACSHA256.HashData(
+                Encoding.UTF8.GetBytes("test-webhook-app-secret"),
+                Encoding.UTF8.GetBytes(body)));
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/webhooks/whatsapp")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("X-Hub-Signature-256", signature);
+        return await _factory.CreateClient().SendAsync(request);
+    }
+
+    private static string BuildTextWebhook(string messageId, string from, string text) =>
+        System.Text.Json.JsonSerializer.Serialize(new
+        {
+            entry = new[]
+            {
+                new
+                {
+                    changes = new[]
+                    {
+                        new
+                        {
+                            value = new
+                            {
+                                messages = new[]
+                                {
+                                    new
+                                    {
+                                        id = messageId,
+                                        from,
+                                        type = "text",
+                                        text = new { body = text },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        });
 }

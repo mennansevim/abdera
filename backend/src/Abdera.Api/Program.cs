@@ -16,12 +16,15 @@ using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Pricing;
 using Abdera.Api.Modules.Progress;
+using Abdera.Api.Modules.Progress.Domain;
+using Abdera.Api.Modules.Progress.Infrastructure;
 using Abdera.Api.Modules.Scheduling;
 using Abdera.Api.Shared;
 using HealthChecks.NpgSql;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -103,15 +106,26 @@ else
 }
 
 // --- Banka entegrasyonu sağlayıcısı: docs/10-decisions.md E1 - WhatsApp'takiyle aynı
-// yapısal DI kararı, gerçek sağlayıcı (PayTR/Papara İşletme/vb.) henüz seçilmedi. ---
-var bankingProvider = builder.Configuration["Banking:Provider"] ?? "Fake";
-if (string.Equals(bankingProvider, "Fake", StringComparison.OrdinalIgnoreCase))
+// yapısal DI kararı, gerçek sağlayıcı (PayTR/Papara İşletme/vb.) henüz seçilmedi.
+//
+// Fake   = sahte ama gerçekçi görünen IBAN üretir; YALNIZCA dev/test (ProductionSecretsGuard reddeder).
+// Manual = banka entegrasyonu kapalı; sanal IBAN tahsisi açık bir hatayla reddedilir, admin
+//          ödemeyi elle girer. Production'da geçerli - gerçek sağlayıcı seçilene kadar okulun
+//          canlıya çıkmasını bu karar bloke etmesin diye var.
+// Geçerli değerler BankingProviderModes'ta tek yerde tanımlı - ProductionSecretsGuard da
+// aynı kaynağı kullanır, aksi halde ikisi ayrışıp uygulamayı hiç başlayamaz hale getirebilir.
+var bankingProvider = builder.Configuration["Banking:Provider"] ?? BankingProviderModes.Fake;
+if (!BankingProviderModes.IsSupported(bankingProvider))
 {
-    builder.Services.AddSingleton<IBankPaymentProvider, FakeBankPaymentProvider>();
+    throw new InvalidOperationException($"Bilinmeyen Banking:Provider değeri: '{bankingProvider}'. Şu an '{BankingProviderModes.Fake}' (dev) ve '{BankingProviderModes.Manual}' (banka entegrasyonu kapalı) destekleniyor; gerçek sağlayıcı seçilince buraya yeni bir IBankPaymentProvider eklenir (bkz. docs/12-bank-integration.md).");
+}
+if (string.Equals(bankingProvider, BankingProviderModes.Manual, StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IBankPaymentProvider, ManualBankPaymentProvider>();
 }
 else
 {
-    throw new InvalidOperationException($"Bilinmeyen Banking:Provider değeri: '{bankingProvider}'. Henüz yalnızca 'Fake' destekleniyor (bkz. docs/12-bank-integration.md).");
+    builder.Services.AddSingleton<IBankPaymentProvider, FakeBankPaymentProvider>();
 }
 
 // --- Yedekleme hedefi: docs/10-decisions.md G - kullanıcının kendi sunucusuna SFTP/SSH. ---
@@ -137,6 +151,21 @@ if (string.Equals(emailProvider, "Smtp", StringComparison.OrdinalIgnoreCase))
 else
 {
     builder.Services.AddSingleton<IEmailSender, FakeEmailSender>();
+}
+
+// --- AI (Faz 10, "yapıcı metne dönüştür"): OPSİYONEL özellik. ---
+// Yapılandırılmadığında Disabled implementasyonu devreye girer ve gelişim akışı AI olmadan
+// eksiksiz çalışmaya devam eder - manuel yorum yazma/onaylama hiç etkilenmez.
+// WhatsApp/Banking ile aynı yapısal DI kararı, bu yüzden Build()'den önce okunuyor.
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
+var aiProvider = builder.Configuration["Ai:Provider"] ?? "Disabled";
+if (string.Equals(aiProvider, "OpenAi", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<IConstructiveTextRewriter, OpenAiConstructiveTextRewriter>();
+}
+else
+{
+    builder.Services.AddSingleton<IConstructiveTextRewriter, DisabledConstructiveTextRewriter>();
 }
 
 // --- Kimlik doğrulama: httpOnly cookie oturumu (docs/10-decisions.md B4 - JWT'nin
@@ -256,8 +285,30 @@ var app = builder.Build();
 
 ProductionSecretsGuard.EnsureConfigured(app);
 
-app.UseExceptionHandler();
+// --- Reverse proxy (Caddy) arkasında çalışırken istemcinin gerçek IP'si ve şeması ---
+// Bunlar olmadan: (1) rate limiting partition'ı Connection.RemoteIpAddress'e bakar, bu da
+// proxy'nin IP'sidir - tüm okul TEK kovaya düşer ve bir kişinin 5 hatalı girişi herkesi
+// kilitler (bkz. GetClientIp); (2) uygulama isteği "http" sanar, HTTPS'e bağlı davranışlar
+// yanlış çalışır. UseForwardedHeaders diğer TÜM middleware'lerden önce gelmeli ki
+// Serilog/rate limiter/auth düzeltilmiş değerleri görsün.
+//
+// KnownIPNetworks/KnownProxies temizleniyor: Docker'ın köprü ağı sabit bir adres aralığı
+// vermez, varsayılan listede olmayan bir kaynaktan gelen header'lar SESSİZCE yok sayılır.
+// Bu, yalnızca proxy'nin erişebildiği bir iç ağda güvenli - api portu dışarı publish
+// EDİLMEZ (docker-compose.yml), yani header'ları yalnızca Caddy set edebilir.
+var forwardedHeaders = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+};
+forwardedHeaders.KnownIPNetworks.Clear();
+forwardedHeaders.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeaders);
+
 app.UseSerilogRequestLogging();
+// Request logging exception handler'in disinda kalir; boylece kontrollu domain
+// istisnalari handler tarafindan RFC 7807/4xx'e cevrildikten sonra Serilog gercek son
+// status'u gorur. Tersi sira istemci 400 alirken logda sahte 500 + stack trace uretiyordu.
+app.UseExceptionHandler();
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();
@@ -292,6 +343,11 @@ app.MapBillingModule();
 app.MapMessagingModule();
 app.MapBankingModule();
 app.MapOpsModule();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapDevelopmentMockData();
+}
 
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);

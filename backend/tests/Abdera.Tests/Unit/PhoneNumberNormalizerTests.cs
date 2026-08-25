@@ -24,4 +24,18 @@ public class PhoneNumberNormalizerTests
     {
         Assert.Throws<ArgumentException>(() => PhoneNumberNormalizer.Normalize(input));
     }
+
+    // Gerçek bir bug'ın regresyonu: gövdesinde phoneNumber eksik/boş gelen bir istek
+    // burada NullReferenceException fırlatıyor ve /api/guardian/otp/request'te kontrollü
+    // bir 400 yerine unhandled 500 üretiyordu. Eksik girdi de sadece "geçersiz numara"dır.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Normalize_reports_missing_input_as_invalid_rather_than_null_referencing(string? input)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => PhoneNumberNormalizer.Normalize(input));
+
+        Assert.IsNotType<NullReferenceException>(ex);
+    }
 }

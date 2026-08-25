@@ -102,7 +102,23 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
 
             var result = await response.Content.ReadFromJsonAsync<CloudApiResponse>(cancellationToken: cancellationToken);
             var messageId = result?.Messages?.FirstOrDefault()?.Id;
+            if (string.IsNullOrWhiteSpace(messageId))
+            {
+                // Meta başarılı bir gönderimde messages[0].id döndürür. Yalnızca HTTP 2xx'e
+                // bakıp boş/bozuk bir cevabı başarılı sayarsak dispatcher job'ı SENT yapar ve
+                // artık retry etmez; mesajın gerçekten kabul edildiğine dair elimizde hiçbir
+                // sağlayıcı referansı kalmaz. Bu nedenle sözleşme eksikse fail-closed davranırız.
+                logger.LogError("WhatsApp Cloud API başarılı HTTP yanıtında mesaj kimliği döndürmedi.");
+                return new WhatsAppSendResult(false, null, "Sağlayıcı mesaj kimliği dönmedi.");
+            }
+
             return new WhatsAppSendResult(true, messageId, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Uygulama kapanırken BackgroundService'in iptal sinyalini hata sonucuna çevirip
+            // yutma; üst katman işlemi gerçekten durdurabilsin.
+            throw;
         }
         catch (Exception ex)
         {

@@ -1,4 +1,6 @@
 using Abdera.Api.Modules.Auth.Domain;
+using System.Security.Claims;
+using System.Text.Json;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.AspNetCore.Identity;
@@ -16,13 +18,21 @@ public static class Teachers
     public record UpdateRequest(string FirstName, string LastName, TeacherStatus Status, Guid[] InstrumentIds);
     public record TeacherResponse(Guid Id, string FirstName, string LastName, TeacherStatus Status, Guid[] InstrumentIds, bool HasLoginAccount);
     public record CreateResponse(TeacherResponse Teacher, string? TemporaryPassword);
+    public record TeacherStudentResponse(
+        Guid StudentId, string FirstName, string LastName, Guid EnrollmentId,
+        Guid InstrumentId, string InstrumentName, DateOnly StartedAt);
+    public record TeacherOverviewResponse(TeacherResponse Teacher, List<TeacherStudentResponse> Students);
+    public record CreateStudentRequest(
+        string FirstName, string LastName, DateOnly BirthDate, Guid InstrumentId, DateOnly StartedAt);
 
     public static void MapTeachers(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/teachers").RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         group.MapGet("", ListAsync);
+        group.MapGet("/overview", OverviewAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        group.MapPost("/{teacherId:guid}/students", CreateStudentAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPatch("/{teacherId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
@@ -30,6 +40,31 @@ public static class Teachers
     {
         var teachers = await LoadTeacherResponsesAsync(db, t => true);
         return Results.Ok(teachers);
+    }
+
+    private static async Task<IResult> OverviewAsync(AbderaDbContext db)
+    {
+        var teachers = await LoadTeacherResponsesAsync(db, teacher => true);
+        var teacherIds = teachers.Select(teacher => teacher.Id).ToList();
+        var students = await db.Enrollments
+            .Where(enrollment => teacherIds.Contains(enrollment.TeacherId) && enrollment.Status == EnrollmentStatus.Active)
+            .Join(db.Students, enrollment => enrollment.StudentId, student => student.Id, (enrollment, student) => new { enrollment, student })
+            .Join(db.Instruments, item => item.enrollment.InstrumentId, instrument => instrument.Id, (item, instrument) => new
+            {
+                item.enrollment.TeacherId,
+                Student = new TeacherStudentResponse(
+                    item.student.Id, item.student.FirstName, item.student.LastName, item.enrollment.Id,
+                    instrument.Id, instrument.Name, item.enrollment.StartedAt),
+            })
+            .ToListAsync();
+
+        return Results.Ok(teachers.Select(teacher => new TeacherOverviewResponse(
+            teacher,
+            students.Where(item => item.TeacherId == teacher.Id)
+                .Select(item => item.Student)
+                .OrderBy(student => student.LastName)
+                .ThenBy(student => student.FirstName)
+                .ToList())));
     }
 
     private static async Task<IResult> CreateAsync(
@@ -72,6 +107,52 @@ public static class Teachers
             instruments.Select(i => i.Id).ToArray(), userId is not null);
 
         return Results.Created($"/api/teachers/{teacher.Id}", new CreateResponse(response, temporaryPassword));
+    }
+
+    private static async Task<IResult> CreateStudentAsync(
+        Guid teacherId, CreateStudentRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var teacher = await db.Teachers.SingleOrDefaultAsync(item => item.Id == teacherId)
+            ?? throw new NotFoundException("Öğretmen bulunamadı.");
+        if (teacher.Status != TeacherStatus.Active)
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["teacherId"] = ["Bu öğretmen aktif değil."],
+            });
+
+        var instrument = await db.Instruments.SingleOrDefaultAsync(item => item.Id == request.InstrumentId)
+            ?? throw new NotFoundException("Enstrüman bulunamadı.");
+        var teachesInstrument = await db.TeacherInstruments
+            .AnyAsync(item => item.TeacherId == teacherId && item.InstrumentId == request.InstrumentId);
+        if (!teachesInstrument)
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["instrumentId"] = ["Bu öğretmen bu enstrümanı öğretmiyor."],
+            });
+
+        var now = clock.UtcNow;
+        var student = Student.Create(request.FirstName, request.LastName, request.BirthDate, now);
+        var enrollment = Enrollment.Create(student.Id, teacherId, request.InstrumentId, request.StartedAt, now);
+        db.Students.Add(student);
+        db.Enrollments.Add(enrollment);
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal),
+            "enrollment.created_with_student",
+            nameof(Enrollment),
+            enrollment.Id,
+            now,
+            afterJson: JsonSerializer.Serialize(new
+            {
+                enrollment.StudentId,
+                enrollment.TeacherId,
+                enrollment.InstrumentId,
+                enrollment.StartedAt,
+            })));
+        await db.SaveChangesAsync();
+
+        return Results.Created($"/api/students/{student.Id}", new TeacherStudentResponse(
+            student.Id, student.FirstName, student.LastName, enrollment.Id,
+            instrument.Id, instrument.Name, enrollment.StartedAt));
     }
 
     private static async Task<IResult> UpdateAsync(Guid teacherId, UpdateRequest request, AbderaDbContext db, IClock clock)

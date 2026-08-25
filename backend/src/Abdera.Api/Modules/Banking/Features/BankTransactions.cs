@@ -74,7 +74,9 @@ public static class BankTransactions
         if (receivable.Status is ReceivableStatus.Cancelled or ReceivableStatus.Paid)
             throw new ConflictException($"'{receivable.Status}' durumundaki bir aidata ödeme kaydedilemez.");
 
-        var totalPaid = await db.Payments.Where(p => p.ReceivableId == receivable.Id).SumAsync(p => p.Amount) + transaction.Amount;
+        var totalPaid = (await Receivables.ComputeTotalsPaidAsync([receivable.Id], db)).GetValueOrDefault(receivable.Id) + transaction.Amount;
+        if (totalPaid > receivable.Amount)
+            throw new ConflictException("Banka işlemi aidatın kalan bakiyesini aşıyor.");
 
         db.Payments.Add(Payment.Create(
             receivable.Id, transaction.Amount, DateOnly.FromDateTime(clock.ToSchoolLocal(transaction.ReceivedAt).Date),

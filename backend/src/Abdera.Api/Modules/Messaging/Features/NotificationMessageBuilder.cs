@@ -24,6 +24,7 @@ public static class NotificationMessageBuilder
             NotificationJobType.LessonRescheduled => await BuildLessonMessageAsync(job, "lesson_rescheduled", db, clock, config),
             NotificationJobType.MakeupApproved => await BuildLessonMessageAsync(job, "makeup_approved", db, clock, config),
             NotificationJobType.PaymentReminder => await BuildPaymentMessageAsync(job, db, clock),
+            NotificationJobType.InstrumentMaintenance => await BuildMaintenanceMessageAsync(job, db),
             // ARC-2: Birthday/PackageEnding tanımlı ama hiçbir use-case tarafından
             // üretilmiyor (Faz 7'ye kaldı) - sessizce null dönüp yanıltıcı bir "kayıt
             // bulunamadı" hatasına düşmek yerine dispatcher'ın yakalayıp okunur bir
@@ -32,6 +33,21 @@ public static class NotificationMessageBuilder
                 throw new NotImplementedNotificationTypeException(job.Type),
             _ => null,
         };
+    }
+
+    private static async Task<BuiltMessage?> BuildMaintenanceMessageAsync(NotificationJob job, AbderaDbContext db)
+    {
+        var reminder = await db.InstrumentMaintenanceReminders.SingleOrDefaultAsync(item => item.Id == job.ReferenceId);
+        if (reminder is null) return null;
+        var setting = await db.InstrumentMaintenanceSettings.SingleAsync(item => item.Id == reminder.SettingId);
+        var instrument = await db.Instruments.SingleAsync(item => item.Id == setting.InstrumentId);
+        var guardian = await db.Guardians.SingleAsync(item => item.Id == reminder.GuardianId);
+        return new BuiltMessage("instrument_maintenance_reminder", new Dictionary<string, string>
+        {
+            ["guardian_name"] = guardian.FirstName,
+            ["instrument"] = instrument.Name,
+            ["maintenance_type"] = setting.MaintenanceType,
+        });
     }
 
     private static async Task<BuiltMessage?> BuildLessonMessageAsync(NotificationJob job, string templateName, AbderaDbContext db, IClock clock, IConfiguration config)

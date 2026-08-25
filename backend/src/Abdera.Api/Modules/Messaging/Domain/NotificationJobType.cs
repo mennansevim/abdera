@@ -12,6 +12,7 @@ public enum NotificationJobType
     PaymentReminder,
     Birthday,
     PackageEnding,
+    InstrumentMaintenance,
 }
 
 public enum NotificationJobStatus

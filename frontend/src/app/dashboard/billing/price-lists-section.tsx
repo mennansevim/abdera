@@ -3,15 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ApiError } from "@/lib/api";
 import { useInstruments } from "@/lib/people";
-import {
-  useApplyBulkUpdate,
-  useCreatePriceList,
-  usePreviewBulkUpdate,
-  usePriceLists,
-  type BillingType,
-  type BulkUpdatePreviewItem,
-  type CreatePriceListItemInput,
-} from "@/lib/billing";
+import { useCreatePriceList, usePriceLists, type BillingType, type CreatePriceListItemInput } from "@/lib/billing";
 
 export function PriceListsSection() {
   const { data: priceLists, isLoading } = usePriceLists();
@@ -49,7 +41,6 @@ export function PriceListsSection() {
                 </div>
               ))}
             </div>
-            <BulkUpdateForm priceListId={list.id} />
           </div>
         ))}
         {priceLists?.length === 0 && !isLoading && <p className="text-meta">Henüz fiyat listesi yok.</p>}
@@ -145,68 +136,5 @@ function CreatePriceListForm({ instruments }: { instruments: { id: string; name:
       </button>
       {error && <p className="text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
-  );
-}
-
-function BulkUpdateForm({ priceListId }: { priceListId: string }) {
-  const preview = usePreviewBulkUpdate();
-  const apply = useApplyBulkUpdate();
-  const [percentage, setPercentage] = useState(10);
-  const [previewResult, setPreviewResult] = useState<BulkUpdatePreviewItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [applied, setApplied] = useState(false);
-
-  async function handlePreview() {
-    setError(null);
-    setApplied(false);
-    try {
-      const result = await preview.mutateAsync({ priceListId, percentageChange: percentage });
-      setPreviewResult(result);
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Önizleme alınamadı.");
-    }
-  }
-
-  async function handleApply() {
-    setError(null);
-    try {
-      await apply.mutateAsync({ priceListId, percentageChange: percentage });
-      setApplied(true);
-      setPreviewResult(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Uygulanamadı.");
-    }
-  }
-
-  return (
-    <div className="border-t-2 border-[var(--line)] bg-[var(--surface-muted)] px-5 py-3.5">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-semibold text-[var(--muted)]">Toplu zam/indirim:</span>
-        <input type="number" value={percentage} onChange={(e) => setPercentage(Number(e.target.value))}
-          className="field min-h-9 w-20 text-sm" />
-        <span className="text-[var(--muted)]">%</span>
-        <button onClick={handlePreview} className="pressable min-h-9 rounded-lg border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)]">
-          Önizle
-        </button>
-        {previewResult && (
-          <button onClick={handleApply} className="pressable min-h-9 rounded-lg bg-[var(--foreground)] px-3 text-xs font-bold text-white">
-            Uygula
-          </button>
-        )}
-      </div>
-
-      {error && <p className="mt-2 text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
-      {applied && <p className="mt-2 text-sm font-medium text-[var(--success-strong)]">Uygulandı - geçmiş aidatlar etkilenmedi.</p>}
-      {previewResult && (
-        <ul className="mt-2 space-y-1 text-sm">
-          {previewResult.map((p) => (
-            <li key={p.itemId} className="rounded-lg bg-[var(--warning-soft)] px-2.5 py-1.5 text-[var(--warning-strong)]">
-              {p.instrumentName} ({p.durationMinutes} dk): {p.oldAmount.toLocaleString("tr-TR")} → {p.newAmount.toLocaleString("tr-TR")} TRY
-              {p.activeFeePlanCount > 0 && ` · ${p.activeFeePlanCount} aktif kayıt etkilenecek`}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }

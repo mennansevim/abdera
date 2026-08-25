@@ -24,10 +24,10 @@ EF Core migrations (`dotnet ef migrations add ...`), master prompt'un istediği 
 (SeedMessageTemplates)
 008_banking (Banking)                     virtual_ibans, bank_incoming_transactions +
                                            payments.created_by nullable'a çevrildi     -- Phase 6 (E1), uygulandı
-009_progress                              skill_definitions, skill_assessments,
-                                           practice_assignments                          -- Phase 7
+009_progress (CompleteProgressModule)     skill_definitions, skill_assessments,
+                                           practice_assignments + ortak/enstrümana özel
+                                           yetenek seed verisi                           -- uygulandı
                                            (lesson_notes zaten 004'te - Phase 3'te gerekliydi)
-010_seed_skill_definitions                skill_definitions seed verisi (ortak + enstrümana özel)
 011_add_optimistic_concurrency            receivables ve bank_incoming_transactions için
 (AddOptimisticConcurrency)                xmin tabanlı concurrency token (ARC-1, Faz 6 sonrası
                                            denetim) - yeni kolon eklemez, yalnızca model
@@ -74,7 +74,7 @@ message_templates:
 ```
 `INSERT ... ON CONFLICT (name) DO NOTHING` ile yazılır. Meta onayı gelene kadar `WhatsApp__Provider=Fake` ile geliştirme paralel ilerler (D2) - şablon adı/parametre isimleri değişirse bu migration'a yeni bir migration ile `UPDATE` eklenir, var olan satır elle düzenlenmez.
 
-**010_seed_skill_definitions** (Phase 6'da eklenecek):
+**CompleteProgressModule içindeki seed** (uygulandı):
 ```
 skill_definitions (ortak, instrument_id=null):
   RHYTHM, TEMPO_CONTROL, SIGHT_READING, MUSICAL_EXPRESSION,

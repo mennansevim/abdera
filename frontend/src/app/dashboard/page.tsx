@@ -10,11 +10,10 @@ import { useDashboardToday } from "@/lib/dashboard";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useNotifications } from "@/lib/messaging";
 import { useSystemHealth } from "@/lib/ops";
-import { useStudents, useTeachers } from "@/lib/people";
+import { useAttentionNeededStudents, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
-import { ChangePasswordForm } from "./change-password-form";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 
 const HOUR_HEIGHT_REM = 3.6;
@@ -59,17 +58,11 @@ function formatMoney(value: number) {
 }
 
 export default function DashboardPage() {
-  const { data: me, refetch } = useMe();
+  const { data: me } = useMe();
   if (!me) return null;
 
   return (
     <div className="space-y-5">
-      {me.mustChangePassword && (
-        <section className="app-card border-[var(--warning)]/40 bg-[var(--warning-soft)] p-4">
-          <p className="text-sm font-bold text-[var(--warning-strong)]">Güvenliğin için önce kalıcı bir şifre belirle.</p>
-          <ChangePasswordForm onDone={() => refetch()} />
-        </section>
-      )}
       {me.role === "Teacher" ? <TeacherDashboard email={me.email} /> : <AdminDashboard email={me.email} />}
     </div>
   );
@@ -391,6 +384,7 @@ function AdminAttentionRail({ lessons }: { lessons: CalendarLesson[] }) {
   const approve = useApproveChangeRequest();
   const reject = useRejectChangeRequest();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const { data: attentionStudents } = useAttentionNeededStudents();
 
   async function act(id: string, action: "approve" | "reject") {
     setBusyId(id);
@@ -426,6 +420,12 @@ function AdminAttentionRail({ lessons }: { lessons: CalendarLesson[] }) {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="app-card p-4">
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">İlgi Gerektirebilecek Öğrenciler</h2><span className="text-[.6rem] text-[var(--muted)]">Açıklanabilir sinyal</span></div>
+        {!attentionStudents?.length && <EmptyRail text="Şu an uyarı üreten bir sinyal yok." />}
+        <div className="divide-y divide-[var(--line)]">{attentionStudents?.slice(0, 4).map((student) => <Link key={student.studentId} href={`/dashboard/students#student-${student.studentId}`} className="pressable block py-3 first:pt-0 last:pb-0"><span className="block text-[.7rem] font-bold">{student.studentName}</span><span className="mt-1 block text-[.58rem] leading-relaxed text-[var(--danger-strong)]">İlgi gerektirebilir · {student.reasons.join(" · ")}</span></Link>)}</div>
       </section>
     </aside>
   );

@@ -12,8 +12,14 @@ export interface SystemHealthSummary {
   level: SystemHealthLevel;
   detail: string | null;
   lastCheckedAt: string;
+  databaseReachable: boolean;
   lastSuccessfulBackupAt: string | null;
   lastBackupStatus: string | null;
+  providers: {
+    whatsApp: "Configured" | "DevelopmentOnly" | "Misconfigured";
+    banking: "Configured" | "DevelopmentOnly" | "Misconfigured";
+    backup: "Configured" | "DevelopmentOnly" | "Misconfigured";
+  };
 }
 
 export function useSystemHealth() {

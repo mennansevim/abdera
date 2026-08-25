@@ -65,6 +65,23 @@ public static class MakeupCredits
         if (hasConflict)
             throw new ConflictException("Bu saat, öğretmenin veya öğrencinin başka bir dersiyle çakışıyor.");
 
+        var localLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(request.StartAt).Date);
+        var weekStart = StudentWeeklyLessonPolicy.StartOfWeek(localLessonDate);
+        var weekEnd = weekStart.AddDays(7);
+        var weekStartAt = LessonGenerator.ToUtcInstant(weekStart, TimeOnly.MinValue, clock.SchoolTimeZone);
+        var weekEndAt = LessonGenerator.ToUtcInstant(weekEnd, TimeOnly.MinValue, clock.SchoolTimeZone);
+        var weeklyLessonCount = await db.Lessons.CountAsync(lesson =>
+            lesson.StudentId == credit.StudentId &&
+            lesson.StartAt >= weekStartAt && lesson.StartAt < weekEndAt &&
+            lesson.Status != LessonStatus.Cancelled && lesson.Status != LessonStatus.Rescheduled);
+        if (weeklyLessonCount >= StudentWeeklyLessonPolicy.MaximumLessons)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["startAt"] = [$"Öğrencinin bu haftada zaten {StudentWeeklyLessonPolicy.MaximumLessons} dersi var. Başka bir hafta seçin."],
+            });
+        }
+
         var makeupLesson = Lesson.CreateMakeup(credit.StudentId, request.TeacherId, request.InstrumentId, request.StartAt, endAt, clock.UtcNow);
         db.Lessons.Add(makeupLesson);
 

@@ -42,6 +42,8 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 // olmasi lazim - bkz. MessagingFlowTests.
                 ["WhatsApp:AppSecret"] = "test-webhook-app-secret",
                 ["WhatsApp:PayloadSigningKey"] = "test-payload-signing-key",
+                ["WhatsApp:WebhookVerifyToken"] = "test-webhook-verify-token",
+                ["Banking:WebhookSharedSecret"] = "test-bank-webhook-secret",
                 ["Bootstrap:AdminEmail"] = "admin@test.local",
                 ["Bootstrap:AdminPassword"] = "Test1234!",
                 // NotificationDispatcher testlerinin gerçek 60 saniye beklemesine gerek kalmasın diye.

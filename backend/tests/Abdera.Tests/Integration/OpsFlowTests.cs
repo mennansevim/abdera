@@ -107,6 +107,10 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         Assert.Equal(SystemHealthLevel.Degraded, body!.Level);
         Assert.Equal("Test amaçlı: son yedekleme eski.", body.Detail);
+        Assert.True(body.DatabaseReachable);
+        Assert.Equal(SystemHealth.ProviderConfigurationState.DevelopmentOnly, body.Providers.WhatsApp);
+        Assert.Equal(SystemHealth.ProviderConfigurationState.DevelopmentOnly, body.Providers.Banking);
+        Assert.Equal(SystemHealth.ProviderConfigurationState.DevelopmentOnly, body.Providers.Backup);
     }
 
     [Fact]

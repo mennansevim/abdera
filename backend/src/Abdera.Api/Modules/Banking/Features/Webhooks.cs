@@ -29,7 +29,7 @@ public static class Webhooks
     }
 
     private static async Task<IResult> ReceiveAsync(
-        HttpRequest request, AbderaDbContext db, IClock clock, IConfiguration config)
+        HttpRequest request, AbderaDbContext db, IClock clock, IConfiguration config, ILoggerFactory loggerFactory)
     {
         request.EnableBuffering();
         string rawBody;
@@ -43,6 +43,7 @@ public static class Webhooks
         var providedSecret = request.Headers["X-Bank-Webhook-Secret"].ToString();
         if (!VerifySharedSecret(providedSecret, sharedSecret))
         {
+            loggerFactory.CreateLogger("BankWebhook").LogWarning("Banka webhook isteği geçersiz imza nedeniyle reddedildi.");
             return Results.Unauthorized();
         }
 
@@ -58,6 +59,9 @@ public static class Webhooks
 
         if (payload is null) return Results.BadRequest();
 
+        var errors = Validate(payload, clock.UtcNow);
+        if (errors.Count > 0) return Results.ValidationProblem(errors);
+
         await ProcessIncomingTransactionAsync(
             "generic", payload.ProviderTransactionId, payload.VirtualIban, payload.Amount, payload.Currency ?? "TRY",
             payload.SenderName, payload.Description, payload.ReceivedAt ?? clock.UtcNow, db, clock);
@@ -68,6 +72,22 @@ public static class Webhooks
     private record BankTransactionPayload(
         string ProviderTransactionId, string VirtualIban, decimal Amount, string? Currency,
         string? SenderName, string? Description, DateTimeOffset? ReceivedAt);
+
+    private static Dictionary<string, string[]> Validate(BankTransactionPayload payload, DateTimeOffset now)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrWhiteSpace(payload.ProviderTransactionId) || payload.ProviderTransactionId.Length > 200)
+            errors["providerTransactionId"] = ["Sağlayıcı işlem kimliği 1–200 karakter olmalı."];
+        if (string.IsNullOrWhiteSpace(payload.VirtualIban) || payload.VirtualIban.Length > 64)
+            errors["virtualIban"] = ["Sanal IBAN zorunludur."];
+        if (payload.Amount <= 0)
+            errors["amount"] = ["İşlem tutarı pozitif olmalı."];
+        if (!string.IsNullOrWhiteSpace(payload.Currency) && (payload.Currency.Length != 3 || !payload.Currency.All(char.IsLetter)))
+            errors["currency"] = ["Para birimi üç harfli ISO kodu olmalı."];
+        if (payload.ReceivedAt is { } receivedAt && receivedAt > now.AddMinutes(5))
+            errors["receivedAt"] = ["İşlem zamanı gelecekte olamaz."];
+        return errors;
+    }
 
     private static bool VerifySharedSecret(string? provided, string expected)
     {

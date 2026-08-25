@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useRequireGuardianAuth } from "@/lib/guardian-auth";
@@ -9,16 +9,21 @@ import {
   useGuardianBilling,
   useGuardianCalendar,
   useGuardianMessages,
+  useGuardianPracticeJournal,
+  useCreateGuardianPracticeEntry,
+  useGuardianProgress,
   useGuardianStudents,
   useRespondRsvp,
   type GuardianBilling,
   type GuardianLesson,
   type GuardianMessage,
+  type GuardianProgress,
+  type PracticeJournal,
   type GuardianStudent,
 } from "@/lib/guardian";
 import { useLogout } from "@/lib/use-auth";
 
-type ParentTab = "home" | "calendar" | "billing" | "messages";
+type ParentTab = "home" | "calendar" | "progress" | "billing" | "messages";
 
 const WEEKDAY_SHORT_FALLBACK = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
@@ -44,6 +49,8 @@ export default function ParentPage() {
   const from = useMemo(() => today.toISOString(), [today]);
   const to = useMemo(() => addDays(today, 60).toISOString(), [today]);
   const { data: lessons } = useGuardianCalendar(selectedStudent?.studentId, from, to);
+  const { data: progress, isLoading: progressLoading } = useGuardianProgress(selectedStudent?.studentId);
+  const { data: practiceJournal, isLoading: practiceJournalLoading } = useGuardianPracticeJournal(selectedStudent?.studentId);
 
   function handleLogout() {
     logout.mutate(undefined, { onSuccess: () => router.push("/parent/login") });
@@ -82,6 +89,7 @@ export default function ParentPage() {
 
           {tab === "home" && <HomeView lessons={lessons} today={today} studentId={selectedStudent?.studentId} billing={billing} messages={messages} />}
           {tab === "calendar" && <CalendarView lessons={lessons} today={today} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />}
+          {tab === "progress" && <ProgressView studentId={selectedStudent?.studentId} progress={progress} practiceJournal={practiceJournal} loading={progressLoading || practiceJournalLoading} />}
           {tab === "billing" && <BillingView billing={billing} loading={billingLoading} studentId={selectedStudent?.studentId} />}
           {tab === "messages" && <MessagesView messages={messages} loading={messagesLoading} />}
         </div>
@@ -410,6 +418,50 @@ function MessagesView({ messages, loading }: { messages: GuardianMessage[] | und
   return <div><h1 className="text-xl font-bold">Mesajlar</h1><p className="mt-1 text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-4 space-y-2">{loading ? <div className="skeleton h-24 rounded-2xl" /> : messages?.length ? messages.map((message) => <MessageCard key={message.id} message={message} />) : <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}</div></div>;
 }
 
+function ProgressView({ studentId, progress, practiceJournal, loading }: { studentId: string | undefined; progress: GuardianProgress | undefined; practiceJournal: PracticeJournal | undefined; loading: boolean }) {
+  const total = (progress?.presentCount ?? 0) + (progress?.absentCount ?? 0) + (progress?.excusedCount ?? 0);
+  const attendanceRate = total ? Math.round(((progress?.presentCount ?? 0) / total) * 100) : 0;
+  const pieces = Array.from(new Set(progress?.entries.map((entry) => entry.pieceTitle).filter((piece): piece is string => !!piece) ?? []));
+  if (loading) return <div className="space-y-3"><div className="skeleton h-8 w-32 rounded-lg" /><div className="skeleton h-28 rounded-2xl" /><div className="skeleton h-44 rounded-2xl" /></div>;
+  return <div><h1 className="text-xl font-bold">Gelişim</h1><p className="mt-1 text-xs text-[var(--muted)]">Öğretmen notları, devamlılık, repertuvar ve çalışma günlüğü</p>
+    <div className="mt-4 grid grid-cols-3 gap-2"><ParentMetric label="Katılım" value={`%${attendanceRate}`} tone="green" /><ParentMetric label="Devamsız" value={String(progress?.absentCount ?? 0)} tone={(progress?.absentCount ?? 0) > 1 ? "red" : "neutral"} /><ParentMetric label="Repertuvar" value={String(pieces.length)} tone="brand" /></div>
+    {pieces.length > 0 && <section className="app-card mt-3 p-4"><p className="text-[.58rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">Çalışılan eserler</p><div className="mt-2 flex flex-wrap gap-1.5">{pieces.map((piece) => <span key={piece} className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1.5 text-[.62rem] font-bold text-[var(--brand-strong)]">{piece}</span>)}</div></section>}
+    <PracticeJournalPanel studentId={studentId} journal={practiceJournal} />
+    <section className="mt-3 space-y-2"><h2 className="text-xs font-bold">Öğretmen değerlendirmeleri</h2>{progress?.entries.map((entry) => <article key={entry.id} className="app-card p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold">{entry.instrumentName}</p><p className="mt-0.5 text-[.58rem] text-[var(--muted)]">{entry.teacherName} · {new Date(entry.lessonStartAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p></div>{entry.pieceDifficulty && <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.55rem] font-bold text-[var(--muted)]">Seviye {entry.pieceDifficulty}/5</span>}</div>{entry.parentComment && <p className="mt-3 text-xs leading-relaxed text-[#554e59]">{entry.parentComment}</p>}{entry.pieceTitle && <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-[.62rem]"><strong>{entry.pieceTitle}</strong>{entry.pieceComposer ? ` · ${entry.pieceComposer}` : ""}{entry.pieceResourceUrl && <a href={entry.pieceResourceUrl} target="_blank" rel="noreferrer" className="ml-2 font-bold text-[var(--brand)] underline">Nota / bağlantı</a>}</div>}{entry.practiced && <p className="mt-2 rounded-xl bg-[var(--surface-muted)] px-3 py-2 text-[.62rem] text-[var(--muted)]"><strong className="text-[var(--foreground)]">Çalışıldı:</strong> {entry.practiced}</p>}{entry.homework && <p className="mt-2 rounded-xl bg-[#fff3dd] px-3 py-2 text-[.62rem] text-[#7b5b20]"><strong>Ev çalışması:</strong> {entry.homework}</p>}{entry.nextGoal && <p className="mt-2 text-[.62rem] text-[var(--brand-strong)]"><strong>Sonraki hedef:</strong> {entry.nextGoal}</p>}</article>)}{!progress?.entries.length && <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz paylaşılmış gelişim değerlendirmesi yok.</p>}</section>
+  </div>;
+}
+
+function PracticeJournalPanel({ studentId, journal }: { studentId: string | undefined; journal: PracticeJournal | undefined }) {
+  const createEntry = useCreateGuardianPracticeEntry(studentId);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [durationMinutes, setDurationMinutes] = useState("30");
+  const [goal, setGoal] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await createEntry.mutateAsync({ date, durationMinutes: Number(durationMinutes), goal, note: note || undefined });
+      setGoal("");
+      setNote("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail ?? err.title : "Çalışma kaydı eklenemedi.");
+    }
+  }
+
+  return <section className="app-card mt-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[.58rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">Çalışma günlüğü</p><p className="mt-1 text-xs font-bold">Toplam {journal?.totalMinutes ?? 0} dakika</p></div><div className="flex flex-wrap justify-end gap-1">{journal?.badges.map((badge) => <span key={badge} className="rounded-full bg-[#fff3dd] px-2 py-1 text-[.52rem] font-bold text-[#8a651d]">{badge}</span>)}</div></div>
+    <form onSubmit={submit} className="mt-3 space-y-2"><div className="grid grid-cols-2 gap-2"><label className="text-[.56rem] font-bold text-[var(--muted)]">Tarih<input type="date" max={new Date().toISOString().slice(0, 10)} value={date} onChange={(event) => setDate(event.target.value)} required className="field mt-1 text-xs" /></label><label className="text-[.56rem] font-bold text-[var(--muted)]">Süre (dk)<input type="number" min="1" max="600" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required className="field mt-1 text-xs" /></label></div><input value={goal} onChange={(event) => setGoal(event.target.value)} required maxLength={500} placeholder="Bugünkü hedef" className="field text-xs" /><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="İsteğe bağlı not" className="field resize-y text-xs" />{error && <p role="alert" className="text-[.62rem] font-semibold text-[var(--danger-strong)]">{error}</p>}<button disabled={createEntry.isPending || !studentId} className="pressable min-h-10 w-full rounded-xl bg-[var(--brand)] text-xs font-bold text-white disabled:opacity-50">{createEntry.isPending ? "Kaydediliyor…" : "Çalışmayı kaydet ve onayla"}</button></form>
+    {!!journal?.entries.length && <div className="mt-3 space-y-2 border-t border-[var(--line)] pt-3">{journal.entries.slice(0, 5).map((entry) => <article key={entry.id} className="rounded-xl bg-[var(--surface-muted)] px-3 py-2"><div className="flex justify-between gap-2 text-[.58rem] text-[var(--muted)]"><span>{new Date(`${entry.date}T00:00:00`).toLocaleDateString("tr-TR")}</span><span>{entry.durationMinutes} dk · {entry.parentApproved ? "Veli onaylı" : "Onay bekliyor"}</span></div><p className="mt-1 text-xs font-bold">{entry.goal}</p>{entry.note && <p className="mt-1 text-[.62rem] text-[var(--muted)]">{entry.note}</p>}</article>)}</div>}
+  </section>;
+}
+
+function ParentMetric({ label, value, tone }: { label: string; value: string; tone: "green" | "red" | "brand" | "neutral" }) {
+  const color = { green: "text-[#287747] bg-[#eaf8ed]", red: "text-[#b3403c] bg-[#ffe8e5]", brand: "text-[var(--brand-strong)] bg-[var(--brand-soft)]", neutral: "text-[var(--muted)] bg-[var(--surface-muted)]" }[tone];
+  return <article className={`rounded-2xl p-3 text-center ${color}`}><p className="text-lg font-bold tabular-nums">{value}</p><p className="mt-1 text-[.55rem] font-bold">{label}</p></article>;
+}
+
 function InfoCard({ icon, label, value, badge, badgeTone, detail }: { icon: IconName; label: string; value: string; badge: string; badgeTone: "red"|"green"; detail: string }) {
   return <article className="app-card min-h-[7.4rem] p-3"><p className="flex items-center gap-1.5 text-[.58rem] text-[var(--muted)]"><Icon name={icon} className="h-3.5 w-3.5" />{label}</p><p className={`mt-2 text-base font-bold ${badgeTone === "green" ? "text-[#297a45]" : "text-[#302b35]"}`}>{value}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[.5rem] font-bold ${badgeTone === "green" ? "bg-[#ddf2e2] text-[#2e7d49]" : "bg-[#ffe0de] text-[#c94b4b]"}`}>{badge}</span><p className="mt-1.5 text-[.5rem] text-[#a29ba5]">{detail}</p></article>;
 }
@@ -443,6 +495,6 @@ function MessageCard({ message, compact }: { message: GuardianMessage; compact?:
 }
 
 function ParentNavigation({ tab, setTab }: { tab: ParentTab; setTab: (tab: ParentTab) => void }) {
-  const items: { id: ParentTab; label: string; icon: IconName }[] = [{id:"home",label:"Ana Sayfa",icon:"home"},{id:"calendar",label:"Takvim",icon:"calendar"},{id:"billing",label:"Aidat",icon:"wallet"},{id:"messages",label:"Mesajlar",icon:"note"}];
-  return <nav className="absolute inset-x-0 bottom-0 grid grid-cols-4 border-t border-[var(--line)] bg-white/95 px-2 pb-[max(.3rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">{items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 text-[.57rem] font-semibold ${tab===item.id?"text-[var(--brand)]":"text-[#9a949e]"}`}><Icon name={item.icon} className="h-4 w-4" />{item.label}</button>)}</nav>;
+  const items: { id: ParentTab; label: string; icon: IconName }[] = [{id:"home",label:"Ana Sayfa",icon:"home"},{id:"calendar",label:"Takvim",icon:"calendar"},{id:"progress",label:"Gelişim",icon:"activity"},{id:"billing",label:"Aidat",icon:"wallet"},{id:"messages",label:"Mesajlar",icon:"note"}];
+  return <nav className="absolute inset-x-0 bottom-0 grid grid-cols-5 border-t border-[var(--line)] bg-white/95 px-1 pb-[max(.3rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">{items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 text-[.52rem] font-semibold ${tab===item.id?"text-[var(--brand)]":"text-[#9a949e]"}`}><Icon name={item.icon} className="h-4 w-4" />{item.label}</button>)}</nav>;
 }

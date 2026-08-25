@@ -63,3 +63,13 @@ export function useVerifyGuardianOtp() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
   });
 }
+
+// Yalnızca Development backend'inde route edilir; gerçek OTP/WhatsApp gerektirmeden
+// veli portalını hızlıca önizlemek için kullanılır.
+export function useDebugGuardianLogin() {
+  const queryClient = useQueryClient();
+  return useMutation<VerifyOtpResult, ApiError, void>({
+    mutationFn: () => api.post<VerifyOtpResult>("/api/guardian/debug-login", {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+  });
+}

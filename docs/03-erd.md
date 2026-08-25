@@ -34,11 +34,13 @@ erDiagram
     PRICE_LIST_ITEM ||--o{ FEE_PLAN : "references"
     FEE_PLAN ||--o{ RECEIVABLE : generates
     RECEIVABLE ||--o{ PAYMENT : "paid by"
+    PAYMENT ||--o{ PAYMENT_CORRECTION : "corrected by append-only entries"
     STUDENT ||--o{ MAKEUP_CREDIT : earns
     LESSON ||--o| MAKEUP_CREDIT : "earned from"
     LESSON ||--o| MAKEUP_CREDIT : "used for"
 
     LESSON ||--o{ LESSON_NOTE : has
+    STUDENT ||--o{ PRACTICE_JOURNAL_ENTRY : records
     STUDENT ||--o{ SKILL_ASSESSMENT : "assessed on"
     SKILL_DEFINITION ||--o{ SKILL_ASSESSMENT : "measured by"
     LESSON ||--o{ PRACTICE_ASSIGNMENT : creates
@@ -46,6 +48,7 @@ erDiagram
     GUARDIAN ||--o{ NOTIFICATION_JOB : "is recipient"
     NOTIFICATION_JOB ||--o| WHATSAPP_MESSAGE : sends
     MESSAGE_TEMPLATE ||--o{ WHATSAPP_MESSAGE : uses
+    INSTRUMENT ||--o| INSTRUMENT_MAINTENANCE_SETTING : configures
 
     GUARDIAN ||--o| VIRTUAL_IBAN : "assigned (E1)"
     VIRTUAL_IBAN ||--o{ BANK_INCOMING_TRANSACTION : receives
@@ -136,6 +139,8 @@ enrollments
   ended_at       date null
   created_at     timestamptz
   updated_at     timestamptz
+
+  UNIQUE (student_id, teacher_id, instrument_id) WHERE status = 'Active'
 ```
 
 ## Scheduling
@@ -300,6 +305,18 @@ payments
 
   CHECK (amount > 0)
 
+payment_corrections
+  id                uuid pk
+  payment_id        uuid fk -> payments(id)
+  previous_amount   numeric(12,2)
+  corrected_amount  numeric(12,2)
+  reason            text
+  created_by        uuid fk -> users(id)
+  created_at        timestamptz
+
+  -- Satırlar güncellenmez/silinmez; en yeni düzeltme ödemenin etkin tutarıdır.
+  CHECK (corrected_amount > 0)
+
 makeup_credits                          -- A2
   id                    uuid pk
   student_id            uuid fk -> students(id)
@@ -329,12 +346,24 @@ lesson_notes
   note           text null
   homework       text null
   next_goal      text null
+  piece_title    text null
+  composer       text null
+  difficulty     smallint null       -- 1..5
+  repertoire_status text null
+  target_date    date null
+  resource_url   text null
+  resource_visible_to_guardian boolean default false
+  parent_comment text null
+  parent_comment_approved_at timestamptz null
+  parent_comment_approved_by uuid fk -> teachers(id) null
   created_at     timestamptz
+  updated_at     timestamptz
 
 skill_assessments
   id                    uuid pk
   student_id            uuid fk -> students(id)
   skill_definition_id   uuid fk -> skill_definitions(id)
+  teacher_id            uuid fk -> teachers(id)
   lesson_id             uuid fk -> lessons(id) null
   score                 smallint     -- 1..5
   note                  text null
@@ -348,6 +377,37 @@ practice_assignments
   description    text
   due_date       date null
   completed      boolean default false
+  created_at     timestamptz
+  updated_at     timestamptz
+
+practice_journal_entries
+  id                uuid pk
+  student_id        uuid fk -> students(id)
+  practice_date     date
+  duration_minutes  smallint       -- 1..600
+  goal              text null
+  note              text null
+  parent_approved   boolean default false
+  created_by_guardian_id uuid fk -> guardians(id) null
+  created_by_user_id uuid fk -> users(id) null
+  created_at        timestamptz
+
+  CHECK (duration_minutes BETWEEN 1 AND 600)
+```
+
+## Instrument maintenance
+
+```
+instrument_maintenance_settings
+  id                       uuid pk
+  instrument_id            uuid fk -> instruments(id) unique
+  maintenance_type         text
+  period_days               integer        -- 1..3650
+  is_enabled                boolean
+  notification_preference  text           -- NONE | WHATSAPP
+  next_reminder_at          timestamptz
+  created_at                timestamptz
+  updated_at                timestamptz
 ```
 
 ## Messaging
@@ -445,8 +505,10 @@ UNIQUE (lesson_id, guardian_id) ON lesson_rsvps
 UNIQUE (lesson_id) ON lesson_attendances
 UNIQUE (iban) ON virtual_ibans
 UNIQUE (provider, provider_transaction_id) ON bank_incoming_transactions
+UNIQUE (student_id, teacher_id, instrument_id) WHERE status='Active' ON enrollments
 CHECK (end_at > start_at) ON lessons
 CHECK (amount >= 0) ON receivables, price_list_items
-CHECK (amount > 0) ON payments, bank_incoming_transactions
+CHECK (amount > 0) ON payments, payment_corrections, bank_incoming_transactions
 CHECK (score BETWEEN 1 AND 5) ON skill_assessments
+CHECK (duration_minutes BETWEEN 1 AND 600) ON practice_journal_entries
 ```

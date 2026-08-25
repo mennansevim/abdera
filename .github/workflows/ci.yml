@@ -1,10 +1,8 @@
 name: CI
 
-# OPS-1 (docs/13-audit-fix-prompt.md madde 14): backend-build-test alti fazdir yorumda
-# kaliyordu, 156 testin koruma degeri yalnizca elle calistirmaya bagliydi. frontend-build-lint
-# hala yorumda - `npm run lint` suan pre-existing bir hatadan (banking/page.tsx, ARC-3'ten
-# once ayri bir gorev olarak flag'lendi) dolayi kirmizi doner; o duzeltilmeden acilmiyor,
-# bkz. docs/09-testing.md.
+# Backend, frontend ve uc kritik rol smoke testi ayni degisikligi ayri kalite katmanlarinda
+# korur. Integration testleri Testcontainers ile, browser smoke testi ise gercek Compose
+# uygulamasina karsi calisir (docs/09-testing.md).
 
 on:
   push:
@@ -58,3 +56,51 @@ jobs:
       - run: npm ci --prefix frontend
       - run: npm run lint --prefix frontend
       - run: npm run build --prefix frontend
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs: [backend-build-test, frontend-build-lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Development smoke ortamini hazirla
+        run: |
+          cp .env.example .env
+          sed -i 's/POSTGRES_PASSWORD=<GUCLU-PAROLA-URET>/POSTGRES_PASSWORD=CiPostgresOnly123!/' .env
+          sed -i 's/Bootstrap__AdminPassword=<ILK-GIRISTE-DEGISTIR>/Bootstrap__AdminPassword=CiAdminOnly123!/' .env
+          # Giris ve veli OTP uclari IP basina 15 dakikada 5 istekle sinirli. Smoke suite'i
+          # tek kosuda 2 admin girisi + 2 OTP tuketiyor; bir test yeniden denenirse (retries: 1)
+          # bu sinir asilir ve testler URUN HATASI OLMADAN kirmizi doner.
+          # Sinir DEVRE DISI BIRAKILMIYOR - yalnizca smoke ortaminda yeniden denemeye yer
+          # birakacak kadar yukseltiliyor. Kuralin kendisi backend testlerinde dogrulaniyor
+          # (RateLimitingFlowTests kendi dusuk limitli factory'siyle).
+          sed -i 's/^RateLimiting__LoginPermitLimit=.*/RateLimiting__LoginPermitLimit=50/' .env
+          sed -i 's/^RateLimiting__GuardianOtpPermitLimit=.*/RateLimiting__GuardianOtpPermitLimit=50/' .env
+      - run: npm ci --prefix frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Compose uygulamasini baslat
+        run: docker compose up --build -d
+      - name: Saglik kontrolunu bekle
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8080/health >/dev/null && curl --fail --silent http://localhost:3000/login >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          exit 1
+      - name: Uc rol Playwright smoke
+        env:
+          E2E_ADMIN_EMAIL: admin@example.com
+          E2E_ADMIN_PASSWORD: CiAdminOnly123!
+        run: npm run test:e2e --prefix frontend
+      - name: Hata durumunda servis loglari
+        if: failure()
+        run: docker compose logs --no-color --tail=250
+      - name: Compose kaynaklarini temizle
+        if: always()
+        run: docker compose down -v

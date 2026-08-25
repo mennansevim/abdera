@@ -110,3 +110,71 @@ export function useGuardianMessages() {
     queryFn: () => api.get<GuardianMessage[]>("/api/guardian/me/messages"),
   });
 }
+
+export interface GuardianProgressEntry {
+  id: string;
+  lessonStartAt: string;
+  teacherName: string;
+  instrumentName: string;
+  practiced: string | null;
+  parentComment: string | null;
+  homework: string | null;
+  nextGoal: string | null;
+  pieceTitle: string | null;
+  pieceDifficulty: number | null;
+  pieceComposer: string | null;
+  pieceStatus: "Learning" | "Polishing" | "PerformanceReady" | "Archived" | null;
+  pieceTargetDate: string | null;
+  pieceResourceUrl: string | null;
+  createdAt: string;
+}
+
+export interface GuardianProgress {
+  studentId: string;
+  presentCount: number;
+  absentCount: number;
+  excusedCount: number;
+  entries: GuardianProgressEntry[];
+}
+
+export function useGuardianProgress(studentId: string | undefined) {
+  return useQuery({
+    queryKey: ["guardian", "progress", studentId],
+    queryFn: () => api.get<GuardianProgress>(`/api/guardian/me/students/${studentId}/progress`),
+    enabled: !!studentId,
+  });
+}
+
+export interface PracticeJournalEntry {
+  id: string;
+  studentId: string;
+  date: string;
+  durationMinutes: number;
+  goal: string;
+  note: string | null;
+  parentApproved: boolean;
+  createdAt: string;
+}
+
+export interface PracticeJournal {
+  entries: PracticeJournalEntry[];
+  totalMinutes: number;
+  badges: string[];
+}
+
+export function useGuardianPracticeJournal(studentId: string | undefined) {
+  return useQuery({
+    queryKey: ["guardian", "practice-journal", studentId],
+    queryFn: () => api.get<PracticeJournal>(`/api/guardian/me/students/${studentId}/practice-journal`),
+    enabled: !!studentId,
+  });
+}
+
+export function useCreateGuardianPracticeEntry(studentId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { date: string; durationMinutes: number; goal: string; note?: string }) =>
+      api.post<PracticeJournalEntry>(`/api/guardian/me/students/${studentId}/practice-journal`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guardian", "practice-journal", studentId] }),
+  });
+}

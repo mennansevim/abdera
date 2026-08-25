@@ -108,4 +108,19 @@ public class BillingDomainTests
         Assert.Throws<ArgumentException>(() => Payment.Create(
             Guid.NewGuid(), 0m, new DateOnly(2026, 9, 1), PaymentMethod.Cash, null, null, Guid.NewGuid(), Now));
     }
+
+    [Fact]
+    public void PaymentCorrection_preserves_before_and_after_amounts_and_requires_reason()
+    {
+        var paymentId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+
+        var correction = PaymentCorrection.Create(paymentId, 1200m, 950m, "Dekont düzeltmesi", actorId, Now);
+
+        Assert.Equal(paymentId, correction.PaymentId);
+        Assert.Equal(1200m, correction.PreviousAmount);
+        Assert.Equal(950m, correction.CorrectedAmount);
+        Assert.Throws<ArgumentException>(() => PaymentCorrection.Create(paymentId, 950m, 900m, " ", actorId, Now));
+        Assert.Throws<ArgumentException>(() => PaymentCorrection.Create(paymentId, 950m, 950m, "aynı", actorId, Now));
+    }
 }

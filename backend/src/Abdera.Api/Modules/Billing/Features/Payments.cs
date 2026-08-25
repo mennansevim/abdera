@@ -33,7 +33,14 @@ public static class Payments
         var payment = Payment.Create(receivableId, request.Amount, request.PaymentDate, request.Method, request.Reference, request.Note, actorId, clock.UtcNow);
         db.Payments.Add(payment);
 
-        var totalPaid = await db.Payments.Where(p => p.ReceivableId == receivableId).SumAsync(p => p.Amount) + request.Amount;
+        var existingPaymentIds = await db.Payments
+            .Where(item => item.ReceivableId == receivableId)
+            .Select(item => item.Id)
+            .ToListAsync();
+        var effectiveAmounts = await Receivables.ComputeEffectivePaymentAmountsAsync(existingPaymentIds, db);
+        var totalPaid = effectiveAmounts.Values.Sum() + request.Amount;
+        if (totalPaid > receivable.Amount)
+            throw new ConflictException("Ödeme aidatın kalan bakiyesini aşamaz.");
         receivable.RecordPaymentEffect(totalPaid, clock.UtcNow);
 
         // JsonSerializer kullanılır - CLAUDE.md "Çok tablolu sorgularda OrderBy sırası"

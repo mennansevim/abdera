@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 import { BrandMark, Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { useRequestGuardianOtp, useVerifyGuardianOtp } from "@/lib/guardian-auth";
+import { useDebugGuardianLogin, useRequestGuardianOtp, useVerifyGuardianOtp } from "@/lib/guardian-auth";
 
 // docs/10-decisions.md Karar F reversal: veli e-posta/şifre yerine telefon + WhatsApp OTP ile
 // giriş yapar (Guardian'ın hiç e-postası/şifresi yok, bkz. login/page.tsx'teki Admin/Öğretmen
@@ -14,6 +14,7 @@ export default function GuardianLoginPage() {
   const router = useRouter();
   const requestOtp = useRequestGuardianOtp();
   const verifyOtp = useVerifyGuardianOtp();
+  const debugLogin = useDebugGuardianLogin();
   const codeRef = useRef<HTMLInputElement>(null);
 
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -21,6 +22,8 @@ export default function GuardianLoginPage() {
   const [step, setStep] = useState<"phone" | "code">("phone");
   const [debugCode, setDebugCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const isDevelopment = process.env.NODE_ENV !== "production";
 
   async function handleRequestOtp(event: FormEvent) {
     event.preventDefault();
@@ -43,6 +46,16 @@ export default function GuardianLoginPage() {
       router.push("/parent");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");
+    }
+  }
+
+  async function handleDebugLogin() {
+    setError(null);
+    try {
+      await debugLogin.mutateAsync();
+      router.push("/parent");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail ?? err.title : "Demo veli girişi yapılamadı. Lütfen tekrar dene.");
     }
   }
 
@@ -93,6 +106,17 @@ export default function GuardianLoginPage() {
               <button type="submit" disabled={requestOtp.isPending} className="pressable mt-5 min-h-12 w-full rounded-lg bg-[#5948aa] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[#4d3c9b] disabled:cursor-wait disabled:opacity-60">
                 {requestOtp.isPending ? "Kod gönderiliyor…" : "Kod gönder"}
               </button>
+
+              {isDevelopment && (
+                <button
+                  type="button"
+                  onClick={handleDebugLogin}
+                  disabled={debugLogin.isPending}
+                  className="pressable mt-3 min-h-11 w-full rounded-lg border border-dashed border-[#b6a8e4] bg-[#f5f1ff] px-4 text-xs font-bold text-[#5948aa] hover:bg-[#eee8ff] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {debugLogin.isPending ? "Demo veli açılıyor…" : "Geliştirme modunda demo veli olarak devam et"}
+                </button>
+              )}
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp}>

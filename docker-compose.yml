@@ -1,12 +1,15 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-abdera}
       POSTGRES_USER: ${POSTGRES_USER:-abdera}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimli olmali}
     ports:
-      - "5432:5432"
+      # Yalnizca host uzerinden erisilebilir - veritabani hicbir zaman
+      # dogrudan internete acilmaz.
+      - "127.0.0.1:5432:5432"
     volumes:
       - abdera_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,6 +19,7 @@ services:
       retries: 10
 
   api:
+    restart: unless-stopped
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -24,13 +28,21 @@ services:
     environment:
       # docker-compose ag adi uzerinden baglanir - .env'deki POSTGRES_HOST=db ile tutarli.
       ConnectionStrings__Default: Host=${POSTGRES_HOST:-db};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-abdera};Username=${POSTGRES_USER:-abdera};Password=${POSTGRES_PASSWORD:?}
-      Frontend__Origin: http://localhost:3000
+      # CORS izin verilen origin. Production'da Caddy tek domain sunar - api ve web
+      # ayni origin'de oldugu icin CORS pratikte devre disi kalir, ama deger yine de
+      # dogru olmali (yanlis origin cerezli istekleri sessizce reddeder).
+      Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:3000}
       Auth__KeysDirectory: /app/keys
     volumes:
       # Data Protection anahtarlari - kalici olmazsa her restart'ta oturumlar dusuer.
       - abdera_dpkeys:/app/keys
     ports:
-      - "8080:8080"
+      # 127.0.0.1: production'da Caddy (prod profili) disindan kimse dogrudan
+      # API'ye ulasamasin. Caddy zaten ic docker agindan "api:8080" ile baglanir.
+      # Bu ayni zamanda X-Forwarded-For sahteciligini de engeller: Program.cs
+      # KnownProxies listesini temizler, yani header'a guvenir - bu ancak API disaridan
+      # erisilemezken guvenlidir. Gelistirmede localhost:8080 aynen calisir.
+      - "127.0.0.1:8080:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -42,13 +54,45 @@ services:
       start_period: 15s
 
   web:
+    restart: unless-stopped
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
     ports:
-      - "3000:3000"
+      # Yukaridaki api ile ayni gerekce - production'da trafik Caddy uzerinden gelir.
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # --- Production reverse proxy + otomatik HTTPS ---
+  # Yalnizca "prod" profilinde calisir: `docker compose --profile prod up -d`.
+  # Profil olmadan (gelistirme, CI e2e-smoke) hic baslatilmaz, mevcut akis degismez.
+  #
+  # Neden gerekli: cerezler Production'da Secure=Always (Program.cs) - duz HTTP uzerinden
+  # tarayici cerezi hic gondermez ve giris SESSIZCE calismaz. TLS opsiyonel degil.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    profiles: [prod]
+    environment:
+      # ${VAR:?...} KULLANILMAZ: compose bu ifadeyi profilden BAGIMSIZ olarak parse
+      # aninda cozer, yani prod profili hic calistirilmasa bile `docker compose up`
+      # (gelistirme) hata verirdi. Bos birakilirsa Caddy bos bir site adresiyle acik
+      # bir hata verip durur - yalnizca prod profilini baslatan kisi bunu gorur.
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Sertifikalar kalici olmazsa her restart'ta yeniden alinir ve Let's Encrypt
+      # hiz limitine takilinir.
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       api:
         condition: service_healthy
@@ -56,3 +100,5 @@ services:
 volumes:
   abdera_pgdata:
   abdera_dpkeys:
+  caddy_data:
+  caddy_config:

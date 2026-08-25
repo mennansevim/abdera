@@ -44,10 +44,44 @@ const PLACEHOLDERS = [
   { key: "student_name", label: "Öğrenci adı" },
   { key: "instrument", label: "Ders türü" },
   { key: "lesson_time", label: "Ders saati" },
+  { key: "new_lesson_time", label: "Yeni ders saati" },
   { key: "teacher_name", label: "Öğretmen adı" },
   { key: "due_date", label: "Son ödeme tarihi" },
   { key: "amount", label: "Tutar" },
 ];
+
+const AUTOMATIC_PREVIEW_VALUES: Record<string, string> = {
+  guardian_name: "Ayşe Hanım",
+  student_name: "Deniz Kaya",
+  instrument: "Piyano",
+  lesson_time: "23 Ağustos 2026 13:00",
+  teacher_name: "Can Öğretmen",
+  due_date: "1 Eylül 2026",
+  amount: "2.400 TL",
+  period: "Eylül 2026",
+  currency: "TRY",
+};
+
+const CUSTOM_PREVIEW_DEFAULTS: Record<string, string> = {
+  new_lesson_time: "28 Ağustos 2026 17:30",
+};
+
+const PLACEHOLDER_LABELS = Object.fromEntries(PLACEHOLDERS.map((placeholder) => [placeholder.key, placeholder.label]));
+
+function placeholdersIn(body: string) {
+  return Array.from(new Set(Array.from(body.matchAll(/{{\s*([^}]+)\s*}}/g), (match) => match[1]!.trim())));
+}
+
+const TEMPLATE_LABELS: Record<string, string> = {
+  lesson_reminder_rsvp: "Ders hatırlatması ve katılım yanıtı",
+  lesson_rescheduled: "Ders saati değişikliği",
+  makeup_approved: "Telafi dersi onayı",
+  payment_reminder: "Aidat ödeme hatırlatması",
+};
+
+function templateLabel(name: string) {
+  return TEMPLATE_LABELS[name] ?? name.replaceAll("_", " ");
+}
 
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<"activity" | "templates">("activity");
@@ -161,7 +195,7 @@ function TemplatesPanel() {
         <div className="app-card h-fit p-2">
           <p className="text-micro px-3 py-2 text-[var(--muted)]">Hazır şablonlar</p>
           {isLoading && <div className="space-y-2 p-2">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
-          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{template.name.replaceAll("_", " ")}</span><span className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /></button>)}
+          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{templateLabel(template.name)}</span><span className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /></button>)}
         </div>
 
         {selected && <TemplateEditor key={selected.id} template={selected} />}
@@ -180,13 +214,19 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
   const [isActive, setIsActive] = useState(template.isActive);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [customValues, setCustomValues] = useState<Record<string, string>>(() => Object.fromEntries(
+    placeholdersIn(template.body)
+      .filter((key) => !(key in AUTOMATIC_PREVIEW_VALUES))
+      .map((key) => [key, CUSTOM_PREVIEW_DEFAULTS[key] ?? ""]),
+  ));
   const update = useUpdateMessageTemplate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const preview = useMemo(() => {
-    const samples: Record<string, string> = { guardian_name: "Ayşe Hanım", student_name: "Deniz Kaya", instrument: "Piyano", lesson_time: "23 Ağustos 13:00", teacher_name: "Can Öğretmen", due_date: "1 Eylül 2026", amount: "2.400 TL" };
-    return body.replace(/{{\s*([^}]+)\s*}}/g, (_match, key: string) => samples[key] ?? `{{${key}}}`);
-  }, [body]);
+  const customPlaceholders = useMemo(() => placeholdersIn(body).filter((key) => !(key in AUTOMATIC_PREVIEW_VALUES)), [body]);
+  const preview = useMemo(() => body.replace(/{{\s*([^}]+)\s*}}/g, (_match, rawKey: string) => {
+    const key = rawKey.trim();
+    return AUTOMATIC_PREVIEW_VALUES[key] ?? customValues[key] ?? `[${PLACEHOLDER_LABELS[key] ?? key} girilmedi]`;
+  }), [body, customValues]);
 
   function insertPlaceholder(key: string, position?: number | null) {
     const textarea = textareaRef.current;
@@ -213,9 +253,9 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
   return (
     <form onSubmit={saveTemplate} className="grid gap-4 lg:grid-cols-2">
       <div className="app-card space-y-4 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Düzenleyici</p><h2 className="mt-1 text-title">Mesaj şablonu</h2></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Aktif</label></div>
-        <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Şablon anahtarı<input value={name} readOnly className="field bg-[var(--surface-muted)] text-sm text-[var(--muted)]" /><span className="block text-[.65rem] font-medium">Otomatik gönderimlerin bozulmaması için anahtar sabittir.</span></label>
-        <div className="space-y-2"><p className="text-xs font-semibold text-[var(--muted)]">Placeholder ekle</p><div className="flex flex-wrap gap-1.5">{PLACEHOLDERS.map((placeholder) => <button key={placeholder.key} type="button" draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", placeholder.key)} onClick={() => insertPlaceholder(placeholder.key)} className="pressable min-h-8 rounded-full border border-[var(--line)] bg-white px-2.5 text-[.68rem] font-bold text-[var(--brand)] hover:border-[var(--brand)]">{placeholder.label}</button>)}</div></div>
+        <div className="flex items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Düzenleyici</p><h2 className="mt-1 text-title">{templateLabel(name)}</h2></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Aktif</label></div>
+        <div className="space-y-2"><p className="text-xs font-semibold text-[var(--muted)]">Mesaja bilgi alanı ekle</p><div className="flex flex-wrap gap-1.5">{PLACEHOLDERS.map((placeholder) => <button key={placeholder.key} type="button" draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", placeholder.key)} onClick={() => insertPlaceholder(placeholder.key)} className="pressable min-h-8 rounded-full border border-[var(--line)] bg-white px-2.5 text-[.68rem] font-bold text-[var(--brand)] hover:border-[var(--brand)]">{placeholder.label}</button>)}</div></div>
+        {customPlaceholders.length > 0 && <section className="rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3"><div><p className="text-xs font-bold">Özel değerler</p><p className="mt-0.5 text-[.64rem] leading-relaxed text-[var(--muted)]">Bu alanları doldurduğunda canlı örnek anında güncellenir.</p></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{customPlaceholders.map((key) => <label key={key} className="space-y-1 text-[.66rem] font-bold text-[var(--muted)]">{PLACEHOLDER_LABELS[key] ?? key.replaceAll("_", " ")}<input value={customValues[key] ?? ""} onChange={(event) => setCustomValues((current) => ({ ...current, [key]: event.target.value }))} placeholder="Değeri gir" className="field min-h-10 bg-white text-xs" /></label>)}</div></section>}
         <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Mesaj gövdesi<textarea ref={textareaRef} value={body} onChange={(event) => setBody(event.target.value)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); insertPlaceholder(event.dataTransfer.getData("text/plain"), textareaRef.current?.selectionStart); }} rows={13} className="field resize-y font-mono text-sm leading-relaxed" /></label>
         {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
         {saved && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-xs font-medium text-[var(--success-strong)]">Şablon kaydedildi.</p>}

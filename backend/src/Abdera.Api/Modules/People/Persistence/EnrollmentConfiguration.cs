@@ -26,5 +26,8 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
 
         builder.HasIndex(e => e.StudentId);
         builder.HasIndex(e => e.TeacherId);
+        builder.HasIndex(e => new { e.StudentId, e.TeacherId, e.InstrumentId })
+            .IsUnique()
+            .HasFilter("status = 'Active'");
     }
 }

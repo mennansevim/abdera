@@ -1,6 +1,6 @@
 # İlk REST API Yüzeyi
 
-Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6, Dashboard denetim sonrası E2); işaretsiz olanlar henüz yok (Progress modülünün kalanı).
+Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6, Dashboard denetim sonrası E2).
 
 ```
 POST   /api/auth/login                          ✅
@@ -18,6 +18,8 @@ GET    /api/students/{studentId}/guardians       ✅ eklendi - docs'ta yoktu, Pe
 POST   /api/students/{studentId}/guardians       ✅ eklendi
 GET    /api/students/{studentId}/enrollments     ✅ eklendi - Enrollment her zaman bir öğrenciye bağlı
 POST   /api/students/{studentId}/enrollments     ✅ eklendi
+DELETE /api/students/{studentId}/enrollments/{enrollmentId} ✅ kursu silmeden enrollment'ı sonlandırır
+GET    /api/students/attention-needed            ✅ Admin/Teacher scope; açıklanabilir son-devamsızlık sinyali
 
 GET    /api/guardians                           ✅
 POST   /api/guardians                           ✅
@@ -44,6 +46,7 @@ GET    /api/change-requests                     ✅ eklendi - Admin onay kuyruğ
 POST   /api/change-requests/{requestId}/approve ✅ reschedule: eski ders RESCHEDULED, yeni NORMAL
 POST   /api/change-requests/{requestId}/reject  ✅
 POST   /api/lessons/{lessonId}/cancel           ✅ eklendi - doğrudan iptal, A2 kredi mantığı burada
+PATCH  /api/lessons/{lessonId}                  ✅ Admin; öğrenci/öğretmen/tarih/süre/durum, sürümleme + audit
 
 GET    /api/school-calendar-days                ✅ A3: tatiller ve okul etkinlikleri
 POST   /api/school-calendar-days                ✅
@@ -54,8 +57,20 @@ GET    /api/lessons/{lessonId}/attendance       ✅
 POST   /api/lessons/{lessonId}/attendance       ✅ Teacher(kendi)/Admin(override, audit'e düşer)
 GET    /api/lessons/{lessonId}/notes            ✅ Admin salt okuma, Teacher kendi dersi
 POST   /api/lessons/{lessonId}/notes            ✅ yalnızca Teacher
-POST   /api/students/{studentId}/skill-assessments   -- Progress'in kalanı, Phase 6
-GET    /api/students/{studentId}/progress            -- Phase 6
+PUT    /api/lesson-notes/{noteId}/parent-comment ✅ taslak kaydeder; Approve=true ise veliye açar
+POST   /api/lesson-notes/{noteId}/parent-comment/revoke ✅ onayı geri çeker, audit'e yazar
+GET    /api/skill-definitions                        ✅ ortak + enstrümana özel yetenek tanımları (?instrumentId=)
+GET    /api/students/{studentId}/skill-assessments   ✅ Teacher kendi öğrencisi, Admin salt okuma
+POST   /api/students/{studentId}/skill-assessments   ✅ yalnızca Teacher; puan 1–5, ders bağı isteğe bağlı
+GET    /api/students/{studentId}/progress            ✅ ders notu + yetenek değerlendirmeleri, rol kapsamlı
+GET    /api/lessons/{lessonId}/practice-assignments  ✅ Admin salt okuma, Teacher kendi dersi
+POST   /api/lessons/{lessonId}/practice-assignments  ✅ yalnızca Teacher
+PATCH  /api/practice-assignments/{id}/complete       ✅ yalnızca dersi atanan Teacher; tek yönlü tamamlama
+GET    /api/students/{studentId}/practice-journal    ✅ Teacher kendi öğrencisi, Admin okul geneli
+POST   /api/students/{studentId}/practice-journal   ✅ staff girişi; süre 1–600 dk
+GET    /api/guardian/me/students/{studentId}/practice-journal ✅ yalnızca bağlı öğrenci
+POST   /api/guardian/me/students/{studentId}/practice-journal ✅ veli girişi
+POST   /api/guardian/me/practice-journal/{entryId}/approve    ✅ veli onayı
 
 GET    /api/price-lists                         ✅ A1
 POST   /api/price-lists                         ✅ liste + tüm kalemleri tek seferde
@@ -69,6 +84,7 @@ GET    /api/receivables                         ✅ ?status= filtresiyle
 POST   /api/receivables                         ✅ aktif FeePlan'dan snapshot alır
 POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edilemez
 POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
+POST   /api/payments/{paymentId}/corrections    ✅ değiştirilemez düzeltme satırı; fazla ödeme reddi + audit
 GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
 POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar
 
@@ -91,6 +107,10 @@ PUT    /api/notification-automation-settings     ✅ günceller; bekleyen Lesson
 
 POST   /api/enrollments/{enrollmentId}/bulk-payments  ✅ Faz 2 - seçilen aydan başlayarak 1-24 ay arası toplu tahsilat, eksik Receivable'ları kendisi oluşturur
 
+GET    /api/instrument-maintenance-settings      ✅ Admin; bakım periyodu/aktiflik/kanal ve rızalı veli sayısı
+PUT    /api/instruments/{instrumentId}/maintenance-setting ✅ Admin upsert + audit
+POST   /api/instrument-maintenance-settings/run-due ✅ vadesi gelen rızalı veli job'larını idempotent planlar
+
 GET    /api/expenses                             ✅ Faz 2 - Maliyet Takibi gider defteri, ?from=&to= filtresiyle
 POST   /api/expenses                             ✅ maaş/elektrik-su/kira/diğer - kayıtlar silinmez
 
@@ -112,7 +132,7 @@ GET    /api/guardian/me/messages                 ✅ yalnızca velinin giden Wha
 
 GET    /api/dashboard/today                     ✅ rol bazlı kapsam (docs/04-permissions.md) - denetim E2/ARC-6
 
-GET    /api/system/health                       ✅ Faz 4 - DB + yedekleme tazeliğine dayalı Healthy/Degraded/Unhealthy özeti
+GET    /api/system/health                       ✅ DB + yedek tazeliği + sır içermeyen sağlayıcı durumları
 GET    /api/backup-runs                         ✅ Faz 4 - ?page=&pageSize= (varsayılan 20) - yanıt {items,totalCount,page,pageSize} zarfında
 POST   /api/backup-runs/trigger                 ✅ Faz 4 - manuel yedeklemeyi arka planda başlatır, hemen 202 döner
 ```

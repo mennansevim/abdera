@@ -76,11 +76,7 @@ public static class BulkPayments
         }
 
         var targetIds = targets.Where(r => r.Id != Guid.Empty).Select(r => r.Id).ToList();
-        var paidByReceivable = await db.Payments
-            .Where(p => targetIds.Contains(p.ReceivableId))
-            .GroupBy(p => p.ReceivableId)
-            .Select(g => new { ReceivableId = g.Key, Total = g.Sum(p => p.Amount) })
-            .ToDictionaryAsync(x => x.ReceivableId, x => x.Total);
+        var paidByReceivable = await Receivables.ComputeTotalsPaidAsync(targetIds, db);
 
         var remaining = request.Amount;
         var actorId = AuthContext.GetUserId(principal);

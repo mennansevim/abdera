@@ -2,30 +2,31 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import type { Me } from "@/lib/api";
 import { useLogout } from "@/lib/use-auth";
 
-type NavItem = { href: string; label: string; icon: IconName; alert?: boolean };
+type NavItem = { href: string; label: string; icon: IconName; alert?: boolean; section: "Genel" | "Eğitim" | "Planlama" | "Finans" | "İletişim" | "Sistem" };
 
 const CORE_LINKS: NavItem[] = [
-  { href: "/dashboard", label: "Bugün", icon: "home" },
-  { href: "/dashboard/students", label: "Öğrenciler", icon: "students" },
-  { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers" },
-  { href: "/dashboard/calendar", label: "Takvim", icon: "calendar" },
+  { href: "/dashboard", label: "Bugün", icon: "home", section: "Genel" },
+  { href: "/dashboard/students", label: "Öğrenciler", icon: "students", section: "Eğitim" },
+  { href: "/dashboard/progress", label: "Gelişim", icon: "activity", section: "Eğitim" },
+  { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers", section: "Eğitim" },
+  { href: "/dashboard/calendar", label: "Takvim", icon: "calendar", section: "Planlama" },
 ];
 
 const ADMIN_LINKS: NavItem[] = [
-  { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet" },
-  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", alert: true },
-  { href: "/dashboard/costs", label: "Maliyet Takibi", icon: "bank" },
-  { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true },
-  { href: "/dashboard/change-requests", label: "Değişiklik Talepleri", icon: "swap" },
-  { href: "/dashboard/backups", label: "Yedekleme", icon: "shield" },
+  { href: "/dashboard/change-requests", label: "Ders Talepleri", icon: "swap", section: "Planlama" },
+  { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
+  { href: "/dashboard/costs", label: "Giderler", icon: "bank", section: "Finans" },
+  { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true, section: "Finans" },
+  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", alert: true, section: "İletişim" },
+  { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
 ];
 
-const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings" };
+const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -47,11 +48,11 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const links = me.role === "Admin" ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS, SETTINGS_LINK];
   const mobilePrimary: NavItem[] = me.role === "Admin"
-    ? [CORE_LINKS[0]!, CORE_LINKS[3]!, ADMIN_LINKS[0]!, ADMIN_LINKS[1]!]
+    ? [CORE_LINKS[0]!, CORE_LINKS[4]!, ADMIN_LINKS[1]!, ADMIN_LINKS[4]!]
     : [
         { ...CORE_LINKS[0], label: "Bugün" },
-        { ...CORE_LINKS[3], label: "Takvimim" },
-        { ...CORE_LINKS[1], label: "Öğrencilerim" },
+        { ...CORE_LINKS[4], label: "Takvimim" },
+        { ...CORE_LINKS[2], label: "Gelişim" },
       ];
 
   useEffect(() => {
@@ -72,9 +73,10 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
       <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] px-3 py-5 text-white lg:flex">
         <Link href="/dashboard" className="mb-6 px-2 text-white"><BrandMark /></Link>
         <nav className="flex flex-1 flex-col gap-1" aria-label="Ana menü">
-          {links.map((link) => (
+          {links.map((link, index) => (
+            <Fragment key={link.href}>
+            {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-0.5 mt-2 px-3 text-[.55rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>}
             <Link
-              key={link.href}
               href={link.href}
               aria-current={isActive(pathname, link.href) ? "page" : undefined}
               className={`pressable group flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm font-bold ${
@@ -87,6 +89,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               <span className="truncate">{link.label}</span>
               {link.alert && <span className="ml-auto h-2 w-2 rounded-full bg-[#ffe27a] ring-1 ring-black/10" aria-label="Dikkat gereken kayıtlar olabilir" />}
             </Link>
+            </Fragment>
           ))}
         </nav>
         <div className="mt-4 border-t border-white/25 pt-4">
@@ -134,10 +137,13 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               <button onClick={() => setIsMenuOpen(false)} className="pressable grid h-11 w-11 place-items-center rounded-xl hover:bg-black/5" aria-label="Menüyü kapat"><Icon name="close" className="h-5 w-5" /></button>
             </div>
             <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-              {links.map((link) => (
-                <Link key={link.href} href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[#5c4d3f] hover:bg-black/[.035]"}`}>
+              {links.map((link, index) => (
+                <Fragment key={link.href}>
+                {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-1 mt-3 block px-3 text-[.58rem] font-bold uppercase tracking-[.1em] text-[var(--muted)] first:mt-1">{link.section}</span>}
+                <Link href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[#5c4d3f] hover:bg-black/[.035]"}`}>
                   <Icon name={link.icon} className="h-5 w-5" /><span>{link.label}</span>{link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />}
                 </Link>
+                </Fragment>
               ))}
             </nav>
             <div className="border-t border-[var(--line)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">

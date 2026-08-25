@@ -553,3 +553,49 @@ Sources: [My Music Staff - Calendar & Attendance](https://www.mymusicstaff.com/c
 ### Kalan iş
 
 Henüz commit yok. Sıradaki: `billing`/`banking` sayfalarının aynı tutarlılık geçişi (ayrı görev olarak ele alınmalı - para hesabı içeriyor).
+
+## 25 Ağustos 2026 — Faz 7–12 kapanış ve uçtan uca doğrulama
+
+### Tamamlanan ürün kapsamı
+
+- Faz 7: takvim çift tıklama, ortak boş slot önerisi, birleşik öğretmen/enstrüman filtresi,
+  ders detayından güvenli PATCH, sürükle-bırak ve kalıcı değişiklik geçmişi/audit.
+- Faz 8: sade dönem aidatı, öğrenci autocomplete, birleşik filtre/özet, kısmi ödeme,
+  silinmeyen `payment_corrections` geçmişi, fazla ödeme reddi ve 20–30 kayıtlı demo veri.
+- Faz 9: öğretmen→öğrenci görünümü, enrollment ekleme/sonlandırma, aynı üçlüde tek aktif
+  enrollment veritabanı kısıtı ve audit.
+- Faz 10: eser/besteci/seviye/durum/hedef/kaynak alanları; ham öğretmen notundan ayrı,
+  taslak→açık onay→geri çekme yaşam döngülü veli yorumu; kaynak ve yorum görünürlük sınırları.
+- Faz 11: veli onaylı pratik günlüğü ve basit rozetler, rızaya bağlı periyodik enstrüman
+  bakım hatırlatması, veliye açık repertuvar kaynağı ve açıklanabilir devamsızlık uyarısı.
+- Faz 12: production secret/provider fail-fast kontrolleri, sır içermeyen sistem sağlık
+  sağlayıcı durumları, banka webhook doğrulama/validasyon/idempotency, üç rol Playwright E2E.
+
+Gerçek tarayıcı koşusunda süre-only ders düzenlemenin `(lesson_series_id,start_at)` unique
+kısıtına takıldığı görüldü. Düzenleme sürümlemesi aynı katılımcılar korunuyorsa yeni kayda seri
+kimliğini devredip tarihsel eski kaydı seriden ayıracak şekilde düzeltildi; `OriginalLessonId`
+  zinciri ve audit korunuyor. Ardından ders düzenleme ve gerçek HTML5 sürükle-bırak, sayfa
+  yenileme sonrası kalıcılık kontrolüyle geçti.
+
+Son log taraması ayrıca kontrollü `ValidationFailedException` yanıtının istemciye 400
+dönerken middleware sırası nedeniyle Serilog'da 500 göründüğünü yakaladı. Request logging
+exception handler'ın dışına alındı; beşinci haftalık seri artık hem istemcide hem logda 400,
+nihai E2E log taramasında beklenmeyen 5xx/stack trace sayısı 0.
+
+### Son kalite kapısı
+
+- Backend: `284 passed, 0 failed, 0 skipped` (`192` unit, `92` integration).
+- Frontend: lint ve production build temiz; 19 sayfa üretildi.
+- Playwright: yönetici, öğretmen ve veli akışlarının tamamı — `3 passed`.
+- Compose: API/web/db sağlıklı; `/health` `Healthy`, login sayfası `200`, tarayıcı
+  konsolunda hata yok.
+- Migration: mevcut DB 19/19; ayrı temiz DB'de 0→19 zinciri geçti.
+- Restore: kaynak dump ayrı DB'ye hatasız geri yüklendi; migration/öğrenci/alacak/ödeme/
+  audit/job/not sayıları eşleşti, finans ve aktif enrollment tutarlılık sorguları `0` hata verdi.
+
+### Dış bağımlılıklar
+
+Gerçek SFTP host/hesap/anahtarı, Meta WABA token/şablon onayları ve seçilmiş banka
+sağlayıcısının sandbox sözleşmesi/kimlik bilgileri verilmedi. Uygulama production'da `Fake`
+sağlayıcı veya placeholder secret ile başlamayı artık reddediyor; bu üç canlı doğrulama ilgili
+bilgiler sağlandığında yapılacak. Development davranışı değişmedi.

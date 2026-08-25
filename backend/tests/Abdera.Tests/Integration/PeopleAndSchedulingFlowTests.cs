@@ -63,6 +63,19 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
         enrollmentResponse.EnsureSuccessStatusCode();
         var enrollment = (await enrollmentResponse.Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
 
+        var overviewResponse = await admin.GetAsync("/api/teachers/overview");
+        overviewResponse.EnsureSuccessStatusCode();
+        var overview = await overviewResponse.Content.ReadFromJsonAsync<List<Teachers.TeacherOverviewResponse>>(TestJson.Options);
+        Assert.Contains(overview!, item => item.Teacher.Id == teacher.Id &&
+            item.Students.Any(assigned => assigned.StudentId == student.Id && assigned.InstrumentName == piano.Name));
+
+        var newStudentResponse = await admin.PostAsJsonAsync($"/api/teachers/{teacher.Id}/students",
+            new Teachers.CreateStudentRequest("Ela", "Kaya", new DateOnly(2017, 4, 12), piano.Id, new DateOnly(2026, 8, 1)));
+        Assert.Equal(HttpStatusCode.Created, newStudentResponse.StatusCode);
+        var newStudent = await newStudentResponse.Content.ReadFromJsonAsync<Teachers.TeacherStudentResponse>(TestJson.Options);
+        Assert.Equal("Ela", newStudent!.FirstName);
+        Assert.True(await db.Enrollments.AnyAsync(item => item.StudentId == newStudent.StudentId && item.TeacherId == teacher.Id));
+
         var seriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
             enrollment.Id, DayOfWeek.Tuesday, new TimeOnly(18, 0), 45, new DateOnly(2026, 8, 18), null));
         Assert.Equal(HttpStatusCode.Created, seriesResponse.StatusCode);
@@ -133,6 +146,74 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
             enrollment2.Id, DayOfWeek.Thursday, new TimeOnly(17, 30), 60, new DateOnly(2026, 8, 20), null));
 
         Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+    }
+
+    [Fact]
+    public async Task Student_cannot_have_more_than_four_recurring_lessons_per_week()
+    {
+        var admin = await CreateAdminClientAsync();
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var piano = instruments!.Single(i => i.Code == "PIANO");
+
+        var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Dört", "Ders", [piano.Id], null)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Haftalık", "Sınır", new DateOnly(2015, 5, 5))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
+                new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 8, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+
+        var days = new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday };
+        foreach (var day in days)
+        {
+            var response = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+                enrollment.Id, day, new TimeOnly(14, 0), 45, new DateOnly(2026, 8, 24), null));
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        }
+
+        var fifth = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+            enrollment.Id, DayOfWeek.Friday, new TimeOnly(14, 0), 45, new DateOnly(2026, 8, 24), null));
+
+        Assert.Equal(HttpStatusCode.BadRequest, fifth.StatusCode);
+        Assert.Contains("haftada en fazla 4", await fifth.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Admin_can_remove_enrollment_and_future_recurring_lessons_are_stopped()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var violin = instruments!.Single(i => i.Code == "VIOLIN");
+
+        var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Kurs", "Silme", [violin.Id], null)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Arşiv", "Öğrenci", new DateOnly(2014, 2, 2))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
+                new Enrollments.CreateRequest(teacher.Id, violin.Id, new DateOnly(2026, 8, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+
+        var seriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+            enrollment.Id, DayOfWeek.Saturday, new TimeOnly(12, 0), 45, new DateOnly(2026, 8, 29), null));
+        Assert.Equal(HttpStatusCode.Created, seriesResponse.StatusCode);
+        var series = (await seriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!.Series;
+
+        var deleteResponse = await admin.DeleteAsync($"/api/students/{student.Id}/enrollments/{enrollment.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        db.ChangeTracker.Clear();
+        Assert.Equal(Abdera.Api.Modules.People.Domain.EnrollmentStatus.Ended,
+            (await db.Enrollments.SingleAsync(item => item.Id == enrollment.Id)).Status);
+        Assert.Equal(Abdera.Api.Modules.Scheduling.Domain.LessonSeriesStatus.Ended,
+            (await db.LessonSeries.SingleAsync(item => item.Id == series.Id)).Status);
+        Assert.Empty(await db.Lessons.Where(item => item.LessonSeriesId == series.Id && item.StartAt > DateTimeOffset.UtcNow).ToListAsync());
     }
 
     [Fact]

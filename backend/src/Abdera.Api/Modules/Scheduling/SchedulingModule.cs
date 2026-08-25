@@ -13,5 +13,6 @@ public static class SchedulingModule
         app.MapCalendar();
         app.MapChangeRequests();
         app.MapCancelLesson();
+        app.MapUpdateLesson();
     }
 }

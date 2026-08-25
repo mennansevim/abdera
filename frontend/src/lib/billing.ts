@@ -127,6 +127,15 @@ export interface Receivable {
   payments: PaymentRecord[];
 }
 
+export interface BillingDue extends Receivable {
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentId: string;
+  instrumentName: string;
+}
+
 export interface PaymentRecord {
   id: string;
   amount: number;
@@ -134,6 +143,10 @@ export interface PaymentRecord {
   method: PaymentMethod;
   reference: string | null;
   note: string | null;
+  kind: "Payment" | "Correction";
+  correctsPaymentId: string | null;
+  previousAmount: number | null;
+  recordedAt: string | null;
 }
 
 export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other";
@@ -178,6 +191,18 @@ export function useMakeupCredits(studentId: string) {
   });
 }
 
+export function useUseMakeupCredit(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ creditId, ...body }: { creditId: string; teacherId: string; instrumentId: string; startAt: string; durationMinutes: number }) =>
+      api.post<{ creditId: string; newLessonId: string }>(`/api/makeup-credits/${creditId}/use`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["makeup-credits", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
 export function useReceivables(status?: ReceivableStatus) {
   const params = status ? `?status=${encodeURIComponent(status)}` : "";
   return useQuery({
@@ -194,11 +219,22 @@ export function useStudentBilling(studentId: string) {
   });
 }
 
+export function useBillingDues() {
+  return useQuery({
+    queryKey: ["billing-dues"],
+    queryFn: () => api.get<BillingDue[]>("/api/billing/dues"),
+  });
+}
+
 export function useCreateReceivable(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { enrollmentId: string; period: string }) => api.post<Receivable>("/api/receivables", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    },
   });
 }
 
@@ -207,7 +243,24 @@ export function useRecordPayment(studentId: string) {
   return useMutation({
     mutationFn: ({ receivableId, ...body }: { receivableId: string; amount: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string }) =>
       api.post(`/api/receivables/${receivableId}/payments`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    },
+  });
+}
+
+export function useCorrectPayment(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ paymentId, correctedAmount, reason }: { paymentId: string; correctedAmount: number; reason: string }) =>
+      api.post(`/api/payments/${paymentId}/corrections`, { correctedAmount, reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+    },
   });
 }
 
@@ -219,6 +272,7 @@ export function useBulkPayment(studentId: string, enrollmentId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
     },
   });
 }

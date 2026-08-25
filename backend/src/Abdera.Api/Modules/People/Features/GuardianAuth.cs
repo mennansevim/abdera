@@ -27,6 +27,7 @@ public static class GuardianAuth
 
     private const string OtpTemplateName = "guardian_login_otp";
     private const string GenericFailureDetail = "Telefon numarası veya kod hatalı.";
+    private const string DebugPhoneNumber = "+905550000001";
 
     // SEC-4 (Login.cs) ile aynı ruh: kayıtsız bir numarada da eş zamanlı bir maliyet oluşturup
     // yanıt süresinin kayıtlı/kayıtsız numara arasında bir numaralandırma kanalı açmasını önler.
@@ -37,6 +38,12 @@ public static class GuardianAuth
         app.MapPost("/api/guardian/otp/request", RequestOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapPost("/api/guardian/otp/verify", VerifyOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapGet("/api/guardian/me", MeAsync).RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+
+        // Test kolaylığı için demo veli girişi yalnızca Development'ta route edilir.
+        if (app.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment())
+        {
+            app.MapPost("/api/guardian/debug-login", DebugLoginAsync).AllowAnonymous();
+        }
     }
 
     private static async Task<IResult> RequestOtpAsync(
@@ -122,15 +129,34 @@ public static class GuardianAuth
         candidate.MarkConsumed(clock.UtcNow);
         await db.SaveChangesAsync();
 
+        await SignInGuardianAsync(guardian, httpContext);
+
+        return Results.Ok(new VerifyOtpResponse(guardian.Id, guardian.FirstName, guardian.LastName));
+    }
+
+    private static async Task<IResult> DebugLoginAsync(AbderaDbContext db, IClock clock, HttpContext httpContext)
+    {
+        var guardian = await db.Guardians.SingleOrDefaultAsync(item => item.PhoneNumber == DebugPhoneNumber);
+        if (guardian is null)
+        {
+            guardian = Guardian.Create("Demo", "Veli", DebugPhoneNumber, clock.UtcNow);
+            db.Guardians.Add(guardian);
+            await db.SaveChangesAsync();
+        }
+
+        await SignInGuardianAsync(guardian, httpContext);
+        return Results.Ok(new VerifyOtpResponse(guardian.Id, guardian.FirstName, guardian.LastName));
+    }
+
+    private static Task SignInGuardianAsync(Guardian guardian, HttpContext httpContext)
+    {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, guardian.Id.ToString()),
             new(ClaimTypes.Role, UserRole.Guardian.ToString()),
         };
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
-
-        return Results.Ok(new VerifyOtpResponse(guardian.Id, guardian.FirstName, guardian.LastName));
+        return httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
     }
 
     private static async Task<IResult> MeAsync(ClaimsPrincipal principal, AbderaDbContext db)
