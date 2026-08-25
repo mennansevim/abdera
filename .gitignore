@@ -59,3 +59,9 @@ frontend/test-results/
 
 # Ajan/arac scratch ciktilari (sunum render'lari, ekran goruntuleri) - kaynak degil
 .codex-artifacts/
+
+# Uretilmis tanitim sunumu ve inceleme ciktisi - kaynak degil, repo public ve git
+# binary'leri gecmisten silmiyor (bir kez girerse her klonda kalicı olarak tasinir).
+# Sunumu paylasmak icin repo yerine Drive/Slack kullan.
+*.pptx
+*.pptx.inspect.ndjson
