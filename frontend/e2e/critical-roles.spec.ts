@@ -164,8 +164,17 @@ test.describe.serial("Abdera critical role flows", () => {
     await page.getByRole("button", { name: "Tahsilat", exact: true }).first().click();
     const paymentForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Ödemeyi kaydet" }) });
     await paymentForm.getByLabel("Tutar").fill("1");
+    // Kismi odemenin GERCEKTEN kaydedildigini sunucu yanitindan dogrula. Ekranda bir
+    // "Kismi odendi" rozetinin gorunmesi tek basina kanit degil: seed verisinde zaten
+    // kismi odenmis aidatlar var, yani odeme hic yazilmasa da o rozet gorunurdu.
+    const paymentSaved = page.waitForResponse((response) =>
+      response.url().includes("/api/receivables/") &&
+      response.url().endsWith("/payments") &&
+      response.request().method() === "POST");
     await paymentForm.getByRole("button", { name: "Ödemeyi kaydet" }).click();
-    await expect(page.getByRole("button", { name: "Kısmi" })).toBeVisible();
+    expect((await paymentSaved).ok()).toBeTruthy();
+    // Odeme sonrasi liste tazelenir ve ilgili satir kismi duruma duser.
+    await expect(page.getByText("Kısmi ödendi").first()).toBeVisible();
   });
 
   test("teacher writes repertoire note and explicitly approves the parent comment", async ({ page }) => {

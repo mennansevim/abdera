@@ -73,8 +73,16 @@ Aidat ekranı yalnızca finansal dönemi anlatmalı; ders geçmişi ve telafi bi
 ekranına taşınmamalıdır.
 
 - [x] Aidat listesini tek, sade dönem görünümünde birleştir.
-- [x] Her satır/kartta yalnızca öğrenci, öğretmen, enstrüman, dönem, tutar, kalan,
-      vade ve ödeme durumu göster.
+- [x] Her satır/kartta yalnızca öğrenci, öğretmen, enstrüman, tutar, kalan ve ödeme
+      durumu göster. *(Dönem ve vade satırdan çıkarıldı: demo veride 12 satır aynı
+      "Ağustos 2026 / 7 Eylül" değerini tekrarlıyordu — 24 hücre, 2 farklı bilgi. Bu iki
+      alan artık dönem başlığında bir kez yazılıyor, ekrandan kaybolmuyor.)*
+- [x] Ekranı bir **dönem defterine** indirge: tek arama kutusu, birbirini dışlayan üç
+      sekme (Bekleyen + Ödenen = Tümü) ve dönem seçici. *(Önceki sürümde iki arama
+      kutusu vardı ve biri "Yeni aidat" başlıklı kartın içindeydi; beş sekme çakışıyor,
+      sayılar toplama vurmuyordu: 17+6+6+12 = 41 ≠ 29.)*
+- [x] Dönem filtresi gecikmiş parayı gizlemesin: seçili dönem dışında gecikmiş aidat
+      varsa listenin üstünde uyarı ve "Hepsini göster" çıkar.
 - [x] Ders listesi ve telafi detayını aidat listesinden kaldır; bunları öğrenci/takvim
       ekranlarında bırak.
 - [x] Öğrenci alanını yazdıkça tamamlayan autocomplete yap; isim, veli telefonu,
