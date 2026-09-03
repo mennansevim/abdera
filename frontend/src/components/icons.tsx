@@ -26,7 +26,9 @@ export type IconName =
   | "shield"
   | "activity"
   | "sparkles"
-  | "target";
+  | "target"
+  | "alert-triangle"
+  | "plus";
 
 const paths: Record<IconName, React.ReactNode> = {
   home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-6h6v6"/></>,
@@ -55,6 +57,9 @@ const paths: Record<IconName, React.ReactNode> = {
   activity: <><path d="M3 12h4l2.2-6 4.1 12 2.2-6H21"/></>,
   sparkles: <><path d="m12 3-1.2 4.3L7 9l3.8 1.7L12 15l1.2-4.3L17 9l-3.8-1.7L12 3Z"/><path d="m19 14-.6 2.4L16 17l2.4.6L19 20l.6-2.4L22 17l-2.4-.6L19 14ZM5 14l-.5 1.7L3 16.2l1.5.5L5 18.5l.5-1.8 1.5-.5-1.5-.5L5 14Z"/></>,
   target: <><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></>,
+  // Gecikmiş aidat uyarısı için (Ders Programı ders kartları) - küçük, tanıdık bir ünlem işareti.
+  "alert-triangle": <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></>,
+  plus: <path d="M12 5v14M5 12h14"/>,
 };
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {

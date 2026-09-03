@@ -219,10 +219,14 @@ export function useStudentBilling(studentId: string) {
   });
 }
 
-export function useBillingDues() {
+// docs/04-permissions.md: aidat verisi tamamen Admin - bu uç 403 verir. `enabled: false`
+// ile çağıranlar (örn. Ders Programı'nın gecikmiş-aidat uyarısı Teacher oturumunda) isteği
+// hiç göndermeden bunu atlayabilir.
+export function useBillingDues(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["billing-dues"],
     queryFn: () => api.get<BillingDue[]>("/api/billing/dues"),
+    enabled: options?.enabled,
   });
 }
 

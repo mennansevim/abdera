@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, t
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useRescheduleLesson } from "@/lib/attendance";
+import { useBillingDues } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useEnrollments, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
@@ -115,9 +116,18 @@ export default function CalendarPage() {
   const [showMakeupScheduler, setShowMakeupScheduler] = useState(false);
   const [instrumentFilter, setInstrumentFilter] = useState<(typeof INSTRUMENT_FILTERS)[number]>("Hepsi");
   const [teacherFilter, setTeacherFilter] = useState("all");
+  const [studentFilter, setStudentFilter] = useState("all");
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: teachers } = useTeachers();
+  const { data: students } = useStudents();
+  // Aidat/tahsilat verisi tamamen Admin'e ait (docs/04-permissions.md) - Teacher oturumunda
+  // bu istek hiç gönderilmez, yalnızca sonucu (gecikmiş aidat rozeti) Admin görür.
+  const { data: dues } = useBillingDues({ enabled: isAdmin });
+  const overdueStudentIds = useMemo(
+    () => new Set((dues ?? []).filter((due) => due.status === "Overdue").map((due) => due.studentId)),
+    [dues],
+  );
   const { data: rawLessons, isLoading } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
   const { data: rawTimelineLessons, isLoading: timelineLoading } = useCalendar(timelineRange.from.toISOString(), timelineRange.to.toISOString());
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
@@ -129,13 +139,15 @@ export default function CalendarPage() {
   const visibleLessons = useMemo(() => lessons.filter((lesson) => {
     const matchesInstrument = instrumentFilter === "Hepsi" || lesson.instrumentName.toLocaleLowerCase("tr-TR") === instrumentFilter.toLocaleLowerCase("tr-TR");
     const matchesTeacher = teacherFilter === "all" || lesson.teacherId === teacherFilter;
-    return matchesInstrument && matchesTeacher;
-  }), [instrumentFilter, lessons, teacherFilter]);
+    const matchesStudent = studentFilter === "all" || lesson.studentId === studentFilter;
+    return matchesInstrument && matchesTeacher && matchesStudent;
+  }), [instrumentFilter, lessons, studentFilter, teacherFilter]);
   const visibleTimelineLessons = useMemo(() => timelineLessons.filter((lesson) => {
     const matchesInstrument = instrumentFilter === "Hepsi" || lesson.instrumentName.toLocaleLowerCase("tr-TR") === instrumentFilter.toLocaleLowerCase("tr-TR");
     const matchesTeacher = teacherFilter === "all" || lesson.teacherId === teacherFilter;
-    return matchesInstrument && matchesTeacher;
-  }), [instrumentFilter, teacherFilter, timelineLessons]);
+    const matchesStudent = studentFilter === "all" || lesson.studentId === studentFilter;
+    return matchesInstrument && matchesTeacher && matchesStudent;
+  }), [instrumentFilter, studentFilter, teacherFilter, timelineLessons]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const colors = useMemo(() => buildInstrumentColorMap([...lessons, ...timelineLessons].map((lesson) => lesson.instrumentName)), [lessons, timelineLessons]);
   const hourWindow = useMemo(() => computeHourWindow(visibleLessons), [visibleLessons]);
@@ -197,6 +209,9 @@ export default function CalendarPage() {
 
       <div className="app-card flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          {/* Öğrenci listesinden seçip yalnızca o öğrencinin derslerini görmek için - diğer
+              filtrelerle AND mantığıyla birlikte çalışır (aynı desen: öğretmen + enstrüman). */}
+          <label className="relative min-w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğrenciler</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
           <label className="relative min-w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
           <div className="h-6 w-px bg-[var(--line)] max-sm:hidden" aria-hidden="true" />
           <div className="flex gap-1.5 overflow-x-auto" aria-label="Enstrümana göre filtrele">{INSTRUMENT_FILTERS.map((filter) => (
@@ -221,7 +236,7 @@ export default function CalendarPage() {
       </div>
 
       <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
-        <WeeklyGrid weekDays={weekDays} lessons={visibleLessons} loading={isLoading} colors={colors} isAdmin={isAdmin} hourWindow={hourWindow} now={now} onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setShowSeriesForm(false); }} />
+        <WeeklyGrid weekDays={weekDays} lessons={visibleLessons} loading={isLoading} colors={colors} isAdmin={isAdmin} hourWindow={hourWindow} now={now} overdueStudentIds={overdueStudentIds} onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setShowSeriesForm(false); }} />
         <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
       </div>
     </div>
@@ -236,6 +251,7 @@ function WeeklyGrid({
   isAdmin,
   hourWindow,
   now,
+  overdueStudentIds,
   onDoubleClickSlot,
 }: {
   weekDays: Date[];
@@ -245,6 +261,7 @@ function WeeklyGrid({
   isAdmin: boolean;
   hourWindow: HourWindow;
   now: Date;
+  overdueStudentIds: Set<string>;
   onDoubleClickSlot: (slot: QuickAddSlot) => void;
 }) {
   const windowMinutes = (hourWindow.endHour - hourWindow.startHour) * 60;
@@ -415,6 +432,7 @@ function WeeklyGrid({
               colors={colors}
               isAdmin={isAdmin}
               hourWindow={hourWindow}
+              overdueStudentIds={overdueStudentIds}
               draggingId={draggingId}
               movingId={movingId}
               hoverSlot={hoverSlot?.day === day.toDateString() ? hoverSlot : null}
@@ -442,7 +460,7 @@ function WeeklyGrid({
                 {WEEK_DAYS_TR[index]}
               </h3>
               <div className="space-y-2 pl-9">
-                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} onOpen={() => setOpenLesson(lesson)} />)}
+                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} overdue={overdueStudentIds.has(lesson.studentId)} onOpen={() => setOpenLesson(lesson)} />)}
                 {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
               </div>
             </div>
@@ -544,6 +562,7 @@ function GridDayColumn({
   colors,
   isAdmin,
   hourWindow,
+  overdueStudentIds,
   draggingId,
   movingId,
   hoverSlot,
@@ -560,6 +579,7 @@ function GridDayColumn({
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
   hourWindow: HourWindow;
+  overdueStudentIds: Set<string>;
   draggingId: string | null;
   movingId: string | null;
   hoverSlot: { minutes: number; label: string; heightPercent: number } | null;
@@ -613,6 +633,7 @@ function GridDayColumn({
         const draggable = isAdmin && lesson.status === "Normal";
         const isCancelled = lesson.status === "Cancelled";
         const active = isLessonActive(lesson, now);
+        const overdue = overdueStudentIds.has(lesson.studentId);
         const gapPct = 1.5;
         const width = `calc(${100 / position.columns}% - ${gapPct}px)`;
         const left = `calc(${(position.column / position.columns) * 100}% + ${gapPct / 2}px)`;
@@ -626,11 +647,14 @@ function GridDayColumn({
             onDragEnd={onDragEndLesson}
             onClick={() => onOpenLesson(lesson)}
             onDoubleClick={(event) => event.stopPropagation()}
-            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`}
-            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}. Detayları aç`}
+            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${overdue ? " · Aidat gecikmiş" : ""}`}
+            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${overdue ? ", aidat gecikmiş" : ""}. Detayları aç`}
             className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
+            {/* Yalnızca Admin oturumunda dolu gelir (overdueStudentIds) - Teacher'a mali veri
+                sızmaz, çünkü hook Teacher için hiç istek atmıyor (docs/04-permissions.md). */}
+            {overdue && <span className="absolute right-1 top-1 z-10 grid h-3.5 w-3.5 place-items-center rounded-full bg-[var(--danger)] text-white shadow-sm" aria-hidden="true"><Icon name="alert-triangle" className="h-2.5 w-2.5" strokeWidth={2.6} /></span>}
             <span className="flex items-center justify-between gap-1">
               <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{formatTime(start)}–{formatTime(end)}</span>
               {active && <span className="rounded-full bg-[var(--brand)] px-1.5 py-0.5 text-[.43rem] font-extrabold uppercase tracking-wide text-white">Şimdi</span>}
@@ -644,15 +668,19 @@ function GridDayColumn({
   );
 }
 
-function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; onOpen: () => void }) {
+function AgendaLessonCard({ lesson, tone, showTeacher, active = false, overdue = false, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; overdue?: boolean; onOpen: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   return (
-    <button type="button" onClick={onOpen} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border bg-white p-2.5 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
+    <button type="button" onClick={onOpen} title={overdue ? "Aidat gecikmiş" : undefined} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border bg-white p-2.5 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
       <span className="h-9 w-1 rounded-full" style={{ background: tone.border }} />
       <span className="w-20 shrink-0 text-[.65rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2"><span className="block truncate text-xs font-bold">{lesson.studentName}</span>{active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.5rem] font-extrabold uppercase text-white">Şimdi</span>}</span>
+        <span className="flex items-center gap-2">
+          <span className="block truncate text-xs font-bold">{lesson.studentName}</span>
+          {overdue && <Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-[var(--danger-strong)]" />}
+          {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.5rem] font-extrabold uppercase text-white">Şimdi</span>}
+        </span>
         <span className="block truncate text-[.62rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
       </span>
       <LessonStatusChip lesson={lesson} />

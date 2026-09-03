@@ -14,12 +14,20 @@ export default function StudentsPage() {
   const isAdmin = me?.role === "Admin";
   const { data: students, isLoading } = useStudents();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Önceden bu form sayfanın üstünde her zaman açık duruyordu - ayrı bir "+" eylemi
+  // olmadığı için "yeni öğrenci nasıl eklenir" belirsizdi. Diğer ekranlardaki
+  // "+ X ekle" deseniyle (takvim, aidat) tutarlı hale getirildi: istek üzerine açılır,
+  // başarılı eklemeden sonra kendiliğinden kapanır.
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   return (
     <div className="space-y-5">
-      <h1 className="text-display font-serif italic">Öğrenciler</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-display font-serif italic">Öğrenciler</h1>
+        {isAdmin && <button type="button" onClick={() => setShowCreateForm((value) => !value)} aria-pressed={showCreateForm} className="pressable inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)]"><Icon name={showCreateForm ? "close" : "plus"} className="h-4 w-4" />{showCreateForm ? "Kapat" : "Yeni öğrenci"}</button>}
+      </div>
 
-      {isAdmin && <CreateStudentForm />}
+      {isAdmin && showCreateForm && <CreateStudentForm onCreated={() => setShowCreateForm(false)} />}
 
       <div className="app-card overflow-hidden">
         {isLoading && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
@@ -47,7 +55,7 @@ export default function StudentsPage() {
   );
 }
 
-function CreateStudentForm() {
+function CreateStudentForm({ onCreated }: { onCreated: () => void }) {
   const createStudent = useCreateStudent();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -62,6 +70,7 @@ function CreateStudentForm() {
       setFirstName("");
       setLastName("");
       setBirthDate("");
+      onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğrenci eklenemedi.");
     }
