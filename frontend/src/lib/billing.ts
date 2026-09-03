@@ -211,11 +211,13 @@ export function useReceivables(status?: ReceivableStatus) {
   });
 }
 
-export function useStudentBilling(studentId: string) {
+// `enabled` opsiyonel: aidat listesindeki her satır "Geçmiş" collapse'ını AÇILANA kadar bu
+// isteği göndermemeli - aksi halde ekrandaki her satır için görünmeyen bir istek atılırdı.
+export function useStudentBilling(studentId: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["student-billing", studentId],
     queryFn: () => api.get<StudentBillingRow[]>(`/api/students/${studentId}/billing`),
-    enabled: !!studentId,
+    enabled: !!studentId && (options?.enabled ?? true),
   });
 }
 
