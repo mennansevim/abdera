@@ -36,9 +36,21 @@ function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: Calen
   return lessonCount < MAXIMUM_STUDENT_LESSONS_PER_WEEK;
 }
 
+// Gerçek bir davranış hatasının düzeltmesi: bu fonksiyon HER GÜN için AYRI AYRI "bu günde
+// eşleşen kayıt yoksa geniş bir varsayılan pencere kullan" diyordu. Yani bir öğretmen sadece
+// Salı/Perşembe için uygunluk tanımlasa bile, Pazartesi/Çarşamba/Cuma günleri için eşleşen
+// kayıt olmadığından hâlâ 10:00-21:00 varsayılanına düşüyor ve o günler de "uygun"
+// gösteriliyordu - "yalnızca Salı/Perşembe" kısıtlaması pratikte hiçbir işe yaramıyordu.
+//
+// Doğru kural: öğretmenin HİÇ uygunluk kaydı yoksa (Öğretmenler ekranında hiçbir gün
+// seçilmemiş - mevcut/varsayılan durum) her gün açık sayılır, geriye dönük uyumluluk için.
+// Ama en az bir kayıt varsa, yalnızca o günler açıktır; eşleşmeyen günler artık BOŞ dizi
+// döner (uygun slot yok) - "bu telafi/akıllı zamanlama önerilerinde kullanılacak" ihtiyacı
+// tam olarak bunu gerektiriyor.
 function windowsForDay(day: Date, availability: TeacherAvailability[]) {
   const windows = availability.filter((item) => DAY_INDEX[item.dayOfWeek] === day.getDay());
-  return windows.length ? windows : [{ id: "default", dayOfWeek: "", startTime: "10:00", endTime: "21:00" }];
+  if (windows.length) return windows;
+  return availability.length ? [] : [{ id: "default", dayOfWeek: "", startTime: "10:00", endTime: "21:00" }];
 }
 
 export function findOpenSlots({

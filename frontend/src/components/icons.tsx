@@ -28,7 +28,11 @@ export type IconName =
   | "sparkles"
   | "target"
   | "alert-triangle"
-  | "plus";
+  | "plus"
+  | "piano"
+  | "guitar"
+  | "violin"
+  | "drums";
 
 const paths: Record<IconName, React.ReactNode> = {
   home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-6h6v6"/></>,
@@ -60,6 +64,13 @@ const paths: Record<IconName, React.ReactNode> = {
   // Gecikmiş aidat uyarısı için (Ders Programı ders kartları) - küçük, tanıdık bir ünlem işareti.
   "alert-triangle": <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></>,
   plus: <path d="M12 5v14M5 12h14"/>,
+  // Öğrenci listesindeki enstrüman rozetleri için (kullanıcı isteği: "içine girmeden
+  // anlayabilelim") - okulda yalnızca dört sabit enstrüman var (Piyano/Gitar/Keman/Bateri),
+  // her birine özgü basit bir piktogram.
+  piano: <><rect x="3" y="8" width="18" height="11" rx="1.5"/><path d="M7.5 8v6.5M11 8v6.5M14.5 8v6.5"/></>,
+  guitar: <><circle cx="8.5" cy="16" r="4.3"/><circle cx="11" cy="10.3" r="2.6"/><path d="M12.1 8 16 3.5M15 5l2-2.2"/></>,
+  violin: <><circle cx="9.5" cy="15" r="3.3"/><circle cx="11.2" cy="10.6" r="2"/><path d="M11.9 8.7 14.5 4M5 19 18 5"/></>,
+  drums: <><ellipse cx="12" cy="7.5" rx="7" ry="3"/><path d="M5 7.5v7.5a7 3 0 0 0 14 0V7.5"/><path d="m8.5 4 2 2.3M17 3.7l-2 2.6"/></>,
 };
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {
@@ -77,6 +88,21 @@ export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGEle
       {paths[name]}
     </svg>
   );
+}
+
+// Öğrenci listesi rozetleri (student/teacher isimleri değil, ENSTRÜMAN adına göre eşleşir -
+// backend `instruments.name` Türkçe döner, örn. "Piyano"). Okulda yalnızca dört sabit
+// enstrüman var; tanınmayan bir isim gelirse (yeni enstrüman eklenirse) genel nota ikonuna
+// düşer, hiçbir zaman kırılmaz.
+export const INSTRUMENT_BADGE_STYLES: Record<string, { icon: IconName; className: string }> = {
+  Piyano: { icon: "piano", className: "bg-[#efe3ff] text-[#5b3aa0]" },
+  Gitar: { icon: "guitar", className: "bg-[var(--brand-soft)] text-[var(--brand-strong)]" },
+  Keman: { icon: "violin", className: "bg-[#fde3ea] text-[#a8285a]" },
+  Bateri: { icon: "drums", className: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+};
+
+export function instrumentBadgeStyle(instrumentName: string) {
+  return INSTRUMENT_BADGE_STYLES[instrumentName] ?? { icon: "music" as const, className: "bg-[var(--surface-muted)] text-[var(--muted)]" };
 }
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {

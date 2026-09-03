@@ -15,7 +15,7 @@ import {
   type FeePlan,
   type PaymentMethod,
 } from "@/lib/billing";
-import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
+import { useEnrollments, useStudents, useTeachers } from "@/lib/people";
 import { StudentBillingSection } from "./student-billing-section";
 
 // Ekran bir "dönem defteri": aynı anda tek bir dönemi gösterir.
@@ -102,16 +102,23 @@ function daysOverdue(dueDate: string) {
 export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summary: BillingFilterSummary) => void }) {
   const { data: dues, isLoading, isError, isFetching, refetch } = useBillingDues();
   const { data: teachers } = useTeachers();
-  const { data: instruments } = useInstruments();
   const [filter, setFilter] = useState<DueFilter>("open");
-  const [search, setSearch] = useState("");
   const [period, setPeriod] = useState<string | null>(null);
   // selectedStudentId artık yalnızca "tam hesabı aç" kaçış kapısı için tutuluyor - hızlı
   // tahsilat panelinin (QuickCollectPanel) kendi öğrenci seçimi ayrıdır.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [teacherFilter, setTeacherFilter] = useState("all");
-  const [instrumentFilter, setInstrumentFilter] = useState("all");
+  // Öğrenciye göre filtre - seçenekler serbest metin yerine liste dolusundan (aşağıdaki
+  // studentOptions) geliyor; kullanıcı isteği: "öğretmen öğrenci gibi" filtreler.
+  const [studentFilter, setStudentFilter] = useState("all");
+
+  // Öğrenci filtresinin seçenekleri: aidatı olan öğrenciler arasından, ada göre tekilleştirilip
+  // sıralanır. Ayrı bir /api/students isteği açmaya gerek yok - dues zaten öğrenci adını taşıyor.
+  const studentOptions = useMemo(() => {
+    const byId = new Map((dues ?? []).map((due) => [due.studentId, due.studentName]));
+    return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], "tr-TR"));
+  }, [dues]);
 
   // Dönem listesi veriden türetilir - okul ölçeğinde tüm aidatlar zaten tek istekte
   // geliyor, ayrı bir uç nokta açmaya gerek yok (CLAUDE.md: gereksiz bağımlılık ekleme).
@@ -148,21 +155,18 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
 
   const clearFilters = useCallback(() => {
     setFilter("all");
-    setSearch("");
     setTeacherFilter("all");
-    setInstrumentFilter("all");
+    setStudentFilter("all");
     setPeriod(ALL_PERIODS);
   }, []);
 
   // Dönem DIŞINDAKİ daraltmalar ayrı tutulur: aşağıdaki "başka dönemde gecikmiş var"
   // uyarısı bu kümeye bakar, çünkü tam da dönem filtresinin gizlediği şeyi göstermesi gerekir.
   const duesMatchingFilters = useMemo(() => (dues ?? []).filter((due) => {
-    const query = search.trim().toLocaleLowerCase("tr-TR");
-    const matchesSearch = !query || `${due.studentName} ${due.teacherName} ${due.instrumentName}`.toLocaleLowerCase("tr-TR").includes(query);
     const matchesTeacher = teacherFilter === "all" || due.teacherId === teacherFilter;
-    const matchesInstrument = instrumentFilter === "all" || due.instrumentId === instrumentFilter;
-    return matchesSearch && matchesTeacher && matchesInstrument;
-  }), [dues, instrumentFilter, search, teacherFilter]);
+    const matchesStudent = studentFilter === "all" || due.studentId === studentFilter;
+    return matchesTeacher && matchesStudent;
+  }), [dues, studentFilter, teacherFilter]);
 
   // Liste, sayaçlar ve toplamlar TEK bir filtrelenmiş diziden türetilir - ekranda bir
   // rakam, listede başka bir veri kümesi olmasın.
@@ -214,7 +218,7 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
       a.studentName.localeCompare(b.studentName, "tr-TR")),
     [baseDues, filter]);
 
-  const hasActiveFilters = Boolean(search.trim()) || teacherFilter !== "all" || instrumentFilter !== "all" || filter !== "all";
+  const hasActiveFilters = teacherFilter !== "all" || studentFilter !== "all" || filter !== "all";
 
   return <div className="space-y-4">
     {showCreatePanel && <section className="app-card overflow-visible p-4 sm:p-5">
@@ -236,26 +240,9 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
     {selectedStudentId && <StudentBillingSection key={selectedStudentId} initialStudentId={selectedStudentId} showStudentPicker={false} onClose={() => setSelectedStudentId(null)} />}
 
     <section className="app-card overflow-hidden">
-      <div className="border-b border-[var(--line)] p-4 sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-micro text-[var(--brand-strong)]">Aidat listesi</p>
-            <h2 className="mt-1 text-title">Öğrenci aidatları</h2>
-            <p className="text-meta mt-1">Borcu gör, ödemeyi kaydet veya öğrenci hesabını aç.</p>
-          </div>
-          <button type="button" onClick={startAddingDue} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white">+ Aidat al</button>
-        </div>
-
-        {/* Tek arama kutusu + iki daraltma. Önceki sürümdeki ikinci arama kutusu ve
-            "yeni aidat" kartına gizlenmiş filtreler buraya toplandı. */}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <label className="relative min-w-[14rem] flex-1"><span className="sr-only">Öğrenci, öğretmen veya enstrüman ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Öğrenci, öğretmen veya enstrüman ara" className="field min-h-11 pl-9 text-sm" /></label>
-          <label className="min-w-[10rem]"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-11 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
-          <label className="min-w-[10rem]"><span className="sr-only">Enstrümana göre filtrele</span><select value={instrumentFilter} onChange={(event) => setInstrumentFilter(event.target.value)} className="field min-h-11 text-xs font-semibold"><option value="all">Tüm enstrümanlar</option>{instruments?.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}</select></label>
-        </div>
-      </div>
-
-      {/* Dönem başlığı: sütunlardan kaldırılan Dönem ve Vade bilgisini bir kez taşır. */}
+      {/* Dönem başlığı: sütunlardan kaldırılan Dönem ve Vade bilgisini bir kez taşır.
+          "+ Aidat al" da buraya taşındı - önceki başlık/açıklama/arama bloğu tamamen
+          kaldırıldı (kullanıcı isteği: gereksiz tekrar, tek bir eylem yeterli). */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
         <label className="flex items-center gap-2">
           <span className="sr-only">Döneme göre filtrele</span>
@@ -264,12 +251,15 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
             {periods.map((item) => <option key={item} value={item} className="capitalize">{formatPeriod(item)}</option>)}
           </select>
         </label>
-        <p className="text-[.68rem] font-semibold tabular-nums text-[var(--muted)]">
-          {sharedDueDate && <>Vade {formatDay(sharedDueDate)} · </>}
-          {counts.all} aidat
-          {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
-          {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-[.68rem] font-semibold tabular-nums text-[var(--muted)]">
+            {sharedDueDate && <>Vade {formatDay(sharedDueDate)} · </>}
+            {counts.all} aidat
+            {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
+            {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
+          </p>
+          <button type="button" onClick={startAddingDue} className="pressable min-h-9 rounded-xl bg-[var(--brand)] px-3.5 text-xs font-bold text-white">+ Aidat al</button>
+        </div>
       </div>
 
       {overdueOutsideScope && <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--danger)]/25 bg-[var(--danger-soft)] px-4 py-2.5">
@@ -280,8 +270,13 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
         <button type="button" onClick={() => { setPeriod(ALL_PERIODS); setFilter("open"); }} className="pressable ml-auto min-h-9 rounded-lg bg-[var(--danger-strong)] px-3 text-[.66rem] font-bold text-white">Hepsini göster</button>
       </div>}
 
-      <div className="px-4 pt-3">
+      {/* Durum sekmeleri solda, Öğretmen/Öğrenci filtreleri sağda - kullanıcı isteği. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
         <div className="inline-flex gap-1 rounded-xl bg-[var(--surface-muted)] p-1" aria-label="Aidat durum filtresi">{FILTERS.map((item) => <button key={item.value} type="button" onClick={() => setFilter(item.value)} aria-pressed={filter === item.value} className={`pressable flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-bold ${filter === item.value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}>{item.label}<span className="rounded-full bg-[var(--surface-muted)] px-1.5 py-0.5 text-[.58rem] tabular-nums">{counts[item.value]}</span></button>)}</div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="min-w-[9rem]"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+          <label className="min-w-[9rem]"><span className="sr-only">Öğrenciye göre filtrele</span><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğrenciler</option>{studentOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+        </div>
       </div>
 
       {/* Beş sütun: Dönem ve Vade artık yukarıdaki dönem başlığında. */}

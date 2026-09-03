@@ -20,16 +20,61 @@ public static class Students
         Guid InstrumentId,
         string InstrumentName,
         string? GuardianPhoneMasked);
+    public record StudentInstrumentSummary(Guid InstrumentId, string InstrumentName);
+    public record StudentOverviewResponse(StudentResponse Student, List<StudentInstrumentSummary> Instruments);
 
     public static void MapStudents(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/students").RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         group.MapGet("", ListAsync);
+        // Öğrenci listesinde "içine girmeden" enstrüman rozetleri gösterebilmek için - N+1
+        // yerine (150 öğrenci için 150 ayrı /enrollments isteği) tek bir toplu sorgu.
+        group.MapGet("/overview", OverviewAsync);
         group.MapGet("/search", SearchAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapGet("/{studentId:guid}", GetAsync);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPatch("/{studentId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+    }
+
+    private static async Task<IResult> OverviewAsync(ClaimsPrincipal principal, AbderaDbContext db)
+    {
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+
+        var studentsQuery = db.Students.AsQueryable();
+        if (teacherScope is { } scopedTeacherId)
+        {
+            var assignedStudentIds = db.Enrollments.Where(e => e.TeacherId == scopedTeacherId).Select(e => e.StudentId);
+            studentsQuery = studentsQuery.Where(s => assignedStudentIds.Contains(s.Id));
+        }
+
+        var students = await studentsQuery
+            .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
+            .Select(s => new StudentResponse(s.Id, s.FirstName, s.LastName, s.BirthDate, s.Status))
+            .ToListAsync();
+
+        var studentIds = students.Select(s => s.Id).ToList();
+        var enrollmentsQuery = db.Enrollments.Where(e => studentIds.Contains(e.StudentId) && e.Status == EnrollmentStatus.Active);
+        // Bir öğrenci birden fazla öğretmenden ders alabilir - Teacher scope'undayken yalnızca
+        // KENDİ kursu görünsün, tıpkı /enrollments uç noktasındaki kural gibi (Enrollments.cs
+        // ListAsync) - aksi halde bir öğretmen başka bir öğretmenin kurs bilgisini rozet
+        // üzerinden görürdü.
+        if (teacherScope is { } filterTeacherId)
+        {
+            enrollmentsQuery = enrollmentsQuery.Where(e => e.TeacherId == filterTeacherId);
+        }
+
+        var instrumentsByStudent = await enrollmentsQuery
+            .Join(db.Instruments, e => e.InstrumentId, i => i.Id, (e, i) => new { e.StudentId, InstrumentId = i.Id, InstrumentName = i.Name })
+            .Distinct()
+            .ToListAsync();
+
+        return Results.Ok(students.Select(student => new StudentOverviewResponse(
+            student,
+            instrumentsByStudent.Where(item => item.StudentId == student.Id)
+                .Select(item => new StudentInstrumentSummary(item.InstrumentId, item.InstrumentName))
+                .OrderBy(item => item.InstrumentName)
+                .ToList())));
     }
 
     private static async Task<IResult> SearchAsync(string query, AbderaDbContext db)

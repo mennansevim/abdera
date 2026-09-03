@@ -22,6 +22,17 @@ async function seedDemoData(page: Page) {
   expect(response.ok()).toBeTruthy();
 }
 
+// Gerçek bir zaman dilimi hatasının düzeltmesi: `date.toISOString().slice(0, 10)` tarihi
+// UTC'ye çevirir. Test makinesi Europe/Istanbul'da (UTC+3) ve yerel saat 00:00-03:00
+// arasındaysa, UTC'ye çevrilince tarih BİR GÜN GERİYE düşer - "Pazartesi"yi hesaplayıp
+// takvimde arıyorken aslında Pazar'ı arayan bir test üretir (gece yarısından hemen sonra
+// koşulunca CI'da rastgele kırılırdı). Yerel tarih bileşenlerinden elle kurmak bu kaymayı
+// önler - app'in kendi dateInputValue (calendar/page.tsx) yardımcısıyla aynı yaklaşım.
+function localDateString(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 test.describe.serial("Abdera critical role flows", () => {
   test("admin creates and edits a lesson, then records a partial payment", async ({ page }) => {
     await loginStaff(page, "Admin", adminEmail, adminPassword);
@@ -47,18 +58,18 @@ test.describe.serial("Abdera critical role flows", () => {
     expect(studentResponse.status()).toBe(201);
     const student = await studentResponse.json();
     const enrollmentResponse = await page.request.post(`${apiUrl}/api/students/${student.id}/enrollments`, {
-      data: { teacherId: teacher.id, instrumentId: piano.id, startedAt: new Date().toISOString().slice(0, 10) },
+      data: { teacherId: teacher.id, instrumentId: piano.id, startedAt: localDateString(new Date()) },
     });
     expect(enrollmentResponse.status()).toBe(201);
     const enrollment = await enrollmentResponse.json();
     const alternateEnrollmentResponse = await page.request.post(`${apiUrl}/api/students/${student.id}/enrollments`, {
-      data: { teacherId: alternateTeacher.id, instrumentId: piano.id, startedAt: new Date().toISOString().slice(0, 10) },
+      data: { teacherId: alternateTeacher.id, instrumentId: piano.id, startedAt: localDateString(new Date()) },
     });
     expect(alternateEnrollmentResponse.status()).toBe(201);
 
     const nextMonday = new Date();
     nextMonday.setDate(nextMonday.getDate() + ((8 - nextMonday.getDay()) % 7 || 7));
-    const date = nextMonday.toISOString().slice(0, 10);
+    const date = localDateString(nextMonday);
 
     await page.goto("/dashboard/calendar");
     await page.getByRole("button", { name: "Sonraki hafta" }).click();
@@ -180,7 +191,8 @@ test.describe.serial("Abdera critical role flows", () => {
   test("teacher writes repertoire note and explicitly approves the parent comment", async ({ page }) => {
     await loginStaff(page, "Teacher", teacherEmail, teacherPassword);
     await page.goto("/dashboard/progress");
-    await page.getByRole("button", { name: /Lara Arslan/ }).click();
+    // Öğrenci listesi artık uzun bir buton listesi değil, tek bir combobox (kullanıcı isteği).
+    await page.getByRole("combobox", { name: "Öğrenci seç" }).selectOption({ label: "Lara Arslan" });
     await page.getByRole("button", { name: "Yeni gelişim notu" }).click();
     const note = `E2E öğretmen ham notu ${Date.now()}`;
     await page.getByLabel("Çalınan eser").fill("E2E Minuet");

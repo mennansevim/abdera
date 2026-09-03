@@ -132,6 +132,22 @@ export function useStudents() {
   return useQuery({ queryKey: ["students"], queryFn: () => api.get<Student[]>("/api/students") });
 }
 
+export interface StudentInstrumentSummary {
+  instrumentId: string;
+  instrumentName: string;
+}
+
+export interface StudentOverview {
+  student: Student;
+  instruments: StudentInstrumentSummary[];
+}
+
+// Öğrenci listesindeki enstrüman rozetleri buna dayanır - useTeacherOverviews ile aynı
+// desen (N+1 yerine tek toplu istek, bkz. Students.cs OverviewAsync).
+export function useStudentOverviews() {
+  return useQuery({ queryKey: ["student-overviews"], queryFn: () => api.get<StudentOverview[]>("/api/students/overview") });
+}
+
 export function useStudentAutocomplete(query: string) {
   const normalized = query.trim();
   return useQuery({

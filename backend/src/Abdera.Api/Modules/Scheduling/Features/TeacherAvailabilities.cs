@@ -18,6 +18,14 @@ public static class TeacherAvailabilities
 
         app.MapPost("/api/teachers/{teacherId:guid}/availability", CreateAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+
+        // Öğretmenler sayfasındaki "uygun günler" tek-tık aç/kapa arayüzü bunu kullanır -
+        // bir günü kapatmak, o güne ait uygunluk penceresini kaldırmaktır. Finansal/audit
+        // kaydı değil (CLAUDE.md'nin "silinmez" kuralı yalnızca para/takvim/rıza değiştiren
+        // ve denetim izi gerektiren kayıtlar için) - bu yalnızca bir zamanlama tercihi,
+        // gerçek silme burada uygun.
+        app.MapDelete("/api/teachers/{teacherId:guid}/availability/{availabilityId:guid}", DeleteAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
     private static async Task<IResult> ListAsync(Guid teacherId, AbderaDbContext db)
@@ -43,5 +51,17 @@ public static class TeacherAvailabilities
         return Results.Created(
             $"/api/teachers/{teacherId}/availability/{availability.Id}",
             new AvailabilityResponse(availability.Id, availability.DayOfWeek, availability.StartTime, availability.EndTime));
+    }
+
+    private static async Task<IResult> DeleteAsync(Guid teacherId, Guid availabilityId, AbderaDbContext db)
+    {
+        var availability = await db.TeacherAvailabilities
+            .SingleOrDefaultAsync(a => a.Id == availabilityId && a.TeacherId == teacherId)
+            ?? throw new NotFoundException("Uygunluk kaydı bulunamadı.");
+
+        db.TeacherAvailabilities.Remove(availability);
+        await db.SaveChangesAsync();
+
+        return Results.NoContent();
     }
 }

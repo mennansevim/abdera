@@ -102,10 +102,30 @@ export interface TeacherAvailability {
   endTime: string;
 }
 
-export function useTeacherAvailability(teacherId: string) {
+export function useTeacherAvailability(teacherId: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["teacher-availability", teacherId],
     queryFn: () => api.get<TeacherAvailability[]>(`/api/teachers/${teacherId}/availability`),
-    enabled: !!teacherId,
+    enabled: !!teacherId && (options?.enabled ?? true),
+  });
+}
+
+// Öğretmenler ekranındaki "uygun günler" tek-tık aç/kapa arayüzü bu ikisini kullanır: bir
+// günü açmak POST, kapatmak DELETE'tir - ayrı bir "toggle" ucu yok, backend zaten
+// create/delete olarak modelliyor (TeacherAvailabilities.cs).
+export function useCreateTeacherAvailability(teacherId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { dayOfWeek: string; startTime: string; endTime: string }) =>
+      api.post<TeacherAvailability>(`/api/teachers/${teacherId}/availability`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["teacher-availability", teacherId] }),
+  });
+}
+
+export function useDeleteTeacherAvailability(teacherId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (availabilityId: string) => api.delete(`/api/teachers/${teacherId}/availability/${availabilityId}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["teacher-availability", teacherId] }),
   });
 }

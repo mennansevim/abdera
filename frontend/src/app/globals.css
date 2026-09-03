@@ -190,3 +190,68 @@ textarea:focus-visible {
   :root { --line: #b89c72; --muted: #6b543f; }
   .app-card { box-shadow: none; }
 }
+
+/* Tekrar eden buton kalıpları - önceki sürümde her ekran kendi uzun Tailwind zincirini
+   taşıyordu (aynı butonun beş farklı yükseklik/gölge varyantı vardı). Tek yerde
+   tanımlanınca ekranlar arası görünüm kendiliğinden tutarlı kalıyor. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 2.5rem;
+  border-radius: .85rem;
+  padding: 0 .9rem;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  white-space: nowrap;
+  transition: transform 120ms ease-out, background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.btn:active { transform: scale(.975); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:disabled:active { transform: none; }
+
+.btn-primary { background: var(--brand); color: var(--on-brand); }
+.btn-primary:hover:not(:disabled) { background: var(--brand-strong); }
+
+.btn-quiet { border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.btn-quiet:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+
+/* Ekranların sağ üstündeki küçük "+" eylemi ve benzeri ikon butonlar - metin taşımaz,
+   erişilebilir adı aria-label'dan gelir. */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: .85rem;
+  transition: transform 120ms ease-out, background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.icon-btn:active { transform: scale(.94); }
+.icon-btn:disabled { opacity: .5; cursor: not-allowed; }
+.icon-btn:disabled:active { transform: none; }
+
+.icon-btn-brand { background: var(--brand); color: var(--on-brand); }
+.icon-btn-brand:hover:not(:disabled) { background: var(--brand-strong); }
+
+.icon-btn-quiet { border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.icon-btn-quiet:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+
+/* Form alanının üstündeki etiket - tüm ekranlarda aynı boyut/ağırlık. */
+.form-label {
+  display: block;
+  font-size: var(--text-meta);
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.form-label > .field,
+.form-label > input,
+.form-label > select,
+.form-label > textarea { margin-top: .35rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn:active, .icon-btn:active { transform: none; }
+}

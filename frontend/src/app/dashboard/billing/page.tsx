@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
+import { PageHeader } from "@/components/ui";
 import { useReceivables } from "@/lib/billing";
 import { PriceListsSection } from "./price-lists-section";
 import { DuesListSection, type BillingFilterSummary } from "./dues-list-section";
@@ -28,18 +29,17 @@ export default function BillingPage() {
   const summary = filteredSummary ?? baseSummary;
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-micro text-[var(--brand-strong)]">Finans</p>
-          <h1 className="text-display mt-1 font-serif italic">Aidat yönetimi</h1>
-          <p className="text-meta mt-2 max-w-2xl">Tahsilat durumunu bir bakışta gör, öğrenci hesabına in ve ödemeyi aynı ekrandan kaydet.</p>
-        </div>
-        <div className="inline-flex rounded-2xl border border-[var(--line)] bg-white p-1 shadow-sm" aria-label="Aidat görünümü">
-          <ViewButton active={view === "collections"} onClick={() => setView("collections")} icon="wallet">Tahsilatlar</ViewButton>
-          <ViewButton active={view === "pricing"} onClick={() => setView("pricing")} icon="settings">Fiyat politikası</ViewButton>
-        </div>
-      </header>
+    <div className="space-y-4">
+      <PageHeader
+        title="Aidat yönetimi"
+        description="Tahsilat durumunu gör, öğrenci hesabına in ve ödemeyi aynı ekrandan kaydet."
+        actions={
+          <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="group" aria-label="Aidat görünümü">
+            <ViewButton active={view === "collections"} onClick={() => setView("collections")} icon="wallet">Tahsilatlar</ViewButton>
+            <ViewButton active={view === "pricing"} onClick={() => setView("pricing")} icon="settings">Fiyat politikası</ViewButton>
+          </div>
+        }
+      />
 
       {view === "collections" ? (
         <>
@@ -56,7 +56,7 @@ export default function BillingPage() {
 }
 
 function ViewButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: IconName; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} aria-pressed={active} className={`pressable inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs font-bold ${active ? "bg-[var(--brand)] text-white shadow-sm" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}><Icon name={icon} className="h-4 w-4" />{children}</button>;
+  return <button type="button" onClick={onClick} aria-pressed={active} className={`btn ${active ? "btn-primary" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}><Icon name={icon} className="h-4 w-4" />{children}</button>;
 }
 
 function SummaryCard({ icon, label, value, detail, loading, tone = "brand" }: { icon: IconName; label: string; value: string; detail: string; loading: boolean; tone?: "brand" | "success" | "danger" | "warning" }) {

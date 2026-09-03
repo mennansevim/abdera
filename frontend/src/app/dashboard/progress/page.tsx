@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { Suspense, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useStudents, type Student } from "@/lib/people";
@@ -40,12 +41,25 @@ function difficultyTone(value: number | null) {
       : "bg-[var(--brand-soft)] text-[var(--brand-strong)]";
 }
 
+// Öğrenci sayfasındaki "Gelişim" bağlantısı (student-detail.tsx) ?studentId= ile buraya
+// yönlendirir - useSearchParams App Router'da bir Suspense sınırı ister, o yüzden asıl
+// içerik ayrı bir bileşende.
 export default function ProgressPage() {
+  return (
+    <Suspense>
+      <ProgressPageContent />
+    </Suspense>
+  );
+}
+
+function ProgressPageContent() {
   const { data: me } = useMe();
   const canWrite = me?.role === "Teacher";
   const { data: students, isLoading: studentsLoading } = useStudents();
-  const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [studentSearch, setStudentSearch] = useState("");
+  const searchParams = useSearchParams();
+  // Yalnızca ilk yüklemede okunur (deep-link) - sonrasında seçim tamamen kullanıcı
+  // etkileşimiyle yönetilir, URL'i her seçimde güncellemeye gerek yok.
+  const [selectedStudentId, setSelectedStudentId] = useState(() => searchParams.get("studentId") ?? "");
   const [showComposer, setShowComposer] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
   const [teacherFilter, setTeacherFilter] = useState("all");
@@ -81,8 +95,6 @@ export default function ProgressPage() {
     (instrumentFilter === "all" || entry.instrumentId === instrumentFilter) &&
     (difficultyFilter === "all" || entry.pieceDifficulty === Number(difficultyFilter)) &&
     (!lastWorkedFrom || new Date(entry.lessonStartAt) >= new Date(`${lastWorkedFrom}T00:00:00`))), [difficultyFilter, instrumentFilter, lastWorkedFrom, progress?.entries, teacherFilter, timelineFilter]);
-  const visibleStudents = useMemo(() => (students ?? []).filter((student) => `${student.firstName} ${student.lastName}`.toLocaleLowerCase("tr-TR").includes(studentSearch.toLocaleLowerCase("tr-TR"))), [studentSearch, students]);
-
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -97,12 +109,10 @@ export default function ProgressPage() {
       </header>
 
       <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
-        <StudentList
-          students={visibleStudents}
+        <StudentPicker
+          students={students ?? []}
           selectedStudentId={activeStudentId}
           isLoading={studentsLoading}
-          search={studentSearch}
-          onSearch={setStudentSearch}
           onSelect={(studentId) => { setSelectedStudentId(studentId); setShowComposer(false); setTimelineFilter("all"); }}
         />
 
@@ -141,40 +151,44 @@ function RepertoireFilters({ entries, teacherFilter, instrumentFilter, difficult
   return <section className="app-card grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Repertuvar filtreleri"><label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherFilter} onChange={(event) => onTeacher(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{teachers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label className="text-micro text-[var(--muted)]">Enstrüman<select value={instrumentFilter} onChange={(event) => onInstrument(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{instruments.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label><label className="text-micro text-[var(--muted)]">Zorluk<select value={difficultyFilter} onChange={(event) => onDifficulty(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select></label><label className="text-micro text-[var(--muted)]">Son çalışma başlangıcı<input type="date" value={lastWorkedFrom} onChange={(event) => onLastWorkedFrom(event.target.value)} className="field mt-1 text-sm" /></label></section>;
 }
 
-function StudentList({
+// Kullanıcı isteği: uzun, kaydırmalı bir liste yerine tek bir combobox - seçtikçe altındaki
+// "Öğrenci gelişimi [Ad]" başlığı (StudentHeader, activeStudent üzerinden) aynı şekilde
+// güncellenmeye devam eder, yalnızca seçim arayüzü değişti.
+function StudentPicker({
   students,
   selectedStudentId,
   isLoading,
-  search,
-  onSearch,
   onSelect,
 }: {
   students: Student[];
   selectedStudentId: string;
   isLoading: boolean;
-  search: string;
-  onSearch: (value: string) => void;
   onSelect: (studentId: string) => void;
 }) {
   return (
-    <aside className="app-card h-fit overflow-hidden">
-      <div className="border-b border-[var(--line)] p-4">
-        <div className="flex items-center justify-between gap-2"><p className="text-micro">Öğrenciler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.62rem] font-bold text-[var(--muted)]">{students.length}</span></div>
-        <label className="relative mt-3 block"><span className="sr-only">Öğrenci ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Öğrenci ara" className="field pl-9 text-xs" /></label>
-      </div>
-      <div className="max-h-[28rem] overflow-y-auto p-2">
-        {isLoading && <div className="space-y-2 p-2">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-14 rounded-xl" />)}</div>}
-        {!isLoading && !students.length && <p className="p-4 text-center text-xs text-[var(--muted)]">Eşleşen öğrenci bulunamadı.</p>}
-        {!isLoading && students.map((student) => {
-          const name = `${student.firstName} ${student.lastName}`;
-          const active = selectedStudentId === student.id;
-          return <button key={student.id} onClick={() => onSelect(student.id)} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left ${active ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`} aria-pressed={active}>
-            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[.68rem] font-bold ${active ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--brand-strong)]"}`}>{initials(name)}</span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{name}</span><span className="mt-0.5 block truncate text-[.66rem] text-[var(--muted)]">{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span></span>
-            {active && <Icon name="chevron" className="h-4 w-4 shrink-0" />}
-          </button>;
-        })}
-      </div>
+    <aside className="app-card h-fit overflow-hidden p-4">
+      <div className="flex items-center justify-between gap-2"><p className="text-micro">Öğrenciler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.62rem] font-bold text-[var(--muted)]">{students.length}</span></div>
+      {isLoading ? (
+        <div className="mt-3 skeleton h-11 rounded-xl" />
+      ) : !students.length ? (
+        <p className="mt-3 text-xs text-[var(--muted)]">Henüz öğrenci yok.</p>
+      ) : (
+        <label className="mt-3 block">
+          <span className="sr-only">Öğrenci seç</span>
+          {/* Sr-only span'i saran <label>, tarayıcıda combobox'ın erişilebilir adını
+              "Öğrenci seç" yerine SEÇİLİ SEÇENEĞİN metnine ("Kerem Aksoy" gibi) çeviriyordu -
+              ekran okuyucu kullanıcısı alanın ne işe yaradığını hiç duymuyordu. Açık
+              aria-label bu belirsizliği ortadan kaldırıyor; wrapping label görsel/yapısal
+              ilişki için kalıyor. */}
+          <select aria-label="Öğrenci seç" value={selectedStudentId} onChange={(event) => onSelect(event.target.value)} className="field min-h-11 w-full text-sm font-semibold">
+            {students.map((student) => (
+              <option key={student.id} value={student.id}>
+                {student.firstName} {student.lastName}{student.status !== "Active" ? " (pasif)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
     </aside>
   );
 }

@@ -278,4 +278,123 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
         var allowed = await teacherClient.GetAsync($"/api/students/{myStudent.Id}");
         Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
     }
+
+    // Öğretmenler sayfasındaki "uygun günler" tek-tık aç/kapa arayüzü bu üç uca dayanır.
+    // docs/07-api.md: uygunluk tanımlamak Admin işi, öğretmen yalnızca kendi uygunluğunu
+    // görebilir - TeacherAvailabilities.cs üstündeki yorumla aynı kural, burada uçtan uca
+    // doğrulanıyor (yalnızca entity seviyesinde değil).
+    [Fact]
+    public async Task Admin_toggles_teacher_availability_days_and_teacher_can_only_read()
+    {
+        var admin = await CreateAdminClientAsync();
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var violin = instruments!.Single(i => i.Code == "VIOLIN");
+
+        var teacherEmail = $"avail-{Guid.NewGuid():N}@test.local";
+        var teacherCreate = await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Uygunluk", "Testi", [violin.Id], teacherEmail)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options);
+        var teacherId = teacherCreate!.Teacher.Id;
+
+        // Başlangıçta hiç kayıt yok - "gün seçilmediyse her gün uygun sayılır" varsayımının
+        // dayandığı boş liste hâli.
+        var initialList = await admin.GetFromJsonAsync<List<TeacherAvailabilities.AvailabilityResponse>>(
+            $"/api/teachers/{teacherId}/availability", TestJson.Options);
+        Assert.Empty(initialList!);
+
+        // Salı ve Perşembe'yi "aç" - iki ayrı POST, arayüzdeki iki ayrı tık gibi.
+        var tuesday = await admin.PostAsJsonAsync($"/api/teachers/{teacherId}/availability",
+            new TeacherAvailabilities.CreateRequest(DayOfWeek.Tuesday, new TimeOnly(9, 0), new TimeOnly(19, 0)));
+        Assert.Equal(HttpStatusCode.Created, tuesday.StatusCode);
+        var tuesdayAvailability = await tuesday.Content.ReadFromJsonAsync<TeacherAvailabilities.AvailabilityResponse>(TestJson.Options);
+
+        var thursday = await admin.PostAsJsonAsync($"/api/teachers/{teacherId}/availability",
+            new TeacherAvailabilities.CreateRequest(DayOfWeek.Thursday, new TimeOnly(9, 0), new TimeOnly(19, 0)));
+        Assert.Equal(HttpStatusCode.Created, thursday.StatusCode);
+
+        var afterCreate = await admin.GetFromJsonAsync<List<TeacherAvailabilities.AvailabilityResponse>>(
+            $"/api/teachers/{teacherId}/availability", TestJson.Options);
+        Assert.Equal(2, afterCreate!.Count);
+        Assert.Contains(afterCreate, a => a.DayOfWeek == DayOfWeek.Tuesday);
+        Assert.Contains(afterCreate, a => a.DayOfWeek == DayOfWeek.Thursday);
+
+        // Öğretmen kendi uygunluğunu görebilir ama değiştiremez.
+        using var teacherClient = _factory.CreateClient();
+        var teacherLogin = await teacherClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(teacherEmail, teacherCreate.TemporaryPassword!));
+        Assert.Equal(HttpStatusCode.OK, teacherLogin.StatusCode);
+
+        var teacherRead = await teacherClient.GetAsync($"/api/teachers/{teacherId}/availability");
+        Assert.Equal(HttpStatusCode.OK, teacherRead.StatusCode);
+
+        var teacherCreateAttempt = await teacherClient.PostAsJsonAsync($"/api/teachers/{teacherId}/availability",
+            new TeacherAvailabilities.CreateRequest(DayOfWeek.Friday, new TimeOnly(9, 0), new TimeOnly(19, 0)));
+        Assert.Equal(HttpStatusCode.Forbidden, teacherCreateAttempt.StatusCode);
+
+        var teacherDeleteAttempt = await teacherClient.DeleteAsync($"/api/teachers/{teacherId}/availability/{tuesdayAvailability!.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, teacherDeleteAttempt.StatusCode);
+
+        // Admin Salı'yı "kapatır" - tek tıkla kapama = uygunluk kaydını silme.
+        var deleteResponse = await admin.DeleteAsync($"/api/teachers/{teacherId}/availability/{tuesdayAvailability.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var afterDelete = await admin.GetFromJsonAsync<List<TeacherAvailabilities.AvailabilityResponse>>(
+            $"/api/teachers/{teacherId}/availability", TestJson.Options);
+        Assert.Single(afterDelete!);
+        Assert.Equal(DayOfWeek.Thursday, afterDelete!.Single().DayOfWeek);
+
+        // Aynı kaydı ikinci kez silmeye çalışmak (çift tık/ağ tekrarı) kontrollü 404 vermeli.
+        var deleteAgain = await admin.DeleteAsync($"/api/teachers/{teacherId}/availability/{tuesdayAvailability.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, deleteAgain.StatusCode);
+    }
+
+    // Öğrenciler listesindeki enstrüman rozetleri /api/students/overview'a dayanır. Kritik
+    // izolasyon kuralı: bir öğrenci iki farklı öğretmenden ders alıyorsa, öğretmen scope'unda
+    // yalnızca KENDİ kursu görünmeli - Enrollments.cs ListAsync'teki kuralla birebir aynı.
+    [Fact]
+    public async Task Student_overview_shows_instrument_badges_and_scopes_them_per_teacher()
+    {
+        var admin = await CreateAdminClientAsync();
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var piano = instruments!.Single(i => i.Code == "PIANO");
+        var violin = instruments!.Single(i => i.Code == "VIOLIN");
+
+        var pianoTeacherEmail = $"overview-piano-{Guid.NewGuid():N}@test.local";
+        var pianoTeacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Piyano", "Hoca", [piano.Id], pianoTeacherEmail)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!;
+        var violinTeacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Keman", "Hoca", [violin.Id], null)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+
+        var sharedStudent = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Paylaşılan", "Öğrenci", new DateOnly(2014, 1, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+
+        await admin.PostAsJsonAsync($"/api/students/{sharedStudent.Id}/enrollments",
+            new Enrollments.CreateRequest(pianoTeacher.Teacher.Id, piano.Id, new DateOnly(2026, 8, 1)));
+        await admin.PostAsJsonAsync($"/api/students/{sharedStudent.Id}/enrollments",
+            new Enrollments.CreateRequest(violinTeacher.Id, violin.Id, new DateOnly(2026, 8, 1)));
+
+        // Admin: ikisini de görür.
+        var adminOverview = await admin.GetFromJsonAsync<List<Students.StudentOverviewResponse>>(
+            "/api/students/overview", TestJson.Options);
+        var adminRow = adminOverview!.Single(row => row.Student.Id == sharedStudent.Id);
+        Assert.Equal(2, adminRow.Instruments.Count);
+        Assert.Contains(adminRow.Instruments, i => i.InstrumentName == piano.Name);
+        Assert.Contains(adminRow.Instruments, i => i.InstrumentName == violin.Name);
+
+        // Piyano öğretmeni: yalnızca kendi kursunu (Piyano) görür, Keman sızmaz.
+        using var teacherClient = _factory.CreateClient();
+        (await teacherClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(pianoTeacherEmail, pianoTeacher.TemporaryPassword!))).EnsureSuccessStatusCode();
+
+        var teacherOverview = await teacherClient.GetFromJsonAsync<List<Students.StudentOverviewResponse>>(
+            "/api/students/overview", TestJson.Options);
+        var teacherRow = teacherOverview!.Single(row => row.Student.Id == sharedStudent.Id);
+        Assert.Single(teacherRow.Instruments);
+        Assert.Equal(piano.Name, teacherRow.Instruments.Single().InstrumentName);
+    }
 }
