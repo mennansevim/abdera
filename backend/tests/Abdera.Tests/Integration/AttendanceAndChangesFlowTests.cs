@@ -5,6 +5,8 @@ using Abdera.Api.Modules.Attendance.Features;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Modules.Scheduling.Features;
@@ -168,6 +170,91 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(LessonStatus.Normal, rescheduled.Status);
         Assert.Equal(original.Id, rescheduled.OriginalLessonId);
         Assert.Equal(proposedStart, rescheduled.StartAt);
+    }
+
+    // Kullanıcı isteği: "takvimde ders taşındığında ilgili öğretmenin ekranına bildirim
+    // gitsin." Taşıma yöneticinin sürükle-bırakıyla (talep + onay) yapılır; öğretmen
+    // uygulamayı açtığında değişikliği zilinde görmeli.
+    [Fact]
+    public async Task Approved_change_request_creates_in_app_notification_for_the_lessons_teacher()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "notify1");
+
+        var originalLesson = await db.Lessons.AsNoTracking().SingleAsync(lesson => lesson.Id == seeded.LessonId);
+        var proposedStart = originalLesson.StartAt.AddDays(1);
+        var createResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/change-requests",
+            new ChangeRequests.CreateRequest(null, proposedStart, proposedStart.AddMinutes(45)));
+        var changeRequest = (await createResponse.Content.ReadFromJsonAsync<ChangeRequests.ChangeRequestResponse>(TestJson.Options))!;
+        var approveResponse = await admin.PostAsync($"/api/change-requests/{changeRequest.Id}/approve", null);
+        Assert.Equal(HttpStatusCode.OK, approveResponse.StatusCode);
+        var approved = (await approveResponse.Content.ReadFromJsonAsync<ChangeRequests.ApproveResponse>(TestJson.Options))!;
+
+        using var teacherClient = _factory.CreateClient();
+        await teacherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(seeded.TeacherEmail, seeded.TeacherTempPassword));
+
+        var listResponse = await teacherClient.GetAsync("/api/me/notifications");
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        var list = (await listResponse.Content.ReadFromJsonAsync<StaffNotifications.ListResponse>(TestJson.Options))!;
+
+        var notification = Assert.Single(list.Items);
+        Assert.Equal(StaffNotificationType.LessonMoved, notification.Type);
+        Assert.Equal("lesson", notification.ReferenceType);
+        // Referans YENİ ders satırını göstermeli - öğretmenin programında artık o var.
+        Assert.Equal(approved.NewLessonId, notification.ReferenceId);
+        Assert.Contains("→", notification.Body);
+        Assert.Null(notification.ReadAt);
+        Assert.Equal(1, list.UnreadCount);
+
+        var readResponse = await teacherClient.PostAsync($"/api/me/notifications/{notification.Id}/read", null);
+        Assert.Equal(HttpStatusCode.OK, readResponse.StatusCode);
+        var afterRead = (await (await teacherClient.GetAsync("/api/me/notifications"))
+            .Content.ReadFromJsonAsync<StaffNotifications.ListResponse>(TestJson.Options))!;
+        Assert.Equal(0, afterRead.UnreadCount);
+        Assert.NotNull(afterRead.Items.Single().ReadAt);
+    }
+
+    // docs/04-permissions.md: hedef kaynak oturumdan çözümlenir. Bir öğretmen başkasının
+    // bildirimini ne listeleyebilir ne de okundu işaretleyebilir.
+    [Fact]
+    public async Task Teacher_cannot_see_or_read_another_teachers_notification()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "notify2");
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var originalLesson = await db.Lessons.AsNoTracking().SingleAsync(lesson => lesson.Id == seeded.LessonId);
+        var proposedStart = originalLesson.StartAt.AddDays(1);
+        var changeRequest = (await (await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/change-requests",
+                new ChangeRequests.CreateRequest(null, proposedStart, proposedStart.AddMinutes(45))))
+            .Content.ReadFromJsonAsync<ChangeRequests.ChangeRequestResponse>(TestJson.Options))!;
+        await admin.PostAsync($"/api/change-requests/{changeRequest.Id}/approve", null);
+
+        using var ownerClient = _factory.CreateClient();
+        await ownerClient.PostAsJsonAsync("/api/auth/login", new Login.Request(seeded.TeacherEmail, seeded.TeacherTempPassword));
+        var owned = (await (await ownerClient.GetAsync("/api/me/notifications"))
+            .Content.ReadFromJsonAsync<StaffNotifications.ListResponse>(TestJson.Options))!;
+        var notificationId = owned.Items.Single().Id;
+
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var guitar = instruments!.Single(instrument => instrument.Code == "GUITAR");
+        const string otherEmail = "teacher-notify2-other@test.local";
+        var other = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Diğer", "Öğretmen", [guitar.Id], otherEmail)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!;
+
+        using var otherClient = _factory.CreateClient();
+        await otherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(otherEmail, other.TemporaryPassword!));
+
+        var otherList = (await (await otherClient.GetAsync("/api/me/notifications"))
+            .Content.ReadFromJsonAsync<StaffNotifications.ListResponse>(TestJson.Options))!;
+        Assert.Empty(otherList.Items);
+        Assert.Equal(0, otherList.UnreadCount);
+
+        var stealResponse = await otherClient.PostAsync($"/api/me/notifications/{notificationId}/read", null);
+        Assert.Equal(HttpStatusCode.NotFound, stealResponse.StatusCode);
     }
 
     [Fact]

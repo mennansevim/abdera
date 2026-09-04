@@ -232,6 +232,67 @@ export function useBillingDues(options?: { enabled?: boolean }) {
   });
 }
 
+// Toplu aidat (BulkReceivables.cs): bir dönemin aidatlarını tüm aktif kayıtlar için tek
+// çağrıda açar. Önizleme ayrı bir uçtan gelir; ekran "kaç aidat açılacak, hangileri zaten
+// var, hangi kayıtta ücret planı eksik" bilgisini işlemden ÖNCE gösterebilsin diye.
+export type BulkReceivableTarget = {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  instrumentName: string;
+  teacherName: string;
+  amount: number;
+  currency: string;
+};
+
+export type BulkReceivableMissing = {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  instrumentName: string;
+  teacherName: string;
+  reason: string;
+};
+
+export type BulkReceivablePlan = {
+  period: string;
+  ready: BulkReceivableTarget[];
+  alreadyExists: BulkReceivableTarget[];
+  missing: BulkReceivableMissing[];
+  readyTotal: number;
+  currency: string;
+};
+
+export type BulkReceivableResult = {
+  period: string;
+  createdCount: number;
+  createdTotal: number;
+  currency: string;
+  alreadyExistsCount: number;
+  missing: BulkReceivableMissing[];
+};
+
+export function useBulkReceivablePlan(period: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["bulk-receivable-plan", period],
+    queryFn: () => api.get<BulkReceivablePlan>(`/api/receivables/bulk-preview?period=${encodeURIComponent(period)}`),
+    enabled: !!period && (options?.enabled ?? true),
+  });
+}
+
+export function useCreateBulkReceivables() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (period: string) => api.post<BulkReceivableResult>("/api/receivables/bulk", { period }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["bulk-receivable-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
+    },
+  });
+}
+
 export function useCreateReceivable(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({

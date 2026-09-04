@@ -599,3 +599,144 @@ Gerçek SFTP host/hesap/anahtarı, Meta WABA token/şablon onayları ve seçilmi
 sağlayıcısının sandbox sözleşmesi/kimlik bilgileri verilmedi. Uygulama production'da `Fake`
 sağlayıcı veya placeholder secret ile başlamayı artık reddediyor; bu üç canlı doğrulama ilgili
 bilgiler sağlandığında yapılacak. Development davranışı değişmedi.
+
+## UI sadeleştirme — "+ ile aç" deseni (2026-09-04)
+
+Kullanıcı geri bildirimi: ekranların üstünde her zaman açık duran oluşturma formları (örn.
+Öğretmenler'deki Ad/Soyad/E-posta/Enstrümanlar kartı) asıl içeriği aşağı itiyor ve ekranı
+kalabalık gösteriyordu. Yeni kural:
+
+- Her ekranın üstünde **tek satır başlık + tek satır açıklama**, sağda **küçük bir `+`
+  ikon butonu**. Büyük harfli "göz kırpma" (eyebrow) satırları kaldırıldı.
+- Oluşturma/düzenleme formları artık `+`'a basınca **modal pencerede** açılır: Esc ile
+  kapanır, açıkken sayfa kaydırılmaz, kapanınca odak `+` butonuna geri döner.
+- Ortak bileşenler `src/components/ui.tsx`: `PageHeader`, `SectionHeader`, `AddButton`,
+  `Modal`, `FormActions`, `FormMessage`. Tekrar eden buton/etiket sınıf zincirleri
+  `globals.css` içinde `.btn`, `.btn-primary`, `.btn-quiet`, `.icon-btn`, `.form-label`
+  olarak toplandı (buton yüksekliği `.field` ile aynı: 2.75rem).
+- Dokunulan ekranlar: Öğretmenler, Öğrenciler (+ öğrenci detayı: veli/kurs), Aidatlar
+  (tahsilat + fiyat listesi), Giderler, Takvim (yeni ders + telafi asistanı), Gelişim,
+  Ayarlar (şifre/yazı boyutu/enstrüman bakımı), Mesaj Merkezi, Banka, Yedekleme,
+  Ders Talepleri.
+- E2E: takvimdeki buton metni `+ Yeni ders` → erişilebilir ad `Yeni ders`; ilgili
+  Playwright beklentisi güncellendi. Diğer erişilebilir adlar (`Yeni gelişim notu`,
+  `Tahsilat`, `Ödemeyi kaydet`, `Gelişim notunu kaydet`, dialog adları) korundu.
+
+## Akış turu ve toplu aidat (2026-09-04)
+
+UI sadeleştirmesinin ardından akışlar gerçek veriyle uçtan uca koşuldu (öğretmen ekle →
+öğrenci ekle → ders serisi → dersi iptal et → telafi yerleştir → aidat aç → tahsil et).
+Turda çıkan dört sorun ve çözümleri:
+
+1. **Öneriler tek güne yığılıyordu.** `findOpenSlots` puanı "en yakın gün + tercih edilen
+   saat" olduğu için listenin tamamı aynı günün 15 dakikalık adımlarıydı (dokuz önerinin
+   dokuzu da aynı Cuma 16:45–18:45). `smart-scheduling.ts`'e `diversify` eklendi: aynı
+   günden en fazla iki öneri, aynı gün içinde en az 60 dk (haftalık seride 90 dk) aralık,
+   yetmezse kalanlar puan sırasıyla. Artık öneriler 4-5 farklı güne yayılıyor.
+2. **Telafi yerleştirme sessizdi.** Pencere `onPlaced` ile kapanınca "telafi şu saate
+   yerleştirildi" mesajı da yok oluyordu. Mesaj artık çağırana taşınıyor ve Ders
+   Programı sayfasında şerit olarak gösteriliyor (aynı düzeltme yeni ders serisi için de).
+3. **Uzun listelerde kayıt bulunamıyordu.** Öğrenciler ve Öğretmenler ekranlarına arama
+   kutusu (`SearchInput`) eklendi, listeler ada göre sıralanıyor; arama enstrümanı da
+   kapsıyor. Öğrenci satırında kursu olmayanlar "Kurs yok" rozetiyle işaretleniyor.
+4. **Aidat ekranında "hangi kurs" belirsizdi.** Ücret planı eksik uyarısı "Kurs 1" yerine
+   "Piyano · Ayşe Kaya" yazıyor.
+
+### Yeni: toplu aidat (`BulkReceivables.cs`)
+
+`GET /api/receivables/bulk-preview?period=yyyy-MM` ve `POST /api/receivables/bulk`.
+Dönem başında tüm aktif kayıtların aidatını tek çağrıda açar; işlemden önce üç sayıyı
+gösterir: açılacak, zaten var, **eksik** (ücret planı olmayan kurslar - listelenir ve
+tıklanınca öğrencinin hesabı açılır). Kapsam yalnızca aylık ücret planları; paket planlar
+peşin ödendiği için dışarıda ve "eksik" listesinde gerekçesiyle görünür. Her oluşturulan
+aidat `audit_log`'a `receivable.bulk_created` olarak yazılır. Testler: mutlu yol + eksik
+raporu + aynı dönemin ikinci çalıştırmasında mükerrer üretmeme (409) + hatalı dönem formatı.
+
+### Turda çıkan diğer düzeltmeler
+
+5. **Yeni öğrenci listeye hiç düşmüyordu.** `useCreateStudent` yalnızca `["students"]`
+   sorgusunu tazeliyordu, ama Öğrenciler ekranı `["student-overviews"]`den besleniyor -
+   kayıt oluşuyor, ekranda görünmüyordu (kullanıcı sayfayı yenilemek zorundaydı). Öğrenci
+   ve kurs (enrollment) mutasyonlarının hepsi artık `student-overviews`/`teacher-overviews`
+   anahtarlarını da tazeliyor. Ekleme sonrası satır açık geliyor ve ekrana kaydırılıyor
+   (`behavior: "smooth"` liste yeniden kurulunca iptal olduğu için anında kaydırma).
+6. **Başarı geri bildirimi yoktu.** Öğrenci/öğretmen eklendiğinde pencere sessizce
+   kapanıyordu; artık sayfa üstünde kısa süreli `Notice` şeridi çıkıyor.
+7. **Hız sınırı yanıtı boş gövdeliydi.** 429 alan kullanıcı ekranda yalnızca "Bir hata
+   oluştu" görüyordu. Rate limiter artık RFC 7807 gövdesi + `Retry-After` döndürüyor
+   ("Yaklaşık 15 dakika sonra tekrar dene"), testi `AuthFlowTests` içinde. Ayrıca
+   `lib/api.ts` gövdesiz 401/403/404/409/429/5xx ve ağ hatası için okunabilir Türkçe
+   karşılıklar taşıyor.
+8. **Yerel E2E ikinci koşuda düşüyordu.** Üretim sınırı (15 dakikada 5 giriş) tek bir
+   Playwright koşusunun tükettiği bütçeyle aynı. `appsettings.Development.json` artık
+   Development için sınırı 100'e çekiyor (kaldırmıyor); production varsayılanı değişmedi.
+
+### Doğrulama
+
+- Backend: `323 passed`. Frontend: lint temiz, production build 19 sayfa.
+- Playwright: dört akış da geçti - **art arda iki koşuda da** (hız sınırı düzeltmesinden
+  sonra).
+- Tarayıcıda uçtan uca elle koşuldu: öğretmen ekle → o öğretmene yeni öğrenci ekle →
+  ders serisi kur → dersi iptal et (telafi hakkı doğar) → telafi asistanıyla yerleştir →
+  ücret planı oluştur → aidatı tek dokunuşla tahsil et → dönemin aidatlarını toplu aç.
+- Tablet (768px): tüm ekranlarda yatay taşma yok; geniş tablolar (Mesaj Merkezi, Banka,
+  Yedekleme) kendi `overflow-x` kapsayıcısında kayıyor, sayfa gövdesi kaymıyor. Takvim
+  bu genişlikte güne göre gruplanmış ajanda görünümüne düşüyor.
+- Docker: `api` ve `web` imajları yeniden kuruldu, stack ayakta; üretim derlemesinde de
+  toplu aidat penceresi ve yeni akışlar çalışıyor.
+
+## Ders taşıma bildirimi ve öğrenci künyesi (2026-09-04)
+
+### Takvimde ders taşınınca öğretmenin ekranına bildirim
+
+Kullanıcı isteği. Ders iki yoldan taşınabiliyor - takvimden sürükle-bırak (değişiklik talebi
+açılır + anında onaylanır) ve ders detayından düzenleme - ikisi de artık dersin öğretmenine
+ekran içi bildirim düşürüyor.
+
+- Yeni tablo `staff_notifications` (Messaging modülü) + `IStaffNotifier` portu. Diğer
+  modüller Messaging'in iç tablolarına değil bu porta bağlanıyor; kayıt `SaveChanges`
+  çağırmadan eklenir, yani bildirim dersin yeni satırıyla **aynı transaction'da** yazılır -
+  "ders taşındı ama bildirim düşmedi" durumu mümkün değil.
+- Uçlar: `GET /api/me/notifications` (liste + `unreadCount`), `POST .../{id}/read`,
+  `POST .../read-all`. Hiçbiri kullanıcı id'si almaz; her sorgu oturumun kendi id'siyle
+  filtrelenir - bir öğretmen başkasının bildirimini ne görebilir ne okundu işaretleyebilir.
+- Öğretmenin giriş hesabı yoksa (`Teacher.UserId` null) satır hiç açılmaz.
+- Metin okulun yerel saatinde ve tr-TR ile kurulur: "Lara Arslan · 8 Eylül Pazartesi 17:30 →
+  11 Eylül Perşembe 18:00". Ders devredildiyse eski öğretmene de düşer ("ders başka bir
+  öğretmene aktarıldı") - programından bir ders sessizce kaybolmasın.
+- Arayüz: öğretmen kabuğunda zil (masaüstünde kenar çubuğu, mobilde alt menüde bir sekme),
+  okunmamış rozeti, panelde tıklayınca okundu işaretlenip takvime gidiliyor. Dakikada bir
+  yenilenir (websocket/push kurmaya değmeyecek ölçek).
+- Testler: onaylanan talep öğretmene bildirim düşürüyor + okundu akışı; başka bir öğretmen
+  ne listeleyebiliyor ne okundu işaretleyebiliyor (404). E2E: yönetici dersi taşır,
+  öğretmen kendi oturumunda zilde "Ders saati değişti" görür.
+
+### Öğrenci künyesi ekranı
+
+"sadece edit butonu olmasın" - açılan öğrenci satırı artık bir künye kartıyla başlıyor:
+büyük baş harf rozeti, ad, doğum tarihi + yaş, durum etiketi ve eylemler. Eylemler tek bir
+ikonda toplanmıyor: **Gelişim** ve **Düzenle** yazılı butonlar, ikincil işler "⋮" menüsünde
+(kurs ekle, veli ekle, pasife al). Veli ve kurs kartları da aynı kalıba geçti - her satırda
+enstrüman/ad rozeti, durum etiketi ve kendi "⋮" menüsü (veliyi düzenle / ara, öğretmene git /
+kursu sonlandır). Yeni ortak bileşenler: `RowMenu`, `RowMenuItem` (dışarı tıklama ve Esc ile
+kapanır), `pencil`/`phone` ikonları. Öğrenci ve veli düzenleme mevcut `PATCH` uçlarına bağlandı
+(`useUpdateStudent`, `useUpdateGuardian`); liste `student-overviews` anahtarıyla tazeleniyor.
+
+### Input ikonu ile placeholder çakışması (2026-09-04)
+
+Kullanıcı bildirimi: arama kutusunda büyüteç ikonu ile "Ad veya enstrüman ara…" metni üst
+üste biniyordu. Neden `pl-9`'un eksikliği değil, **hiç uygulanmamasıydı**: `globals.css`'teki
+bileşen sınıfları katmansız tanımlıydı ve Tailwind'in utilities katmanını eziyordu
+(ölçüm: beklenen 30.6px yerine `padding-left: 10.88px`). Sınıflar `@layer components` içine
+alındı; artık her utility onları geçersiz kılabiliyor.
+
+Aynı düzeltme sessizce bozuk olan iki yeri daha onardı: fiyat listesi penceresindeki
+"Kalem ekle" butonu artık gerçekten kesikli çerçeveli, satır sonundaki "⋮" menü butonu
+`h-9 w-9` ölçüsünde ve çerçevesiz. Ölçülen sonuç - öğrenci/öğretmen araması 7px, ana ekran
+araması 9px, takvim filtreleri 7px boşluk; hiçbirinde çakışma yok.
+
+E2E tarafında iki kırılganlık düzeltildi: (1) ders taşıma bildirimi testi hedef saati tahmin
+etmek yerine takvimden boş slot hesaplıyor - art arda koşulduğunda önceki koşunun taşıdığı
+ders 409 üretiyordu; (2) veli testindeki `getByText("Lara Arslan")` artık `exact` - taşıma
+sonrası veliye giden "Ders Saati Değişikliği" mesajı da öğrencinin adını içerdiği için iki
+öğeye denk geliyordu. Üç ardışık tam koşu geçti.

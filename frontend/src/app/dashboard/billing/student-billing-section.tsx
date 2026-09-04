@@ -191,9 +191,9 @@ function AddTuitionForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 p-4">
-      {enrollments.length > 1 && <label className="space-y-1 text-[.68rem] font-bold text-[var(--muted)]">Kurs<select value={enrollmentId} onChange={(event) => setEnrollmentId(event.target.value)} required className="field min-h-10 text-sm">{enrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment.id)}</option>)}</select></label>}
-      <label className="space-y-1 text-[.68rem] font-bold text-[var(--muted)]">Dönem<input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} required className="field min-h-10 text-sm" /></label>
-      <button type="submit" disabled={createReceivable.isPending || !enrollmentId} className="pressable min-h-10 rounded-lg bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{createReceivable.isPending ? "Ekleniyor…" : "Aidatı oluştur"}</button>
+      {enrollments.length > 1 && <label className="form-label">Kurs<select value={enrollmentId} onChange={(event) => setEnrollmentId(event.target.value)} required className="field min-h-10 text-sm">{enrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment.id)}</option>)}</select></label>}
+      <label className="form-label">Dönem<input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} required className="field min-h-10 text-sm" /></label>
+      <button type="submit" disabled={createReceivable.isPending || !enrollmentId} className="btn btn-primary">{createReceivable.isPending ? "Ekleniyor…" : "Aidatı oluştur"}</button>
       {error && <p role="alert" className="w-full text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
@@ -226,8 +226,8 @@ function MissingFeePlanCard({ enrollmentId, label, priceListItems }: { enrollmen
               <option value="">Fiyat kalemi seç</option>
               {priceListItems.map((i) => <option key={i.id} value={i.id}>{i.durationMinutes} dk · {i.billingType === "Monthly" ? "Aylık" : "Paket"} · {i.amount.toLocaleString("tr-TR")} {i.currency}</option>)}
             </select>
-            <input type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(Number(e.target.value))} className="field min-h-10 w-20 text-sm" title="Vade günü" />
-            <button type="submit" disabled={createFeePlan.isPending || !itemId} className="pressable min-h-10 rounded-lg bg-[var(--brand)] px-3 text-sm font-bold text-white disabled:opacity-50">{createFeePlan.isPending ? "Oluşturuluyor…" : "Ücret planı oluştur"}</button>
+            <label className="form-label">Vade günü<input type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(Number(e.target.value))} className="field min-h-10 w-20 text-sm" /></label>
+            <button type="submit" disabled={createFeePlan.isPending || !itemId} className="btn btn-primary">{createFeePlan.isPending ? "Oluşturuluyor…" : "Ücret planı oluştur"}</button>
           </form>}
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </div>
@@ -264,13 +264,13 @@ function BulkPaymentBlock({ studentId, enrollmentId, label, feePlan }: { student
     <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-3.5">
       <p className="mb-2 text-xs font-bold">{label}</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <label className="space-y-1 text-[.68rem] font-semibold text-[var(--muted)]">Başlangıç<input type="month" value={startPeriod} onChange={(event) => setStartPeriod(event.target.value)} className="field min-h-10 text-xs" /></label>
-        <label className="space-y-1 text-[.68rem] font-semibold text-[var(--muted)]">Kaç ay?<select value={months} onChange={(event) => changeMonths(Number(event.target.value))} className="field min-h-10 text-xs"><option value={1}>1 ay</option><option value={3}>3 ay</option><option value={6}>6 ay</option><option value={10}>10 ay</option><option value={12}>12 ay</option></select></label>
-        <label className="space-y-1 text-[.68rem] font-semibold text-[var(--muted)]">Toplam tutar<input type="number" min={0.01} step={0.01} value={amount} onChange={(event) => setAmount(Number(event.target.value))} className="field min-h-10 text-xs" /></label>
-        <label className="space-y-1 text-[.68rem] font-semibold text-[var(--muted)]">Ödeme tarihi<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} className="field min-h-10 text-xs" /></label>
-        <label className="space-y-1 text-[.68rem] font-semibold text-[var(--muted)]">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 text-xs"><option value="Transfer">Havale</option><option value="Cash">Nakit</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
+        <label className="form-label">Başlangıç<input type="month" value={startPeriod} onChange={(event) => setStartPeriod(event.target.value)} className="field min-h-10 text-xs" /></label>
+        <label className="form-label">Kaç ay?<select value={months} onChange={(event) => changeMonths(Number(event.target.value))} className="field min-h-10 text-xs"><option value={1}>1 ay</option><option value={3}>3 ay</option><option value={6}>6 ay</option><option value={10}>10 ay</option><option value={12}>12 ay</option></select></label>
+        <label className="form-label">Toplam tutar<input type="number" min={0.01} step={0.01} value={amount} onChange={(event) => setAmount(Number(event.target.value))} className="field min-h-10 text-xs" /></label>
+        <label className="form-label">Ödeme tarihi<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} className="field min-h-10 text-xs" /></label>
+        <label className="form-label">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 text-xs"><option value="Transfer">Havale</option><option value="Cash">Nakit</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
       </div>
-      <button type="submit" disabled={bulkPayment.isPending} className="pressable mt-3 min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{bulkPayment.isPending ? "Kaydediliyor…" : "Toplu ödemeyi kaydet"}</button>
+      <button type="submit" disabled={bulkPayment.isPending} className="btn btn-primary mt-3">{bulkPayment.isPending ? "Kaydediliyor…" : "Toplu ödemeyi kaydet"}</button>
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
@@ -321,7 +321,7 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
       <span className="text-right"><strong className="block text-xs tabular-nums">{receivable.amount.toLocaleString("tr-TR")} {receivable.currency}</strong><span className="mt-0.5 block text-[.62rem] tabular-nums text-[var(--muted)]">{remaining ? `${remaining.toLocaleString("tr-TR")} kaldı` : "Tamamı ödendi"}</span></span>
       <span className={`rounded-full px-2 py-1 text-[.58rem] font-bold ${statusTone[receivable.status]}`}>{statusLabel[receivable.status]}</span>
       <span className="flex items-center gap-1.5">
-        {canCollect && <button type="button" onClick={() => setShowForm((v) => !v)} className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-3 text-[.66rem] font-bold text-white">Tahsilat</button>}
+        {canCollect && <button type="button" onClick={() => setShowForm((v) => !v)} className="btn btn-primary">Tahsilat</button>}
         {receivable.payments.length > 0 && <button type="button" onClick={() => setShowHistory((v) => !v)} className="pressable min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-[.66rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Geçmiş · {receivable.payments.length}</button>}
       </span>
     </div>
@@ -334,7 +334,7 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
         <option value="Card">Kart</option>
         <option value="Other">Diğer</option>
       </select>
-      <button type="submit" disabled={recordPayment.isPending} className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-2.5 text-xs font-bold text-white disabled:opacity-50">{recordPayment.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
+      <button type="submit" disabled={recordPayment.isPending} className="btn btn-primary">{recordPayment.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
       {error && <p className="w-full text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>}
 
@@ -371,6 +371,6 @@ function PaymentHistoryRow({ studentId, payment, currency }: { studentId: string
 
   return <div className="rounded-lg bg-white px-2.5 py-2 text-xs">
     <div className="flex flex-wrap items-center justify-between gap-2"><span>{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} className="font-bold text-[var(--brand)]">Düzelt</button></span></div>
-    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-9 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" className="field min-h-9 text-xs" /><button disabled={correctPayment.isPending} className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-3 text-xs font-bold text-white disabled:opacity-50">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
+    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-9 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" className="field min-h-9 text-xs" /><button disabled={correctPayment.isPending} className="btn btn-primary">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
   </div>;
 }

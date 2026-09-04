@@ -132,5 +132,14 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
         }
 
         Assert.Equal(HttpStatusCode.TooManyRequests, response!.StatusCode);
+
+        // Gövde boş dönerse arayüz yalnızca "Bir hata oluştu" gösterebiliyordu: kullanıcı ne
+        // olduğunu ve ne kadar bekleyeceğini öğrenemiyordu. Reddedilen istek de diğer hatalar
+        // gibi ProblemDetails taşımalı ve Retry-After vermeli.
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(TestJson.Options);
+        Assert.Equal("Çok fazla deneme", problem!.Title);
+        Assert.Contains("tekrar dene", problem.Detail);
+        Assert.True(response.Headers.TryGetValues("Retry-After", out var retryAfter));
+        Assert.True(int.Parse(retryAfter!.Single()) > 0);
     }
 }

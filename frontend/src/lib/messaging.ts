@@ -48,6 +48,52 @@ export interface PagedResponse<T> {
   pageSize: number;
 }
 
+// Ekran içi personel bildirimi (staff_notifications) - WhatsApp job'larından ayrı bir akış:
+// bunlar dışarı gönderilmez, oturumdaki kullanıcının kendi zilinde görünür.
+export type StaffNotificationType = "LessonMoved";
+
+export type StaffNotification = {
+  id: string;
+  type: StaffNotificationType;
+  title: string;
+  body: string;
+  referenceType: string;
+  referenceId: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type StaffNotificationList = { items: StaffNotification[]; unreadCount: number };
+
+// Ders taşıma bildiriminin, öğretmen sayfayı yenilemeden de düşmesi gerekiyor; okul
+// ölçeğinde (6-8 öğretmen) dakikada bir küçük bir istek yeterli - websocket/push
+// altyapısı kurmaya değmez (CLAUDE.md: gereksiz bağımlılık ekleme).
+export function useStaffNotifications(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["staff-notifications"],
+    queryFn: () => api.get<StaffNotificationList>("/api/me/notifications"),
+    enabled: options?.enabled ?? true,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useMarkStaffNotificationRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) => api.post(`/api/me/notifications/${notificationId}/read`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff-notifications"] }),
+  });
+}
+
+export function useMarkAllStaffNotificationsRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/api/me/notifications/read-all"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff-notifications"] }),
+  });
+}
+
 export function useNotifications(status?: NotificationJobStatus, page: number = 1, pageSize: number = 50) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (status) params.set("status", status);

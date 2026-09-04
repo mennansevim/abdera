@@ -15,6 +15,7 @@ public static class BillingModule
         app.MapMakeupCredits();
         app.MapFeePlans();
         app.MapReceivables();
+        app.MapBulkReceivables();
         app.MapPayments();
         app.MapPaymentCorrections();
         app.MapBulkPayments();

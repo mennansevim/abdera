@@ -264,6 +264,84 @@ public class PricingAndBillingFlowTests : IClassFixture<AbderaWebApplicationFact
         Assert.All(storedReceivables, r => Assert.Equal(1000m, r.Amount));
     }
 
+    // Dönem başında tüm aktif kayıtların aidatını tek çağrıda açar (BulkReceivables.cs).
+    // Ücret planı olmayan kayıt sessizce atlanmaz - "eksikler" listesinde geri döner.
+    [Fact]
+    public async Task Bulk_receivables_create_dues_for_active_enrollments_and_report_missing_fee_plans()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var guitar = instruments!.Single(i => i.Code == "GUITAR");
+
+        var priceListResponse = await admin.PostAsJsonAsync("/api/price-lists", new PriceLists.CreateRequest(
+            "Toplu Aidat Sezonu", new DateOnly(2026, 1, 1), null,
+            [new PriceLists.CreateItemRequest(guitar.Id, 45, BillingType.Monthly, 1500m, "TRY", null)]));
+        var priceList = (await priceListResponse.Content.ReadFromJsonAsync<PriceLists.PriceListResponse>(TestJson.Options))!;
+        var item = priceList.Items.Single();
+
+        var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Toplu", "Aidat Öğretmeni", [guitar.Id], null)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+
+        // İki öğrenci: birinin ücret planı var (aidatı açılmalı), diğerinin yok (eksik listesine düşmeli).
+        var withPlan = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Planlı", "Öğrenci", new DateOnly(2014, 1, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        var withoutPlan = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Plansız", "Öğrenci", new DateOnly(2014, 1, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+
+        var plannedEnrollment = (await (await admin.PostAsJsonAsync($"/api/students/{withPlan.Id}/enrollments",
+                new Enrollments.CreateRequest(teacher.Id, guitar.Id, new DateOnly(2026, 1, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+        var unplannedEnrollment = (await (await admin.PostAsJsonAsync($"/api/students/{withoutPlan.Id}/enrollments",
+                new Enrollments.CreateRequest(teacher.Id, guitar.Id, new DateOnly(2026, 1, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+
+        await admin.PostAsJsonAsync($"/api/enrollments/{plannedEnrollment.Id}/fee-plan",
+            new FeePlans.CreateRequest(item.Id, DueDay: 5, new DateOnly(2026, 1, 1)));
+
+        const string period = "2027-03";
+        var preview = await (await admin.GetAsync($"/api/receivables/bulk-preview?period={period}"))
+            .Content.ReadFromJsonAsync<BulkReceivables.PlanResponse>(TestJson.Options);
+        Assert.Contains(preview!.Ready, row => row.EnrollmentId == plannedEnrollment.Id);
+        Assert.Contains(preview.Missing, row => row.EnrollmentId == unplannedEnrollment.Id);
+
+        var createResponse = await admin.PostAsJsonAsync("/api/receivables/bulk", new BulkReceivables.CreateRequest(period));
+        var createBody = await createResponse.Content.ReadAsStringAsync();
+        Assert.True(createResponse.StatusCode == HttpStatusCode.OK, $"Beklenmeyen durum: {createResponse.StatusCode}, gövde: {createBody}");
+        var created = (await createResponse.Content.ReadFromJsonAsync<BulkReceivables.CreateResponse>(TestJson.Options))!;
+        Assert.True(created.CreatedCount >= 1);
+        Assert.Contains(created.Missing, row => row.EnrollmentId == unplannedEnrollment.Id);
+
+        var stored = await db.Receivables.AsNoTracking()
+            .SingleAsync(receivable => receivable.EnrollmentId == plannedEnrollment.Id && receivable.Period == period);
+        Assert.Equal(1500m, stored.Amount);
+        Assert.Equal(new DateOnly(2027, 3, 5), stored.DueDate);
+        Assert.False(await db.Receivables.AsNoTracking()
+            .AnyAsync(receivable => receivable.EnrollmentId == unplannedEnrollment.Id && receivable.Period == period));
+
+        // Aynı dönem ikinci kez çalıştırılırsa mükerrer aidat üretilmemeli: açılacak yeni
+        // kayıt kalmadığı için istek 409 döner ve tablo değişmez.
+        var repeat = await admin.PostAsJsonAsync("/api/receivables/bulk", new BulkReceivables.CreateRequest(period));
+        Assert.Equal(HttpStatusCode.Conflict, repeat.StatusCode);
+        Assert.Equal(1, await db.Receivables.AsNoTracking()
+            .CountAsync(receivable => receivable.EnrollmentId == plannedEnrollment.Id && receivable.Period == period));
+    }
+
+    [Fact]
+    public async Task Bulk_receivables_reject_malformed_period()
+    {
+        var admin = await CreateAdminClientAsync();
+
+        var response = await admin.PostAsJsonAsync("/api/receivables/bulk", new BulkReceivables.CreateRequest("2027/03"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task Bulk_payment_exceeding_outstanding_balance_of_requested_months_is_rejected()
     {

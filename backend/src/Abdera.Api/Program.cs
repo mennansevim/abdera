@@ -229,6 +229,34 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    // Reddedilen istek boş gövdeyle dönerse istemci "Bir hata oluştu" demekten başka bir şey
+    // yapamıyordu (frontend'in ApiError'ı ProblemDetails bekliyor) - kullanıcı neden
+    // giremediğini ve ne kadar bekleyeceğini bilmiyordu. Aynı sözleşmeyle (RFC 7807, bkz.
+    // Shared/GlobalExceptionHandler.cs) Türkçe bir gövde ve mümkünse Retry-After yazıyoruz.
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var retryAfter = context.Lease.TryGetMetadata(
+            System.Threading.RateLimiting.MetadataName.RetryAfter, out var retry)
+            ? (TimeSpan?)retry
+            : null;
+        if (retryAfter is { } wait)
+        {
+            context.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString();
+        }
+
+        var minutes = retryAfter is { } window ? (int)Math.Ceiling(window.TotalMinutes) : 0;
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            type = "https://tools.ietf.org/html/rfc9110#section-15.5.29",
+            title = "Çok fazla deneme",
+            status = StatusCodes.Status429TooManyRequests,
+            detail = minutes > 0
+                ? $"Güvenlik için bu işlem geçici olarak kısıtlandı. Yaklaşık {minutes} dakika sonra tekrar dene."
+                : "Güvenlik için bu işlem geçici olarak kısıtlandı. Kısa bir süre sonra tekrar dene.",
+        }, cancellationToken);
+    };
+
     // /api/auth/login: IP başına sabit pencere (öneri: 5 istek / 15 dakika) - kaba kuvvet
     // saldırısına karşı. Testlerde CreateAdminClientAsync onlarca kez çağrıldığından
     // (bkz. MessagingFlowTests vb.), test factory bu limiti config override'ıyla

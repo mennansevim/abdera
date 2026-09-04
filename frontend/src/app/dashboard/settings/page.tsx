@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, type FormEvent } from "react";
-import { Icon } from "@/components/icons";
+import { AddButton, FormActions, FormMessage, Modal, PageHeader, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { applyFontSizePreference, FONT_SIZE_CHANGE_EVENT, readFontSizePreference, type FontSizePreference } from "@/lib/font-size";
 import { useInstruments, useInstrumentMaintenanceSettings, useRunDueMaintenanceReminders, useSaveInstrumentMaintenanceSetting } from "@/lib/people";
@@ -33,22 +33,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      <div>
-        <p className="text-micro text-[var(--brand-strong)]">Hesap ve güvenlik</p>
-        <h1 className="text-display mt-1 font-serif italic">Ayarlar</h1>
-        <p className="text-meta mt-2 max-w-2xl">Hesap güvenliği, bildirim tercihleri ve uygulama davranışları burada yönetilir.</p>
-      </div>
+    <div className="mx-auto max-w-4xl space-y-4">
+      <PageHeader title="Ayarlar" description="Hesap güvenliği, görünüm ve bildirim tercihleri." />
 
       <section className="app-card overflow-hidden">
-        <div className="flex items-start gap-3 border-b border-[var(--line)] p-5 sm:p-6">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name="settings" className="h-5 w-5" /></span>
-          <div>
-            <h2 className="text-title">Şifre değiştir</h2>
-            <p className="text-meta mt-1">Kalıcı şifreni güncellemek için mevcut şifreni ve en az 8 karakterli yeni şifreni gir.</p>
-          </div>
+        <div className="border-b border-[var(--line)] p-4 sm:p-5">
+          <SectionHeader title="Şifre değiştir" description="Mevcut şifreni ve en az 8 karakterli yeni şifreni gir." />
         </div>
-        <div className="p-5 sm:p-6">
+        <div className="p-4 sm:p-5">
           {passwordChangeRequired && (
             <p className="mb-4 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--warning-strong)]">
               Güvenliğin için önce kalıcı bir şifre belirlemelisin.
@@ -60,16 +52,10 @@ export default function SettingsPage() {
       </section>
 
       <section className="app-card overflow-hidden">
-        <div className="flex items-start gap-3 border-b border-[var(--line)] p-5 sm:p-6">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[var(--surface-muted)] text-[var(--brand-strong)]" aria-hidden="true">
-            <span className="text-lg font-bold">Aa</span>
-          </span>
-          <div>
-            <h2 className="text-title">Yazı boyutu</h2>
-            <p className="text-meta mt-1">Responsive yerleşim korunur; uygulamadaki yazıları ve rem tabanlı aralıkları birlikte ayarlar.</p>
-          </div>
+        <div className="border-b border-[var(--line)] p-4 sm:p-5">
+          <SectionHeader title="Yazı boyutu" description="Uygulamadaki yazıları ve aralıkları birlikte ölçekler; seçim bu tarayıcıda saklanır." />
         </div>
-        <div className="p-5 sm:p-6">
+        <div className="p-4 sm:p-5">
           <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Yazı boyutu seçimi">
             {FONT_SIZE_OPTIONS.map((option) => (
               <button
@@ -84,16 +70,11 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <p className="mt-3 text-[.68rem] text-[var(--muted)]" role="status">Seçimin bu tarayıcıda otomatik olarak kaydedilir.</p>
         </div>
       </section>
 
-      <section className="app-card grid gap-4 p-5 sm:grid-cols-[auto_1fr] sm:p-6">
-        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="bell" className="h-5 w-5" /></span>
-        <div>
-          <h2 className="text-title">Mesaj Merkezi</h2>
-          <p className="text-meta mt-1">Ders hatırlatmaları, hazır WhatsApp şablonları ve gönderim tercihleri için Mesaj Merkezi’ni kullan.</p>
-        </div>
+      <section className="app-card p-4 sm:p-5">
+        <SectionHeader title="Mesaj Merkezi" description="Ders hatırlatmaları, WhatsApp şablonları ve gönderim tercihleri Mesaj Merkezi'nde yönetilir." />
       </section>
       {me?.role === "Admin" && <MaintenanceSettingsPanel />}
     </div>
@@ -101,33 +82,112 @@ export default function SettingsPage() {
 }
 
 function MaintenanceSettingsPanel() {
-  const { data: instruments } = useInstruments();
   const { data: settings } = useInstrumentMaintenanceSettings();
-  const save = useSaveInstrumentMaintenanceSetting();
   const runDue = useRunDueMaintenanceReminders();
-  const [instrumentId, setInstrumentId] = useState("");
-  const [maintenanceType, setMaintenanceType] = useState("");
-  const [periodDays, setPeriodDays] = useState("180");
-  const [nextReminderAt, setNextReminderAt] = useState(() => new Date().toISOString().slice(0, 16));
-  const [enabled, setEnabled] = useState(true);
-  const [preference, setPreference] = useState<"None" | "WhatsApp">("WhatsApp");
+  const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setMessage(null);
-    try {
-      await save.mutateAsync({ instrumentId: instrumentId || instruments?.[0]?.id || "", maintenanceType, periodDays: Number(periodDays), isEnabled: enabled, notificationPreference: preference, nextReminderAt: new Date(nextReminderAt).toISOString() });
-      setMessage("Bakım ayarı kaydedildi.");
-    } catch (error) {
-      setMessage(error instanceof ApiError ? error.detail ?? error.title : "Bakım ayarı kaydedilemedi.");
-    }
-  }
 
   async function runReminders() {
     const result = await runDue.mutateAsync();
     setMessage(`${result.dueSettingCount} zamanı gelen ayar işlendi; rızası açık veliler için ${result.scheduledCount} bildirim sıraya alındı.`);
   }
 
-  return <section className="app-card overflow-hidden"><div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--line)] p-5 sm:p-6"><div><h2 className="text-title">Enstrüman bakım hatırlatmaları</h2><p className="text-meta mt-1">Bakım türü, dönem ve kanal enstrüman bazında yönetilir. WhatsApp kuyruğuna yalnız rızası açık veliler eklenir.</p></div><button type="button" onClick={() => void runReminders()} disabled={runDue.isPending} className="pressable min-h-10 rounded-xl border border-[var(--line)] px-3 text-xs font-bold disabled:opacity-50">Zamanı gelenleri sırala</button></div><div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]"><form onSubmit={submit} className="space-y-3"><label className="block text-xs font-bold text-[var(--muted)]">Enstrüman<select value={instrumentId || instruments?.[0]?.id || ""} onChange={(event) => setInstrumentId(event.target.value)} className="field mt-1 text-sm">{instruments?.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}</select></label><label className="block text-xs font-bold text-[var(--muted)]">Bakım türü<input value={maintenanceType} onChange={(event) => setMaintenanceType(event.target.value)} required maxLength={200} placeholder="Örn. piyano akordu" className="field mt-1 text-sm" /></label><div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold text-[var(--muted)]">Dönem (gün)<input type="number" min="1" max="3650" value={periodDays} onChange={(event) => setPeriodDays(event.target.value)} required className="field mt-1 text-sm" /></label><label className="text-xs font-bold text-[var(--muted)]">Sonraki tarih<input type="datetime-local" value={nextReminderAt} onChange={(event) => setNextReminderAt(event.target.value)} required className="field mt-1 text-sm" /></label></div><label className="block text-xs font-bold text-[var(--muted)]">Bildirim<select value={preference} onChange={(event) => setPreference(event.target.value as "None" | "WhatsApp")} className="field mt-1 text-sm"><option value="WhatsApp">WhatsApp</option><option value="None">Bildirim yok</option></select></label><label className="flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Etkin</label><button disabled={save.isPending || !instruments?.length} className="pressable min-h-11 w-full rounded-xl bg-[var(--brand)] text-xs font-bold text-white disabled:opacity-50">Ayarı kaydet</button>{message && <p role="status" className="rounded-xl bg-[var(--surface-muted)] p-3 text-xs">{message}</p>}</form><div className="space-y-2">{settings?.map((setting) => <article key={setting.id} className="rounded-xl border border-[var(--line)] p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold">{setting.instrumentName} · {setting.maintenanceType}</p><p className="mt-1 text-xs text-[var(--muted)]">Her {setting.periodDays} gün · {setting.notificationPreference === "WhatsApp" ? "WhatsApp" : "Bildirim yok"} · {setting.consentingGuardianCount} rızası açık veli</p></div><span className={`rounded-full px-2 py-1 text-[.6rem] font-bold ${setting.isEnabled ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{setting.isEnabled ? "Etkin" : "Kapalı"}</span></div><p className="mt-2 text-[.62rem] text-[var(--muted)]">Sonraki: {new Date(setting.nextReminderAt).toLocaleString("tr-TR")}</p></article>)}{!settings?.length && <p className="rounded-xl bg-[var(--surface-muted)] p-4 text-center text-xs text-[var(--muted)]">Henüz bakım ayarı yok.</p>}</div></div></section>;
+  return (
+    <section className="app-card overflow-hidden">
+      <div className="border-b border-[var(--line)] p-4 sm:p-5">
+        <SectionHeader
+          title="Enstrüman bakımı"
+          description="Bakım türü, dönem ve kanal enstrüman bazında yönetilir; WhatsApp kuyruğuna yalnız rızası açık veliler eklenir."
+          actions={
+            <>
+              <button type="button" onClick={() => void runReminders()} disabled={runDue.isPending} className="btn btn-quiet">Zamanı gelenleri sırala</button>
+              <AddButton label="Bakım ayarı ekle" onClick={() => setShowForm(true)} />
+            </>
+          }
+        />
+        {message && <p role="status" className="text-meta mt-3">{message}</p>}
+      </div>
+
+      <div className="divide-y divide-[var(--line)]">
+        {settings?.map((setting) => (
+          <article key={setting.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold">{setting.instrumentName} · {setting.maintenanceType}</p>
+              <p className="text-meta mt-0.5">
+                Her {setting.periodDays} gün · {setting.notificationPreference === "WhatsApp" ? "WhatsApp" : "Bildirim yok"} · {setting.consentingGuardianCount} rızası açık veli · sonraki {new Date(setting.nextReminderAt).toLocaleDateString("tr-TR")}
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full px-2 py-1 text-[.62rem] font-bold ${setting.isEnabled ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{setting.isEnabled ? "Etkin" : "Kapalı"}</span>
+          </article>
+        ))}
+        {!settings?.length && <p className="text-meta px-4 py-6 text-center">Henüz bakım ayarı yok.</p>}
+      </div>
+
+      <Modal open={showForm} title="Bakım ayarı ekle" onClose={() => setShowForm(false)} size="sm">
+        <MaintenanceSettingForm onClose={() => setShowForm(false)} />
+      </Modal>
+    </section>
+  );
+}
+
+function MaintenanceSettingForm({ onClose }: { onClose: () => void }) {
+  const { data: instruments } = useInstruments();
+  const save = useSaveInstrumentMaintenanceSetting();
+  const [instrumentId, setInstrumentId] = useState("");
+  const [maintenanceType, setMaintenanceType] = useState("");
+  const [periodDays, setPeriodDays] = useState("180");
+  const [nextReminderAt, setNextReminderAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [enabled, setEnabled] = useState(true);
+  const [preference, setPreference] = useState<"None" | "WhatsApp">("WhatsApp");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await save.mutateAsync({
+        instrumentId: instrumentId || instruments?.[0]?.id || "",
+        maintenanceType,
+        periodDays: Number(periodDays),
+        isEnabled: enabled,
+        notificationPreference: preference,
+        nextReminderAt: new Date(nextReminderAt).toISOString(),
+      });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail ?? err.title : "Bakım ayarı kaydedilemedi.");
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3.5">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="form-label">Enstrüman
+          <select value={instrumentId || instruments?.[0]?.id || ""} onChange={(event) => setInstrumentId(event.target.value)} className="field text-sm">
+            {instruments?.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
+          </select>
+        </label>
+        <label className="form-label">Bakım türü
+          <input value={maintenanceType} onChange={(event) => setMaintenanceType(event.target.value)} required maxLength={200} placeholder="Örn. piyano akordu" className="field text-sm" />
+        </label>
+        <label className="form-label">Dönem (gün)
+          <input type="number" min="1" max="3650" value={periodDays} onChange={(event) => setPeriodDays(event.target.value)} required className="field text-sm" />
+        </label>
+        <label className="form-label">Sonraki tarih
+          <input type="datetime-local" value={nextReminderAt} onChange={(event) => setNextReminderAt(event.target.value)} required className="field text-sm" />
+        </label>
+        <label className="form-label">Bildirim
+          <select value={preference} onChange={(event) => setPreference(event.target.value as "None" | "WhatsApp")} className="field text-sm">
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="None">Bildirim yok</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 self-end pb-2.5 text-xs font-semibold">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Etkin
+        </label>
+      </div>
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <FormActions onCancel={onClose} submitLabel="Ayarı kaydet" pending={save.isPending} disabled={!instruments?.length} />
+    </form>
+  );
 }

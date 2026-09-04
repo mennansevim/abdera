@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { AddButton, FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
+import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
@@ -44,20 +44,49 @@ export default function TeachersPage() {
   const { data: instruments } = useInstruments();
   const { data: students } = useStudents();
   const [showCreate, setShowCreate] = useState(false);
+  const [search, setSearch] = useState("");
   // Geçici şifre yalnızca oluşturma yanıtında bir kez döner - pencere kapandıktan sonra da
   // görünmesi gerektiği için sayfa seviyesinde tutulur, admin kapatana kadar durur.
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
-  const teacherRows = isAdmin
-    ? (overviews ?? []).map((overview) => ({ teacher: overview.teacher, teacherStudents: overview.students }))
-    : (teachers ?? []).map((teacher) => ({ teacher, teacherStudents: [] as TeacherStudentEnrollment[] }));
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function announce(text: string) {
+    setNotice(text);
+    window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 4000);
+  }
+  // Liste ada göre sıralanır ve arama kutusuyla daraltılır: okul büyüdükçe (E2E/demo
+  // kayıtlarıyla birlikte) sıralamasız bir listede kaydı gözle bulmak zorlaşıyordu.
+  // Arama enstrümanı da kapsar - "keman öğretmeni kimdi" en sık sorulan soru.
+  const teacherRows = useMemo(() => {
+    const rows = isAdmin
+      ? (overviews ?? []).map((overview) => ({ teacher: overview.teacher, teacherStudents: overview.students }))
+      : (teachers ?? []).map((teacher) => ({ teacher, teacherStudents: [] as TeacherStudentEnrollment[] }));
+    const query = search.trim().toLocaleLowerCase("tr-TR");
+    const instrumentNames = new Map((instruments ?? []).map((instrument) => [instrument.id, instrument.name]));
+    return rows
+      .filter(({ teacher }) => {
+        if (!query) return true;
+        const haystack = [
+          `${teacher.firstName} ${teacher.lastName}`,
+          ...teacher.instrumentIds.map((id) => instrumentNames.get(id) ?? ""),
+        ].join(" ").toLocaleLowerCase("tr-TR");
+        return haystack.includes(query);
+      })
+      .sort((a, b) => `${a.teacher.firstName} ${a.teacher.lastName}`.localeCompare(`${b.teacher.firstName} ${b.teacher.lastName}`, "tr-TR"));
+  }, [isAdmin, overviews, teachers, instruments, search]);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Öğretmenler"
         description="Öğretmenler, verdikleri dersler ve öğrencileri."
-        actions={isAdmin && <AddButton label="Öğretmen ekle" onClick={() => setShowCreate(true)} />}
+        actions={<>
+          <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Ad veya enstrüman ara…" />
+          {isAdmin && <AddButton label="Öğretmen ekle" onClick={() => setShowCreate(true)} />}
+        </>}
       />
+
+      {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
       {temporaryPassword && (
         <div className="app-card flex flex-wrap items-center justify-between gap-3 border-[var(--warning)]/40 bg-[var(--warning-soft)] p-3.5">
@@ -70,7 +99,7 @@ export default function TeachersPage() {
 
       <div className="app-card overflow-hidden">
         {(isLoading || (isAdmin && overviewsLoading)) && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-16 rounded-xl" />)}</div>}
-        {!isLoading && teacherRows.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">Henüz öğretmen yok.</p>}
+        {!isLoading && teacherRows.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">{search ? `"${search}" ile eşleşen öğretmen yok.` : "Henüz öğretmen yok."}</p>}
         <ul className="divide-y divide-[var(--line)]">
           {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} isAdmin={isAdmin} />)}
         </ul>
@@ -81,7 +110,7 @@ export default function TeachersPage() {
           <CreateTeacherForm
             instruments={instruments ?? []}
             onClose={() => setShowCreate(false)}
-            onCreated={(password) => { setTemporaryPassword(password); setShowCreate(false); }}
+            onCreated={(password, name) => { setTemporaryPassword(password); setShowCreate(false); announce(`${name} eklendi.`); }}
           />
         </Modal>
       )}
@@ -310,7 +339,7 @@ function TeacherAvailabilityDays({ teacherId, enabled }: { teacherId: string; en
   );
 }
 
-function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: { id: string; name: string }[]; onClose: () => void; onCreated: (temporaryPassword: string | null) => void }) {
+function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: { id: string; name: string }[]; onClose: () => void; onCreated: (temporaryPassword: string | null, name: string) => void }) {
   const createTeacher = useCreateTeacher();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -332,7 +361,7 @@ function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: {
         instrumentIds: selectedInstruments,
         email: email || undefined,
       });
-      onCreated(result.temporaryPassword ?? null);
+      onCreated(result.temporaryPassword ?? null, `${firstName} ${lastName}`);
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğretmen eklenemedi.");
     }

@@ -29,6 +29,8 @@ export type IconName =
   | "target"
   | "alert-triangle"
   | "plus"
+  | "pencil"
+  | "phone"
   | "piano"
   | "guitar"
   | "violin"
@@ -64,6 +66,8 @@ const paths: Record<IconName, React.ReactNode> = {
   // Gecikmiş aidat uyarısı için (Ders Programı ders kartları) - küçük, tanıdık bir ünlem işareti.
   "alert-triangle": <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></>,
   plus: <path d="M12 5v14M5 12h14"/>,
+  pencil: <><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m14.5 6.5 3 3"/></>,
+  phone: <path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5L16 12l4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3.5 5.2 2 2 0 0 1 5.5 3h1Z"/>,
   // Öğrenci listesindeki enstrüman rozetleri için (kullanıcı isteği: "içine girmeden
   // anlayabilelim") - okulda yalnızca dört sabit enstrüman var (Piyano/Gitar/Keman/Bateri),
   // her birine özgü basit bir piktogram.

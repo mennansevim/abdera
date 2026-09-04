@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   useAutomationSettings,
@@ -87,12 +88,8 @@ export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<"activity" | "templates">("activity");
 
   return (
-    <div className="space-y-5">
-      <div>
-        <p className="text-micro text-[var(--brand-strong)]">WhatsApp ve otomasyon</p>
-        <h1 className="text-display mt-1 font-serif italic">Mesaj Merkezi</h1>
-        <p className="text-meta mt-2 max-w-3xl">Ders türü, veli ve öğrenci bilgilerini görünür tut; hazır mesajlarını düzenle, önizle ve zamanlanmış gönderimleri buradan takip et.</p>
-      </div>
+    <div className="space-y-4">
+      <PageHeader title="Mesaj Merkezi" description="Hazır WhatsApp mesajlarını düzenle, önizle ve gönderimleri takip et." />
 
       <div className="flex flex-wrap gap-2 border-b border-[var(--line)] pb-1">
         <button type="button" onClick={() => setActiveTab("activity")} className={`pressable min-h-11 rounded-t-xl px-4 text-sm font-bold ${activeTab === "activity" ? "border-b-2 border-[var(--brand)] text-[var(--brand-strong)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}>
@@ -253,7 +250,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
   return (
     <form onSubmit={saveTemplate} className="grid gap-4 lg:grid-cols-2">
       <div className="app-card space-y-4 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Düzenleyici</p><h2 className="mt-1 text-title">{templateLabel(name)}</h2></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Aktif</label></div>
+        <div className="flex items-start justify-between gap-3"><h2 className="text-title">{templateLabel(name)}</h2><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} /> Aktif</label></div>
         <div className="space-y-2"><p className="text-xs font-semibold text-[var(--muted)]">Mesaja bilgi alanı ekle</p><div className="flex flex-wrap gap-1.5">{PLACEHOLDERS.map((placeholder) => <button key={placeholder.key} type="button" draggable onDragStart={(event) => event.dataTransfer.setData("text/plain", placeholder.key)} onClick={() => insertPlaceholder(placeholder.key)} className="pressable min-h-8 rounded-full border border-[var(--line)] bg-white px-2.5 text-[.68rem] font-bold text-[var(--brand)] hover:border-[var(--brand)]">{placeholder.label}</button>)}</div></div>
         {customPlaceholders.length > 0 && <section className="rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3"><div><p className="text-xs font-bold">Özel değerler</p><p className="mt-0.5 text-[.64rem] leading-relaxed text-[var(--muted)]">Bu alanları doldurduğunda canlı örnek anında güncellenir.</p></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{customPlaceholders.map((key) => <label key={key} className="space-y-1 text-[.66rem] font-bold text-[var(--muted)]">{PLACEHOLDER_LABELS[key] ?? key.replaceAll("_", " ")}<input value={customValues[key] ?? ""} onChange={(event) => setCustomValues((current) => ({ ...current, [key]: event.target.value }))} placeholder="Değeri gir" className="field min-h-10 bg-white text-xs" /></label>)}</div></section>}
         <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Mesaj gövdesi<textarea ref={textareaRef} value={body} onChange={(event) => setBody(event.target.value)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); insertPlaceholder(event.dataTransfer.getData("text/plain"), textareaRef.current?.selectionStart); }} rows={13} className="field resize-y font-mono text-sm leading-relaxed" /></label>
@@ -261,7 +258,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
         {saved && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-xs font-medium text-[var(--success-strong)]">Şablon kaydedildi.</p>}
         <button type="submit" disabled={update.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{update.isPending ? "Kaydediliyor…" : "Şablonu kaydet"}</button>
       </div>
-      <div className="app-card h-fit overflow-hidden p-4 sm:p-5"><div className="mb-4 flex items-center justify-between"><div><p className="text-micro text-[var(--brand-strong)]">Canlı örnek</p><h2 className="mt-1 text-title">Önizleme</h2></div><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.65rem] font-bold text-[var(--success-strong)]">WhatsApp</span></div><div className="rounded-2xl bg-[#e8f5df] p-3.5 text-sm leading-relaxed text-[#2d4c28] shadow-inner"><p className="mb-2 text-[.65rem] font-bold uppercase tracking-[.08em] text-[#6a8a5f]">Abdera Müzik Okulu</p><p className="whitespace-pre-wrap">{preview || "Mesaj gövdesi burada görünecek."}</p></div><p className="text-meta mt-4">Veli ve öğrenci bilgileri gönderim anında gerçek kayıtlarla değiştirilir.</p></div>
+      <div className="app-card h-fit overflow-hidden p-4 sm:p-5"><div className="mb-4 flex items-center justify-between"><h2 className="text-title">Önizleme</h2><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.65rem] font-bold text-[var(--success-strong)]">WhatsApp</span></div><div className="rounded-2xl bg-[#e8f5df] p-3.5 text-sm leading-relaxed text-[#2d4c28] shadow-inner"><p className="mb-2 text-[.65rem] font-bold uppercase tracking-[.08em] text-[#6a8a5f]">Abdera Müzik Okulu</p><p className="whitespace-pre-wrap">{preview || "Mesaj gövdesi burada görünecek."}</p></div><p className="text-meta mt-4">Veli ve öğrenci bilgileri gönderim anında gerçek kayıtlarla değiştirilir.</p></div>
     </form>
   );
 }
@@ -299,7 +296,7 @@ function AutomationSettings() {
 
   return (
     <section className="app-card space-y-4 p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-micro text-[var(--brand-strong)]">Ders hatırlatması</p><h2 className="mt-1 text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} disabled={isLoading} /> Otomatik gönder</label></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} disabled={isLoading} /> Otomatik gönder</label></div>
       <div className="grid gap-4 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
         <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Dersden ne kadar önce?<select value={minutes} onChange={(event) => setMinutes(event.target.value)} disabled={isLoading} className="field text-sm"><option value="15">15 dakika önce</option><option value="30">30 dakika önce</option><option value="45">45 dakika önce</option><option value="60">60 dakika önce</option></select></label>
         <div className="space-y-2">

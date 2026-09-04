@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useGuardians } from "@/lib/people";
 import {
@@ -18,8 +19,8 @@ import {
 // admin belirsiz kalanları elle çözer.
 export default function BankingPage() {
   return (
-    <div className="space-y-8">
-      <h1 className="text-display font-serif italic">Banka Entegrasyonu</h1>
+    <div className="space-y-4">
+      <PageHeader title="Banka entegrasyonu" description="Sanal IBAN atamaları ve gelen havalelerin aidatlara işlenmesi." />
       <VirtualIbanSection />
       <TransactionsSection />
     </div>
@@ -44,7 +45,7 @@ function VirtualIbanSection() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-micro text-[var(--brand-strong)]">Sanal IBAN Ataması</h2>
+      <h2 className="text-title">Sanal IBAN ataması</h2>
       <div className="app-card space-y-3 p-4 sm:p-5">
         <p className="text-meta max-w-2xl leading-relaxed">
           Bir veliye sanal IBAN atandığında o IBAN&apos;a gelen havaleler otomatik olarak veliye bağlı aidatlara
@@ -103,7 +104,7 @@ function TransactionsSection() {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-micro text-[var(--brand-strong)]">Gelen İşlemler</h2>
+      <h2 className="text-title">Gelen işlemler</h2>
 
       <div className="flex flex-wrap gap-2">
         {(["NeedsReview", "Matched", "Ignored", "all"] as const).map((f) => (

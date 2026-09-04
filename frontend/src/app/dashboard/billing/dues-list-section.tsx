@@ -3,19 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Icon } from "@/components/icons";
+import { AddButton, FormMessage, Modal } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import {
   useBillingDues,
+  useBulkReceivablePlan,
+  useCreateBulkReceivables,
   useCreateFeePlan,
   useCreateReceivable,
   usePriceLists,
   useRecordPayment,
   useStudentBilling,
   type BillingDue,
+  type BulkReceivableResult,
   type FeePlan,
   type PaymentMethod,
 } from "@/lib/billing";
-import { useEnrollments, useStudents, useTeachers } from "@/lib/people";
+import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { StudentBillingSection } from "./student-billing-section";
 
 // Ekran bir "dönem defteri": aynı anda tek bir dönemi gösterir.
@@ -108,6 +112,7 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   // tahsilat panelinin (QuickCollectPanel) kendi öğrenci seçimi ayrıdır.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [showBulkPanel, setShowBulkPanel] = useState(false);
   const [teacherFilter, setTeacherFilter] = useState("all");
   // Öğrenciye göre filtre - seçenekler serbest metin yerine liste dolusundan (aşağıdaki
   // studentOptions) geliyor; kullanıcı isteği: "öğretmen öğrenci gibi" filtreler.
@@ -144,13 +149,8 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   const studentPickerRef = useRef<HTMLSelectElement>(null);
   const startAddingDue = useCallback(() => {
     setShowCreatePanel(true);
-    // Panel açıldıktan sonra odaklan - aksi halde eleman henüz DOM'da olmuyor.
-    window.setTimeout(() => {
-      const select = studentPickerRef.current;
-      if (!select) return;
-      select.scrollIntoView({ behavior: "smooth", block: "center" });
-      select.focus();
-    }, 0);
+    // Pencere açıldıktan sonra odaklan - aksi halde eleman henüz DOM'da olmuyor.
+    window.setTimeout(() => studentPickerRef.current?.focus(), 0);
   }, []);
 
   const clearFilters = useCallback(() => {
@@ -221,21 +221,22 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   const hasActiveFilters = teacherFilter !== "all" || studentFilter !== "all" || filter !== "all";
 
   return <div className="space-y-4">
-    {showCreatePanel && <section className="app-card overflow-visible p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-micro text-[var(--brand-strong)]">Aidat al</p>
-          <h2 className="mt-1 text-title">Öğrenci seç, ödemeyi kaydet</h2>
-          <p className="text-meta mt-1">Elden alındıysa veya havale geldiyse tek dokunuşla işaretle.</p>
-        </div>
-        <button type="button" onClick={() => setShowCreatePanel(false)} className="pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold text-[var(--muted)]">Kapat</button>
-      </div>
+    {/* Yalnızca açıkken monte edilir: pencere her açılışta temiz durumla (o anki dönem,
+        önceki çalıştırmanın sonucu olmadan) başlasın diye - state'i effect'te sıfırlamak
+        yerine bileşeni yeniden kurmak hem daha basit hem fazladan render turu üretmiyor. */}
+    {showBulkPanel && <BulkReceivableDialog
+      defaultPeriod={activePeriod === ALL_PERIODS ? new Date().toISOString().slice(0, 7) : activePeriod}
+      onClose={() => setShowBulkPanel(false)}
+      onGoToStudent={(studentId) => { setShowBulkPanel(false); setSelectedStudentId(studentId); }}
+    />}
+
+    <Modal open={showCreatePanel} title="Aidat al" description="Öğrenciyi seç; elden alındıysa veya havale geldiyse tek dokunuşla işaretle." onClose={() => setShowCreatePanel(false)}>
       <QuickCollectPanel
         pickerRef={studentPickerRef}
-        onOpenFullAccount={(studentId) => setSelectedStudentId(studentId)}
+        onOpenFullAccount={(studentId) => { setShowCreatePanel(false); setSelectedStudentId(studentId); }}
         onCollected={() => setShowCreatePanel(false)}
       />
-    </section>}
+    </Modal>
 
     {selectedStudentId && <StudentBillingSection key={selectedStudentId} initialStudentId={selectedStudentId} showStudentPicker={false} onClose={() => setSelectedStudentId(null)} />}
 
@@ -258,7 +259,8 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
             {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
             {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
           </p>
-          <button type="button" onClick={startAddingDue} className="pressable min-h-9 rounded-xl bg-[var(--brand)] px-3.5 text-xs font-bold text-white">+ Aidat al</button>
+          <button type="button" onClick={() => setShowBulkPanel(true)} className="btn btn-quiet">Toplu aidat</button>
+          <AddButton label="Aidat al" onClick={startAddingDue} />
         </div>
       </div>
 
@@ -290,14 +292,14 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
           ? <>
               <p className="mt-3 text-sm font-bold">Henüz aidat kaydı yok</p>
               <p className="text-meta mt-1">Bir öğrenci seçip ücret planına göre dönem aidatını oluşturarak başla. Aidat oluşturulduğunda tahsilat, kısmi ödeme ve gecikme takibi buradan yürür.</p>
-              <button type="button" onClick={startAddingDue} className="pressable mt-3 min-h-9 rounded-lg bg-[var(--brand)] px-4 text-xs font-bold text-white">Aidat al</button>
+              <button type="button" onClick={startAddingDue} className="btn btn-primary mt-3">Aidat al</button>
             </>
           : <>
               <p className="mt-3 text-sm font-bold">Bu dönemde aidat yok</p>
               <p className="text-meta mt-1">{hasActiveFilters ? "Seçili filtrelerle eşleşen aidat bulunamadı." : "Bu dönem için henüz aidat oluşturulmamış."} Başka bir dönem seçebilir veya yeni bir dönem aidatı ekleyebilirsin.</p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button type="button" onClick={clearFilters} className="pressable min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold">Filtreleri temizle</button>
-                <button type="button" onClick={startAddingDue} className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-4 text-xs font-bold text-white">Aidat al</button>
+                <button type="button" onClick={clearFilters} className="btn btn-quiet">Filtreleri temizle</button>
+                <button type="button" onClick={startAddingDue} className="btn btn-primary">Aidat al</button>
               </div>
             </>}
       </div></div>}
@@ -326,6 +328,8 @@ function QuickCollectPanel({
   onCollected: () => void;
 }) {
   const { data: students } = useStudents();
+  const { data: instruments } = useInstruments();
+  const { data: teachers } = useTeachers();
   const [studentId, setStudentId] = useState("");
   const [rawEnrollmentId, setRawEnrollmentId] = useState("");
   const { data: enrollments, isLoading: enrollmentsLoading } = useEnrollments(studentId);
@@ -369,11 +373,15 @@ function QuickCollectPanel({
   const dueAmount = currentReceivable ? Math.max(0, currentReceivable.amount - currentReceivable.totalPaid) : feePlan?.amount ?? 0;
 
   function enrollmentLabel(enrollment: { instrumentId: string; teacherId: string }, enrollmentIdValue: string) {
-    // Kurs adları burada yalnızca ayrıştırmak için gerekiyor; instrument/teacher isimleri
-    // ayrı uçlardan geliyor ama bu panel öğretmen listesini zaten çekmiyor - okulun bu
-    // ölçeğinde bir öğrencinin genelde tek aktif kaydı olduğu için (çoklu kayıt nadir),
-    // ad yerine sıra numarası yeterince ayırt edici ve ek bir istek gerektirmiyor.
-    return `Kurs ${activeEnrollments.findIndex((item) => item.id === enrollmentIdValue) + 1}`;
+    // "Kurs 1 / Kurs 2" ayırt ediciydi ama hangi ders olduğunu söylemiyordu - ücret planı
+    // eksik uyarısında kullanıcı neye baktığını anlayamıyordu. Enstrüman ve öğretmen adı
+    // ek istek getirmiyor: her iki liste de React Query'de aynı anahtarla zaten önbellekte
+    // (öğrenci/öğretmen ekranları ve bu sayfanın filtreleri onları çoktan çekmiş oluyor).
+    const instrument = instruments?.find((item) => item.id === enrollment.instrumentId)?.name;
+    const teacher = teachers?.find((item) => item.id === enrollment.teacherId);
+    const teacherName = teacher ? `${teacher.firstName} ${teacher.lastName}` : null;
+    if (instrument && teacherName) return `${instrument} · ${teacherName}`;
+    return instrument ?? teacherName ?? `Kurs ${activeEnrollments.findIndex((item) => item.id === enrollmentIdValue) + 1}`;
   }
 
   async function collect(method: PaymentMethod) {
@@ -398,7 +406,7 @@ function QuickCollectPanel({
   }
 
   return <div className="mt-4 max-w-xl space-y-3">
-    <label className="block space-y-1.5 text-[.68rem] font-bold text-[var(--muted)]">
+    <label className="form-label block">
       <span>Öğrenci</span>
       <select ref={pickerRef} value={studentId} onChange={(event) => { setStudentId(event.target.value); setRawEnrollmentId(""); setError(null); }} className="field min-h-11 text-sm">
         <option value="">Öğrenci seç…</option>
@@ -418,7 +426,9 @@ function QuickCollectPanel({
           <MissingFeePlanInline
             key={enrollment.id}
             enrollmentId={enrollment.id}
-            label={activeEnrollments.length > 1 ? enrollmentLabel(enrollment, enrollment.id) : "Bu kurs"}
+            // Tek kurs olsa bile adıyla yazılır: "Bu kurs: ücret planı yok" satırı hangi
+            // enstrüman/öğretmen olduğunu söylemediği için kullanıcı doğrulayamıyordu.
+            label={enrollmentLabel(enrollment, enrollment.id)}
             priceListItems={(priceLists ?? []).flatMap((list) => list.items).filter((item) => item.instrumentId === enrollment.instrumentId)}
           />
         ))}
@@ -426,7 +436,7 @@ function QuickCollectPanel({
     )}
 
     {studentId && !feePlanLoading && enrollmentsWithPlan.length > 1 && !enrollmentId && (
-      <label className="block space-y-1.5 text-[.68rem] font-bold text-[var(--muted)]">
+      <label className="form-label block">
         <span>Hangi kurs?</span>
         <select value={rawEnrollmentId} onChange={(event) => setRawEnrollmentId(event.target.value)} className="field min-h-11 text-sm">
           <option value="">Kurs seç…</option>
@@ -483,7 +493,7 @@ function MissingFeePlanInline({ enrollmentId, label, priceListItems }: { enrollm
               {priceListItems.map((item) => <option key={item.id} value={item.id}>{item.durationMinutes} dk · {item.billingType === "Monthly" ? "Aylık" : "Paket"} · {item.amount.toLocaleString("tr-TR")} {item.currency}</option>)}
             </select>
             <input type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(Number(e.target.value))} className="field min-h-10 w-20 text-sm" title="Vade günü" />
-            <button type="submit" disabled={createFeePlan.isPending || !itemId} className="pressable min-h-10 rounded-lg bg-[var(--brand)] px-3 text-sm font-bold text-white disabled:opacity-50">{createFeePlan.isPending ? "Oluşturuluyor…" : "Ücret planı oluştur"}</button>
+            <button type="submit" disabled={createFeePlan.isPending || !itemId} className="btn btn-primary">{createFeePlan.isPending ? "Oluşturuluyor…" : "Ücret planı oluştur"}</button>
           </form>}
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </div>
@@ -520,14 +530,14 @@ function DueRow({ due }: { due: BillingDue }) {
       <div><strong className="block text-xs tabular-nums">{formatMoney(due.amount, due.currency)}</strong><span className={`mt-0.5 block text-[.62rem] tabular-nums ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, due.currency)} kaldı` : "Tamamı ödendi"}</span></div>
       <div><span className={`inline-flex rounded-full px-2 py-1 text-[.6rem] font-bold ${STATUS_TONES[due.status]}`}>{lateDays > 0 ? `${lateDays} gün gecikti` : STATUS_LABELS[due.status]}</span></div>
       <div className="flex justify-end gap-1.5">
-        {canCollect && <button type="button" onClick={() => setShowPayment((visible) => !visible)} className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-3 text-[.66rem] font-bold text-white">Tahsilat</button>}
+        {canCollect && <button type="button" onClick={() => setShowPayment((visible) => !visible)} className="btn btn-primary">Tahsilat</button>}
         {/* "Hesap" yerine "Geçmiş": ayrı bir üst panel açmak yerine satırın hemen altında
             katlanır (collapse) bir bölüm olarak, yalnızca bu öğrencinin eski dönem
             ödemelerini gösterir - kullanıcı isteği üzerine sadeleştirildi. */}
         <button type="button" onClick={() => setShowHistory((visible) => !visible)} aria-expanded={showHistory} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-white px-3 text-[.66rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Geçmiş<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showHistory ? "rotate-90" : ""}`} /></button>
       </div>
     </div>
-    {showPayment && <form onSubmit={collect} className="mt-3 grid gap-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"><label className="space-y-1 text-[.64rem] font-bold text-[var(--muted)]">Tutar<input type="number" min={0.01} max={remaining} step={0.01} value={amount} onChange={(event) => setAmount(Number(event.target.value))} required className="field min-h-10 bg-white text-xs" /></label><label className="space-y-1 text-[.64rem] font-bold text-[var(--muted)]">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-10 bg-white text-xs" /></label><label className="space-y-1 text-[.64rem] font-bold text-[var(--muted)]">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label><button type="submit" disabled={recordPayment.isPending} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white disabled:opacity-50">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>{error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] sm:col-span-4">{error}</p>}</form>}
+    {showPayment && <form onSubmit={collect} className="mt-3 grid gap-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"><label className="form-label">Tutar<input type="number" min={0.01} max={remaining} step={0.01} value={amount} onChange={(event) => setAmount(Number(event.target.value))} required className="field min-h-10 bg-white text-xs" /></label><label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-10 bg-white text-xs" /></label><label className="form-label">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label><button type="submit" disabled={recordPayment.isPending} className="btn btn-primary">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>{error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] sm:col-span-4">{error}</p>}</form>}
     {showHistory && <PaymentHistoryCollapse studentId={due.studentId} />}
   </article>;
 }
@@ -581,4 +591,105 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
       </div>}
     </>}
   </div>;
+}
+
+// Dönem başında tüm aktif kayıtların aidatını tek seferde açar. İşlemden ÖNCE ne olacağını
+// gösterir (kaç aidat açılacak, hangileri zaten var) ve en önemlisi EKSİKLERİ listeler:
+// ücret planı olmadığı için aidatı açılamayan kayıtlar. Bunlar sessizce atlanırsa ay sonunda
+// "bu öğrencinin aidatı neden yok" sorusu çıkıyordu.
+function BulkReceivableDialog({
+  defaultPeriod,
+  onClose,
+  onGoToStudent,
+}: {
+  defaultPeriod: string;
+  onClose: () => void;
+  onGoToStudent: (studentId: string) => void;
+}) {
+  const [period, setPeriod] = useState(defaultPeriod);
+  const [result, setResult] = useState<BulkReceivableResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { data: plan, isLoading } = useBulkReceivablePlan(period);
+  const createBulk = useCreateBulkReceivables();
+
+  async function run() {
+    setError(null);
+    try {
+      setResult(await createBulk.mutateAsync(period));
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Toplu aidat oluşturulamadı.");
+    }
+  }
+
+  const missing = result?.missing ?? plan?.missing ?? [];
+
+  return (
+    <Modal open title="Toplu aidat" description="Seçilen dönemin aidatını tüm aktif kurslar için tek seferde aç." onClose={onClose}>
+      <div className="space-y-3.5">
+        <label className="form-label sm:max-w-xs">Dönem
+          <input type="month" value={period} onChange={(event) => { setPeriod(event.target.value); setResult(null); setError(null); }} className="field text-sm" />
+        </label>
+
+        {isLoading && <div className="skeleton h-20 rounded-xl" />}
+
+        {!isLoading && plan && !result && (
+          <div className="grid gap-2 sm:grid-cols-3">
+            <SummaryTile label="Açılacak aidat" value={`${plan.ready.length}`} detail={plan.ready.length ? formatMoney(plan.readyTotal, plan.currency) : "—"} tone="brand" />
+            <SummaryTile label="Zaten var" value={`${plan.alreadyExists.length}`} detail="Bu dönemde açılmış" tone="muted" />
+            <SummaryTile label="Eksik" value={`${plan.missing.length}`} detail="Ücret planı bekliyor" tone={plan.missing.length ? "warning" : "muted"} />
+          </div>
+        )}
+
+        {result && (
+          <FormMessage tone="success">
+            {result.createdCount} aidat oluşturuldu · {formatMoney(result.createdTotal, result.currency)}
+            {result.alreadyExistsCount > 0 && ` · ${result.alreadyExistsCount} kayıt zaten vardı`}
+          </FormMessage>
+        )}
+
+        {missing.length > 0 && (
+          <section className="rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)]/50 p-3">
+            <p className="text-xs font-bold text-[var(--warning-strong)]">Ücret planı olmayan {missing.length} kurs</p>
+            <p className="text-meta mt-0.5">Bunların aidatı açılamaz. Öğrencinin hesabını açıp ücret planını tanımla.</p>
+            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+              {missing.map((row) => (
+                <li key={row.enrollmentId}>
+                  <button type="button" onClick={() => onGoToStudent(row.studentId)} className="pressable flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left text-xs hover:bg-[var(--brand-soft)]">
+                    <span className="min-w-0"><strong>{row.studentName}</strong><span className="text-meta"> · {row.instrumentName} · {row.teacherName}</span></span>
+                    <span className="text-meta shrink-0">{row.reason}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {error && <FormMessage tone="error">{error}</FormMessage>}
+
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+          <button type="button" onClick={onClose} className="btn btn-quiet">{result ? "Kapat" : "Vazgeç"}</button>
+          {!result && (
+            <button type="button" onClick={run} disabled={createBulk.isPending || !plan?.ready.length} className="btn btn-primary">
+              {createBulk.isPending ? "Oluşturuluyor…" : plan?.ready.length ? `${plan.ready.length} aidatı oluştur` : "Açılacak aidat yok"}
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SummaryTile({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "brand" | "muted" | "warning" }) {
+  const palette = {
+    brand: "text-[var(--brand-strong)]",
+    muted: "text-[var(--muted)]",
+    warning: "text-[var(--warning-strong)]",
+  }[tone];
+  return (
+    <div className="rounded-xl border border-[var(--line)] p-3">
+      <p className="text-meta font-bold">{label}</p>
+      <p className={`mt-1 text-lg font-bold tabular-nums ${palette}`}>{value}</p>
+      <p className="text-meta mt-0.5 truncate">{detail}</p>
+    </div>
+  );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
+import { NotificationBell } from "@/components/notification-bell";
 import type { Me } from "@/lib/api";
 import { useLogout } from "@/lib/use-auth";
 
@@ -101,6 +102,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               <span className="block truncate text-xs font-bold">{displayName(me.email) || me.email}</span>
               <span className="block text-[.65rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
             </span>
+            {me.role === "Teacher" && <NotificationBell />}
             <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap">
               <Icon name="logout" className="h-4 w-4" />
             </button>
@@ -120,8 +122,11 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
           {children}
         </main>
 
-        <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${me.role === "Admin" ? "grid-cols-5" : "grid-cols-4"} border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden`} aria-label="Mobil ana menü">
+        {/* Öğretmende üst çubuk gizli (yalnızca alt menü var) - ders taşıma bildirimi her
+            ekranda görünsün diye zil buraya bir sekme olarak giriyor. */}
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden" aria-label="Mobil ana menü">
           {mobilePrimary.map((link) => <MobileNavLink key={link.href} link={link} active={isActive(pathname, link.href)} />)}
+          {me.role === "Teacher" && <NotificationBell variant="mobile" />}
           <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.61rem] font-medium text-[var(--muted)]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
             <Icon name={me.role === "Admin" ? "more" : "teachers"} className="h-[1.05rem] w-[1.05rem]" /><span>{me.role === "Admin" ? "Daha Fazla" : "Profil"}</span>
           </button>

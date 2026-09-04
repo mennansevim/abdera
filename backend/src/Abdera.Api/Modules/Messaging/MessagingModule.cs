@@ -8,6 +8,7 @@ public static class MessagingModule
     public static void AddMessagingModule(this IServiceCollection services)
     {
         services.AddScoped<INotificationScheduler, NotificationScheduler>();
+        services.AddScoped<IStaffNotifier, StaffNotifier>();
         services.AddHostedService<NotificationDispatcher>();
     }
 
@@ -15,6 +16,7 @@ public static class MessagingModule
     {
         app.MapWebhooks();
         app.MapNotifications();
+        app.MapStaffNotifications();
         app.MapMessageTemplates();
         app.MapAutomationSettings();
 

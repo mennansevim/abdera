@@ -53,6 +53,42 @@ function windowsForDay(day: Date, availability: TeacherAvailability[]) {
   return availability.length ? [] : [{ id: "default", dayOfWeek: "", startTime: "10:00", endTime: "21:00" }];
 }
 
+// Öneriler tek bir güne yığılmasın diye. Önceki sürümde puan yalnızca "en yakın gün +
+// tercih edilen saat" idi; en yakın uygun gün 15 dakikalık adımlarla listeyi tamamen
+// dolduruyordu (örn. dokuz önerinin dokuzu da aynı Cuma 16:45-18:45 arası). Kullanıcı
+// için bunlar pratikte tek bir seçenek. Bu yüzden sıralamadan sonra çeşitlendiriyoruz:
+// aynı anahtardan (gün ya da haftanın günü) en fazla `perKeyCap` öneri ve aynı gün içinde
+// en az `minGapMinutes` aralık. Yeterli çeşit bulunamazsa kalanlar puan sırasıyla eklenir -
+// böylece "az sayıda uygun slot" durumunda liste yine dolu döner.
+function diversify(
+  slots: SuggestedSlot[],
+  { limit, keyOf, perKeyCap = 2, minGapMinutes = 60 }: { limit: number; keyOf: (slot: SuggestedSlot) => string; perKeyCap?: number; minGapMinutes?: number },
+) {
+  const picked: SuggestedSlot[] = [];
+  const usedByKey = new Map<string, number>();
+
+  for (const slot of slots) {
+    if (picked.length >= limit) break;
+    const key = keyOf(slot);
+    if ((usedByKey.get(key) ?? 0) >= perKeyCap) continue;
+    const tooClose = picked.some((other) =>
+      keyOf(other) === key && Math.abs(other.start.getTime() - slot.start.getTime()) < minGapMinutes * 60000);
+    if (tooClose) continue;
+    picked.push(slot);
+    usedByKey.set(key, (usedByKey.get(key) ?? 0) + 1);
+  }
+
+  for (const slot of slots) {
+    if (picked.length >= limit) break;
+    if (!picked.includes(slot)) picked.push(slot);
+  }
+
+  return picked;
+}
+
+const dayKey = (slot: SuggestedSlot) => slot.start.toDateString();
+const weekdayKey = (slot: SuggestedSlot) => String(slot.start.getDay());
+
 export function findOpenSlots({
   from,
   days,
@@ -98,7 +134,8 @@ export function findOpenSlots({
       }
     }
   }
-  return results.sort((a, b) => b.score - a.score || a.start.getTime() - b.start.getTime()).slice(0, limit);
+  const ranked = results.sort((a, b) => b.score - a.score || a.start.getTime() - b.start.getTime());
+  return diversify(ranked, { limit, keyOf: dayKey });
 }
 
 export function findRecurringSlots({ effectiveFrom, durationMinutes, teacherId, studentId, availability, lessons, limit = 6 }: { effectiveFrom: string; durationMinutes: number; teacherId: string; studentId: string; availability: TeacherAvailability[]; lessons: CalendarLesson[]; limit?: number }) {
@@ -118,5 +155,8 @@ export function findRecurringSlots({ effectiveFrom, durationMinutes, teacherId, 
     const key = `${slot.start.getDay()}-${slot.start.getHours()}-${slot.start.getMinutes()}`;
     if (!unique.has(key)) unique.set(key, { ...slot, reason: "8 hafta boyunca uygun" });
   }
-  return Array.from(unique.values()).slice(0, limit);
+  // Haftalık seri için çeşit "haftanın günü" demektir: aynı güne art arda üç saat önermek
+  // yerine farklı günlerden birer seçenek göster.
+  const weekly = Array.from(unique.values()).sort((a, b) => b.score - a.score || a.start.getTime() - b.start.getTime());
+  return diversify(weekly, { limit, keyOf: weekdayKey, minGapMinutes: 90 });
 }

@@ -114,3 +114,39 @@ Ek olarak:
 - Ekran başına bir commit (`abdera-commit` skill'i, Türkçe conventional commit). Push için kullanıcıdan onay iste (repo public).
 - `docs/11-progress-log.md`'ye tek bölüm ekle: neyi değiştirdin, hangi tasarım kararını neden aldın (özellikle B3'teki saat penceresi ve kırılım kararı), neyi bilerek yapmadın.
 - Mockup'ta olup API'de karşılığı olmadığı için atladığın her şeyi ayrı bir liste olarak raporun sonunda ver.
+
+## 6. Güncel desen — form yerine "+" (2026-09 sadeleştirmesi)
+
+Yukarıdaki bölümler ilk tasarım görevinin metnidir; aşağıdaki kural onların üzerine gelir ve
+yeni ekran yazarken **bağlayıcıdır**:
+
+- Ekran üstünde her zaman açık duran oluşturma formu **yok**. Başlık satırının sağında küçük
+  bir `+` (`AddButton`) durur, form `Modal` içinde açılır.
+- Ortak bileşenler: `src/components/ui.tsx` → `PageHeader`, `SectionHeader`, `AddButton`,
+  `Modal`, `FormActions`, `FormMessage`. Yeni ekran bunları kullanır, kendi başlık/pencere
+  iskeletini kurmaz.
+- Buton ve etiket sınıfları `globals.css`'te: `.btn` + `.btn-primary`/`.btn-quiet`,
+  `.icon-btn` + `.icon-btn-brand`/`.icon-btn-quiet`, `.form-label`. Uzun Tailwind zinciriyle
+  yeni bir buton varyantı üretme.
+- `AddButton` metin taşımaz; erişilebilir adı `label`'dan gelir ve **ne eklendiğini** söyler
+  ("Öğretmen ekle"). E2E seçicileri bu ada bağlıdır, değiştirirken testi de güncelle.
+- Her form alanının görünen bir etiketi olur (`.form-label`); yalnızca `placeholder` ya da
+  `title` ile alan anlatılmaz.
+
+### Bileşen sınıfları `@layer components` içinde durur (gerçek bir hata)
+
+`globals.css`'teki `.field`, `.btn`, `.icon-btn`, `.app-card`, `.text-*` gibi sınıflar
+katmansız yazıldığında Tailwind'in **utilities katmanını eziyor** - CSS'te katman sırası
+özgüllükten önce gelir, katmansız kural her zaman kazanır. Sonuç: `class="field pl-9"` yazan
+arama kutusunda `.field`'in kısayol `padding`'i geçerli kalıyor, `pl-9` hiç uygulanmıyor ve
+placeholder ikonun üstüne biniyordu (kullanıcı ekran görüntüsüyle bildirdi). Aynı sessiz
+eziliş `btn-quiet border-dashed` (kesikli çerçeve görünmüyordu) ve `icon-btn h-9 w-9`
+(buton hep 2.75rem kalıyordu) örneklerinde de vardı.
+
+Kural: yeni bir bileşen sınıfı `@layer components { ... }` içine yazılır. Böylece tek bir
+utility onu geçersiz kılabilir - beklenen davranış bu. Katmanın dışında yalnızca bilinçli
+"son söz" kuralları kalır: `:root` token'ları, `body`, element reset'leri ve
+`prefers-reduced-motion`/`prefers-contrast` gibi erişilebilirlik media query'leri.
+
+İçinde ikon olan bir alan yazarken: ikon `absolute left-3`, alan `pl-9` (ikon 1rem ise) -
+ölçüp doğrula, `padding-left` gerçekten uygulanmış olmalı (yazı ile ikon arasında ~7px boşluk).

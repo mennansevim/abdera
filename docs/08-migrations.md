@@ -103,3 +103,16 @@ Sağlayıcı bunu otomatik olarak `xmin` sistem koluna eşler (bkz. [Npgsql conc
 - Yıkıcı işlem (kolon/tablo silme) ayrı bir migration'da, en az bir sürüm sonra yapılır — "expand/contract" yaklaşımı.
 - Her migration, gerçek bir Postgres'e karşı hem ileri (`database update`) hem idempotency (iki kez çalıştırma) açısından doğrulanır — bkz. `docs/09-testing.md` madde 1 ve `MigrationTests.cs`.
 - Uygulama başlangıçta bekleyen migration'ları otomatik uygular (`Database__AutoMigrate=true`, `Shared/DatabaseMigrator.cs`) — `docker compose up` tek başına çalışan bir kurulum verir.
+
+## staff_notifications (ekran içi personel bildirimi)
+
+**AddStaffNotifications** (Messaging modülü, `Modules/Messaging/Persistence/Migrations`): takvimde
+ders taşındığında ilgili öğretmenin ekranında görünecek bildirim satırı. `notification_jobs`
+WhatsApp'a özgü alanlar (telefon, deneme sayısı, sessiz saat) taşıdığı için ayrı tablo.
+
+```
+staff_notifications(id, user_id, type, title, body, reference_type, reference_id,
+                    read_at, created_at, updated_at)
+UNIQUE (user_id, type, reference_type, reference_id)   -- aynı olay iki kez düşmesin (A5'in ekran içi karşılığı)
+INDEX  (user_id, created_at)                           -- zil listesi: kendi bildirimleri, en yeniden eskiye
+```

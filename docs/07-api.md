@@ -84,12 +84,18 @@ GET    /api/receivables                         ✅ ?status= filtresiyle
 POST   /api/receivables                         ✅ aktif FeePlan'dan snapshot alır
 POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edilemez
 POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
+GET    /api/receivables/bulk-preview            ✅ ?period=yyyy-MM - açılacak/zaten var/eksik (ücret planı yok) dökümü
+POST   /api/receivables/bulk                    ✅ dönemin aidatını tüm aktif kayıtlar için tek çağrıda açar; yeni kayıt yoksa 409
 POST   /api/payments/{paymentId}/corrections    ✅ değiştirilemez düzeltme satırı; fazla ödeme reddi + audit
 GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
 POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar
 
 GET    /api/students/{studentId}/makeup-credits  ✅ A2
 POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar
+
+GET    /api/me/notifications                     ✅ oturumdaki personelin ekran içi bildirimleri {items,unreadCount}
+POST   /api/me/notifications/{id}/read            ✅ yalnızca kendi bildirimi - başkasınınki 404
+POST   /api/me/notifications/read-all             ✅ zili sıfırlar
 
 GET    /api/notifications                        ✅ ?status=&page=&pageSize= (varsayılan 50, en fazla 200) - yanıt {items,totalCount,page,pageSize} zarfında (ARC-3)
 POST   /api/notifications/{notificationId}/retry ✅ yalnızca FAILED durumundan

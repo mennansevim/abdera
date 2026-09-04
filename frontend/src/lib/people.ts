@@ -163,7 +163,40 @@ export function useCreateStudent() {
   return useMutation({
     mutationFn: (body: { firstName: string; lastName: string; birthDate: string }) =>
       api.post<Student>("/api/students", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["students"] }),
+    // Öğrenci listesi ekranı "students" değil "student-overviews" sorgusundan besleniyor
+    // (satırdaki enstrüman rozetleri için) - yalnızca "students" tazelenince yeni öğrenci
+    // ekranda hiç görünmüyordu, kullanıcı sayfayı yenilemek zorunda kalıyordu.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
+    },
+  });
+}
+
+// Öğrenci künyesi (ad/soyad/doğum tarihi/durum) düzenleme - PATCH /api/students/{id}.
+// Liste ekranı "student-overviews"den beslendiği için o anahtar da tazelenir, aksi halde
+// ad değişikliği satırda görünmezdi.
+export function useUpdateStudent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, ...body }: { studentId: string; firstName: string; lastName: string; birthDate: string; status: StudentStatus }) =>
+      api.patch<Student>(`/api/students/${studentId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
+    },
+  });
+}
+
+export function useUpdateGuardian(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guardianId, ...body }: { guardianId: string; firstName: string; lastName: string; phoneNumber: string }) =>
+      api.patch<Guardian>(`/api/guardians/${guardianId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-guardians", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["guardians"] });
+    },
   });
 }
 
@@ -272,6 +305,7 @@ export function useCreateStudentForTeacher(teacherId: string) {
       api.post<TeacherStudentEnrollment>(`/api/teachers/${teacherId}/students`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
     },
   });
@@ -292,6 +326,7 @@ export function useCreateEnrollment(studentId: string) {
       api.post<Enrollment>(`/api/students/${studentId}/enrollments`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
     },
   });
@@ -304,6 +339,8 @@ export function useEndEnrollment(studentId: string) {
       api.delete(`/api/students/${studentId}/enrollments/${enrollmentId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
     },

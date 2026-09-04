@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { Icon } from "./icons";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Icon, type IconName } from "./icons";
 
 // Ekranların ortak iskeleti. Önceki sürümde her sayfa kendi başlık bloğunu (üstte küçük
 // büyük harfli bir "göz kırpma" satırı + serif başlık + açıklama) ve altına HER ZAMAN AÇIK
@@ -46,6 +46,88 @@ export function AddButton({ label, onClick, disabled = false, tone = "brand" }: 
       className={`icon-btn ${tone === "brand" ? "icon-btn-brand" : "icon-btn-quiet"}`}
     >
       <Icon name="plus" className="h-4 w-4" />
+    </button>
+  );
+}
+
+// Liste ekranlarının arama kutusu. Uzun listelerde (öğrenci/öğretmen) kaydı gözle aramak
+// yerine yazarak daraltmak için - ekranın kendi verisini filtreler, sunucuya istek atmaz.
+export function SearchInput({ value, onChange, label, placeholder }: { value: string; onChange: (value: string) => void; label: string; placeholder?: string }) {
+  return (
+    <label className="relative block w-full sm:w-56">
+      <span className="sr-only">{label}</span>
+      <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder ?? label}
+        className="field min-h-11 pl-9 text-sm"
+      />
+    </label>
+  );
+}
+
+// Satır sonundaki "⋮" eylem menüsü. Bir satırda birden fazla eylem olduğunda hepsini yan
+// yana buton olarak dizmek listeyi okunmaz yapıyor; ikincil eylemler buraya toplanır.
+// Dışarı tıklama ve Esc ile kapanır, klavyeyle erişilebilir.
+export function RowMenu({ label, children }: { label: string; children: (close: () => void) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        className="icon-btn icon-btn-quiet h-9 w-9 border-transparent bg-transparent"
+      >
+        <Icon name="more" className="h-4 w-4" />
+      </button>
+      {open && (
+        <div role="menu" className="app-card absolute right-0 top-[calc(100%+.25rem)] z-30 w-52 overflow-hidden p-1">
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// RowMenu içindeki tek bir eylem satırı.
+export function RowMenuItem({ onClick, icon, tone = "default", children }: { onClick: () => void; icon?: IconName; tone?: "default" | "danger"; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className={`pressable flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-semibold ${
+        tone === "danger"
+          ? "text-[var(--danger-strong)] hover:bg-[var(--danger-soft)]"
+          : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
+      }`}
+    >
+      {icon && <Icon name={icon} className="h-4 w-4 shrink-0 opacity-70" />}
+      {children}
     </button>
   );
 }
@@ -126,6 +208,18 @@ export function FormActions({ onCancel, submitLabel, pending, pendingLabel, disa
         {pending ? (pendingLabel ?? "Kaydediliyor…") : submitLabel}
       </button>
     </div>
+  );
+}
+
+// Sayfa seviyesinde kısa süreli başarı bildirimi. Pencere kapandıktan sonra "oldu mu?"
+// sorusunu bırakmamak için: form penceresi kapanırken sonucu buraya taşır.
+export function Notice({ children, onDismiss }: { children: ReactNode; onDismiss?: () => void }) {
+  return (
+    <p role="status" className="flex items-center gap-2 rounded-xl border border-[color:var(--success-soft)] bg-[var(--success-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--success-strong)]">
+      <Icon name="check" className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1">{children}</span>
+      {onDismiss && <button type="button" onClick={onDismiss} aria-label="Bildirimi kapat" className="pressable shrink-0 rounded-lg p-1 hover:bg-white/60"><Icon name="close" className="h-3.5 w-3.5" /></button>}
+    </p>
   );
 }
 

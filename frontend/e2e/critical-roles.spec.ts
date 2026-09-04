@@ -104,7 +104,7 @@ test.describe.serial("Abdera critical role flows", () => {
     await quickAdd.getByLabel("1 · Öğrenci").selectOption(student.id);
     await quickAdd.getByLabel("2 · Ders ve öğretmen").selectOption(enrollment.id);
     await quickAdd.getByRole("button", { name: "Seriyi takvime yerleştir" }).click();
-    await expect(page.getByRole("button", { name: "+ Yeni ders" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Yeni ders", exact: true })).toBeVisible();
 
     const lessonCard = page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}`) }).first();
     await expect(lessonCard).toBeVisible();
@@ -188,6 +188,72 @@ test.describe.serial("Abdera critical role flows", () => {
     await expect(page.getByText("Kısmi ödendi").first()).toBeVisible();
   });
 
+  // Kullanıcı isteği: "takvimde ders taşındığında ilgili öğretmenin ekranına bildirim
+  // gitsin." Yönetici dersi taşır (sürükle-bırakın kullandığı talep+onay uçları), öğretmen
+  // kendi oturumunda zilde görür.
+  test("admin moves a lesson and the assigned teacher sees an in-app notification", async ({ page }) => {
+    await loginStaff(page, "Admin", adminEmail, adminPassword);
+    await seedDemoData(page);
+
+    const teachers = await (await page.request.get(`${apiUrl}/api/teachers`)).json();
+    const teacher = teachers.find((item: { firstName: string; lastName: string }) =>
+      `${item.firstName} ${item.lastName}` === "Ayşe Kaya");
+    expect(teacher, "mock öğretmen bulunmalı").toBeTruthy();
+
+    const from = new Date();
+    const to = new Date();
+    to.setDate(to.getDate() + 30);
+    const lessons = await (await page.request.get(
+      `${apiUrl}/api/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&teacherId=${teacher.id}`)).json();
+    const lesson = lessons
+      .filter((item: { startAt: string; status: string }) => item.status === "Normal" && new Date(item.startAt) > new Date())
+      .sort((a: { startAt: string }, b: { startAt: string }) => a.startAt.localeCompare(b.startAt))[0];
+    expect(lesson, "taşınacak yaklaşan bir ders olmalı").toBeTruthy();
+
+    // Hedef saati tahmin etmiyoruz: aynı veritabanına art arda koşulduğunda önceki koşunun
+    // taşıdığı ders slotu doldurup çakışma (409) üretiyordu. Onay kuralı "öğretmenin VEYA
+    // öğrencinin başka dersi" olduğu için ikisinin de o günkü dersleri toplanıp ilk boş
+    // 45 dakika seçiliyor - sabah saatleri seed verisinde boş (dersler 16:00-21:00).
+    const allLessons = await (await page.request.get(
+      `${apiUrl}/api/calendar?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`)).json();
+    const targetDay = new Date(lesson.startAt);
+    targetDay.setDate(targetDay.getDate() + 3);
+    const busy = allLessons
+      .filter((item: { teacherId: string; studentId: string; status: string; startAt: string }) =>
+        item.status !== "Cancelled" && item.status !== "Rescheduled" &&
+        (item.teacherId === lesson.teacherId || item.studentId === lesson.studentId) &&
+        new Date(item.startAt).toDateString() === targetDay.toDateString())
+      .map((item: { startAt: string; endAt: string }) => [new Date(item.startAt).getTime(), new Date(item.endAt).getTime()] as const);
+
+    let target: Date | null = null;
+    for (let minutes = 6 * 60; minutes <= 12 * 60 && !target; minutes += 15) {
+      const candidate = new Date(targetDay);
+      candidate.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+      const candidateEnd = candidate.getTime() + 45 * 60000;
+      if (!busy.some(([busyStart, busyEnd]: readonly [number, number]) => candidate.getTime() < busyEnd && busyStart < candidateEnd)) {
+        target = candidate;
+      }
+    }
+    expect(target, "hedef gün için boş bir sabah slotu bulunmalı").toBeTruthy();
+
+    const changeRequest = await (await page.request.post(`${apiUrl}/api/lessons/${lesson.id}/change-requests`, {
+      data: { reason: null, proposedStartAt: target!.toISOString(), proposedEndAt: new Date(target!.getTime() + 45 * 60000).toISOString() },
+    })).json();
+    const approve = await page.request.post(`${apiUrl}/api/change-requests/${changeRequest.id}/approve`);
+    expect(approve.ok(), `onay başarısız: ${await approve.text()}`).toBeTruthy();
+
+    await loginStaff(page, "Teacher", teacherEmail, teacherPassword);
+    await page.getByRole("button", { name: /^Bildirimler/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Bildirimler" });
+    await expect(dialog).toContainText("Ders saati değişti");
+    await expect(dialog).toContainText("→");
+
+    // Okundu işaretlemek zili sıfırlar: bildirime tıklayınca takvime gidilir.
+    await dialog.getByRole("button", { name: /Ders saati değişti/ }).first().click();
+    await page.waitForURL(/\/dashboard\/calendar/);
+    await expect(page.getByRole("button", { name: "Bildirimler", exact: true })).toBeVisible();
+  });
+
   test("teacher writes repertoire note and explicitly approves the parent comment", async ({ page }) => {
     await loginStaff(page, "Teacher", teacherEmail, teacherPassword);
     await page.goto("/dashboard/progress");
@@ -216,7 +282,9 @@ test.describe.serial("Abdera critical role flows", () => {
     await page.getByLabel("Doğrulama kodu").fill(code!);
     await page.getByRole("button", { name: "Giriş yap" }).click();
     await page.waitForURL(/\/parent$/);
-    await expect(page.getByText("Lara Arslan")).toBeVisible();
+    // exact: mesaj listesindeki "Ders Saati Değişikliği" bildirimi de öğrencinin adını
+    // içeriyor - beklenen şey çocuğun kartındaki ad, gövde metni değil.
+    await expect(page.getByText("Lara Arslan", { exact: true }).first()).toBeVisible();
     await page.getByRole("button", { name: "Takvim" }).click();
     await expect(page.getByRole("heading", { name: "Takvim" })).toBeVisible();
     await page.getByRole("button", { name: "Aidat" }).click();

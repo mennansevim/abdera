@@ -39,50 +39,43 @@ export function ChangePasswordForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-3 flex flex-wrap items-end gap-3">
-      <div className="space-y-1.5">
-        <label className="text-[.7rem] font-bold text-[var(--warning-strong)]">Mevcut şifre</label>
+    <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-3">
+      <label className="form-label">Mevcut şifre
         <input
           type="password"
           required
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
-          className="field min-h-11 w-40 border-[var(--warning)]/50 text-sm"
+          className="field text-sm"
           autoComplete="current-password"
         />
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-[.7rem] font-bold text-[var(--warning-strong)]">Yeni şifre (en az 8 karakter)</label>
+      </label>
+      <label className="form-label">Yeni şifre (en az 8 karakter)
         <input
           type="password"
           required
           minLength={8}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
-          className="field min-h-11 w-48 border-[var(--warning)]/50 text-sm"
+          className="field text-sm"
           autoComplete="new-password"
         />
-      </div>
-      <div className="space-y-1.5">
-        <label className="text-[.7rem] font-bold text-[var(--warning-strong)]">Yeni şifre tekrarı</label>
+      </label>
+      <label className="form-label">Yeni şifre tekrarı
         <input
           type="password"
           required
           minLength={8}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="field min-h-11 w-48 border-[var(--warning)]/50 text-sm"
+          className="field text-sm"
           autoComplete="new-password"
         />
-      </div>
-      <button
-        type="submit"
-        disabled={changePassword.isPending}
-        className="pressable min-h-11 rounded-xl bg-[var(--warning-strong)] px-4 text-sm font-bold text-white disabled:opacity-50"
-      >
+      </label>
+      <button type="submit" disabled={changePassword.isPending} className="btn btn-primary justify-self-start sm:col-span-3">
         {changePassword.isPending ? "Kaydediliyor…" : "Şifreyi değiştir"}
       </button>
-      {error && <p className="w-full text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
+      {error && <p role="alert" className="text-sm font-semibold text-[var(--danger-strong)] sm:col-span-3">{error}</p>}
     </form>
   );
 }

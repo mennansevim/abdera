@@ -36,7 +36,8 @@ public static class UpdateLesson
         AbderaDbContext db,
         IClock clock,
         IConfiguration config,
-        INotificationScheduler scheduler)
+        INotificationScheduler scheduler,
+        IStaffNotifier staffNotifier)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(item => item.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -145,6 +146,24 @@ public static class UpdateLesson
                 replacement.Id,
                 guardianId,
                 clock.UtcNow);
+        }
+
+        // Ders detayından yapılan düzenleme de bir "taşıma"dır: saat değiştiyse dersi
+        // programında taşıyan öğretmen(ler) bunu ekranında görmeli. Öğretmen de değiştiyse
+        // dersi kaybeden taraf sessiz kalmasın diye eski öğretmene de düşer.
+        if (replacement.StartAt != lesson.StartAt)
+        {
+            await LessonMovedNotice.NotifyTeacherAsync(
+                staffNotifier, db, clock, replacement.TeacherId, replacement.StudentId,
+                lesson.StartAt, replacement.StartAt, replacement.Id);
+
+            if (replacement.TeacherId != lesson.TeacherId)
+            {
+                await LessonMovedNotice.NotifyTeacherAsync(
+                    staffNotifier, db, clock, lesson.TeacherId, replacement.StudentId,
+                    lesson.StartAt, replacement.StartAt, replacement.Id,
+                    extraNote: "ders başka bir öğretmene aktarıldı");
+            }
         }
 
         db.AuditLogs.Add(AuditLog.Record(

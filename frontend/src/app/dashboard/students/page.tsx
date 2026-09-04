@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Icon, instrumentBadgeStyle } from "@/components/icons";
-import { AddButton, FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
+import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
-import { useCreateStudent, useStudentOverviews, type StudentInstrumentSummary } from "@/lib/people";
+import { useCreateStudent, useStudentOverviews, type Student, type StudentInstrumentSummary } from "@/lib/people";
 import { StudentDetail } from "./student-detail";
 
 // docs/04-permissions.md: öğrenci oluşturma/veli/kayıt yönetimi yalnızca Admin - Teacher
@@ -16,23 +16,47 @@ export default function StudentsPage() {
   // "İçine girmeden anlayabilelim" - liste artık her satırda enstrüman rozetlerini de
   // taşıyan tek bir toplu istekten (overview) besleniyor, N+1 sorgu açmadan.
   const { data: overviews, isLoading } = useStudentOverviews();
-  const students = overviews?.map((row) => row.student);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function announce(text: string) {
+    setNotice(text);
+    window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 4000);
+  }
+
+  // Ada göre sıralı + aranabilir liste; arama enstrümanı da kapsar ("piyano öğrencileri").
+  const visibleRows = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase("tr-TR");
+    return (overviews ?? [])
+      .filter(({ student, instruments }) => {
+        if (!query) return true;
+        const haystack = [`${student.firstName} ${student.lastName}`, ...instruments.map((item) => item.instrumentName)]
+          .join(" ").toLocaleLowerCase("tr-TR");
+        return haystack.includes(query);
+      })
+      .sort((a, b) => `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`, "tr-TR"));
+  }, [overviews, search]);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Öğrenciler"
         description="Öğrenciler, aldıkları dersler ve kayıt bilgileri."
-        actions={isAdmin && <AddButton label="Öğrenci ekle" onClick={() => setShowCreate(true)} />}
+        actions={<>
+          <SearchInput value={search} onChange={setSearch} label="Öğrenci ara" placeholder="Ad veya enstrüman ara…" />
+          {isAdmin && <AddButton label="Öğrenci ekle" onClick={() => setShowCreate(true)} />}
+        </>}
       />
+
+      {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
       <div className="app-card overflow-hidden">
         {isLoading && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
-        {students?.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">Henüz öğrenci yok.</p>}
+        {!isLoading && visibleRows.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">{search ? `"${search}" ile eşleşen öğrenci yok.` : "Henüz öğrenci yok."}</p>}
         <ul className="divide-y divide-[var(--line)]">
-          {overviews?.map(({ student, instruments }) => (
+          {visibleRows.map(({ student, instruments }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
@@ -43,10 +67,12 @@ export default function StudentsPage() {
                   <span className="block truncate text-sm font-bold">{student.firstName} {student.lastName}</span>
                   <span className="text-meta mt-0.5 block">{student.birthDate}</span>
                 </span>
-                <InstrumentBadgeRow instruments={instruments} />
+                {instruments.length
+                  ? <InstrumentBadgeRow instruments={instruments} />
+                  : <span className="shrink-0 rounded-full bg-[var(--warning-soft)] px-2 py-1 text-[.62rem] font-bold text-[var(--warning-strong)]">Kurs yok</span>}
                 <Icon name="chevron" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${expandedId === student.id ? "rotate-90" : ""}`} />
               </button>
-              {expandedId === student.id && <StudentDetail studentId={student.id} isAdmin={isAdmin} />}
+              {expandedId === student.id && <StudentDetail student={student} isAdmin={isAdmin} />}
             </li>
           ))}
         </ul>
@@ -54,11 +80,42 @@ export default function StudentsPage() {
 
       {isAdmin && (
         <Modal open={showCreate} title="Öğrenci ekle" onClose={() => setShowCreate(false)} size="sm">
-          <CreateStudentForm onClose={() => setShowCreate(false)} onCreated={() => setShowCreate(false)} />
+          {/* Yeni öğrenci eklenince satırı açık bırak: sıradaki iş neredeyse her zaman
+              veli ve kurs eklemek, ikisi de bu satırın içindeki "+" eylemleri. */}
+          <CreateStudentForm
+            onClose={() => setShowCreate(false)}
+            onCreated={(student) => {
+              setShowCreate(false);
+              setSearch("");
+              setExpandedId(student.id);
+              announce(`${student.firstName} ${student.lastName} eklendi - veli ve kurs bilgisi aşağıda eklenebilir.`);
+              scrollToStudentWhenReady(student.id);
+            }}
+          />
         </Modal>
       )}
     </div>
   );
+}
+
+// Yeni eklenen satıra kaydır. Sabit bir gecikme yetmiyor: liste "student-overviews"
+// sorgusu tazelendikten sonra yeniden kuruluyor ve satır DOM'a birkaç yüz ms sonra
+// giriyor - eleman görünene kadar kısa aralıklarla denenir, en fazla 2 saniye.
+function scrollToStudentWhenReady(studentId: string) {
+  let attempts = 0;
+  let scrolled = 0;
+  const timer = window.setInterval(() => {
+    const element = document.getElementById(`student-${studentId}`);
+    if (element) {
+      // Anında kaydırma: "smooth" animasyonu listenin yeniden kurulmasıyla yarışıp
+      // iptal oluyordu, satır ekranda hiç görünmüyordu.
+      element.scrollIntoView({ block: "center" });
+      // Liste, sorgu tazelendikçe yeniden kuruluyor - satır yerine oturana kadar tekrarla.
+      if (++scrolled >= 3) window.clearInterval(timer);
+      return;
+    }
+    if (++attempts > 20) window.clearInterval(timer);
+  }, 200);
 }
 
 // "Keman piyano bateri gitar tasarımları ile yatay barlar süslenebilir" - her enstrüman
@@ -79,7 +136,7 @@ function InstrumentBadgeRow({ instruments }: { instruments: StudentInstrumentSum
   );
 }
 
-function CreateStudentForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateStudentForm({ onClose, onCreated }: { onClose: () => void; onCreated: (student: Student) => void }) {
   const createStudent = useCreateStudent();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -90,8 +147,7 @@ function CreateStudentForm({ onClose, onCreated }: { onClose: () => void; onCrea
     event.preventDefault();
     setError(null);
     try {
-      await createStudent.mutateAsync({ firstName, lastName, birthDate });
-      onCreated();
+      onCreated(await createStudent.mutateAsync({ firstName, lastName, birthDate }));
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğrenci eklenemedi.");
     }

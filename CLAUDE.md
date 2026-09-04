@@ -40,6 +40,7 @@ Modules/Billing/
 ```
 UNIQUE (lesson_series_id, start_at)                         -- mükerrer ders üretimi engeli
 UNIQUE (type, reference_type, reference_id) ON notification_jobs   -- idempotency anahtarı
+UNIQUE (user_id, type, reference_type, reference_id) ON staff_notifications  -- ekran içi bildirim idempotency
 UNIQUE (provider_event_id) ON whatsapp_webhook_events
 UNIQUE (enrollment_id, period) ON receivables
 CHECK (end_at > start_at)

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/icons";
+import { PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 
@@ -39,8 +40,8 @@ export default function ChangeRequestsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-display font-serif italic">Ders Değişikliği Talepleri</h1>
+    <div className="space-y-4">
+      <PageHeader title="Ders değişikliği talepleri" description="Öğretmenlerin gönderdiği saat değişikliği isteklerini onayla veya reddet." />
 
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 

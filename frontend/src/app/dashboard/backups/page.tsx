@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/icons";
+import { PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useBackupRuns, useSystemHealth, useTriggerBackup, type BackupRunStatus } from "@/lib/ops";
 
@@ -45,15 +46,12 @@ export default function BackupsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-micro text-[var(--brand-strong)]">Veri güvenliği</p>
-          <h1 className="text-display mt-1 font-serif italic">Yedekleme</h1>
-          <p className="text-meta mt-2 max-w-2xl">Günlük şifreli veritabanı yedeklemesi ve sistem sağlık durumu burada takip edilir.</p>
-        </div>
-        {health && <span className={`min-h-9 rounded-full px-3.5 py-2 text-xs font-bold ${HEALTH_CLASS[health.level]}`}>{HEALTH_LABELS[health.level]}</span>}
-      </div>
+    <div className="space-y-4">
+      <PageHeader
+        title="Yedekleme"
+        description="Günlük şifreli veritabanı yedeklemesi ve sistem sağlık durumu."
+        actions={health && <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${HEALTH_CLASS[health.level]}`}>{HEALTH_LABELS[health.level]}</span>}
+      />
 
       {health && health.level !== "Healthy" && (
         <section role="alert" className="app-card flex items-start gap-3 border-[var(--danger)]/30 bg-[var(--danger-soft)] p-4">

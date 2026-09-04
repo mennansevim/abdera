@@ -62,6 +62,7 @@ public class AbderaDbContext : DbContext
     public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
 
     public DbSet<NotificationJob> NotificationJobs => Set<NotificationJob>();
+    public DbSet<StaffNotification> StaffNotifications => Set<StaffNotification>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppWebhookEvent> WhatsAppWebhookEvents => Set<WhatsAppWebhookEvent>();
     public DbSet<MessageTemplate> MessageTemplates => Set<MessageTemplate>();

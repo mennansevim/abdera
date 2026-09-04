@@ -10,6 +10,7 @@ import { useEnrollments, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
+import { AddButton, Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
 import { MakeupScheduler } from "./makeup-scheduler";
 
@@ -114,6 +115,15 @@ export default function CalendarPage() {
   const [showSeriesForm, setShowSeriesForm] = useState(false);
   const [quickAddSlot, setQuickAddSlot] = useState<QuickAddSlot | null>(null);
   const [showMakeupScheduler, setShowMakeupScheduler] = useState(false);
+  // Ders serisi ve telafi yerleştirme sonuçları pencere kapandığı anda kaybolmasın diye
+  // sayfa seviyesinde tutulur; ızgaranın kendi toast'ı (WeeklyGrid) yalnızca sürükle-bırak
+  // ve ders düzenleme için, oraya buradan erişilemiyor.
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function announce(text: string) {
+    setNotice(text);
+    window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 5000);
+  }
   const [instrumentFilter, setInstrumentFilter] = useState<(typeof INSTRUMENT_FILTERS)[number]>("Hepsi");
   const [teacherFilter, setTeacherFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
@@ -174,32 +184,39 @@ export default function CalendarPage() {
             {formatWeekRange(weekStart, addDays(weekEnd, -1))}
           </span>
           {isAdmin && (
-            <><button onClick={() => { setShowMakeupScheduler((value) => !value); setShowSeriesForm(false); setQuickAddSlot(null); }} className={`pressable ml-1 min-h-10 rounded-xl border px-3.5 text-[.68rem] font-bold ${showMakeupScheduler ? "border-[#6d559b] bg-[#6d559b] text-white" : "border-[#cfc2e4] bg-white text-[#5c477f] hover:bg-[#eee8f8]"}`}>
-              {showMakeupScheduler ? "Telafi asistanını kapat" : "Telafi planla"}
-            </button><button onClick={() => { setShowSeriesForm((value) => !value); setShowMakeupScheduler(false); setQuickAddSlot(null); }} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-3.5 text-[.68rem] font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)]">
-              {showSeriesForm ? "Zamanlayıcıyı kapat" : "+ Yeni ders"}
-            </button></>
+            <>
+              <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet ml-1">Telafi planla</button>
+              <AddButton label="Yeni ders" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} />
+            </>
           )}
         </div>
       </header>
 
-      {isAdmin && showSeriesForm && !quickAddSlot && (
-        <section className="app-card p-4">
+      {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
+
+      {isAdmin && (
+        <Modal open={showSeriesForm && !quickAddSlot} title="Yeni ders" description="Öğrenciyi seç; sistem öğretmen ve öğrenci takvimini birlikte tarasın." onClose={() => setShowSeriesForm(false)}>
           <CreateSeriesForm
             key="manual"
-            onCreated={() => { setShowSeriesForm(false); setQuickAddSlot(null); }}
+            onCreated={(summary) => { setShowSeriesForm(false); setQuickAddSlot(null); announce(summary); }}
+            onCancel={() => setShowSeriesForm(false)}
           />
-        </section>
+        </Modal>
       )}
 
       {isAdmin && quickAddSlot && (
         <QuickAddLessonPopover
           slot={quickAddSlot}
+          onCreated={announce}
           onClose={() => { setQuickAddSlot(null); setShowSeriesForm(false); }}
         />
       )}
 
-      {isAdmin && showMakeupScheduler && <section className="app-card p-4 sm:p-5"><MakeupScheduler /></section>}
+      {isAdmin && (
+        <Modal open={showMakeupScheduler} title="Telafi planla" description="Öğretmen ve öğrenci programındaki ortak boşlukları tek tıkla kullan." onClose={() => setShowMakeupScheduler(false)}>
+          <MakeupScheduler onPlaced={(summary) => { setShowMakeupScheduler(false); announce(summary); }} onCancel={() => setShowMakeupScheduler(false)} />
+        </Modal>
+      )}
 
       {isAdmin && (
         <p className="hidden items-center gap-1.5 text-[.65rem] text-[var(--muted)] xl:flex">
@@ -476,7 +493,7 @@ function FloatingDragPreview({ preview, tone }: { preview: { x: number; y: numbe
   return <div aria-hidden="true" className="pointer-events-none fixed z-[70] w-44 -translate-x-1/2 -translate-y-[calc(100%+.8rem)] overflow-hidden rounded-xl border-l-4 px-3 py-2.5 text-left shadow-[0_16px_40px_rgba(58,42,31,.25)]" style={{ left: preview.x, top: preview.y, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}><span className="block rounded-lg bg-white/85 px-2 py-1 text-center text-xs font-extrabold tabular-nums shadow-sm">{preview.label}</span><span className="mt-2 block truncate text-xs font-bold">{preview.lesson.studentName}</span><span className="mt-0.5 block truncate text-[.62rem] opacity-75">{preview.lesson.instrumentName} · {preview.lesson.teacherName}</span></div>;
 }
 
-function QuickAddLessonPopover({ slot, onClose }: { slot: QuickAddSlot; onClose: () => void }) {
+function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlot; onCreated: (summary: string) => void; onClose: () => void }) {
   // Popup, çift tıklanan hücrenin yakınında açılır; ekran kenarına taşarsa içeri doğru kayar.
   // Bu bileşen yalnızca kullanıcı etkileşiminden sonra oluşturulduğu için viewport ölçüsü
   // burada güvenle okunabilir (ilk SSR çıktısında popup yoktur).
@@ -504,18 +521,18 @@ function QuickAddLessonPopover({ slot, onClose }: { slot: QuickAddSlot; onClose:
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
           <div>
-            <p className="text-micro text-[var(--brand-strong)]">Takvimden hızlı ekle</p>
-            <h2 className="mt-1 text-base font-extrabold">Yeni ders oluştur</h2>
+            <h2 className="text-title">Yeni ders oluştur</h2>
             <p className="mt-1 text-[.68rem] font-semibold text-[var(--muted)]">{slotLabel}</p>
           </div>
-          <button type="button" onClick={onClose} className="pressable grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-[var(--line)] bg-white text-[var(--muted)]" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat" title="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
         <div className="max-h-[calc(100vh-7rem)] overflow-y-auto p-4">
           <CreateSeriesForm
             initialDate={slot.date}
             initialDay={slot.day}
             initialTime={slot.time}
-            onCreated={onClose}
+            onCreated={(summary) => { onCreated(summary); onClose(); }}
+            onCancel={onClose}
           />
         </div>
       </section>

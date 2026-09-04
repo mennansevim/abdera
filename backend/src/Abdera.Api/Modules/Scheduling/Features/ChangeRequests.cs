@@ -84,7 +84,8 @@ public static class ChangeRequests
     }
 
     private static async Task<IResult> ApproveAsync(
-        Guid requestId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
+        Guid requestId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        INotificationScheduler scheduler, IStaffNotifier staffNotifier)
     {
         var changeRequest = await db.LessonChangeRequests.SingleOrDefaultAsync(r => r.Id == requestId)
             ?? throw new NotFoundException("Değişiklik talebi bulunamadı.");
@@ -114,6 +115,11 @@ public static class ChangeRequests
             await scheduler.ScheduleAsync(
                 NotificationJobType.LessonRescheduled, "lesson", newLesson.Id, guardianId, clock.UtcNow);
         }
+
+        // Dersi taşıyan çoğu zaman yönetici olur; öğretmen değişikliği kendi ekranında görsün.
+        await LessonMovedNotice.NotifyTeacherAsync(
+            staffNotifier, db, clock, lesson.TeacherId, lesson.StudentId,
+            lesson.StartAt, newLesson.StartAt, newLesson.Id);
 
         db.AuditLogs.Add(AuditLog.Record(
             AuthContext.GetUserId(principal),

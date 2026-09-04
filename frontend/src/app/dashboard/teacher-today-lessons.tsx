@@ -129,17 +129,17 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="sm:col-span-2"><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Kısa ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
-            <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
-            <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Ödev</span><input value={homework} onChange={(event) => setHomework(event.target.value)} className="field text-xs" placeholder="Bir sonraki derse kadar" /></label>
-            <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-xs" placeholder="Örn. Bach · Minuet in G" /></label>
-            <label><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Eser zorluğu</span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-xs"><option value="">Belirtme</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5</option>)}</select></label>
-            <label className="sm:col-span-2"><span className="mb-1.5 block text-[.68rem] font-bold text-[var(--muted)]">Sonraki hedef</span><input value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} className="field text-xs" placeholder="Bir sonraki dersin odağı" /></label>
+            <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Kısa ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
+            <label><span className="text-meta mb-1.5 block font-bold">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
+            <label><span className="text-meta mb-1.5 block font-bold">Ödev</span><input value={homework} onChange={(event) => setHomework(event.target.value)} className="field text-xs" placeholder="Bir sonraki derse kadar" /></label>
+            <label><span className="text-meta mb-1.5 block font-bold">Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-xs" placeholder="Örn. Bach · Minuet in G" /></label>
+            <label><span className="text-meta mb-1.5 block font-bold">Eser zorluğu</span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-xs"><option value="">Belirtme</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5</option>)}</select></label>
+            <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Sonraki hedef</span><input value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} className="field text-xs" placeholder="Bir sonraki dersin odağı" /></label>
           </div>
           {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] p-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={handleSave} disabled={markAttendance.isPending || createNote.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-xs font-bold text-white shadow-[0_8px_20px_rgba(217,102,42,.22)] disabled:opacity-50">{markAttendance.isPending || createNote.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
-            <button onClick={() => setShowChangeForm((value) => !value)} className="pressable min-h-11 rounded-xl px-3 text-xs font-bold text-[var(--brand)] hover:bg-[var(--brand-soft)]">Ders değişikliği iste</button>
+            <button type="button" onClick={handleSave} disabled={markAttendance.isPending || createNote.isPending} className="btn btn-primary">{markAttendance.isPending || createNote.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
+            <button type="button" onClick={() => setShowChangeForm((value) => !value)} className="btn btn-quiet">Ders değişikliği iste</button>
           </div>
           {showChangeForm && <ChangeRequestForm onSubmit={async (proposedStartAt, proposedEndAt, reason) => { await createChangeRequest.mutateAsync({ proposedStartAt, proposedEndAt, reason }); setShowChangeForm(false); }} />}
         </>
@@ -168,13 +168,13 @@ function ChangeRequestForm({ onSubmit }: { onSubmit: (start: string, end: string
 
   if (sent) return <p className="rounded-xl bg-[var(--success-soft)] p-3 text-xs font-bold text-[var(--success-strong)]">Talep gönderildi; yönetici onayı bekleniyor.</p>;
   return (
-    <form onSubmit={handleSubmit} className="grid gap-2 rounded-2xl border border-[var(--line)] bg-white p-3 sm:grid-cols-2">
-      <input type="date" value={date} onChange={(event) => setDate(event.target.value)} required className="field text-xs" aria-label="Önerilen gün" />
-      <input type="time" value={time} onChange={(event) => setTime(event.target.value)} required className="field text-xs" aria-label="Önerilen saat" />
-      <input type="number" min={15} step={15} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-xs" aria-label="Ders süresi, dakika" />
-      <input value={reason} onChange={(event) => setReason(event.target.value)} className="field text-xs" placeholder="Sebep (opsiyonel)" />
-      <button type="submit" className="pressable min-h-11 rounded-xl bg-[var(--brand-strong)] px-4 text-xs font-bold text-white sm:col-span-2">Talebi gönder</button>
-      {error && <p className="text-xs text-[var(--danger-strong)] sm:col-span-2">{error}</p>}
+    <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl border border-[var(--line)] bg-white p-3 sm:grid-cols-2">
+      <label className="form-label">Önerilen gün<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required className="field text-xs" /></label>
+      <label className="form-label">Önerilen saat<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required className="field text-xs" /></label>
+      <label className="form-label">Süre (dk)<input type="number" min={15} step={15} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-xs" /></label>
+      <label className="form-label">Sebep <span className="font-medium">· opsiyonel</span><input value={reason} onChange={(event) => setReason(event.target.value)} className="field text-xs" /></label>
+      <button type="submit" className="btn btn-primary sm:col-span-2">Talebi gönder</button>
+      {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] sm:col-span-2">{error}</p>}
     </form>
   );
 }

@@ -430,6 +430,23 @@ notification_jobs
 
   UNIQUE (type, reference_type, reference_id)   -- A5: idempotency anahtarı
 
+-- Ekran içi personel bildirimi: dışarı hiçbir şey gönderilmez, alıcı uygulamada görür.
+-- notification_jobs veliye GİDEN mesajın durum makinesini taşır; bu tablo yalnızca
+-- "okundu/okunmadı" bilir. İlk kullanım: takvimde ders taşınınca dersin öğretmenine düşer.
+staff_notifications
+  id             uuid pk
+  user_id        uuid fk -> users(id)   -- alıcı; öğretmenin giriş hesabı yoksa satır hiç açılmaz
+  type           text     -- LessonMoved
+  title          text
+  body           text     -- "Lara Arslan · 8 Eylül Pazartesi 17:30 → 11 Eylül Perşembe 18:00"
+  reference_type text     -- "lesson"
+  reference_id   uuid     -- taşımadan sonra oluşan YENİ ders satırı
+  read_at        timestamptz null
+  created_at     timestamptz
+  updated_at     timestamptz
+
+  UNIQUE (user_id, type, reference_type, reference_id)   -- aynı olay iki kez düşmesin
+
 whatsapp_messages
   id                  uuid pk
   notification_job_id uuid fk -> notification_jobs(id) null

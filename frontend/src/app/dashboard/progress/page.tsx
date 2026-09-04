@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
+import { AddButton, FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useStudents, type Student } from "@/lib/people";
 import { buildProgressAnalysis, type PieceInsight } from "@/lib/progress-analysis";
@@ -97,16 +98,11 @@ function ProgressPageContent() {
     (!lastWorkedFrom || new Date(entry.lessonStartAt) >= new Date(`${lastWorkedFrom}T00:00:00`))), [difficultyFilter, instrumentFilter, lastWorkedFrom, progress?.entries, teacherFilter, timelineFilter]);
   return (
     <div className="space-y-5">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-micro text-[var(--brand-strong)]">ÖĞRENCİ ODAKLI TAKİP</p>
-          <h1 className="mt-1 text-display font-serif italic">Gelişim günlüğü</h1>
-          <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">Ders notlarını, ödevleri ve eser yolculuğunu tek bir akışta biriktir. Açıklanabilir özetler her yeni kayıtla öğrencinin gelişim resmini günceller.</p>
-        </div>
-        {canWrite && <button onClick={() => setShowComposer(true)} disabled={!activeStudentId} className="pressable inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_8px_20px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
-          <span className="text-lg leading-none">+</span> Yeni gelişim notu
-        </button>}
-      </header>
+      <PageHeader
+        title="Gelişim günlüğü"
+        description="Ders notları, ödevler ve eser yolculuğu tek bir akışta birikir."
+        actions={canWrite && <AddButton label="Yeni gelişim notu" onClick={() => setShowComposer(true)} disabled={!activeStudentId} />}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <StudentPicker
@@ -125,7 +121,11 @@ function ProgressPageContent() {
             <StudentHeader student={activeStudent} progress={progress} analysis={analysis} />
             <ProgressStats analysis={analysis} />
             <RepertoireFilters entries={progress?.entries ?? []} teacherFilter={teacherFilter} instrumentFilter={instrumentFilter} difficultyFilter={difficultyFilter} lastWorkedFrom={lastWorkedFrom} onTeacher={setTeacherFilter} onInstrument={setInstrumentFilter} onDifficulty={setDifficultyFilter} onLastWorkedFrom={setLastWorkedFrom} />
-            {canWrite && showComposer && <ProgressComposer studentId={activeStudent.id} lessons={studentLessons} onClose={() => setShowComposer(false)} />}
+            {canWrite && (
+              <Modal open={showComposer} title="Yeni gelişim notu" description="Kayıt eklendiğinde kümülatif analiz otomatik yenilenir." onClose={() => setShowComposer(false)}>
+                <ProgressComposer studentId={activeStudent.id} lessons={studentLessons} onClose={() => setShowComposer(false)} />
+              </Modal>
+            )}
 
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(19rem,.8fr)]">
               <Timeline
@@ -242,16 +242,15 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
     }
   }
 
-  return <form onSubmit={handleSubmit} className="app-card overflow-hidden border-[var(--brand)]/30">
-    <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] bg-[var(--brand-soft)]/50 p-4 sm:p-5"><div><p className="text-micro text-[var(--brand-strong)]">YENİ KAYIT</p><h3 className="mt-1 text-title">Ders gelişimini ekle</h3><p className="mt-1 text-xs text-[var(--muted)]">Kayıt eklendiğinde kümülatif analiz otomatik yenilenir.</p></div><button type="button" onClick={onClose} className="pressable grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--muted)]" aria-label="Gelişim notu formunu kapat"><Icon name="close" className="h-4 w-4" /></button></div>
-    {!lessons.length ? <div className="p-5 text-sm text-[var(--muted)]">Bu öğrenci için yakın tarihli ders bulunamadı. Önce takvimden bir ders oluşturmalısın.</div> : <div className="grid gap-4 p-4 sm:p-5">
-      <label className="space-y-1.5 text-xs font-bold text-[var(--muted)] sm:max-w-md">Ders<select value={activeLessonId} onChange={(event) => setLessonId(event.target.value)} className="field text-sm">{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{formatDate(lesson.startAt, true)} · {formatTime(lesson.startAt)} · {lesson.instrumentName}</option>)}</select></label>
-      <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1.5 text-xs font-bold text-[var(--muted)]"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label><label className="space-y-1.5 text-xs font-bold text-[var(--muted)]"><span>Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-sm" placeholder="Örn. Bach · Minuet in G" /></label></div>
-      {pieceTitle && <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="space-y-1 text-xs font-bold text-[var(--muted)]">Besteci<input value={pieceComposer} onChange={(event) => setPieceComposer(event.target.value)} className="field bg-white text-sm" /></label><label className="space-y-1 text-xs font-bold text-[var(--muted)]">Eser durumu<select value={pieceStatus} onChange={(event) => setPieceStatus(event.target.value as typeof pieceStatus)} className="field bg-white text-sm"><option value="Learning">Çalışılıyor</option><option value="Polishing">Pekiştiriliyor</option><option value="PerformanceReady">Sahneye hazır</option><option value="Archived">Arşivlendi</option></select></label><label className="space-y-1 text-xs font-bold text-[var(--muted)]">Hedef tarih<input type="date" value={pieceTargetDate} onChange={(event) => setPieceTargetDate(event.target.value)} className="field bg-white text-sm" /></label><label className="space-y-1 text-xs font-bold text-[var(--muted)]">Nota / bağlantı<input type="url" value={pieceResourceUrl} onChange={(event) => setPieceResourceUrl(event.target.value)} placeholder="https://…" className="field bg-white text-sm" /></label><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)] sm:col-span-2 lg:col-span-4"><input type="checkbox" checked={pieceResourceVisibleToGuardian} onChange={(event) => setPieceResourceVisibleToGuardian(event.target.checked)} disabled={!pieceResourceUrl} /> Bağlantıyı veli portalında göster</label></div>}
-      <label className="space-y-1.5 text-xs font-bold text-[var(--muted)]"><span>Ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /></label>
-      <div className="grid gap-3 sm:grid-cols-3"><label className="space-y-1.5 text-xs font-bold text-[var(--muted)]"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="space-y-1.5 text-xs font-bold text-[var(--muted)]"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label><label className="space-y-1.5 text-xs font-bold text-[var(--muted)]"><span>Eser zorluğu <span className="font-medium">· isteğe bağlı</span></span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-sm"><option value="">Otomatik öner</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select><span className="block text-[.62rem] font-medium leading-relaxed">Boş bırakırsan ders notuna göre kural tabanlı önerilir.</span></label></div>
-      {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4"><button type="button" onClick={onClose} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-xs font-bold text-[var(--muted)]">Vazgeç</button><button type="submit" disabled={createNote.isPending || !lessons.length} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-xs font-bold text-white disabled:opacity-50">{createNote.isPending ? "Kaydediliyor…" : "Gelişim notunu kaydet"}</button></div>
+  return <form onSubmit={handleSubmit}>
+    {!lessons.length ? <p className="text-sm text-[var(--muted)]">Bu öğrenci için yakın tarihli ders bulunamadı. Önce takvimden bir ders oluşturmalısın.</p> : <div className="grid gap-3.5">
+      <label className="form-label sm:max-w-md">Ders<select value={activeLessonId} onChange={(event) => setLessonId(event.target.value)} className="field text-sm">{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{formatDate(lesson.startAt, true)} · {formatTime(lesson.startAt)} · {lesson.instrumentName}</option>)}</select></label>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="form-label"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label><label className="form-label"><span>Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-sm" placeholder="Örn. Bach · Minuet in G" /></label></div>
+      {pieceTitle && <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="form-label">Besteci<input value={pieceComposer} onChange={(event) => setPieceComposer(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Eser durumu<select value={pieceStatus} onChange={(event) => setPieceStatus(event.target.value as typeof pieceStatus)} className="field bg-white text-sm"><option value="Learning">Çalışılıyor</option><option value="Polishing">Pekiştiriliyor</option><option value="PerformanceReady">Sahneye hazır</option><option value="Archived">Arşivlendi</option></select></label><label className="form-label">Hedef tarih<input type="date" value={pieceTargetDate} onChange={(event) => setPieceTargetDate(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Nota / bağlantı<input type="url" value={pieceResourceUrl} onChange={(event) => setPieceResourceUrl(event.target.value)} placeholder="https://…" className="field bg-white text-sm" /></label><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)] sm:col-span-2 lg:col-span-4"><input type="checkbox" checked={pieceResourceVisibleToGuardian} onChange={(event) => setPieceResourceVisibleToGuardian(event.target.checked)} disabled={!pieceResourceUrl} /> Bağlantıyı veli portalında göster</label></div>}
+      <label className="form-label"><span>Ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /></label>
+      <div className="grid gap-3 sm:grid-cols-3"><label className="form-label"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="form-label"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label><label className="form-label"><span>Eser zorluğu <span className="font-medium">· isteğe bağlı</span></span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-sm"><option value="">Otomatik öner</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select><span className="block text-[.62rem] font-medium leading-relaxed">Boş bırakırsan ders notuna göre kural tabanlı önerilir.</span></label></div>
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <FormActions onCancel={onClose} submitLabel="Gelişim notunu kaydet" pending={createNote.isPending} disabled={!lessons.length} />
     </div>}
   </form>;
 }
