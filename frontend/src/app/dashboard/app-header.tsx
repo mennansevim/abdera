@@ -47,7 +47,13 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const router = useRouter();
   const logout = useLogout();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const links = me.role === "Admin" ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS, SETTINGS_LINK];
+  // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
+  // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
+  // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor
+  // (index'e dayalı mobilePrimary referanslarını kaydırmamak için).
+  const links = me.role === "Admin"
+    ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK]
+    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK];
   const mobilePrimary: NavItem[] = me.role === "Admin"
     ? [CORE_LINKS[0]!, CORE_LINKS[4]!, ADMIN_LINKS[1]!, ADMIN_LINKS[4]!]
     : [

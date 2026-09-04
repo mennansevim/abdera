@@ -1,7 +1,32 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useMe } from "@/lib/use-auth";
 import { Icon, type IconName } from "./icons";
+
+// Yönetici-özel sayfaların (Aidatlar, Giderler, Banka, Mesaj Merkezi, Ders Talepleri,
+// Yedekleme) ortak kapısı. Önceden bu sayfalar YALNIZCA kenar çubuğunda gizleniyordu ve
+// altlarındaki API çağrıları Admin-only olduğu için veri sızmıyordu - ama bir öğretmen
+// adresi doğrudan yazarsa (ör. /dashboard/costs) sayfanın kendisi (başlık, boş durumlar,
+// bazı ekranlarda "şifreni doğrula" kutusu) yine de render ediliyordu. Kullanıcı isteği net:
+// "masraflarla ilgili bir sayfayı ASLA görmemeli" - API 403'ü yeterli değil, sayfa hiç
+// açılmamalı. `me` yüklenene kadar hiçbir şey göstermez (yanlış rolün anlık görünüp
+// kaybolmasını engeller).
+export function AdminGate({ children }: { children: ReactNode }) {
+  const { data: me, isLoading } = useMe();
+  const router = useRouter();
+  const isAdmin = me?.role === "Admin";
+
+  useEffect(() => {
+    if (!isLoading && me && !isAdmin) {
+      router.replace("/dashboard");
+    }
+  }, [isLoading, me, isAdmin, router]);
+
+  if (isLoading || !me || !isAdmin) return null;
+  return <>{children}</>;
+}
 
 // Ekranların ortak iskeleti. Önceki sürümde her sayfa kendi başlık bloğunu (üstte küçük
 // büyük harfli bir "göz kırpma" satırı + serif başlık + açıklama) ve altına HER ZAMAN AÇIK

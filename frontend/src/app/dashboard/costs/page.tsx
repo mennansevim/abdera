@@ -2,12 +2,21 @@
 
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
-import { AddButton, FormActions, FormMessage, Modal, PageHeader, SectionHeader } from "@/components/ui";
+import { AddButton, AdminGate, FormActions, FormMessage, Modal, PageHeader, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useCreateExpense, useExpenses, useReceivables, type ExpenseCategory } from "@/lib/billing";
 import { useVerifyPassword } from "@/lib/use-auth";
 
 export default function CostsPage() {
+  return <AdminGate><CostsPageContent /></AdminGate>;
+}
+
+// Maliyet/maaş verisi tamamen Admin'e özel (docs/04-permissions.md) - AdminGate bir
+// öğretmenin bu sayfayı doğrudan adresle açmasını (ve kendi şifresiyle aşağıdaki
+// "doğrula" kutusuna girip kabuğu görmesini) engeller. Şifre-doğrulama adımı bunun
+// YERİNE geçmiyor, ÜSTÜNE ekleniyor: paylaşılan bir bilgisayarda oturum açık kalmış bir
+// yönetici için ek bir onay.
+function CostsPageContent() {
   const [unlocked, setUnlocked] = useState(false);
   const [password, setPassword] = useState("");
   const verifyPassword = useVerifyPassword();

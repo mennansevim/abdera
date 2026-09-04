@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
+import { AddButton, AdminGate, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
@@ -14,8 +14,10 @@ import {
   useStudents,
   useTeacherOverviews,
   useTeachers,
+  useUpdateTeacher,
   type Student,
   type Teacher,
+  type TeacherStatus,
   type TeacherStudentEnrollment,
 } from "@/lib/people";
 
@@ -37,6 +39,13 @@ const DEFAULT_AVAILABILITY_START = "09:00";
 const DEFAULT_AVAILABILITY_END = "19:00";
 
 export default function TeachersPage() {
+  return <AdminGate><TeachersPageContent /></AdminGate>;
+}
+
+// Öğretmen dizini (isim + branş) tamamen Admin'e özel - bir öğretmenin okuldaki diğer
+// öğretmenleri gezme ihtiyacı yok (kullanıcı isteği). Kenar çubuğundan zaten kaldırıldı
+// (app-header.tsx); AdminGate doğrudan adres yazılmasına karşı ikinci katman.
+function TeachersPageContent() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
   const { data: teachers, isLoading } = useTeachers();
@@ -121,6 +130,7 @@ export default function TeachersPage() {
 function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; isAdmin: boolean }) {
   const [showStudents, setShowStudents] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
   const teacherInstruments = instruments.filter((instrument) => teacher.instrumentIds.includes(instrument.id));
   const groupedStudents = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string; courses: string[] }>();
@@ -153,6 +163,17 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
         </span>
         {isAdmin && <Icon name="chevron" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${showStudents ? "rotate-90" : ""}`} />}
       </button>
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={() => setShowEditForm(true)}
+          aria-label={`${teacher.firstName} ${teacher.lastName} bilgilerini düzenle`}
+          title="Düzenle"
+          className="icon-btn icon-btn-quiet shrink-0"
+        >
+          <Icon name="pencil" className="h-4 w-4" />
+        </button>
+      )}
       {isAdmin && teacher.status === "Active" && (
         <AddButton label={`${teacher.firstName} ${teacher.lastName} öğretmenine öğrenci ekle`} tone="quiet" onClick={() => setShowAddForm(true)} />
       )}
@@ -178,7 +199,77 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
         onAdded={() => { setShowAddForm(false); setShowStudents(true); }}
       />
     </Modal>
+
+    <Modal open={showEditForm} title="Öğretmeni düzenle" onClose={() => setShowEditForm(false)} size="sm">
+      <EditTeacherForm teacher={teacher} instruments={instruments} onClose={() => setShowEditForm(false)} />
+    </Modal>
   </li>;
+}
+
+// "Öğretmen ayarlarında kaç enstrüman çalabileceği seçilmeli" - oluşturma sırasında zaten
+// seçilebiliyordu ama sonradan DEĞİŞTİRİLEMİYORDU (backend UpdateAsync zaten vardı,
+// arayüzde hiç kullanılmıyordu). Ad/soyad ve aktif/pasif durumu da aynı formda - üçü de
+// aynı PATCH isteğine gidiyor.
+function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; instruments: { id: string; name: string }[]; onClose: () => void }) {
+  const updateTeacher = useUpdateTeacher(teacher.id);
+  const [firstName, setFirstName] = useState(teacher.firstName);
+  const [lastName, setLastName] = useState(teacher.lastName);
+  const [status, setStatus] = useState<TeacherStatus>(teacher.status);
+  const [selectedInstruments, setSelectedInstruments] = useState<string[]>(teacher.instrumentIds);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleInstrument(id: string) {
+    setSelectedInstruments((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await updateTeacher.mutateAsync({ firstName, lastName, status, instrumentIds: selectedInstruments });
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğretmen güncellenemedi.");
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3.5">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="form-label">Ad<input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field text-sm" /></label>
+        <label className="form-label">Soyad<input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field text-sm" /></label>
+      </div>
+
+      <div className="inline-flex rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Durum">
+        {([["Active", "Aktif"], ["Inactive", "Pasif"]] as const).map(([value, label]) => (
+          <button key={value} type="button" onClick={() => setStatus(value)} aria-pressed={status === value} className={`pressable min-h-8 rounded-lg px-3 text-xs font-bold ${status === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
+        ))}
+      </div>
+
+      <div>
+        <p className="form-label">Enstrümanlar</p>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {instruments.map((instrument) => {
+            const checked = selectedInstruments.includes(instrument.id);
+            return (
+              <button
+                key={instrument.id}
+                type="button"
+                onClick={() => toggleInstrument(instrument.id)}
+                aria-pressed={checked}
+                className={`pressable min-h-9 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)]"}`}
+              >
+                {instrument.name}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <FormActions onCancel={onClose} submitLabel="Kaydet" pending={updateTeacher.isPending} pendingLabel="Kaydediliyor…" disabled={selectedInstruments.length === 0} />
+    </form>
+  );
 }
 
 // Öğretmene öğrenci bağlama: ya yeni bir öğrenci kaydı açılır ya da kayıtlı bir öğrenci

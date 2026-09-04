@@ -12,7 +12,13 @@ public static class Me
     // Frontend butonu buna göre açar/kapatır - kullanıcı çalışmayan bir düğmeye basmasın.
     // Ayrı bir /api/capabilities ucu açmak yerine buraya eklendi: istemci zaten her açılışta
     // bu yanıtı okuyor, ikinci bir istek gereksiz olurdu.
-    public record Response(Guid Id, string Email, UserRole Role, bool MustChangePassword, bool AiRewriteAvailable);
+    //
+    // InstrumentIds: Teacher oturumunda kendi TeacherInstruments'ı (Admin'de her zaman boş
+    // dizi) - Takvim ekranındaki enstrüman filtresini "yalnızca kendi branşı" ile
+    // sınırlamak için (kullanıcı isteği: "öğretmen sadece kendi branşını görebilir").
+    // Bu tamamen kendi verisi, /api/teachers zaten herkese açık olsa da ayrı bir istek
+    // yerine buraya eklendi - istemci zaten her açılışta bu yanıtı okuyor.
+    public record Response(Guid Id, string Email, UserRole Role, bool MustChangePassword, bool AiRewriteAvailable, Guid[] InstrumentIds);
 
     public static void MapMe(this IEndpointRouteBuilder app)
     {
@@ -28,6 +34,13 @@ public static class Me
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id && u.IsActive)
             ?? throw new ForbiddenException("Hesap artık aktif değil.");
 
-        return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword, rewriter.IsAvailable));
+        var instrumentIds = user.Role == UserRole.Teacher
+            ? await db.Teachers.AsNoTracking()
+                .Where(teacher => teacher.UserId == user.Id)
+                .Join(db.TeacherInstruments, teacher => teacher.Id, ti => ti.TeacherId, (teacher, ti) => ti.InstrumentId)
+                .ToArrayAsync()
+            : [];
+
+        return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword, rewriter.IsAvailable, instrumentIds));
     }
 }

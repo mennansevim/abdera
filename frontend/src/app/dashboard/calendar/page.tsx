@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api";
 import { useRescheduleLesson } from "@/lib/attendance";
 import { useBillingDues } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
-import { useEnrollments, useStudents, useTeachers } from "@/lib/people";
+import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
@@ -21,7 +21,8 @@ import { MakeupScheduler } from "./makeup-scheduler";
 const GRID_HEIGHT_REM_PER_HOUR = 3.8;
 const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
+const ALL_INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
+type InstrumentFilter = (typeof ALL_INSTRUMENT_FILTERS)[number];
 type QuickAddSlot = { date: string; day: string; time: string; x: number; y: number };
 
 // Haftanın Pazartesi'sini bulur - takvim her zaman Pazartesi'den başlar.
@@ -124,13 +125,28 @@ export default function CalendarPage() {
     setNotice(text);
     window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 5000);
   }
-  const [instrumentFilter, setInstrumentFilter] = useState<(typeof INSTRUMENT_FILTERS)[number]>("Hepsi");
+  const [instrumentFilter, setInstrumentFilter] = useState<InstrumentFilter>("Hepsi");
   const [teacherFilter, setTeacherFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: teachers } = useTeachers();
   const { data: students } = useStudents();
+  const { data: instruments } = useInstruments();
+  // "Öğretmen sadece kendi branşını görebilir": Teacher oturumunda enstrüman filtresi
+  // /api/auth/me'nin döndürdüğü kendi TeacherInstruments'ı ile sınırlanır - dört sabit
+  // butonun tamamı değil. Admin'de kısıtlama yok (null = sınırsız).
+  const myInstrumentNames = useMemo(() => {
+    if (isAdmin || !me) return null;
+    const ids = new Set(me.instrumentIds);
+    return new Set((instruments ?? []).filter((instrument) => ids.has(instrument.id)).map((instrument) => instrument.name));
+  }, [isAdmin, me, instruments]);
+  const instrumentFilters = useMemo(
+    () => (myInstrumentNames
+      ? (["Hepsi", ...ALL_INSTRUMENT_FILTERS.filter((filter) => filter !== "Hepsi" && myInstrumentNames.has(filter))] as InstrumentFilter[])
+      : [...ALL_INSTRUMENT_FILTERS]),
+    [myInstrumentNames],
+  );
   // Aidat/tahsilat verisi tamamen Admin'e ait (docs/04-permissions.md) - Teacher oturumunda
   // bu istek hiç gönderilmez, yalnızca sonucu (gecikmiş aidat rozeti) Admin görür.
   const { data: dues } = useBillingDues({ enabled: isAdmin });
@@ -226,12 +242,18 @@ export default function CalendarPage() {
 
       <div className="app-card flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          {/* Öğrenci listesinden seçip yalnızca o öğrencinin derslerini görmek için - diğer
-              filtrelerle AND mantığıyla birlikte çalışır (aynı desen: öğretmen + enstrüman). */}
-          <label className="relative min-w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğrenciler</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
-          <label className="relative min-w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
-          <div className="h-6 w-px bg-[var(--line)] max-sm:hidden" aria-hidden="true" />
-          <div className="flex gap-1.5 overflow-x-auto" aria-label="Enstrümana göre filtrele">{INSTRUMENT_FILTERS.map((filter) => (
+          {/* Öğrenci/öğretmen filtreleri yalnızca Admin'e görünür: bir öğretmen zaten yalnızca
+              kendi derslerini görüyor (backend Calendar.cs bunu zorluyor), "tüm öğretmenler"
+              arasından seçim yapabilecekmiş gibi bir kontrol sunmak yanıltıcı ve kullanıcı
+              isteği üzerine kaldırıldı ("öğretmen diğer öğretmenlerin derslerini görmemeli"). */}
+          {isAdmin && <>
+            <label className="relative min-w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğrenciler</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
+            <label className="relative min-w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+            <div className="h-6 w-px bg-[var(--line)] max-sm:hidden" aria-hidden="true" />
+          </>}
+          {/* Enstrüman filtresi de aynı kuralı izler: Teacher oturumunda yalnızca kendi
+              branşları listelenir (myInstrumentNames/instrumentFilters, yukarıda). */}
+          <div className="flex gap-1.5 overflow-x-auto" aria-label="Enstrümana göre filtrele">{instrumentFilters.map((filter) => (
               <button
                 key={filter}
                 type="button"

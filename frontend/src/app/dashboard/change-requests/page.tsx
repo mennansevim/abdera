@@ -2,13 +2,19 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/icons";
-import { PageHeader } from "@/components/ui";
+import { AdminGate, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 
 // docs/00-master-prompt.md Admin UX: "lesson-change queue". docs/05-state-models.md:
 // PENDING -> APPROVED/REJECTED (ALTERNATIVE_PROPOSED/PARENT_* Phase 5'te - WhatsApp gerekir).
 export default function ChangeRequestsPage() {
+  return <AdminGate><ChangeRequestsPageContent /></AdminGate>;
+}
+
+// Talep inceleme/onaylama tamamen Admin'e özel (docs/04-permissions.md) - bir öğretmenin
+// KENDİ talebini oluşturması ayrı bir uçtan (Takvim ekranı) yapılır, bu ekrana gerek duymaz.
+function ChangeRequestsPageContent() {
   const { data: requests, isLoading } = usePendingChangeRequests();
   const approve = useApproveChangeRequest();
   const reject = useRejectChangeRequest();

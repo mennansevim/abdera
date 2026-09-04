@@ -298,6 +298,22 @@ export function useCreateTeacher() {
   });
 }
 
+// Öğretmen künyesi/enstrümanları/durumu düzenleme - PATCH /api/teachers/{id}. Bu uç
+// zaten backend'de vardı (Teachers.cs UpdateAsync) ama arayüzde hiç kullanılmıyordu -
+// yalnızca oluşturma sırasında enstrüman seçilebiliyordu, sonradan değiştirilemiyordu
+// (kullanıcı isteği: "öğretmen ayarlarında kaç enstrüman çalabileceği seçilmeli").
+export function useUpdateTeacher(teacherId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { firstName: string; lastName: string; status: TeacherStatus; instrumentIds: string[] }) =>
+      api.patch<Teacher>(`/api/teachers/${teacherId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teachers"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+    },
+  });
+}
+
 export function useCreateStudentForTeacher(teacherId: string) {
   const queryClient = useQueryClient();
   return useMutation({

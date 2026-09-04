@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "@/components/icons";
-import { PageHeader } from "@/components/ui";
+import { AdminGate, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useBackupRuns, useSystemHealth, useTriggerBackup, type BackupRunStatus } from "@/lib/ops";
 
@@ -26,6 +26,11 @@ function formatSize(bytes: number | null) {
 }
 
 export default function BackupsPage() {
+  return <AdminGate><BackupsPageContent /></AdminGate>;
+}
+
+// Yedekleme kontrolü tamamen Admin'e özel (docs/04-permissions.md).
+function BackupsPageContent() {
   const [page, setPage] = useState(1);
   const { data: health } = useSystemHealth();
   const { data: runs, isLoading } = useBackupRuns(page, 20);

@@ -91,6 +91,9 @@ export interface Me {
   // ekranındaki "yapıcı metne dönüştür" butonu buna göre açılır - yapılandırılmamışken
   // buton kapalı kalır ve manuel yorum akışı aynen çalışır.
   aiRewriteAvailable: boolean;
+  // Teacher oturumunda kendi çaldığı enstrümanlar (Admin'de her zaman boş dizi) - Takvim
+  // ekranındaki enstrüman filtresini yalnızca kendi branşıyla sınırlamak için.
+  instrumentIds: string[];
 }
 
 export interface LoginResponse {

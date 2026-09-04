@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { PageHeader } from "@/components/ui";
+import { AdminGate, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   useAutomationSettings,
@@ -85,6 +85,11 @@ function templateLabel(name: string) {
 }
 
 export default function NotificationsPage() {
+  return <AdminGate><NotificationsPageContent /></AdminGate>;
+}
+
+// Mesaj şablonları/otomasyon ayarları tamamen Admin'e özel (docs/04-permissions.md).
+function NotificationsPageContent() {
   const [activeTab, setActiveTab] = useState<"activity" | "templates">("activity");
 
   return (

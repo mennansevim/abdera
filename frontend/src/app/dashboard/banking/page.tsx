@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PageHeader } from "@/components/ui";
+import { AdminGate, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useGuardians } from "@/lib/people";
 import {
@@ -18,6 +18,11 @@ import {
 // görünmez (zaten Receivable'a işlendi) - yalnızca NeedsReview/Ignored/tüm liste görünür,
 // admin belirsiz kalanları elle çözer.
 export default function BankingPage() {
+  return <AdminGate><BankingPageContent /></AdminGate>;
+}
+
+// Banka/havale eşleştirmesi tamamen Admin'e özel (docs/04-permissions.md).
+function BankingPageContent() {
   return (
     <div className="space-y-4">
       <PageHeader title="Banka entegrasyonu" description="Sanal IBAN atamaları ve gelen havalelerin aidatlara işlenmesi." />

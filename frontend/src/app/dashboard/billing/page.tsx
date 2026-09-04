@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
-import { PageHeader } from "@/components/ui";
+import { AdminGate, PageHeader } from "@/components/ui";
 import { useReceivables } from "@/lib/billing";
 import { PriceListsSection } from "./price-lists-section";
 import { DuesListSection, type BillingFilterSummary } from "./dues-list-section";
@@ -14,6 +14,12 @@ function money(value: number) {
 }
 
 export default function BillingPage() {
+  return <AdminGate><BillingPageContent /></AdminGate>;
+}
+
+// Aidatlar tamamen Admin'e özel (docs/04-permissions.md) - AdminGate sayfayı bir
+// öğretmen doğrudan adres yazsa bile açmaz, /dashboard'a geri yönlendirir.
+function BillingPageContent() {
   const [view, setView] = useState<BillingView>("collections");
   const { data: receivables, isLoading } = useReceivables();
   const baseSummary = useMemo(() => {

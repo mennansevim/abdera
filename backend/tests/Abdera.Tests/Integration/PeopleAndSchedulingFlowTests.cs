@@ -397,4 +397,85 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
         Assert.Single(teacherRow.Instruments);
         Assert.Equal(piano.Name, teacherRow.Instruments.Single().InstrumentName);
     }
+
+    // Kullanıcı geri bildirimi: "öğretmen diğer öğretmenlerin derslerini görmemeli...
+    // sadece kendi branşını görebilir." /api/auth/me artık Teacher oturumunda kendi
+    // TeacherInstruments'ını döndürüyor (Takvim'deki enstrüman filtresi bunu kullanır);
+    // Admin'de her zaman boş - bu bilgiye ihtiyacı yok, kısıtlaması da yok.
+    [Fact]
+    public async Task Me_returns_teachers_own_instruments_and_empty_for_admin()
+    {
+        var admin = await CreateAdminClientAsync();
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var piano = instruments!.Single(i => i.Code == "PIANO");
+        var guitar = instruments!.Single(i => i.Code == "GUITAR");
+
+        var teacherEmail = $"me-instruments-{Guid.NewGuid():N}@test.local";
+        var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Çoklu", "Enstrüman", [piano.Id, guitar.Id], teacherEmail)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!;
+
+        using var teacherClient = _factory.CreateClient();
+        (await teacherClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(teacherEmail, teacher.TemporaryPassword!))).EnsureSuccessStatusCode();
+
+        var teacherMe = await teacherClient.GetFromJsonAsync<Me.Response>("/api/auth/me", TestJson.Options);
+        Assert.Equal(2, teacherMe!.InstrumentIds.Length);
+        Assert.Contains(piano.Id, teacherMe.InstrumentIds);
+        Assert.Contains(guitar.Id, teacherMe.InstrumentIds);
+
+        var adminMe = await admin.GetFromJsonAsync<Me.Response>("/api/auth/me", TestJson.Options);
+        Assert.Empty(adminMe!.InstrumentIds);
+    }
+
+    // Aynı ihlal iddiasının takvim tarafı: bir öğretmen, başka bir öğretmenin id'sini
+    // sorgu parametresi olarak göndererek onun derslerini görmeye çalışırsa backend bunu
+    // yok saymalı (AuthContext.ResolveTeacherScopeAsync zaten kendi id'sini zorluyor) -
+    // yanıt boş dönmeli, başka öğretmenin dersi asla sızmamalı.
+    [Fact]
+    public async Task Teacher_cannot_use_teacherId_query_param_to_see_another_teachers_lessons()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var piano = instruments!.Single(i => i.Code == "PIANO");
+        var guitar = instruments!.Single(i => i.Code == "GUITAR");
+
+        var ownerEmail = $"isolation1-owner-{Guid.NewGuid():N}@test.local";
+        var owner = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Sahip", "Öğretmen", [piano.Id], ownerEmail)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
+        var otherEmail = $"isolation1-other-{Guid.NewGuid():N}@test.local";
+        var other = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Başka", "Öğretmen", [guitar.Id], otherEmail)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!;
+
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("İzolasyon", "Öğrencisi", new DateOnly(2015, 1, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
+                new Enrollments.CreateRequest(owner.Id, piano.Id, new DateOnly(2026, 8, 1))))
+            .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
+
+        var series = (await (await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+                enrollment.Id, DayOfWeek.Wednesday, new TimeOnly(17, 0), 45, new DateOnly(2026, 8, 19), null)))
+            .Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+        var ownerLesson = await db.Lessons.AsNoTracking()
+            .Where(lesson => lesson.LessonSeriesId == series.Series.Id)
+            .OrderBy(lesson => lesson.StartAt).FirstAsync();
+
+        using var otherClient = _factory.CreateClient();
+        (await otherClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(otherEmail, other.TemporaryPassword!))).EnsureSuccessStatusCode();
+
+        var from = Uri.EscapeDataString(ownerLesson.StartAt.AddDays(-1).ToString("O"));
+        var to = Uri.EscapeDataString(ownerLesson.StartAt.AddDays(1).ToString("O"));
+        var lessons = await otherClient.GetFromJsonAsync<List<Calendar.LessonResponse>>(
+            $"/api/calendar?from={from}&to={to}&teacherId={owner.Id}", TestJson.Options);
+
+        Assert.DoesNotContain(lessons!, lesson => lesson.Id == ownerLesson.Id);
+    }
 }
