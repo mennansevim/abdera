@@ -61,7 +61,12 @@ public static class AdminBootstrapper
         var email = (config["Bootstrap:TeacherEmail"] ?? "teacher@example.com").Trim().ToLowerInvariant();
         var password = config["Bootstrap:TeacherPassword"] ?? "DevTeacher123!";
 
-        if (await db.Users.AnyAsync(user => user.Email == email))
+        // Yalnızca öğretmen tablosu tamamen boşsa (gerçekten ilk kurulum) demo öğretmen
+        // eklenir. Önceden yalnızca bu e-postanın varlığına bakılıyordu; bu da admin
+        // gerçek bir öğretmen ekleyip demo hesabını sildikten sonra her API yeniden
+        // başlatmasında (docker compose restart/up) "Demo Öğretmen"i sessizce geri
+        // getiriyordu - gerçek bir bug olarak bulundu (demo veri seti kürlerken).
+        if (await db.Teachers.AnyAsync())
         {
             return;
         }

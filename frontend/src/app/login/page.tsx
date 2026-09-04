@@ -14,13 +14,20 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
   { role: "Guardian", title: "Veliyim", description: "Ders ve ödeme bildirimlerini takip ederim", icon: "students", color: "#2b918d" },
 ];
 
-// Şimdilik geliştirme kolaylığı: AdminBootstrapper.cs'nin oluşturduğu demo hesaplarla
+// Şimdilik geliştirme kolaylığı: AdminBootstrapper.cs'nin oluşturduğu admin hesabıyla
 // eşleşir. Yalnızca production build'e sızmasın diye env kontrolü var - gerçek bir
-// dağıtımda bu alanlar boş kalır.
+// dağıtımda bu alan boş kalır.
+//
+// Öğretmen için artık sabit bir dev-otomatik-doldur YOK: AdminBootstrapper yalnızca
+// öğretmen tablosu tamamen boşken bir demo hesap açıyor, admin gerçek bir öğretmen
+// ekleyince (bu da her okulda ilk kurulumdan hemen sonra oluyor) o hesap bir daha hiç
+// var olmuyor. Sabit "teacher@example.com" değerini burada tutmak, hesap silindikten
+// sonra "geçersiz kullanıcı" hatasıyla sonuçlanan ölü bir kısayola dönüşüyordu - gerçek
+// bir öğretmenin e-postası zaten admin tarafından oluşturulduğu anda bilinmiyor ve
+// tek seferlik geçici şifresi ilk girişten sonra geçersiz kalıyor, bu yüzden kod içine
+// gömülemez.
 const DEV_ADMIN_EMAIL = process.env.NODE_ENV !== "production" ? "admin@example.com" : "";
 const DEV_ADMIN_PASSWORD = process.env.NODE_ENV !== "production" ? "DevAdmin123!" : "";
-const DEV_TEACHER_EMAIL = process.env.NODE_ENV !== "production" ? "teacher@example.com" : "";
-const DEV_TEACHER_PASSWORD = process.env.NODE_ENV !== "production" ? "DevTeacher123!" : "";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,8 +49,8 @@ export default function LoginPage() {
       setEmail(DEV_ADMIN_EMAIL);
       setPassword(DEV_ADMIN_PASSWORD);
     } else {
-      setEmail(DEV_TEACHER_EMAIL);
-      setPassword(DEV_TEACHER_PASSWORD);
+      setEmail("");
+      setPassword("");
     }
     requestAnimationFrame(() => emailRef.current?.focus());
   }
