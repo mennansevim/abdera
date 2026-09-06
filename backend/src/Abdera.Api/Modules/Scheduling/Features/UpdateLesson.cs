@@ -39,7 +39,21 @@ public static class UpdateLesson
         INotificationScheduler scheduler,
         IStaffNotifier staffNotifier)
     {
-        var lesson = await db.Lessons.SingleOrDefaultAsync(item => item.Id == lessonId)
+        // LOADTEST.md Round 1: N eş zamanlı PATCH isteği aynı dersi aynı anda okuyup hepsi
+        // Status==Normal görebiliyordu (TOCTOU) - Lesson'da xmin/rowversion YOK (CLAUDE.md'nin
+        // "eşzamanlı düzenleme riski olan tablolarda optimistic concurrency" kuralı burada
+        // uygulanmamıştı), sonuç: aynı derse birden fazla "replacement" satırı üretiliyordu
+        // (bkz. loadtest/verify-concurrent-reschedule.sh - 20 eş zamanlı istekten 4'ü 200 dönüp
+        // 4 farklı replacement satırı yaratmıştı). Şema değişikliği (migration) gerektiren bir
+        // xmin eklemek yerine - ki bu onay gerektirir - PESİMİST kilit yeterli: satırı
+        // "FOR UPDATE" ile kilitleyip aynı transaction içinde SaveChanges'e kadar tutuyoruz.
+        // İkinci istek bu satırda BLOKE olur, birincinin commit'inden sonra Status'u
+        // "Rescheduled" görüp doğru şekilde 409 fırlatır - artık yalnızca TEK bir kazanan olur.
+        await using var transaction = await db.Database.BeginTransactionAsync();
+
+        var lesson = await db.Lessons
+            .FromSqlInterpolated($"SELECT * FROM lessons WHERE id = {lessonId} FOR UPDATE")
+            .SingleOrDefaultAsync()
             ?? throw new NotFoundException("Ders bulunamadı.");
 
         if (lesson.Status != LessonStatus.Normal)
@@ -95,6 +109,7 @@ public static class UpdateLesson
                 before,
                 JsonSerializer.Serialize(new { Status = lesson.Status.ToString() })));
             await db.SaveChangesAsync();
+            await transaction.CommitAsync();
             return Results.Ok(new Response(lesson.Id, null, lesson.Status));
         }
 
@@ -184,6 +199,7 @@ public static class UpdateLesson
             })));
 
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         return Results.Ok(new Response(replacement.Id, lesson.Id, replacement.Status));
     }
 }
