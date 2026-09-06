@@ -6,6 +6,21 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-abdera}
       POSTGRES_USER: ${POSTGRES_USER:-abdera}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env icinde tanimli olmali}
+    # LOADTEST.md Round 1: varsayilan max_connections (~100, birkaci superuser icin ayrilmis)
+    # tek basina api'nin Npgsql pool'u tarafindan doldurulabiliyordu - 500 VU'luk bir yuk
+    # testinden SONRA bile idle-ama-acik pool baglantilari (Npgsql varsayilani: 5 dk'ya kadar)
+    # butun sunucu capini tutup psql/pgAdmin/migration gibi disaridan gelen HERHANGI bir
+    # istemciyi "sorry, too many clients already" ile reddediyordu (LOADTEST.md Round 1
+    # bulgusu - api'nin kendisi calismaya devam ediyordu, sorun yalnizca DISARIDAN erisimdi).
+    # api'nin havuzu artik ConnectionStrings__Default'ta "Maximum Pool Size=150" ile sinirli
+    # (asagida) - buradaki 250 o sinirin USTUNE, diger istemciler icin pay birakiyor.
+    #
+    # LOADTEST.md Round 2 duzeltmesi: ilk denemede pool 50'ye sabitlenmisti - 500 VU'luk ramp
+    # kademesinde 50 baglanti icin 10x talep olusup istekler kuyrukta beklemeye basladi (p95
+    # 349ms -> 1.37s, p99 625ms -> 2.59s, gercek 5xx YOK - yalnizca kuyruklama gecikmesi).
+    # 150'ye cikarilinca 500 VU'nun coğu paralel calisabiliyor, 250'lik max_connections'ta da
+    # disaridan erisim icin 100 baglantilik pay kaliyor.
+    command: postgres -c max_connections=250
     ports:
       # Yalnizca host uzerinden erisilebilir - veritabani hicbir zaman
       # dogrudan internete acilmaz.
@@ -27,7 +42,17 @@ services:
       - .env
     environment:
       # docker-compose ag adi uzerinden baglanir - .env'deki POSTGRES_HOST=db ile tutarli.
-      ConnectionStrings__Default: Host=${POSTGRES_HOST:-db};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-abdera};Username=${POSTGRES_USER:-abdera};Password=${POSTGRES_PASSWORD:?}
+      # Maximum Pool Size=150: Npgsql varsayilani (100) sinirsizdi, ilk duzeltmede 50'ye
+      # sabitlenmisti ama 500 VU'luk ramp kademesinde bu darbogaz oldu (LOADTEST.md Round 2).
+      # 150'ye cikarilinca (Round 3) p95 500ms hedefine 13ms kala kaldi (513ms). 200'e
+      # cikarmak (Round 4/5) DAHA KOTU sonuc verdi (p95 1.09-1.58s) - bu host'ta (8 cekirdek)
+      # ~200 es zamanli Postgres backend'i CPU/kilit rekabetine giriyor; "daha buyuk pool
+      # daha iyi" varsayimi burada YANLIS. 150 - olcumle bulunan tatli nokta - geri kondu.
+      # Connection Idle Lifetime=60: bos duran pool baglantilari 5 dk yerine 60 sn'de
+      # kapatilir - bir yuk patlamasindan sonra sunucu slotlari cok daha hizli serbest kalir
+      # (LOADTEST.md Round 1: 500 VU'luk spike'tan DAKIKALAR sonra bile disaridan psql
+      # baglantisi reddediliyordu).
+      ConnectionStrings__Default: Host=${POSTGRES_HOST:-db};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-abdera};Username=${POSTGRES_USER:-abdera};Password=${POSTGRES_PASSWORD:?};Maximum Pool Size=150;Connection Idle Lifetime=60
       # CORS izin verilen origin. Production'da Caddy tek domain sunar - api ve web
       # ayni origin'de oldugu icin CORS pratikte devre disi kalir, ama deger yine de
       # dogru olmali (yanlis origin cerezli istekleri sessizce reddeder).

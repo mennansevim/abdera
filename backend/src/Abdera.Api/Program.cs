@@ -375,6 +375,7 @@ app.MapOpsModule();
 if (app.Environment.IsDevelopment())
 {
     app.MapDevelopmentMockData();
+    app.MapLoadTestFixtures();
 }
 
 await DatabaseMigrator.RunAsync(app);

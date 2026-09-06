@@ -65,3 +65,8 @@ frontend/test-results/
 # Sunumu paylasmak icin repo yerine Drive/Slack kullan.
 *.pptx
 *.pptx.inspect.ndjson
+
+# k6 yuk testi ham ciktilari (per-run JSON/txt) - tekrar uretilebilir, kaynak degil.
+# Ozet ve bulgular LOADTEST.md'de kalici olarak tutuluyor; script'ler (loadtest/k6/,
+# loadtest/verify-concurrent-reschedule.sh) commit'lenir, ham sonuclar commit'lenmez.
+loadtest/results/
