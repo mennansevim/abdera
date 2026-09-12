@@ -8,7 +8,7 @@
 //
 // Çalıştırma:
 //   API_BASE=http://localhost:8081 ADMIN_PASSWORD=... node tools/bulk-seed/seed.mjs
-// Ölçek (varsayılan 10x15 = en fazla 150 öğrenci):
+// Ölçek (varsayılan 10 öğretmen / 12 öğrenci):
 //   TEACHERS=2 STUDENTS_PER=3 node tools/bulk-seed/seed.mjs      # duman testi
 // Bayraklar:
 //   WITH_LESSONS=0   -> haftalık ders serisi (gün/saat) oluşturmayı atla (varsayılan 1)
@@ -27,7 +27,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "";
 const MAX_TEACHERS = 10;
 const MAX_STUDENTS = 150;
 const TEACHERS = Number(process.env.TEACHERS ?? MAX_TEACHERS);
-const STUDENTS_PER = Number(process.env.STUDENTS_PER ?? 15);
+const STUDENTS_PER = Number(process.env.STUDENTS_PER ?? 2);
+const STUDENT_TARGET = Number(process.env.STUDENT_TARGET ??
+  (process.env.TEACHERS || process.env.STUDENTS_PER ? TEACHERS * STUDENTS_PER : 12));
 const SECOND_RATIO = Number(process.env.SECOND_RATIO ?? 0.35); // >=0.30 istendi
 const WITH_LESSONS = (process.env.WITH_LESSONS ?? "1") !== "0";
 const VERIFY_SAMPLE = Number(process.env.VERIFY_SAMPLE ?? 25);
@@ -39,7 +41,8 @@ if (!ADMIN_PASSWORD) {
   process.exit(1);
 }
 if (!Number.isInteger(TEACHERS) || TEACHERS < 1 || TEACHERS > MAX_TEACHERS ||
-    !Number.isInteger(STUDENTS_PER) || STUDENTS_PER < 1 || TEACHERS * STUDENTS_PER > MAX_STUDENTS) {
+    !Number.isInteger(STUDENTS_PER) || STUDENTS_PER < 1 ||
+    !Number.isInteger(STUDENT_TARGET) || STUDENT_TARGET < 1 || STUDENT_TARGET > MAX_STUDENTS) {
   console.error(`HATA: demo veri en fazla ${MAX_TEACHERS} öğretmen ve ${MAX_STUDENTS} öğrenci içerebilir.`);
   process.exit(1);
 }
@@ -126,7 +129,7 @@ const SLOTS = ["15:00:00","16:00:00","17:00:00","18:00:00","19:00:00"];
 // ---------------- ana akış ----------------
 async function main() {
   const started = performance.now();
-  console.log(`# Abdera toplu kurulum — ${TEACHERS} öğretmen × ${STUDENTS_PER} öğrenci, 2. enstrüman oranı ~${Math.round(SECOND_RATIO*100)}%`);
+  console.log(`# Abdera toplu kurulum — ${TEACHERS} öğretmen, ${STUDENT_TARGET} öğrenci hedefi, 2. enstrüman oranı ~${Math.round(SECOND_RATIO*100)}%`);
   console.log(`API: ${API_BASE}`);
 
   // 1) admin login
@@ -187,7 +190,7 @@ async function main() {
 
   // 4) öğrenciler + kayıtlar + veliler. Demo aidat verisi özellikle üretilmez.
   const existingStudents = await req("GET", "/api/students");
-  const targetStudentCount = TEACHERS * STUDENTS_PER;
+  const targetStudentCount = STUDENT_TARGET;
   if (existingStudents.length > targetStudentCount) {
     throw new Error(`Veritabanında zaten ${existingStudents.length} öğrenci var; hedef ${targetStudentCount}. Önce demo veri temizleme migration'ını uygulayın.`);
   }
