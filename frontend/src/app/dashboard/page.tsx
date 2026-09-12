@@ -6,7 +6,7 @@ import { Icon, type IconName } from "@/components/icons";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
 import { useReceivables } from "@/lib/billing";
-import { useDashboardToday } from "@/lib/dashboard";
+import { useDashboardToday, type UpcomingBirthday } from "@/lib/dashboard";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useNotifications } from "@/lib/messaging";
 import { useSystemHealth } from "@/lib/ops";
@@ -92,7 +92,7 @@ function AdminDashboard({ email }: { email: string }) {
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
         <WeeklySchedule weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
-        <AdminAttentionRail lessons={lessons ?? []} />
+        <AdminAttentionRail lessons={lessons ?? []} birthdays={today?.upcomingBirthdays} />
       </div>
     </>
   );
@@ -378,7 +378,7 @@ function ScheduleSkeleton() {
   return <div className="grid h-[21.5rem] grid-cols-5 gap-3 border-t border-[var(--line)] p-4">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton rounded-xl" />)}</div>;
 }
 
-function AdminAttentionRail({ lessons }: { lessons: CalendarLesson[] }) {
+function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[]; birthdays?: UpcomingBirthday[] }) {
   const { data: requests, isLoading } = usePendingChangeRequests();
   const { data: bankItems } = useBankTransactions("NeedsReview", 1, 3);
   const approve = useApproveChangeRequest();
@@ -427,7 +427,41 @@ function AdminAttentionRail({ lessons }: { lessons: CalendarLesson[] }) {
         {!attentionStudents?.length && <EmptyRail text="Şu an uyarı üreten bir sinyal yok." />}
         <div className="divide-y divide-[var(--line)]">{attentionStudents?.slice(0, 4).map((student) => <Link key={student.studentId} href={`/dashboard/students#student-${student.studentId}`} className="pressable block py-3 first:pt-0 last:pb-0"><span className="block text-[.7rem] font-bold">{student.studentName}</span><span className="mt-1 block text-[.58rem] leading-relaxed text-[var(--danger-strong)]">İlgi gerektirebilir · {student.reasons.join(" · ")}</span></Link>)}</div>
       </section>
+
+      <UpcomingBirthdaysRail birthdays={birthdays} />
     </aside>
+  );
+}
+
+// Öğrencilerin doğum günleri önceden yalnızca bir KPI sayısıydı, ana ekranda hiçbir yerde
+// gösterilmiyordu - kullanıcı isteğiyle gerçek bir liste (isim + tarih + kaç gün kaldı)
+// hâline getirildi (bkz. Dashboard.cs ListUpcomingBirthdaysAsync, 30 günlük pencere).
+function UpcomingBirthdaysRail({ birthdays }: { birthdays?: UpcomingBirthday[] }) {
+  function dueLabel(daysUntil: number) {
+    if (daysUntil === 0) return "Bugün";
+    if (daysUntil === 1) return "Yarın";
+    return `${daysUntil} gün sonra`;
+  }
+
+  return (
+    <section className="app-card p-4">
+      <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Yaklaşan Doğum Günleri</h2><span className="text-[.6rem] text-[var(--muted)]">30 gün içinde</span></div>
+      {!birthdays?.length && <EmptyRail text="Yaklaşan doğum günü yok." />}
+      <div className="divide-y divide-[var(--line)]">
+        {birthdays?.slice(0, 5).map((item) => (
+          <Link key={item.studentId} href={`/dashboard/students#student-${item.studentId}`} className="pressable flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name="cake" className="h-4 w-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[.7rem] font-bold">{item.studentName}</span>
+              <span className="mt-0.5 block text-[.58rem] text-[var(--muted)]">
+                {new Date(`${item.nextOccurrence}T00:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} · {item.turningAge} yaşına giriyor
+              </span>
+            </span>
+            <span className="shrink-0 text-[.62rem] font-bold text-[var(--brand)]">{dueLabel(item.daysUntil)}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { useRequireGuardianAuth } from "@/lib/guardian-auth";
+import { useGuardianLogout, useRequireGuardianAuth } from "@/lib/guardian-auth";
 import {
   useGuardianBilling,
   useGuardianCalendar,
@@ -21,7 +21,6 @@ import {
   type PracticeJournal,
   type GuardianStudent,
 } from "@/lib/guardian";
-import { useLogout } from "@/lib/use-auth";
 
 type ParentTab = "home" | "calendar" | "progress" | "billing" | "messages";
 
@@ -35,10 +34,10 @@ function addDays(date: Date, days: number) {
 
 export default function ParentPage() {
   const router = useRouter();
-  const logout = useLogout();
+  const logout = useGuardianLogout();
   const { guardian, isLoading: guardianLoading } = useRequireGuardianAuth();
   const { data: students, isLoading: studentsLoading } = useGuardianStudents();
-  const { data: billing, isLoading: billingLoading } = useGuardianBilling();
+  const { data: billing, isLoading: billingLoading, isError: billingError, refetch: refetchBilling, isFetching: billingFetching } = useGuardianBilling();
   const { data: messages, isLoading: messagesLoading } = useGuardianMessages();
   const [tab, setTab] = useState<ParentTab>("home");
   const [selectedDay, setSelectedDay] = useState(1);
@@ -53,7 +52,7 @@ export default function ParentPage() {
   const { data: practiceJournal, isLoading: practiceJournalLoading } = useGuardianPracticeJournal(selectedStudent?.studentId);
 
   function handleLogout() {
-    logout.mutate(undefined, { onSuccess: () => router.push("/parent/login") });
+    logout.mutate(undefined, { onSettled: () => router.replace("/parent/login") });
   }
 
   if (guardianLoading || studentsLoading || !guardian) {
@@ -90,7 +89,7 @@ export default function ParentPage() {
           {tab === "home" && <HomeView lessons={lessons} today={today} studentId={selectedStudent?.studentId} billing={billing} messages={messages} />}
           {tab === "calendar" && <CalendarView lessons={lessons} today={today} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />}
           {tab === "progress" && <ProgressView studentId={selectedStudent?.studentId} progress={progress} practiceJournal={practiceJournal} loading={progressLoading || practiceJournalLoading} />}
-          {tab === "billing" && <BillingView billing={billing} loading={billingLoading} studentId={selectedStudent?.studentId} />}
+          {tab === "billing" && <BillingView billing={billing} loading={billingLoading} error={billingError} refetch={refetchBilling} fetching={billingFetching} studentId={selectedStudent?.studentId} />}
           {tab === "messages" && <MessagesView messages={messages} loading={messagesLoading} />}
         </div>
         <ParentNavigation tab={tab} setTab={setTab} />
@@ -188,7 +187,8 @@ function HomeView({ lessons, today, studentId, billing, messages }: {
   const studentBilling = billing?.enrollments.filter((item) => item.studentId === studentId);
   const outstanding = (studentBilling ?? [])
     .flatMap((item) => item.receivables)
-    .filter((item) => item.status !== "Paid" && item.status !== "Cancelled");
+    .filter((item) => item.status !== "Paid" && item.status !== "Cancelled")
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const outstandingTotal = outstanding.reduce((sum, item) => sum + Math.max(0, item.amount - item.totalPaid), 0);
   const availableMakeups = billing?.makeupCredits.filter((credit) => credit.studentId === studentId) ?? [];
 
@@ -323,14 +323,21 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 }
 
-function BillingView({ billing, loading, studentId }: {
+function BillingView({ billing, loading, error, refetch, fetching, studentId }: {
   billing: GuardianBilling | undefined;
   loading: boolean;
+  error: boolean;
+  refetch: () => Promise<unknown>;
+  fetching: boolean;
   studentId: string | undefined;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const enrollments = billing?.enrollments.filter((item) => item.studentId === studentId) ?? [];
   const availableMakeups = billing?.makeupCredits.filter((credit) => credit.studentId === studentId) ?? [];
+  const allReceivables = enrollments.flatMap((enrollment) => enrollment.receivables);
+  const openReceivables = allReceivables.filter((receivable) => receivable.status !== "Paid" && receivable.status !== "Cancelled");
+  const outstandingTotal = openReceivables.reduce((total, receivable) => total + Math.max(0, receivable.amount - receivable.totalPaid), 0);
+  const paidTotal = allReceivables.reduce((total, receivable) => total + receivable.totalPaid, 0);
 
   async function copyIban() {
     const iban = billing?.virtualIban?.iban;
@@ -360,12 +367,24 @@ function BillingView({ billing, loading, studentId }: {
     return <div className="space-y-3"><div className="skeleton h-8 w-32 rounded-lg" /><div className="skeleton h-28 rounded-2xl" /><div className="skeleton h-40 rounded-2xl" /></div>;
   }
 
+  if (error) {
+    return <div><h1 className="text-xl font-bold">Aidat</h1><p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p><div role="alert" className="app-card mt-4 grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[#ffe0de] text-[#b3403c]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Aidat listesi yüklenemedi</p><p className="mt-1 text-[.62rem] text-[var(--muted)]">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={fetching} className="pressable mt-3 min-h-10 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white disabled:opacity-60">{fetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div></div>;
+  }
+
   return (
     <div>
       <h1 className="text-xl font-bold">Aidat</h1>
       <p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p>
 
       <div className="mt-4 space-y-3">
+        <section className={`rounded-2xl p-4 ${openReceivables.length ? "bg-[#fff0ed] text-[#883e39]" : "bg-[#e7f5ea] text-[#286c42]"}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div><p className="text-[.58rem] font-bold uppercase tracking-[.07em] opacity-70">Güncel durum</p><p className="mt-1 text-xl font-bold tabular-nums">{openReceivables.length ? formatMoney(outstandingTotal, openReceivables[0]!.currency) : "Borç yok"}</p></div>
+            <span className="rounded-full bg-white/70 px-2.5 py-1 text-[.58rem] font-bold">{openReceivables.length ? `${openReceivables.length} açık dönem` : "Ödemeler güncel"}</span>
+          </div>
+          <p className="mt-2 text-[.62rem] opacity-75">Toplam kaydedilen ödeme: {formatMoney(paidTotal, allReceivables[0]?.currency ?? "TRY")}</p>
+        </section>
+
         {enrollments.map((enrollment) => (
           <section key={enrollment.enrollmentId} className="app-card p-4">
             <div className="flex items-start justify-between gap-3">
@@ -373,13 +392,17 @@ function BillingView({ billing, loading, studentId }: {
               <span className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[.55rem] font-bold text-[var(--brand)]">{enrollment.studentName}</span>
             </div>
             <div className="mt-3 space-y-2">
-              {enrollment.receivables.map((receivable) => {
+              {[...enrollment.receivables].sort((a, b) => {
+                const aOpen = a.status !== "Paid" && a.status !== "Cancelled";
+                const bOpen = b.status !== "Paid" && b.status !== "Cancelled";
+                return Number(bOpen) - Number(aOpen) || b.period.localeCompare(a.period);
+              }).map((receivable) => {
                 const remaining = Math.max(0, receivable.amount - receivable.totalPaid);
                 const paid = receivable.status === "Paid";
                 return <div key={receivable.id} className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white p-3">
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${paid ? "bg-[#ddf2e2] text-[#2e7d49]" : "bg-[#ffe0de] text-[#c94b4b]"}`}><Icon name={paid ? "check" : "wallet"} className="h-3.5 w-3.5" /></span>
-                  <span className="min-w-0 flex-1"><span className="block text-xs font-bold">{receivable.period}</span><span className="block text-[.58rem] text-[var(--muted)]">Vade: {formatDate(receivable.dueDate)} · {paid ? "Ödendi" : receivable.status === "Partial" ? "Kısmi ödeme" : "Açık"}</span></span>
-                  <span className={`shrink-0 text-xs font-bold ${paid ? "text-[#297a45]" : "text-[#b3403c]"}`}>{formatMoney(remaining, receivable.currency)}</span>
+                  <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-1.5 text-xs font-bold capitalize">{new Date(`${receivable.period}-01T00:00:00`).toLocaleDateString("tr-TR", { month: "long", year: "numeric" })}{receivable.bulkPaymentMonths && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.5rem] font-bold normal-case text-[var(--brand-strong)]">Toplu ödeme · {receivable.bulkPaymentMonths} ay</span>}</span><span className="block text-[.58rem] text-[var(--muted)]">Vade: {formatDate(receivable.dueDate)} · {paid ? "Ödendi" : receivable.status === "Partial" ? "Kısmi ödeme" : receivable.status === "Overdue" ? "Vadesi geçti" : "Açık"}</span></span>
+                  <span className={`shrink-0 text-right text-xs font-bold ${paid ? "text-[#297a45]" : "text-[#b3403c]"}`}><span className="block">{formatMoney(paid ? receivable.totalPaid : remaining, receivable.currency)}</span><span className="mt-0.5 block text-[.5rem] font-semibold opacity-70">{paid ? "ödendi" : "kalan"}</span></span>
                 </div>;
               })}
               {!enrollment.receivables.length && <p className="rounded-xl bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted)]">Henüz bu kayıt için aidat oluşturulmadı.</p>}

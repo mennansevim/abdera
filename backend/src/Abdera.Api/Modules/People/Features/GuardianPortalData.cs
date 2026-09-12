@@ -16,7 +16,7 @@ public static class GuardianPortalData
 {
     public record GuardianReceivableResponse(
         Guid Id, string Period, decimal Amount, string Currency, DateOnly DueDate,
-        ReceivableStatus Status, decimal TotalPaid);
+        ReceivableStatus Status, decimal TotalPaid, int? BulkPaymentMonths);
 
     public record GuardianEnrollmentBillingResponse(
         Guid EnrollmentId, Guid StudentId, string StudentName, string InstrumentName,
@@ -95,6 +95,14 @@ public static class GuardianPortalData
 
         var receivableIds = receivables.Select(receivable => receivable.Id).ToList();
         var paidTotals = await Receivables.ComputeTotalsPaidAsync(receivableIds, db);
+        var bulkPaymentMonths = (await db.Payments
+            .Where(payment => receivableIds.Contains(payment.ReceivableId) && payment.BulkPaymentId != null)
+            .Select(payment => new { payment.ReceivableId, payment.BulkPaymentMonths, payment.CreatedAt })
+            .ToListAsync())
+            .GroupBy(payment => payment.ReceivableId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.OrderByDescending(payment => payment.CreatedAt).First().BulkPaymentMonths);
 
         var billing = enrollmentRows.Select(enrollment => new GuardianEnrollmentBillingResponse(
             enrollment.Id,
@@ -111,7 +119,8 @@ public static class GuardianPortalData
                     receivable.Currency,
                     receivable.DueDate,
                     receivable.Status,
-                    paidTotals.GetValueOrDefault(receivable.Id)))
+                    paidTotals.GetValueOrDefault(receivable.Id),
+                    bulkPaymentMonths.GetValueOrDefault(receivable.Id)))
                 .ToList()))
             .ToList();
 

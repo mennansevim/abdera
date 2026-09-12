@@ -255,6 +255,13 @@ public class PricingAndBillingFlowTests : IClassFixture<AbderaWebApplicationFact
         Assert.Equal(3, receivables!.Count);
         Assert.All(receivables, r => Assert.Equal(ReceivableStatus.Paid, r.Status));
         Assert.Equal(["2026-09", "2026-10", "2026-11"], receivables.Select(r => r.Period).OrderBy(p => p));
+        Assert.All(receivables, r =>
+        {
+            var payment = Assert.Single(r.Payments);
+            Assert.NotNull(payment.BulkPaymentId);
+            Assert.Equal(3, payment.BulkPaymentMonths);
+        });
+        Assert.Single(receivables.SelectMany(r => r.Payments).Select(payment => payment.BulkPaymentId).Distinct());
 
         var storedReceivables = await db.Receivables.AsNoTracking()
             .Where(r => r.EnrollmentId == enrollment.Id).ToListAsync();

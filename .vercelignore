@@ -1,0 +1,28 @@
+# Yerel sırlar hiçbir koşulda Vercel yükleme paketine girmez.
+.env
+.env.*
+**/.env
+**/.env.*
+**/appsettings.Local.json
+**/secrets.json
+**/*.pem
+**/*.key
+**/id_rsa*
+
+# Yerel/veri çıktıları
+.git
+.claude
+.codex-artifacts
+**/node_modules
+**/.next
+**/bin
+**/obj
+**/TestResults
+**/coverage
+**/logs
+**/*.log
+**/*.dump
+**/*.sql.gz
+frontend/.playwright-artifacts
+frontend/playwright-report
+frontend/test-results

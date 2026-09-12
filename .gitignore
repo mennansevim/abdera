@@ -70,3 +70,5 @@ frontend/test-results/
 # Ozet ve bulgular LOADTEST.md'de kalici olarak tutuluyor; script'ler (loadtest/k6/,
 # loadtest/verify-concurrent-reschedule.sh) commit'lenir, ham sonuclar commit'lenmez.
 loadtest/results/
+.vercel
+.env*

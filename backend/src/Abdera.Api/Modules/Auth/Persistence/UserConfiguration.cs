@@ -26,6 +26,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.MustChangePassword).HasColumnName("must_change_password").HasDefaultValue(false);
         builder.Property(u => u.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        builder.Property(u => u.SecurityStamp).HasColumnName("security_stamp").HasDefaultValueSql("gen_random_uuid()");
         builder.Property(u => u.CreatedAt).HasColumnName("created_at");
         builder.Property(u => u.UpdatedAt).HasColumnName("updated_at");
     }

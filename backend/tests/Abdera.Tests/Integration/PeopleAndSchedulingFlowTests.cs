@@ -478,4 +478,50 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
 
         Assert.DoesNotContain(lessons!, lesson => lesson.Id == ownerLesson.Id);
     }
+
+    // Canlı QA turunda bulunan gerçek bug: PATCH /api/teachers/{id} yalnızca Teacher.Status
+    // domain alanını değiştiriyordu, bağlı giriş hesabını (User.IsActive) hiç etkilemiyordu -
+    // "pasife alınan" bir öğretmen mevcut oturumuyla (hatta yeniden giriş yaparak) sisteme
+    // erişmeye devam edebiliyordu.
+    [Fact]
+    public async Task Deactivating_a_teacher_disables_their_login_account_and_drops_the_existing_session()
+    {
+        var admin = await CreateAdminClientAsync();
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var piano = instruments!.Single(i => i.Code == "PIANO");
+
+        var email = $"deactivate-{Guid.NewGuid():N}@test.local";
+        var created = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Teachers.CreateRequest("Pasife", "Alınacak", [piano.Id], email)))
+            .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!;
+
+        using var teacherClient = _factory.CreateClient();
+        (await teacherClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(email, created.TemporaryPassword!))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await teacherClient.GetAsync("/api/students/overview")).StatusCode);
+
+        var deactivateResponse = await admin.PatchAsJsonAsync($"/api/teachers/{created.Teacher.Id}",
+            new Teachers.UpdateRequest("Pasife", "Alınacak", Abdera.Api.Modules.People.Domain.TeacherStatus.Inactive, [piano.Id]));
+        Assert.Equal(HttpStatusCode.OK, deactivateResponse.StatusCode);
+
+        // Var olan oturum bir sonraki istekte düşmeli (Program.cs OnValidatePrincipal).
+        Assert.Equal(HttpStatusCode.Unauthorized, (await teacherClient.GetAsync("/api/students/overview")).StatusCode);
+
+        // Yeniden giriş denemesi de artık reddedilmeli - hesap tamamen kilitli.
+        using var retryClient = _factory.CreateClient();
+        var retryLogin = await retryClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(email, created.TemporaryPassword!));
+        Assert.Equal(HttpStatusCode.Unauthorized, retryLogin.StatusCode);
+
+        // Tekrar Active yapılınca hesap yeniden çalışmalı.
+        var reactivateResponse = await admin.PatchAsJsonAsync($"/api/teachers/{created.Teacher.Id}",
+            new Teachers.UpdateRequest("Pasife", "Alınacak", Abdera.Api.Modules.People.Domain.TeacherStatus.Active, [piano.Id]));
+        Assert.Equal(HttpStatusCode.OK, reactivateResponse.StatusCode);
+
+        using var reactivatedClient = _factory.CreateClient();
+        var reactivatedLogin = await reactivatedClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(email, created.TemporaryPassword!));
+        Assert.Equal(HttpStatusCode.OK, reactivatedLogin.StatusCode);
+    }
 }

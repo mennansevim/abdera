@@ -20,6 +20,26 @@ public class UserTests
         Assert.Throws<ArgumentException>(() => User.Create("   ", "hash", UserRole.Admin, Now));
     }
 
+    // Canlı QA turunda bulunan gerçek bug: "@" içermeyen bir değer önceden sessizce kabul
+    // ediliyordu, yalnızca boş/whitespace kontrolü vardı.
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("abc@")]
+    [InlineData("@abc.com")]
+    [InlineData("abc@@abc.com")]
+    public void Create_throws_when_email_has_invalid_format(string invalidEmail)
+    {
+        Assert.Throws<ArgumentException>(() => User.Create(invalidEmail, "hash", UserRole.Admin, Now));
+    }
+
+    [Fact]
+    public void Create_throws_when_email_exceeds_max_length()
+    {
+        var tooLong = new string('a', 316) + "@a.co"; // 316 + 5 = 321, sınırın (320) bir fazlası
+
+        Assert.Throws<ArgumentException>(() => User.Create(tooLong, "hash", UserRole.Admin, Now));
+    }
+
     [Fact]
     public void Create_sets_active_and_timestamps()
     {

@@ -175,6 +175,7 @@ export default function CalendarPage() {
     return matchesInstrument && matchesTeacher && matchesStudent;
   }), [instrumentFilter, studentFilter, teacherFilter, timelineLessons]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
+  const isCurrentWeek = startOfWeek(now).getTime() === weekStart.getTime();
   const colors = useMemo(() => buildInstrumentColorMap([...lessons, ...timelineLessons].map((lesson) => lesson.instrumentName)), [lessons, timelineLessons]);
   const hourWindow = useMemo(() => computeHourWindow(visibleLessons), [visibleLessons]);
   const totalMinutes = useMemo(() => visibleLessons.reduce((total, lesson) => total + lessonDurationMinutes(lesson), 0), [visibleLessons]);
@@ -194,8 +195,8 @@ export default function CalendarPage() {
         <div className="flex flex-wrap items-center gap-1.5">
           <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
           <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))} className="pressable ml-1 min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:bg-[var(--surface-muted)]">Bugün</button>
-          <span className="ml-1 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/55 px-2.5 text-xs font-bold tabular-nums text-[#5c4d3f]">
+          <button onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="pressable ml-1 min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
+          <span aria-live="polite" className="ml-1 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/55 px-2.5 text-xs font-bold tabular-nums text-[#5c4d3f]">
             <Icon name="calendar" className="h-4 w-4 text-[var(--brand)]" />
             {formatWeekRange(weekStart, addDays(weekEnd, -1))}
           </span>
@@ -548,7 +549,7 @@ function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlo
           </div>
           <button type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat" title="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
-        <div className="max-h-[calc(100vh-7rem)] overflow-y-auto p-4">
+        <div className="max-h-[calc(100vh-7rem)] overflow-x-hidden overflow-y-auto p-4">
           <CreateSeriesForm
             initialDate={slot.date}
             initialDay={slot.day}
@@ -669,7 +670,8 @@ function GridDayColumn({
         const position = layout.get(lesson.id);
         if (!position) return null;
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
-        const draggable = isAdmin && lesson.status === "Normal";
+        const isPast = end.getTime() <= now.getTime();
+        const draggable = isAdmin && lesson.status === "Normal" && !isPast;
         const isCancelled = lesson.status === "Cancelled";
         const active = isLessonActive(lesson, now);
         const overdue = overdueStudentIds.has(lesson.studentId);
@@ -686,9 +688,9 @@ function GridDayColumn({
             onDragEnd={onDragEndLesson}
             onClick={() => onOpenLesson(lesson)}
             onDoubleClick={(event) => event.stopPropagation()}
-            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${overdue ? " · Aidat gecikmiş" : ""}`}
-            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${overdue ? ", aidat gecikmiş" : ""}. Detayları aç`}
-            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${isPast ? " · Geçmiş ders" : ""}${overdue ? " · Aidat gecikmiş" : ""}`}
+            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${isPast ? ", geçmiş ders" : ""}${overdue ? ", aidat gecikmiş" : ""}. Detayları aç`}
+            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : isPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
             {/* Yalnızca Admin oturumunda dolu gelir (overdueStudentIds) - Teacher'a mali veri

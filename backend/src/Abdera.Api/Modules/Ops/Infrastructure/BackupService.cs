@@ -54,7 +54,13 @@ public class BackupService(
 
     private async Task RunOnceAsync(bool triggeredManually, CancellationToken cancellationToken)
     {
-        if (!await _runLock.WaitAsync(0, cancellationToken))
+        // Otomatik taramalar çakışırsa ikincisini atlamak doğru; fakat adminin açıkça
+        // tetiklediği "şimdi yedek al" isteği 202 döndükten sonra sessizce kaybolmamalı.
+        // Manuel koşu varsa mevcut yedeğin bitmesini bekleyip hemen arkasından çalışır.
+        var acquired = triggeredManually
+            ? await WaitForManualTurnAsync(cancellationToken)
+            : await _runLock.WaitAsync(0, cancellationToken);
+        if (!acquired)
         {
             logger.LogInformation("Bir yedekleme zaten sürüyor, bu tetikleme atlandı.");
             return;
@@ -140,6 +146,12 @@ public class BackupService(
         {
             _runLock.Release();
         }
+    }
+
+    private async Task<bool> WaitForManualTurnAsync(CancellationToken cancellationToken)
+    {
+        await _runLock.WaitAsync(cancellationToken);
+        return true;
     }
 
     private static async Task RunPgDumpAsync(IConfiguration config, string outputPath, CancellationToken cancellationToken)

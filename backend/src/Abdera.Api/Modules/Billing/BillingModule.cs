@@ -5,9 +5,12 @@ namespace Abdera.Api.Modules.Billing;
 
 public static class BillingModule
 {
-    public static void AddBillingModule(this IServiceCollection services)
+    public static void AddBillingModule(this IServiceCollection services, bool enableHostedServices = true)
     {
-        services.AddHostedService<OverdueReceivableSweeper>();
+        if (enableHostedServices)
+        {
+            services.AddHostedService<OverdueReceivableSweeper>();
+        }
     }
 
     public static void MapBillingModule(this WebApplication app)

@@ -14,59 +14,51 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
   { role: "Guardian", title: "Veliyim", description: "Ders ve ödeme bildirimlerini takip ederim", icon: "students", color: "#2b918d" },
 ];
 
-// Şimdilik geliştirme kolaylığı: AdminBootstrapper.cs'nin oluşturduğu admin hesabıyla
-// eşleşir. Yalnızca production build'e sızmasın diye env kontrolü var - gerçek bir
-// dağıtımda bu alan boş kalır.
-//
-// Öğretmen için artık sabit bir dev-otomatik-doldur YOK: AdminBootstrapper yalnızca
-// öğretmen tablosu tamamen boşken bir demo hesap açıyor, admin gerçek bir öğretmen
-// ekleyince (bu da her okulda ilk kurulumdan hemen sonra oluyor) o hesap bir daha hiç
-// var olmuyor. Sabit "teacher@example.com" değerini burada tutmak, hesap silindikten
-// sonra "geçersiz kullanıcı" hatasıyla sonuçlanan ölü bir kısayola dönüşüyordu - gerçek
-// bir öğretmenin e-postası zaten admin tarafından oluşturulduğu anda bilinmiyor ve
-// tek seferlik geçici şifresi ilk girişten sonra geçersiz kalıyor, bu yüzden kod içine
-// gömülemez.
-const DEV_ADMIN_EMAIL = process.env.NODE_ENV !== "production" ? "admin@example.com" : "";
-const DEV_ADMIN_PASSWORD = process.env.NODE_ENV !== "production" ? "DevAdmin123!" : "";
+const DEMO_PASSWORD = "AbderaDemo2026!";
+const DEMO_EMAILS: Record<Exclude<LoginRole, "Guardian">, string> = {
+  Admin: "demo.yonetici@abdera.com",
+  Teacher: "demo.ogretmen@abdera.com",
+};
 
 export default function LoginPage() {
   const router = useRouter();
   const login = useLogin();
   const emailRef = useRef<HTMLInputElement>(null);
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
-  const [email, setEmail] = useState(DEV_ADMIN_EMAIL);
-  const [password, setPassword] = useState(DEV_ADMIN_PASSWORD);
+  const [email, setEmail] = useState(DEMO_EMAILS.Admin);
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
 
-  function chooseRole(role: LoginRole) {
-    setSelectedRole(role);
-    setError(null);
-    if (role === "Guardian") {
-      router.push("/parent/login");
-      return;
-    }
-    if (role === "Admin") {
-      setEmail(DEV_ADMIN_EMAIL);
-      setPassword(DEV_ADMIN_PASSWORD);
-    } else {
-      setEmail("");
-      setPassword("");
-    }
-    requestAnimationFrame(() => emailRef.current?.focus());
-  }
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  async function submitLogin(loginEmail: string, loginPassword: string, role: LoginRole) {
     setError(null);
     try {
-      const result = await login.mutateAsync({ email, password });
-      if (result.role !== selectedRole) {
+      const result = await login.mutateAsync({ email: loginEmail, password: loginPassword });
+      if (result.role !== role) {
         setSelectedRole(result.role);
       }
       router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");
     }
+  }
+
+  function chooseRole(role: LoginRole) {
+    setSelectedRole(role);
+    setError(null);
+    if (role === "Guardian") {
+      // Demo yayınında /parent örnek veli oturumunu otomatik açar. Demo kapalıysa
+      // koruma normal telefon + OTP ekranına yönlendirir.
+      router.push("/parent");
+      return;
+    }
+    setEmail(DEMO_EMAILS[role]);
+    setPassword(DEMO_PASSWORD);
+    requestAnimationFrame(() => emailRef.current?.focus());
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    await submitLogin(email, password, selectedRole);
   }
 
   return (
@@ -110,11 +102,11 @@ export default function LoginPage() {
           {selectedRole !== "Guardian" && (
             <form onSubmit={handleSubmit} className="mt-7">
               <div className="mb-5 flex items-center gap-3 text-[.65rem] text-[var(--muted)] before:h-px before:flex-1 before:bg-[var(--line)] after:h-px after:flex-1 after:bg-[var(--line)]">
-                e-posta ile giriş yap
+                demo bilgileri hazır
               </div>
 
               <label htmlFor="email" className="mb-1.5 block text-[.7rem] font-semibold text-[var(--muted)]">E-posta</label>
-              <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
+              <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="demo.yonetici@abdera.com" className="field text-sm" />
 
               <label htmlFor="password" className="mb-1.5 mt-4 block text-[.7rem] font-semibold text-[var(--muted)]">Şifre</label>
               <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="field text-sm tracking-[.18em]" />

@@ -26,6 +26,10 @@ public class Enrollment
     public static Enrollment Create(
         Guid studentId, Guid teacherId, Guid instrumentId, DateOnly startedAt, DateTimeOffset now)
     {
+        // İstek gövdesinde startedAt eksikse System.Text.Json onu sessizce default(DateOnly)
+        // (0001-01-01) yapıyordu, hiç hata vermeden - canlı QA turunda bulunan gerçek bir bug.
+        if (startedAt == default) throw new ArgumentException("Başlangıç tarihi zorunlu.", nameof(startedAt));
+
         return new Enrollment
         {
             Id = Guid.NewGuid(),

@@ -9,5 +9,6 @@ public static class DashboardModule
     public static void MapDashboardModule(this WebApplication app)
     {
         app.MapDashboard();
+        app.MapBenchmark();
     }
 }

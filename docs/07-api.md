@@ -153,9 +153,13 @@ POST   /api/backup-runs/trigger                 ✅ Faz 4 - manuel yedeklemeyi a
   "noResponse": 5,
   "pendingChangeRequests": 3,
   "overduePayments": 8,
-  "upcomingBirthdays": 2,
+  "upcomingBirthdays": [
+    { "studentId": "...", "studentName": "Ela Kaya", "birthDate": "2017-09-16", "nextOccurrence": "2026-09-16", "daysUntil": 5, "turningAge": 9 }
+  ],
   "upcomingSchoolEvents": 1
 }
 ```
 
 Rol bazlı davranış: `TEACHER` bu uç noktayı çağırdığında sayılar okul geneli değil, yalnızca kendi dersleri üzerinden hesaplanır (bkz. `docs/04-permissions.md`).
+
+`upcomingBirthdays` önceden yalnızca bir sayıydı (hiçbir ekranda gösterilmiyordu) - kullanıcı isteğiyle 30 günlük pencere içindeki öğrencilerin gerçek listesine (`daysUntil`'e göre artan sırayla) çevrildi, `/dashboard` ana ekranında "Yaklaşan Doğum Günleri" bölümü olarak gösterilir.

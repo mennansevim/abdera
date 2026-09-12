@@ -147,6 +147,8 @@ export interface PaymentRecord {
   correctsPaymentId: string | null;
   previousAmount: number | null;
   recordedAt: string | null;
+  bulkPaymentId: string | null;
+  bulkPaymentMonths: number | null;
 }
 
 export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other";

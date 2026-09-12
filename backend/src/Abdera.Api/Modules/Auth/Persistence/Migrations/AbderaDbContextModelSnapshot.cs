@@ -188,6 +188,12 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("role");
 
+                    b.Property<Guid>("SecurityStamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -515,6 +521,14 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount");
 
+                    b.Property<Guid?>("BulkPaymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bulk_payment_id");
+
+                    b.Property<int?>("BulkPaymentMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("bulk_payment_months");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -548,11 +562,15 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BulkPaymentId");
+
                     b.HasIndex("ReceivableId");
 
                     b.ToTable("payments", null, t =>
                         {
                             t.HasCheckConstraint("CK_payments_amount", "amount > 0");
+
+                            t.HasCheckConstraint("CK_payments_bulk_payment_months", "(bulk_payment_id IS NULL AND bulk_payment_months IS NULL) OR (bulk_payment_id IS NOT NULL AND bulk_payment_months BETWEEN 2 AND 24)");
                         });
                 });
 
@@ -1149,11 +1167,21 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasDefaultValue(true)
                         .HasColumnName("notification_consent");
 
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("text")
+                        .HasColumnName("password_hash");
+
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone_number");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("security_stamp")
+                        .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2083,6 +2111,25 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_teacher_time_off_dates", "ends_on >= starts_on");
                         });
+                });
+
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.PaymentCorrection", b =>

@@ -129,6 +129,7 @@ function TeachersPageContent() {
 
 function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; isAdmin: boolean }) {
   const [showStudents, setShowStudents] = useState(false);
+  const [studentSearch, setStudentSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const teacherInstruments = instruments.filter((instrument) => teacher.instrumentIds.includes(instrument.id));
@@ -146,8 +147,13 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
         });
       }
     }
-    return [...grouped.values()];
+    return [...grouped.values()].sort((a, b) => a.name.localeCompare(b.name, "tr-TR"));
   }, [teacherStudents]);
+  const visibleStudents = useMemo(() => {
+    const query = studentSearch.trim().toLocaleLowerCase("tr-TR");
+    if (!query) return groupedStudents;
+    return groupedStudents.filter((student) => `${student.name} ${student.courses.join(" ")}`.toLocaleLowerCase("tr-TR").includes(query));
+  }, [groupedStudents, studentSearch]);
 
   return <li id={`teacher-${teacher.id}`} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
     <div className="flex min-h-16 items-center gap-3 px-4 py-3">
@@ -179,8 +185,12 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
       )}
     </div>
 
-    {showStudents && isAdmin && <div className="border-t border-[var(--line)] bg-white px-4 py-3">
-      {groupedStudents.length > 0 ? <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{groupedStudents.map((student) => <li key={student.id} className="flex items-center gap-2.5 rounded-xl border border-[var(--line)] px-3 py-2.5"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--surface-muted)] text-[.62rem] font-bold text-[var(--brand-strong)]">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0"><span className="block truncate text-xs font-bold">{student.name}</span><span className="text-meta mt-0.5 block truncate">{student.courses.join(", ")}</span></span></li>)}</ul> : <p className="text-meta py-2">Bu öğretmene bağlı aktif öğrenci yok.</p>}
+    {showStudents && isAdmin && <div className="border-t border-[var(--line)] bg-[var(--surface-muted)]/35 px-4 py-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div><p className="text-xs font-bold">Öğrenciler</p><p className="text-meta mt-0.5">Bu öğretmenden aktif ders alan {groupedStudents.length} öğrenci</p></div>
+        {groupedStudents.length > 6 && <label className="relative"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 w-48 pl-9 text-xs" /></label>}
+      </div>
+      {visibleStudents.length > 0 ? <ul className="grid gap-2 sm:grid-cols-2">{visibleStudents.map((student) => <li key={student.id} className="flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 shadow-sm"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.62rem] font-bold text-[var(--brand-strong)]">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{student.name}</span><span className="mt-1 flex flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.55rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></span></li>)}</ul> : groupedStudents.length ? <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}
       <TeacherAvailabilityDays teacherId={teacher.id} enabled={showStudents} />
     </div>}
 

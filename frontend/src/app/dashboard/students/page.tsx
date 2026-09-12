@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { Icon, instrumentBadgeStyle } from "@/components/icons";
 import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -11,6 +12,7 @@ import { StudentDetail } from "./student-detail";
 // docs/04-permissions.md: öğrenci oluşturma/veli/kayıt yönetimi yalnızca Admin - Teacher
 // yalnızca kendisine atanmış öğrencileri görür, formlar 403 vermesin diye gizlenir.
 export default function StudentsPage() {
+  const router = useRouter();
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
   // "İçine girmeden anlayabilelim" - liste artık her satırda enstrüman rozetlerini de
@@ -19,6 +21,7 @@ export default function StudentsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
+  const [instrumentId, setInstrumentId] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
 
   function announce(text: string) {
@@ -26,18 +29,29 @@ export default function StudentsPage() {
     window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 4000);
   }
 
-  // Ada göre sıralı + aranabilir liste; arama enstrümanı da kapsar ("piyano öğrencileri").
+  const instrumentOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const overview of overviews ?? []) {
+      for (const instrument of overview.instruments) byId.set(instrument.instrumentId, instrument.instrumentName);
+    }
+    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, "tr-TR"));
+  }, [overviews]);
+
+  // Arama ve enstrüman seçimi birlikte çalışır: örneğin "Ece" + "Piyano" yalnızca
+  // iki koşulu da karşılayan öğrencileri gösterir. Filtre seçenekleri de listedeki toplu
+  // overview yanıtından çıkarılır; bunun için ikinci bir API isteği gerekmez.
   const visibleRows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("tr-TR");
     return (overviews ?? [])
       .filter(({ student, instruments }) => {
+        if (instrumentId && !instruments.some((item) => item.instrumentId === instrumentId)) return false;
         if (!query) return true;
         const haystack = [`${student.firstName} ${student.lastName}`, ...instruments.map((item) => item.instrumentName)]
           .join(" ").toLocaleLowerCase("tr-TR");
         return haystack.includes(query);
       })
       .sort((a, b) => `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`, "tr-TR"));
-  }, [overviews, search]);
+  }, [instrumentId, overviews, search]);
 
   return (
     <div className="space-y-4">
@@ -45,8 +59,24 @@ export default function StudentsPage() {
         title="Öğrenciler"
         description="Öğrenciler, aldıkları dersler ve kayıt bilgileri."
         actions={<>
+          <label className="relative min-w-0 flex-1 sm:w-44 sm:flex-none">
+            <span className="sr-only">Enstrümana göre filtrele</span>
+            <select
+              value={instrumentId}
+              onChange={(event) => setInstrumentId(event.target.value)}
+              className="field min-h-11 w-full appearance-none pr-9 text-xs font-semibold"
+              aria-label="Enstrümana göre filtrele"
+            >
+              <option value="">Tüm enstrümanlar</option>
+              {instrumentOptions.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
+            </select>
+            <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
+          </label>
           <SearchInput value={search} onChange={setSearch} label="Öğrenci ara" placeholder="Ad veya enstrüman ara…" />
-          {isAdmin && <AddButton label="Öğrenci ekle" onClick={() => setShowCreate(true)} />}
+          {isAdmin && <>
+            <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet min-h-11 whitespace-nowrap text-xs font-semibold">Hızlı ekle</button>
+            <AddButton label="Öğrenci ekle" onClick={() => router.push("/dashboard/students/new")} />
+          </>}
         </>}
       />
 
@@ -54,7 +84,12 @@ export default function StudentsPage() {
 
       <div className="app-card overflow-hidden">
         {isLoading && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
-        {!isLoading && visibleRows.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">{search ? `"${search}" ile eşleşen öğrenci yok.` : "Henüz öğrenci yok."}</p>}
+        {!isLoading && visibleRows.length === 0 && (
+          <div className="p-6 text-center text-sm text-[var(--muted)]">
+            <p>{search || instrumentId ? "Seçili filtrelerle eşleşen öğrenci yok." : "Henüz öğrenci yok."}</p>
+            {(search || instrumentId) && <button type="button" onClick={() => { setSearch(""); setInstrumentId(""); }} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}
+          </div>
+        )}
         <ul className="divide-y divide-[var(--line)]">
           {visibleRows.map(({ student, instruments }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">

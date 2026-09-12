@@ -2,6 +2,108 @@
 
 Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma günlüğü. Her faz tamamlandığında buraya bir bölüm eklenir; bir sonraki oturum en üstteki "Devam noktası" bölümünü okuyarak başlar. Tasarım kararları için `10-decisions.md`, API yüzeyi için `07-api.md`, migration sırası için `08-migrations.md` — burada yalnızca "ne yapıldı, ne kaldı, nasıl doğrulandı" tutulur.
 
+## Ana ekranda "Yaklaşan Doğum Günleri" bölümü (2026-09-12)
+
+Kullanıcı isteği: `GET /api/dashboard/today`'in `upcomingBirthdays` alanı önceden yalnızca bir
+sayıydı ve hiçbir ekranda gösterilmiyordu (`grep` ile doğrulandı - yalnızca `lib/dashboard.ts`
+tip tanımında vardı). `Dashboard.cs` bu alanı gerçek bir listeye çevrildi
+(`StudentId`/`StudentName`/`BirthDate`/`NextOccurrence`/`DaysUntil`/`TurningAge`, 30 günlük
+pencere, `DaysUntil`'e göre artan sırayla, rol bazlı kapsam korunarak - Teacher yalnızca kendi
+öğrencisini görür). Admin dashboard'una (`/dashboard`) dördüncü bir rail bölümü eklendi:
+"Yaklaşan Doğum Günleri" (yeni `cake` ikonu, `icons.tsx`) - öğrenci adı + tarih + "yaşına
+giriyor" + "N gün sonra/Bugün/Yarın" etiketiyle, tıklanınca öğrenci sayfasına gidiyor.
+
+**Testler:** `Integration/DashboardFlowTests.cs` güncellendi - admin'in listede doğru öğrenciyi
+(`daysUntil=5`) gördüğü, Teacher A'nın yalnızca kendi öğrencisini gördüğü (başka öğretmenin
+öğrencisini göremediği) doğrulanıyor. `dotnet test` → 347/347 yeşil (değişmedi, mevcut test
+güncellendi). `npm run build`/`npm run lint` temiz.
+
+**Canlı doğrulama:** `docker compose`'da doğum günü 5 gün sonraya denk gelen bir öğrenci
+oluşturulup gerçek admin oturumuyla `/dashboard`'da "Ela Kaya · 17 Eylül · 9 yaşına giriyor ·
+5 gün sonra" doğru göründü, tıklanınca `/dashboard/students`'e gitti, konsol hatası yok.
+
+**Kalan iş:** Yalnızca Admin dashboard'una eklendi - backend zaten rol bazlı kapsamlı olduğu
+için istenirse Teacher'ın mobil "Bugün" görünümüne de aynı veriyle eklenebilir, bu turda
+kapsam dışı bırakıldı (kullanıcı yalnızca "ana ekran"ı belirtti). Commit edilmedi.
+
+## Uçtan uca QA turu (2026-09-11) — kimlik doğrulama ve girdi doğrulama bugları
+
+Kapsamlı bir QA/güvenlik taraması (öğrenci/öğretmen/veli CRUD, auth, yetkilendirme,
+concurrency, aidat) canlı `docker compose` ortamına karşı curl ile yürütüldü. Bu turda
+dokunulmayan, ayrı bir oturuma ait commit'lenmemiş değişiklikler (Vercel/Supabase deploy
+hazırlığı - `Dockerfile.vercel`, `vercel.json`, `Runtime:Serverless`, `Demo:Enabled` vb.)
+olduğu gibi bırakıldı; yalnızca bu QA turunda bulunan buglar düzeltildi.
+
+### Bulunan ve düzeltilen buglar
+
+1. **KRİTİK - Logout sunucu tarafında oturumu geçersiz kılmıyordu.** `SignOutAsync`
+   yalnızca istemci cookie'sini siliyordu; imzalı ticket kendiliğinden geçersiz olmadığından
+   bir kopyası alınmış eski cookie, logout sonrasında da 12 saatlik sliding pencere boyunca
+   sunucuda kabul edilmeye devam ediyordu - aynı sınıf bug şifre değişiminde ve hesap
+   pasifleştirmede de vardı (eski oturum düşmüyordu). `User`/`Guardian`'a `SecurityStamp`
+   (opak `Guid`) eklendi; login'de cookie'ye claim olarak gömülüyor, her istekte
+   `Program.cs`'teki `OnValidatePrincipal` bunu DB'deki güncel değerle karşılaştırıyor.
+   Logout/şifre değişimi/hesap pasifleştirme stamp'i yeniliyor - böylece o ana kadar geçerli
+   olan TÜM eski cookie'ler bir sonraki istekte reddediliyor. `docs/10-decisions.md` B4'ün
+   "JWT revocation karmaşıklığı bu ölçekte gereksiz" kararını bozmuyor - JWT/refresh token
+   eklenmedi, yalnızca mevcut cookie şemasına bir doğrulama alanı eklendi. Migration:
+   `AddSecurityStamp` (users + guardians, `gen_random_uuid()` varsayılanıyla geriye dönük
+   dolduruldu). Dosyalar: `Modules/Auth/Domain/User.cs`, `Modules/People/Domain/Guardian.cs`,
+   `Modules/Auth/Features/Login.cs`, `Modules/Auth/Features/Logout.cs`,
+   `Modules/People/Features/GuardianAuth.cs`, `Program.cs`, `Shared/SecurityStampClaim.cs`
+   (yeni). Canlı `docker compose`'da doğrulandı: kopyalanmış cookie logout sonrası 401,
+   sıfır veritabanında da (23 migration) hatasız.
+
+2. **YÜKSEK - Öğretmeni "pasife alma" giriş hesabını hiç etkilemiyordu.**
+   `PATCH /api/teachers/{id}` yalnızca `Teacher.Status` domain alanını değiştiriyordu;
+   bağlı `User.IsActive` hiç senkron değildi - pasife alınan bir öğretmen mevcut oturumuyla
+   (hatta yeniden giriş yaparak) sisteme erişmeye devam edebiliyordu. `User.Activate()`
+   eklendi, `Teachers.UpdateAsync` artık `Inactive`/`Active` durumunu `User.IsActive`'e
+   senkronluyor (ki bu da yukarıdaki SecurityStamp mekanizmasıyla mevcut oturumu düşürüyor).
+   Canlı doğrulandı: pasife alınan öğretmenin var olan cookie'si 401, yeniden giriş denemesi
+   401, tekrar Active yapılınca giriş yeniden çalışıyor.
+
+3. **YÜKSEK - Öğrenci/öğretmen/veli adı 100 karakteri aşınca 500 dönüyordu.**
+   `Student`/`Teacher`/`Guardian` domain sınıfları DB'deki `HasMaxLength(100)` sınırını
+   uygulama katmanında hiç kontrol etmiyordu - aşırı uzun bir ad yakalanmayan bir
+   `DbUpdateException` (500 + stack trace log'a düşüyor) ile pat­lıyordu. Üçüne de
+   uzunluk kontrolü eklendi (400 + anlaşılır mesaj).
+
+4. **YÜKSEK - Öğrenci doğum tarihi hiç sınırlanmamıştı.** `2099-01-01` (gelecek) ve
+   `1500-01-01` (absürt eski) `201` ile kabul ediliyordu. `Student.Create/Update`'e
+   gelecek-tarih ve 120 yıldan eski tarih reddi eklendi.
+
+5. **ORTA - Kurs (Enrollment) başlangıç tarihi eksik gönderilirse sessizce
+   `0001-01-01`'e düşüyordu.** İstek gövdesinde `startedAt` olmadığında JSON deserializer
+   sessizce `default(DateOnly)` atıyordu, hiçbir doğrulama yoktu. `Enrollment.Create`
+   artık `default` değeri reddediyor. (Not: frontend formu her zaman gerçek bir tarih
+   gönderiyor - bu yalnızca ham API çağrılarına karşı bir savunma katmanı.)
+
+6. **ORTA - Kullanıcı e-postası format kontrolünden geçmiyordu.** `User.Create` yalnızca
+   boş kontrolü yapıyordu; "abc" gibi "@" içermeyen bir değer kabul ediliyordu.
+   `System.Net.Mail.MailAddress` ile hafif format doğrulaması + 320 karakter sınırı eklendi.
+
+### Doğrulanan, regresyon olmadığı teyit edilen mevcut korumalar
+
+Önceki fazlarda eklenmiş ve bu turda canlı ortamda yeniden test edilen kritik davranışlar:
+teacher/guardian veri izolasyonu (IDOR reddi - başka öğretmenin öğrencisine 403, başka
+veliye 403), aynı dönem için mükerrer aidat reddi (409, `UNIQUE(enrollment_id, period)`),
+ve en kritiği - **aynı aidata eşzamanlı iki ödeme isteği** gerçekten yarıştırıldı: biri
+`201`, diğeri optimistic concurrency ile `409` döndü, `totalPaid` çift sayılmadı. Bunların
+hiçbiri bu turda değişmedi, yalnızca gerçek trafikle yeniden doğrulandı.
+
+### Testler
+
+`Unit/PeopleDomainTests.cs` (yeni, 10 test), `Unit/UserTests.cs` (+3), `Integration/AuthFlowTests.cs`
+(+2: kopyalanmış cookie logout sonrası düşüyor, şifre değişimi eski cookie'yi düşürüyor),
+`Integration/GuardianOtpFlowTests.cs` (+1: veli logout'u da aynı şekilde düşürüyor),
+`Integration/PeopleAndSchedulingFlowTests.cs` (+1: öğretmen pasife alma tam akışı).
+`dotnet test` → 347/347 yeşil (328'den +19 yeni test).
+
+### Kalan iş
+
+Commit edilmedi - kullanıcı onayı bekleniyor. Bu QA turunun tam raporu sohbet geçmişinde.
+
 ## Devam noktası (şu an)
 
 **`redesign/sicak-atolye` dalı — Faz 1-4'ün tamamı tamamlandı (docs/15-product-phases.md). Faz 1-3 push edildi; Faz 4 bu turda eklendi, henüz commit edilmedi.**

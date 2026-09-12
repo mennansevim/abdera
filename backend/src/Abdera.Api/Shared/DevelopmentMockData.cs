@@ -1,11 +1,8 @@
-using System.Security.Claims;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
-using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Progress.Domain;
-using Abdera.Api.Modules.Pricing.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -17,7 +14,6 @@ namespace Abdera.Api.Shared;
 // test databases stay clean and an operator never gets surprise rows after a restart.
 public static class DevelopmentMockData
 {
-    private const string MarkerEmail = "mock.ayse.kaya@abdera.local";
     private const string DemoGuardianPhone = "+905550000001";
     private const string DemoPassword = "DemoTeacher123!";
 
@@ -26,6 +22,12 @@ public static class DevelopmentMockData
         new("Ayşe", "Kaya", "mock.ayse.kaya@abdera.local", "PIANO"),
         new("Mert", "Yılmaz", "mock.mert.yilmaz@abdera.local", "GUITAR"),
         new("Selin", "Demir", "mock.selin.demir@abdera.local", "VIOLIN"),
+        new("Cem", "Akın", "mock.cem.akin@abdera.local", "DRUMS"),
+        new("Zeynep", "Acar", "mock.zeynep.acar@abdera.local", "PIANO"),
+        new("Burak", "Eren", "mock.burak.eren@abdera.local", "GUITAR"),
+        new("Ece", "Şahin", "mock.ece.sahin@abdera.local", "VIOLIN"),
+        new("Onur", "Koç", "mock.onur.koc@abdera.local", "DRUMS"),
+        new("Derya", "Çelik", "mock.derya.celik@abdera.local", "PIANO"),
     ];
 
     private static readonly GuardianSpec[] GuardianSpecs =
@@ -47,12 +49,12 @@ public static class DevelopmentMockData
         new("Lara", "Arslan", new DateOnly(2015, 3, 14), 0, 0, "Anne"),
         new("Emir", "Aydın", new DateOnly(2012, 9, 7), 1, 1, "Baba"),
         new("Ada", "Çetin", new DateOnly(2016, 1, 22), 2, 2, "Anne"),
-        new("Ege", "Kurt", new DateOnly(2011, 11, 3), 0, 3, "Baba"),
-        new("Mina", "Şahin", new DateOnly(2014, 6, 19), 1, 4, "Anne"),
-        new("Aras", "Koç", new DateOnly(2013, 2, 11), 2, 5, "Baba"),
-        new("Defne", "Eren", new DateOnly(2017, 8, 29), 0, 6, "Anne"),
-        new("Kerem", "Aksoy", new DateOnly(2010, 12, 16), 1, 7, "Baba"),
-        new("İpek", "Öztürk", new DateOnly(2015, 10, 5), 2, 8, "Anne"),
+        new("Ege", "Kurt", new DateOnly(2011, 11, 3), 3, 3, "Baba"),
+        new("Mina", "Şahin", new DateOnly(2014, 6, 19), 4, 4, "Anne"),
+        new("Aras", "Koç", new DateOnly(2013, 2, 11), 5, 5, "Baba"),
+        new("Defne", "Eren", new DateOnly(2017, 8, 29), 6, 6, "Anne"),
+        new("Kerem", "Aksoy", new DateOnly(2010, 12, 16), 7, 7, "Baba"),
+        new("İpek", "Öztürk", new DateOnly(2015, 10, 5), 8, 8, "Anne"),
         new("Deniz", "Arslan", new DateOnly(2013, 4, 27), 0, 1, "Baba"),
         new("Lina", "Koç", new DateOnly(2016, 12, 2), 1, 5, "Anne"),
         new("Bora", "Aydın", new DateOnly(2014, 9, 13), 2, 2, "Baba"),
@@ -94,18 +96,34 @@ public static class DevelopmentMockData
     private static async Task<IResult> SeedAsync(
         AbderaDbContext db,
         IPasswordHasher<User> passwordHasher,
-        IClock clock,
-        ClaimsPrincipal principal)
+        IClock clock)
     {
         var schoolZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
-        if (await db.Users.AnyAsync(user => user.Email == MarkerEmail))
+        var demoTeacherEmails = TeacherSpecs.Select(spec => spec.Email).ToArray();
+        var existingDemoTeacherCount = await db.Users.CountAsync(user => demoTeacherEmails.Contains(user.Email));
+        if (existingDemoTeacherCount == TeacherSpecs.Length)
         {
             var alreadySeededToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(clock.UtcNow, schoolZone).DateTime);
             return Results.Ok(new SeedResponse("already-seeded", alreadySeededToday.AddMonths(-6), alreadySeededToday, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
         }
 
+        var existingStudentNames = await db.Students
+            .Select(student => new { student.FirstName, student.LastName })
+            .ToListAsync();
+        var missingStudentCount = StudentSpecs.Count(spec => !existingStudentNames.Any(student =>
+            student.FirstName == spec.FirstName && student.LastName == spec.LastName));
+        if (await db.Teachers.CountAsync() + (TeacherSpecs.Length - existingDemoTeacherCount) > 10 ||
+            await db.Students.CountAsync() + missingStudentCount > 150)
+        {
+            return Results.BadRequest(new
+            {
+                message = "Mevcut kayıtlarla birlikte demo veri en fazla 10 öğretmen ve 150 öğrenci içerebilir.",
+            });
+        }
+
         var instruments = await db.Instruments.ToDictionaryAsync(instrument => instrument.Code, StringComparer.OrdinalIgnoreCase);
-        if (!instruments.ContainsKey("PIANO") || !instruments.ContainsKey("GUITAR") || !instruments.ContainsKey("VIOLIN"))
+        if (!instruments.ContainsKey("PIANO") || !instruments.ContainsKey("GUITAR") ||
+            !instruments.ContainsKey("VIOLIN") || !instruments.ContainsKey("DRUMS"))
         {
             throw new InvalidOperationException("Mock veri için enstrüman seed verileri bulunamadı.");
         }
@@ -207,97 +225,6 @@ public static class DevelopmentMockData
 
         await db.SaveChangesAsync();
 
-        // Aidat ekranının tüm durumları ilk açılışta görülebilsin diye 12 öğrenciye ikişer
-        // dönem olmak üzere 24 deterministik kayıt oluşturulur. Marker kullanıcı kontrolü
-        // nedeniyle endpoint tekrar çağrıldığında duplicate üretilmez.
-        var actorId = AuthContext.GetUserId(principal);
-        var priceList = PriceList.Create("Demo 2026–2027", from, null, actorId, now);
-        db.PriceLists.Add(priceList);
-        var priceItems = instruments.Values.ToDictionary(
-            instrument => instrument.Id,
-            instrument => PriceListItem.Create(
-                priceList.Id,
-                instrument.Id,
-                50,
-                BillingType.Monthly,
-                instrument.Code switch
-                {
-                    "PIANO" => 3200m,
-                    "VIOLIN" => 3000m,
-                    "GUITAR" => 2800m,
-                    _ => 2900m,
-                },
-                "TRY",
-                null));
-        db.PriceListItems.AddRange(priceItems.Values);
-
-        for (var studentIndex = 0; studentIndex < students.Count; studentIndex++)
-        {
-            var (student, enrollment, _, _, instrument) = students[studentIndex];
-            var item = priceItems[instrument.Id];
-            var feePlan = FeePlan.CreateFromPriceListItem(enrollment.Id, item, 5, from, now);
-            db.FeePlans.Add(feePlan);
-
-            for (var periodIndex = 0; periodIndex < 2; periodIndex++)
-            {
-                var scenario = (studentIndex * 2 + periodIndex) % 4;
-                var periodMonth = today.AddMonths(periodIndex - 1);
-                var dueDate = scenario switch
-                {
-                    1 or 3 => today.AddDays(12 + periodIndex),
-                    _ => today.AddDays(-12 - periodIndex),
-                };
-                var receivable = Receivable.Create(
-                    enrollment.Id,
-                    feePlan.Id,
-                    item.Id,
-                    periodMonth.ToString("yyyy-MM"),
-                    item.Amount,
-                    item.Currency,
-                    dueDate,
-                    now);
-                db.Receivables.Add(receivable);
-
-                if (scenario == 0)
-                {
-                    db.Payments.Add(Payment.Create(
-                        receivable.Id,
-                        item.Amount,
-                        dueDate,
-                        PaymentMethod.Transfer,
-                        $"demo-paid-{student.Id:N}-{periodIndex}",
-                        "Demo tam ödeme",
-                        actorId,
-                        now));
-                    receivable.RecordPaymentEffect(item.Amount, now);
-                    counts.Payments++;
-                }
-                else if (scenario == 1)
-                {
-                    var paid = Math.Round(item.Amount * .4m, 2);
-                    db.Payments.Add(Payment.Create(
-                        receivable.Id,
-                        paid,
-                        today,
-                        PaymentMethod.Cash,
-                        null,
-                        "Demo kısmi ödeme",
-                        actorId,
-                        now));
-                    receivable.RecordPaymentEffect(paid, now);
-                    counts.Payments++;
-                }
-                else if (scenario == 2)
-                {
-                    receivable.MarkOverdueIfPastDue(today, now);
-                }
-
-                counts.Receivables++;
-            }
-        }
-
-        await db.SaveChangesAsync();
-
         for (var index = 0; index < students.Count; index++)
         {
             var item = students[index];
@@ -317,6 +244,12 @@ public static class DevelopmentMockData
             {
                 var startAt = ToUtc(date, startTime, schoolZone);
                 var endAt = ToUtc(date, startTime.AddMinutes(50), schoolZone);
+                if (await db.Lessons.AnyAsync(candidate =>
+                        candidate.LessonSeriesId == series.Id && candidate.StartAt == startAt))
+                {
+                    continue;
+                }
+
                 var lesson = Lesson.CreateFromSeries(series.Id, item.Student.Id, item.Teacher.Id, item.Instrument.Id, startAt, endAt, now);
                 var isPast = date < today;
                 if (isPast)

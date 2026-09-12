@@ -20,7 +20,9 @@ public static class Receivables
         string Kind = "Payment",
         Guid? CorrectsPaymentId = null,
         decimal? PreviousAmount = null,
-        DateTimeOffset? RecordedAt = null);
+        DateTimeOffset? RecordedAt = null,
+        Guid? BulkPaymentId = null,
+        int? BulkPaymentMonths = null);
     public record ReceivableResponse(
         Guid Id, Guid EnrollmentId, string Period, decimal Amount, string Currency,
         DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid, List<PaymentSummary> Payments);
@@ -148,7 +150,11 @@ public static class Receivables
             {
                 var history = new List<PaymentSummary>
                 {
-                    new(payment.Id, payment.Amount, payment.PaymentDate, payment.Method, payment.Reference, payment.Note, RecordedAt: payment.CreatedAt),
+                    new(
+                        payment.Id, payment.Amount, payment.PaymentDate, payment.Method, payment.Reference, payment.Note,
+                        RecordedAt: payment.CreatedAt,
+                        BulkPaymentId: payment.BulkPaymentId,
+                        BulkPaymentMonths: payment.BulkPaymentMonths),
                 };
                 history.AddRange(corrections
                     .Where(correction => correction.PaymentId == payment.Id)
@@ -162,7 +168,9 @@ public static class Receivables
                         "Correction",
                         payment.Id,
                         correction.PreviousAmount,
-                        correction.CreatedAt)));
+                        correction.CreatedAt,
+                        payment.BulkPaymentId,
+                        payment.BulkPaymentMonths)));
                 return history;
             }).OrderByDescending(item => item.RecordedAt).ToList());
     }

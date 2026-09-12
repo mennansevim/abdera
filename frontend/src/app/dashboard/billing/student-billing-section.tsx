@@ -19,6 +19,14 @@ import {
   type Receivable,
 } from "@/lib/billing";
 
+function isValidPeriod(period: string | null | undefined): period is string {
+  return !!period && /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
+}
+
+function isValidDateInput(value: string | null | undefined): value is string {
+  return !!value && /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value) && Number.isFinite(new Date(`${value}T00:00:00`).getTime());
+}
+
 // Bu panel bilinçli olarak TEK bir şey yapar: bir öğrencinin aidat geçmişini göstermek ve
 // yeni bir dönem aidatı eklemek. Önceki sürümde aynı bilginin İKİ farklı temsili vardı -
 // üstte salt-okunur bir "Dönem takibi" özeti, altta her kurs için ayrı, kendi "Ödeme al"
@@ -181,6 +189,10 @@ function AddTuitionForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!enrollmentId || !isValidPeriod(period)) {
+      setError("Aidat oluşturmak için geçerli bir dönem seçin.");
+      return;
+    }
     try {
       await createReceivable.mutateAsync({ enrollmentId, period });
       onCreated();
@@ -193,7 +205,7 @@ function AddTuitionForm({
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 p-4">
       {enrollments.length > 1 && <label className="form-label">Kurs<select value={enrollmentId} onChange={(event) => setEnrollmentId(event.target.value)} required className="field min-h-10 text-sm">{enrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment.id)}</option>)}</select></label>}
       <label className="form-label">Dönem<input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} required className="field min-h-10 text-sm" /></label>
-      <button type="submit" disabled={createReceivable.isPending || !enrollmentId} className="btn btn-primary">{createReceivable.isPending ? "Ekleniyor…" : "Aidatı oluştur"}</button>
+      <button type="submit" disabled={createReceivable.isPending || !enrollmentId || !isValidPeriod(period)} className="btn btn-primary">{createReceivable.isPending ? "Ekleniyor…" : "Aidatı oluştur"}</button>
       {error && <p role="alert" className="w-full text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
@@ -246,13 +258,18 @@ function BulkPaymentBlock({ studentId, enrollmentId, label, feePlan }: { student
   if (feePlan.billingType !== "Monthly") return null;
 
   function changeMonths(value: number) {
-    setMonths(value);
-    setAmount(feePlan.amount * value);
+    const normalized = Number.isFinite(value) ? Math.max(1, Math.min(24, Math.trunc(value))) : 1;
+    setMonths(normalized);
+    setAmount(feePlan.amount * normalized);
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!isValidPeriod(startPeriod) || !isValidDateInput(paymentDate)) {
+      setError("Başlangıç dönemi ve ödeme tarihini seçin.");
+      return;
+    }
     try {
       await bulkPayment.mutateAsync({ startPeriod, months, amount, paymentDate, method });
     } catch (err) {
@@ -264,13 +281,13 @@ function BulkPaymentBlock({ studentId, enrollmentId, label, feePlan }: { student
     <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-3.5">
       <p className="mb-2 text-xs font-bold">{label}</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <label className="form-label">Başlangıç<input type="month" value={startPeriod} onChange={(event) => setStartPeriod(event.target.value)} className="field min-h-10 text-xs" /></label>
-        <label className="form-label">Kaç ay?<select value={months} onChange={(event) => changeMonths(Number(event.target.value))} className="field min-h-10 text-xs"><option value={1}>1 ay</option><option value={3}>3 ay</option><option value={6}>6 ay</option><option value={10}>10 ay</option><option value={12}>12 ay</option></select></label>
-        <label className="form-label">Toplam tutar<input type="number" min={0.01} step={0.01} value={amount} onChange={(event) => setAmount(Number(event.target.value))} className="field min-h-10 text-xs" /></label>
-        <label className="form-label">Ödeme tarihi<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} className="field min-h-10 text-xs" /></label>
+        <label className="form-label">Başlangıç<input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required className="field min-h-10 text-xs" /></label>
+        <label className="form-label">Kaç ay?<input type="number" min={1} max={24} value={months} onChange={(event) => changeMonths(Math.max(1, Math.min(24, Number(event.target.value))))} className="field min-h-10 text-xs" /></label>
+        <label className="form-label">Toplam tutar<input type="number" value={amount} readOnly className="field min-h-10 bg-[var(--surface-muted)] text-xs" /></label>
+        <label className="form-label">Ödeme tarihi<input type="date" value={paymentDate} onChange={(event) => { setPaymentDate(event.target.value); setError(null); }} required className="field min-h-10 text-xs" /></label>
         <label className="form-label">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 text-xs"><option value="Transfer">Havale</option><option value="Cash">Nakit</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
       </div>
-      <button type="submit" disabled={bulkPayment.isPending} className="btn btn-primary mt-3">{bulkPayment.isPending ? "Kaydediliyor…" : "Toplu ödemeyi kaydet"}</button>
+      <button type="submit" disabled={bulkPayment.isPending || !isValidPeriod(startPeriod) || !isValidDateInput(paymentDate)} className="btn btn-primary mt-3">{bulkPayment.isPending ? "Kaydediliyor…" : "Toplu ödemeyi kaydet"}</button>
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
@@ -370,7 +387,7 @@ function PaymentHistoryRow({ studentId, payment, currency }: { studentId: string
   }
 
   return <div className="rounded-lg bg-white px-2.5 py-2 text-xs">
-    <div className="flex flex-wrap items-center justify-between gap-2"><span>{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} className="font-bold text-[var(--brand)]">Düzelt</button></span></div>
+    <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex flex-wrap items-center gap-1.5">{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}{payment.bulkPaymentId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.58rem] font-bold text-[var(--brand-strong)]">Toplu ödeme · {payment.bulkPaymentMonths} ay</span>}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} className="font-bold text-[var(--brand)]">Düzelt</button></span></div>
     {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-9 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" className="field min-h-9 text-xs" /><button disabled={correctPayment.isPending} className="btn btn-primary">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
   </div>;
 }

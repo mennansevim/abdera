@@ -45,7 +45,10 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // Tetikleme asenkron (arka planda) tamamlanıyor - pg_dump + AES-GCM şifreleme gerçekten
         // çalıştığı için birkaç saniye sürebilir, bu yüzden kısa aralıklarla yoklanıyor.
         BackupRun? run = null;
-        for (var attempt = 0; attempt < 30 && run?.Status != BackupRunStatus.Succeeded; attempt++)
+        // Tam paket koşusunda servis açılır açılmaz günlük otomatik yedek de başlamış
+        // olabilir. Manuel istek artık kaybolmak yerine onun arkasında sıraya girdiği için
+        // iki gerçek pg_dump işleminin bitmesine yetecek süre tanı.
+        for (var attempt = 0; attempt < 120 && run?.Status != BackupRunStatus.Succeeded; attempt++)
         {
             await Task.Delay(500);
             run = await db.BackupRuns.AsNoTracking().Where(r => !idsBefore.Contains(r.Id)).FirstOrDefaultAsync();

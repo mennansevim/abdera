@@ -263,6 +263,11 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var rsvp = await db.LessonRsvps.SingleAsync(r => r.LessonId == seeded.LessonId && r.GuardianId == seeded.GuardianId);
         Assert.Equal(RsvpResponse.Attending, rsvp.Response);
         Assert.Equal(RsvpSource.WhatsApp, rsvp.Source);
+
+        // Webhook kaydı yalnızca tabloda kalmamalı; öğretmen/yönetici takviminin kullandığı
+        // API cevabı da yeni durumu taşımalı.
+        var lesson = await GetCalendarLessonAsync(admin, seeded.LessonId);
+        Assert.Equal(RsvpResponse.Attending, lesson.RsvpResponse);
     }
 
     // Faz 3: üçüncü RSVP seçeneği ("Evet ama biraz geç kalacağım").
@@ -285,6 +290,33 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var rsvp = await db.LessonRsvps.SingleAsync(r => r.LessonId == seeded.LessonId && r.GuardianId == seeded.GuardianId);
         Assert.Equal(RsvpResponse.AttendingLate, rsvp.Response);
         Assert.Equal(RsvpSource.WhatsApp, rsvp.Source);
+
+        var lesson = await GetCalendarLessonAsync(admin, seeded.LessonId);
+        Assert.Equal(RsvpResponse.AttendingLate, lesson.RsvpResponse);
+    }
+
+    [Fact]
+    public async Task Rsvp_button_webhook_records_not_attending_and_calendar_reflects_it()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "rsvpwhno");
+
+        using var client = _factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/dev/whatsapp/simulate-rsvp", new
+        {
+            fromPhoneNumber = seeded.GuardianPhone,
+            action = RsvpButtonPayload.NotAttendingAction,
+            lessonId = seeded.LessonId,
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var rsvp = await db.LessonRsvps.SingleAsync(r => r.LessonId == seeded.LessonId && r.GuardianId == seeded.GuardianId);
+        Assert.Equal(RsvpResponse.NotAttending, rsvp.Response);
+        Assert.Equal(RsvpSource.WhatsApp, rsvp.Source);
+
+        var lesson = await GetCalendarLessonAsync(admin, seeded.LessonId);
+        Assert.Equal(RsvpResponse.NotAttending, lesson.RsvpResponse);
     }
 
     [Theory]
@@ -643,6 +675,15 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         };
         request.Headers.Add("X-Hub-Signature-256", signature);
         return await _factory.CreateClient().SendAsync(request);
+    }
+
+    private static async Task<Calendar.LessonResponse> GetCalendarLessonAsync(HttpClient admin, Guid lessonId)
+    {
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"));
+        var to = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(90).ToString("O"));
+        var lessons = await admin.GetFromJsonAsync<List<Calendar.LessonResponse>>(
+            $"/api/calendar?from={from}&to={to}", TestJson.Options);
+        return lessons!.Single(item => item.Id == lessonId);
     }
 
     private static string BuildTextWebhook(string messageId, string from, string text) =>

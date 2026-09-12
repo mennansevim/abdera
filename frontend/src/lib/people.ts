@@ -2,7 +2,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 
 export type StudentStatus = "Active" | "Inactive";
 export type TeacherStatus = "Active" | "Inactive";
@@ -323,6 +323,96 @@ export function useCreateStudentForTeacher(teacherId: string) {
       queryClient.invalidateQueries({ queryKey: ["students"] });
       queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+    },
+  });
+}
+
+export interface GuardianCredential {
+  guardianId: string;
+  phoneNumber: string;
+  password: string;
+}
+
+export interface RegisterStudentInput {
+  student: { firstName: string; lastName: string; birthDate: string };
+  teacherId: string;
+  instrumentId: string;
+  startedAt: string;
+  guardian: { firstName: string; lastName: string; phoneNumber: string; relationship?: string };
+  lesson?: { dayOfWeek: string; startTime: string; durationMinutes: number };
+}
+
+export interface RegisterStudentResult {
+  studentId: string;
+  enrollmentId: string;
+  guardian: GuardianCredential;
+  lessonScheduled: boolean;
+  lessonWarning: string | null;
+}
+
+// docs/13 Pillar C + UX-2: tek-ekran kayıt. Backend'de birleşik bir uç yok (dikey dilim
+// mimarisi, her use-case ayrı) - bu yüzden orkestrasyonu istemcide tek mutation'da toplarız:
+// öğrenci+kayıt -> veli -> bağlama -> şifre (WhatsApp) -> (opsiyonel) ders günü. Ders serisi
+// çakışırsa kayıt yine başarılıdır; uyarı döner (öğrenci/veli zaten oluşmuştur).
+export function useRegisterStudent() {
+  const queryClient = useQueryClient();
+  return useMutation<RegisterStudentResult, unknown, RegisterStudentInput>({
+    mutationFn: async (input) => {
+      const created = await api.post<TeacherStudentEnrollment>(`/api/teachers/${input.teacherId}/students`, {
+        firstName: input.student.firstName,
+        lastName: input.student.lastName,
+        birthDate: input.student.birthDate,
+        instrumentId: input.instrumentId,
+        startedAt: input.startedAt,
+      });
+
+      const guardian = await api.post<Guardian>("/api/guardians", {
+        firstName: input.guardian.firstName,
+        lastName: input.guardian.lastName,
+        phoneNumber: input.guardian.phoneNumber,
+      });
+      await api.post(`/api/students/${created.studentId}/guardians`, {
+        guardianId: guardian.id,
+        relationship: input.guardian.relationship,
+        isPrimary: true,
+      });
+      const cred = await api.post<{ id: string; phoneNumber: string; password: string; message: string }>(
+        `/api/guardians/${guardian.id}/reset-password`,
+        {},
+      );
+
+      let lessonScheduled = false;
+      let lessonWarning: string | null = null;
+      if (input.lesson) {
+        try {
+          await api.post("/api/lesson-series", {
+            enrollmentId: created.enrollmentId,
+            dayOfWeek: input.lesson.dayOfWeek,
+            startTime: input.lesson.startTime,
+            durationMinutes: input.lesson.durationMinutes,
+            effectiveFrom: new Date().toISOString().slice(0, 10),
+          });
+          lessonScheduled = true;
+        } catch (err) {
+          lessonWarning =
+            err instanceof ApiError ? err.detail ?? err.title : "Ders günü kaydedilemedi, sonra takvimden ekleyebilirsin.";
+        }
+      }
+
+      return {
+        studentId: created.studentId,
+        enrollmentId: created.enrollmentId,
+        guardian: { guardianId: guardian.id, phoneNumber: cred.phoneNumber, password: cred.password },
+        lessonScheduled,
+        lessonWarning,
+      };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["students"] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+      queryClient.invalidateQueries({ queryKey: ["guardians"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
   });
 }

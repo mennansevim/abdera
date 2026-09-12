@@ -78,8 +78,21 @@ public static class BulkPayments
         var targetIds = targets.Where(r => r.Id != Guid.Empty).Select(r => r.Id).ToList();
         var paidByReceivable = await Receivables.ComputeTotalsPaidAsync(targetIds, db);
 
+        var unavailablePeriods = targets
+            .Where(receivable => receivable.Status is ReceivableStatus.Cancelled or ReceivableStatus.Paid)
+            .Select(receivable => receivable.Period)
+            .ToList();
+        if (unavailablePeriods.Count > 0)
+            throw new ConflictException($"Seçilen aralıkta zaten ödenmiş veya iptal edilmiş dönem var: {string.Join(", ", unavailablePeriods)}. Başlangıç dönemini değiştirin.");
+
+        var expectedAmount = targets.Sum(receivable =>
+            Math.Max(0, receivable.Amount - paidByReceivable.GetValueOrDefault(receivable.Id)));
+        if (request.Amount != expectedAmount)
+            throw new ConflictException($"Seçilen {request.Months} ayın kalan toplamı {expectedAmount:0.##} {feePlan.Currency}. Ödeme tutarı bu toplamla aynı olmalı.");
+
         var remaining = request.Amount;
         var actorId = AuthContext.GetUserId(principal);
+        var bulkPaymentId = request.Months > 1 ? Guid.NewGuid() : (Guid?)null;
         foreach (var receivable in targets.OrderBy(r => r.Period))
         {
             if (receivable.Status is ReceivableStatus.Cancelled or ReceivableStatus.Paid) continue;
@@ -89,7 +102,9 @@ public static class BulkPayments
             var applied = Math.Min(outstanding, remaining);
             if (applied <= 0) break;
 
-            var payment = Payment.Create(receivable.Id, applied, request.PaymentDate, request.Method, request.Reference, request.Note, actorId, now);
+            var payment = Payment.Create(
+                receivable.Id, applied, request.PaymentDate, request.Method, request.Reference, request.Note,
+                actorId, now, bulkPaymentId, request.Months > 1 ? request.Months : null);
             db.Payments.Add(payment);
             receivable.RecordPaymentEffect(paidByReceivable.GetValueOrDefault(receivable.Id) + applied, now);
             db.AuditLogs.Add(AuditLog.Record(actorId, "receivable.bulk_payment_recorded", nameof(Receivable), receivable.Id, now,

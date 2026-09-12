@@ -22,9 +22,12 @@ public static class Dashboard
 {
     private const int UpcomingWindowDays = 30;
 
+    public record UpcomingBirthdayResponse(
+        Guid StudentId, string StudentName, DateOnly BirthDate, DateOnly NextOccurrence, int DaysUntil, int TurningAge);
+
     public record TodayResponse(
         int TodayLessons, int Attending, int NotAttending, int NoResponse,
-        int PendingChangeRequests, int OverduePayments, int UpcomingBirthdays, int UpcomingSchoolEvents);
+        int PendingChangeRequests, int OverduePayments, List<UpcomingBirthdayResponse> UpcomingBirthdays, int UpcomingSchoolEvents);
 
     public static void MapDashboard(this IEndpointRouteBuilder app)
     {
@@ -63,7 +66,7 @@ public static class Dashboard
             ? await db.Receivables.CountAsync(r => r.Status == ReceivableStatus.Overdue)
             : 0;
 
-        var upcomingBirthdays = await CountUpcomingBirthdaysAsync(teacherScope, todayLocal, db);
+        var upcomingBirthdays = await ListUpcomingBirthdaysAsync(teacherScope, todayLocal, db);
 
         // Okul takvimi kurum geneli - rol bazlı kapsam farkı yok.
         var upcomingSchoolEvents = await db.SchoolCalendarDays.CountAsync(d =>
@@ -110,23 +113,43 @@ public static class Dashboard
 
     // Doğum günleri ay/gün bazlı tekrar eder (yıl bağımsız) - EF/SQL'e böyle bir karşılaştırma
     // temiz çevrilmediğinden (ve bu ölçekte en fazla ~150 öğrenci var, "BI projesi" olmasın
-    // diye) doğum tarihleri belleğe çekilip C# tarafında hesaplanıyor.
-    private static async Task<int> CountUpcomingBirthdaysAsync(Guid? teacherScope, DateOnly today, AbderaDbContext db)
+    // diye) doğum tarihleri belleğe çekilip C# tarafında hesaplanıyor. Önceden yalnızca bir
+    // sayı dönüyordu (KPI kartında bile hiç gösterilmiyordu) - kullanıcı isteğiyle ana ekranda
+    // gerçekten takip edilebilecek bir liste (isim + tarih + kaç gün kaldı) haline getirildi.
+    private static async Task<List<UpcomingBirthdayResponse>> ListUpcomingBirthdaysAsync(
+        Guid? teacherScope, DateOnly today, AbderaDbContext db)
     {
-        var birthDatesQuery = db.Students.Where(s => s.Status == StudentStatus.Active).Select(s => s.BirthDate);
+        var studentsQuery = db.Students.Where(s => s.Status == StudentStatus.Active);
         if (teacherScope is { } scopedTeacherId)
         {
             var studentIds = db.Enrollments
                 .Where(e => e.TeacherId == scopedTeacherId && e.Status == EnrollmentStatus.Active)
                 .Select(e => e.StudentId);
-            birthDatesQuery = db.Students.Where(s => s.Status == StudentStatus.Active && studentIds.Contains(s.Id)).Select(s => s.BirthDate);
+            studentsQuery = studentsQuery.Where(s => studentIds.Contains(s.Id));
         }
 
-        var birthDates = await birthDatesQuery.ToListAsync();
-        return birthDates.Count(birthDate => IsBirthdayWithinWindow(birthDate, today, UpcomingWindowDays));
+        var students = await studentsQuery
+            .Select(s => new { s.Id, Name = s.FirstName + " " + s.LastName, s.BirthDate })
+            .ToListAsync();
+
+        return students
+            .Select(student =>
+            {
+                var nextOccurrence = NextOccurrence(student.BirthDate, today);
+                var turningAge = nextOccurrence.Year - student.BirthDate.Year;
+                return new UpcomingBirthdayResponse(
+                    student.Id, student.Name, student.BirthDate, nextOccurrence,
+                    nextOccurrence.DayNumber - today.DayNumber, turningAge);
+            })
+            .Where(item => item.DaysUntil <= UpcomingWindowDays)
+            .OrderBy(item => item.DaysUntil)
+            .ThenBy(item => item.StudentName)
+            .ToList();
     }
 
-    private static bool IsBirthdayWithinWindow(DateOnly birthDate, DateOnly today, int windowDays)
+    // 29 Şubat doğumlular artık olmayan bir yılda 28 Şubat'a düşer - hem bu yılki hem (bu yıl
+    // geçtiyse) gelecek yılki oluşumda ayrı ayrı kontrol edilir.
+    private static DateOnly NextOccurrence(DateOnly birthDate, DateOnly today)
     {
         var day = birthDate is { Month: 2, Day: 29 } && !DateTime.IsLeapYear(today.Year) ? 28 : birthDate.Day;
         var nextOccurrence = new DateOnly(today.Year, birthDate.Month, day);
@@ -137,6 +160,6 @@ public static class Dashboard
             nextOccurrence = new DateOnly(nextYear, birthDate.Month, dayNextYear);
         }
 
-        return nextOccurrence <= today.AddDays(windowDays);
+        return nextOccurrence;
     }
 }

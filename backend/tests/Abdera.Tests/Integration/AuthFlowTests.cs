@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Abdera.Api.Modules.Auth.Features;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 
 namespace Abdera.Tests.Integration;
@@ -79,6 +80,88 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         var newLogin = await freshClient.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "YeniSifre2026!"));
         Assert.Equal(HttpStatusCode.OK, newLogin.StatusCode);
+
+        // Bu sınıftaki testler aynı gerçek Postgres'i (IClassFixture) paylaşıyor - şifreyi
+        // geri almazsak, "Test1234!" ile giriş yapan sonraki testler bu testin çalışma
+        // sırasına sessizce bağımlı kalırdı. Geri almak sıra bağımlılığını ortadan kaldırıyor.
+        var revert = await freshClient.PostAsJsonAsync("/api/auth/change-password",
+            new ChangePassword.Request("YeniSifre2026!", "Test1234!"));
+        Assert.Equal(HttpStatusCode.NoContent, revert.StatusCode);
+    }
+
+    // Canlı QA turunda bulunan gerçek bug: SignOutAsync yalnızca istemci cookie'sini
+    // siliyordu - imzalı ticket kendiliğinden geçersiz olmuyordu, bu yüzden bir kopyası
+    // alınmış eski cookie logout sonrasında da sliding pencere (12 saat) boyunca hâlâ
+    // kabul ediliyordu. SecurityStamp doğrulaması (Program.cs OnValidatePrincipal) bunu
+    // düzeltiyor - burada tam olarak "kopyalanmış cookie" senaryosunu test ediyoruz.
+    [Fact]
+    public async Task Logout_invalidates_the_session_cookie_even_for_a_copy_kept_elsewhere()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        // HandleCookies=false: cookie'yi otomatik bir kavanoza koyup gizlemek yerine ham
+        // Set-Cookie başlığını okuyup elle taşıyoruz - "bir kopyası alınmış cookie" senaryosunu
+        // gerçekten simüle etmenin tek yolu bu (aksi halde istemcinin kendi kavanozu logout
+        // sonrası cookie'yi zaten kendiliğinden temizlerdi).
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request("admin@test.local", "Test1234!"));
+        var cookieValue = loginResponse.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+
+        var meRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        meRequest.Headers.Add("Cookie", cookieValue);
+        var meBeforeLogout = await client.SendAsync(meRequest);
+        Assert.Equal(HttpStatusCode.OK, meBeforeLogout.StatusCode);
+
+        var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        logoutRequest.Headers.Add("Cookie", cookieValue);
+        var logoutResponse = await client.SendAsync(logoutRequest);
+        Assert.Equal(HttpStatusCode.NoContent, logoutResponse.StatusCode);
+
+        var meAfterLogoutRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        meAfterLogoutRequest.Headers.Add("Cookie", cookieValue);
+        var meAfterLogout = await client.SendAsync(meAfterLogoutRequest);
+        Assert.Equal(HttpStatusCode.Unauthorized, meAfterLogout.StatusCode);
+    }
+
+    // Aynı sınıf bug: şifre değiştirildiğinde, değişiklikten ÖNCE alınmış bir cookie de
+    // hâlâ geçerliydi - kullanıcı "şifremi değiştirdim" dediği anda diğer tüm oturumların
+    // düşmesini bekler.
+    [Fact]
+    public async Task Changing_password_invalidates_a_session_cookie_obtained_before_the_change()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+
+        var loginResponse = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request("admin@test.local", "Test1234!"));
+        var cookieValue = loginResponse.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+
+        var changeRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password")
+        {
+            Content = JsonContent.Create(new ChangePassword.Request("Test1234!", "StampTest2026!")),
+        };
+        changeRequest.Headers.Add("Cookie", cookieValue);
+        var changeResponse = await client.SendAsync(changeRequest);
+        Assert.Equal(HttpStatusCode.NoContent, changeResponse.StatusCode);
+
+        var meAfterChangeRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        meAfterChangeRequest.Headers.Add("Cookie", cookieValue);
+        var meAfterChange = await client.SendAsync(meAfterChangeRequest);
+        Assert.Equal(HttpStatusCode.Unauthorized, meAfterChange.StatusCode);
+
+        // Test veritabanını sonraki testler için eski şifreye geri al (yeni şifreyle
+        // giriş yapıp yeni bir cookie almak gerekiyor - eskisi artık geçersiz).
+        var reLoginResponse = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request("admin@test.local", "StampTest2026!"));
+        var newCookieValue = reLoginResponse.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+        var revertRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password")
+        {
+            Content = JsonContent.Create(new ChangePassword.Request("StampTest2026!", "Test1234!")),
+        };
+        revertRequest.Headers.Add("Cookie", newCookieValue);
+        var revert = await client.SendAsync(revertRequest);
+        Assert.Equal(HttpStatusCode.NoContent, revert.StatusCode);
     }
 
     [Fact]

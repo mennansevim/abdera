@@ -53,10 +53,13 @@ services:
       # (LOADTEST.md Round 1: 500 VU'luk spike'tan DAKIKALAR sonra bile disaridan psql
       # baglantisi reddediliyordu).
       ConnectionStrings__Default: Host=${POSTGRES_HOST:-db};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-abdera};Username=${POSTGRES_USER:-abdera};Password=${POSTGRES_PASSWORD:?};Maximum Pool Size=150;Connection Idle Lifetime=60
-      # CORS izin verilen origin. Production'da Caddy tek domain sunar - api ve web
+      # CORS izin verilen origin(ler). Production'da Caddy tek domain sunar - api ve web
       # ayni origin'de oldugu icin CORS pratikte devre disi kalir, ama deger yine de
-      # dogru olmali (yanlis origin cerezli istekleri sessizce reddeder).
-      Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      # dogru olmali (yanlis origin cerezli istekleri sessizce reddeder). Gelistirmede
+      # virgulle ikinci bir origin eklendi: docker-compose'daki "web" (3000) yaninda
+      # ".claude/launch.json"daki ayri "npm run dev" frontend'i de (3001) ayni api'ye
+      # bakabilsin diye (Program.cs artik Frontend:Origin'i virgulle boluyor).
+      Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:3000,http://localhost:3001}
       Auth__KeysDirectory: /app/keys
     volumes:
       # Data Protection anahtarlari - kalici olmazsa her restart'ta oturumlar dusuer.

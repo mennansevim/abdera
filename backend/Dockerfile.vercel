@@ -1,0 +1,27 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+WORKDIR /src
+
+COPY Abdera.slnx ./
+COPY src/Abdera.Api/Abdera.Api.csproj src/Abdera.Api/
+COPY tests/Abdera.Tests/Abdera.Tests.csproj tests/Abdera.Tests/
+RUN dotnet restore src/Abdera.Api/Abdera.Api.csproj
+
+COPY src/Abdera.Api/ src/Abdera.Api/
+RUN dotnet publish src/Abdera.Api/Abdera.Api.csproj -c Release -o /app --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS runtime
+WORKDIR /app
+
+RUN apk add --no-cache tzdata krb5-libs icu-libs icu-data-full postgresql16-client
+
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
+    ASPNETCORE_URLS=http://+:8080 \
+    PORT=8080
+
+RUN mkdir -p /app/keys && chown app:app /app/keys
+USER app
+
+COPY --from=build /app .
+
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "Abdera.Api.dll"]

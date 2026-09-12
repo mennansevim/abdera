@@ -25,6 +25,8 @@ const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true, section: "Finans" },
   { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", alert: true, section: "İletişim" },
   { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
+  // Sona eklendi: mobilePrimary index referanslarını (ADMIN_LINKS[1]/[4]) kaydırmamak için.
+  { href: "/dashboard/benchmark", label: "Performans", icon: "activity", section: "Eğitim" },
 ];
 
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };

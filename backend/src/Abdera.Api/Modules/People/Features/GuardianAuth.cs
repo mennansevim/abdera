@@ -24,26 +24,72 @@ public static class GuardianAuth
     public record VerifyOtpRequest(string PhoneNumber, string Code);
     public record VerifyOtpResponse(Guid Id, string FirstName, string LastName);
     public record GuardianMeResponse(Guid Id, string FirstName, string LastName, string PhoneNumber);
+    // Karar F (ikinci) reversal: telefon + şifre ile giriş (docs/13-...). Yanıt gövdesi OTP
+    // doğrulamasıyla aynı (VerifyOtpResponse) - frontend tek bir başarı şeklini işler.
+    public record LoginRequest(string PhoneNumber, string Password);
 
     private const string OtpTemplateName = "guardian_login_otp";
-    private const string GenericFailureDetail = "Telefon numarası veya kod hatalı.";
+    private const string GenericFailureDetail = "Telefon numarası veya şifre hatalı.";
     private const string DebugPhoneNumber = "+905550000001";
 
     // SEC-4 (Login.cs) ile aynı ruh: kayıtsız bir numarada da eş zamanlı bir maliyet oluşturup
     // yanıt süresinin kayıtlı/kayıtsız numara arasında bir numaralandırma kanalı açmasını önler.
     private static readonly Guardian DummyGuardian = Guardian.Create("Dummy", "Guardian", "+905551234567", DateTimeOffset.UnixEpoch);
+    // Şifresiz/kayıtsız velide de bir VerifyHashedPassword maliyeti oluşturmak için önceden
+    // hesaplanmış bir dummy hash (Login.cs'teki DummyPasswordHash ile aynı desen).
+    private static readonly string DummyPasswordHash =
+        new PasswordHasher<Guardian>().HashPassword(DummyGuardian, "dummy-password-for-timing-safety-only");
 
     public static void MapGuardianAuth(this IEndpointRouteBuilder app)
     {
+        app.MapPost("/api/guardian/login", LoginAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapPost("/api/guardian/otp/request", RequestOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapPost("/api/guardian/otp/verify", VerifyOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapGet("/api/guardian/me", MeAsync).RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+        app.MapPost("/api/guardian/logout", GuardianLogoutAsync)
+            .AllowAnonymous();
 
-        // Test kolaylığı için demo veli girişi yalnızca Development'ta route edilir.
-        if (app.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment())
+        // Development'ta ve açıkça Demo:Enabled olarak işaretlenmiş staging yayınında
+        // gerçek WhatsApp/OTP gerektirmeden örnek veli portalı açılabilir.
+        var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        var configuration = app.ServiceProvider.GetRequiredService<IConfiguration>();
+        if (environment.IsDevelopment() || configuration.GetValue<bool>("Demo:Enabled"))
         {
             app.MapPost("/api/guardian/debug-login", DebugLoginAsync).AllowAnonymous();
         }
+    }
+
+    private static async Task<IResult> LoginAsync(
+        LoginRequest request, AbderaDbContext db,
+        IPasswordHasher<Guardian> passwordHasher, HttpContext httpContext)
+    {
+        string normalizedPhone;
+        try
+        {
+            normalizedPhone = PhoneNumberNormalizer.Normalize(request.PhoneNumber);
+        }
+        catch (ArgumentException)
+        {
+            // Zamanlama güvenliği: geçersiz numarada da bir doğrulama maliyeti oluştur.
+            passwordHasher.VerifyHashedPassword(DummyGuardian, DummyPasswordHash, request.Password ?? "");
+            return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: GenericFailureDetail);
+        }
+
+        var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.PhoneNumber == normalizedPhone);
+        if (guardian?.PasswordHash is null)
+        {
+            passwordHasher.VerifyHashedPassword(DummyGuardian, DummyPasswordHash, request.Password ?? "");
+            return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: GenericFailureDetail);
+        }
+
+        var verifyResult = passwordHasher.VerifyHashedPassword(guardian, guardian.PasswordHash, request.Password ?? "");
+        if (verifyResult == PasswordVerificationResult.Failed)
+        {
+            return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: GenericFailureDetail);
+        }
+
+        await SignInGuardianAsync(guardian, httpContext);
+        return Results.Ok(new VerifyOtpResponse(guardian.Id, guardian.FirstName, guardian.LastName));
     }
 
     private static async Task<IResult> RequestOtpAsync(
@@ -148,12 +194,22 @@ public static class GuardianAuth
         return Results.Ok(new VerifyOtpResponse(guardian.Id, guardian.FirstName, guardian.LastName));
     }
 
+    // Veli çıkışında tarayıcı cookie'sini bekletmeden sil. Genel /api/auth/logout
+    // personel hesaplarında güvenlik damgasını da yeniler; veli portalında ise bu hızlı
+    // uç kullanıcıyı veritabanı yazma beklemesine sokmadan çıkarır.
+    private static async Task GuardianLogoutAsync(HttpContext httpContext)
+    {
+        await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        httpContext.Response.StatusCode = StatusCodes.Status204NoContent;
+    }
+
     private static Task SignInGuardianAsync(Guardian guardian, HttpContext httpContext)
     {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, guardian.Id.ToString()),
             new(ClaimTypes.Role, UserRole.Guardian.ToString()),
+            new(SecurityStampClaim.ClaimType, guardian.SecurityStamp.ToString()),
         };
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         return httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));

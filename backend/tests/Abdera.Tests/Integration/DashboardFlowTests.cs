@@ -121,7 +121,9 @@ public class DashboardFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // todayLessons her zaman üç RSVP kovasının toplamına eşit olmalı.
         Assert.Equal(adminDashboard.TodayLessons, adminDashboard.Attending + adminDashboard.NotAttending + adminDashboard.NoResponse);
         Assert.True(adminDashboard.PendingChangeRequests >= 1);
-        Assert.True(adminDashboard.UpcomingBirthdays >= 1);
+        // Önceden yalnızca bir sayıydı ve hiçbir ekranda gösterilmiyordu - kullanıcı isteğiyle
+        // ana ekranda gerçek bir liste (isim + tarih + kaç gün kaldı) hâline getirildi.
+        Assert.Contains(adminDashboard.UpcomingBirthdays, item => item.StudentId == studentA.Id && item.DaysUntil == 5 && item.StudentName == "StudentA Dash");
 
         // Teacher A: yalnızca kendi dersi - CLAUDE.md/docs/04-permissions.md rol izolasyonu.
         using var teacherAClient = _factory.CreateClient();
@@ -138,5 +140,9 @@ public class DashboardFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // Mali özet Teacher'a hiç görünmez (docs/04-permissions.md) - okulda başka overdue
         // aidat olsa bile burada her zaman 0.
         Assert.Equal(0, teacherDashboard.OverduePayments);
+        // Doğum günü listesi de rol kapsamına tabi - Teacher A yalnızca kendi öğrencisinin
+        // (studentA) doğum gününü görür, başka öğretmenin öğrencisini (studentB) göremez.
+        Assert.Contains(teacherDashboard.UpcomingBirthdays, item => item.StudentId == studentA.Id);
+        Assert.DoesNotContain(teacherDashboard.UpcomingBirthdays, item => item.StudentId == studentB.Id);
     }
 }

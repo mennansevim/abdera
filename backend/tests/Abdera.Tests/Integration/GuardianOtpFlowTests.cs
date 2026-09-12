@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Tests.Integration;
@@ -129,6 +130,35 @@ public class GuardianOtpFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(beforeCount, await db.GuardianLoginCodes.CountAsync());
+    }
+
+    // Canlı QA turunda bulunan gerçek bug (bkz. AuthFlowTests.cs'teki admin/öğretmen
+    // karşılığı): /api/auth/logout Guardian oturumu için de aynı paylaşılan cookie şemasını
+    // kullanıyor (GuardianAuth.cs SignInGuardianAsync) - logout öncesi kopyalanmış bir
+    // cookie'nin de düşmesi gerekiyor.
+    [Fact]
+    public async Task Guardian_logout_invalidates_the_session_cookie_even_for_a_copy_kept_elsewhere()
+    {
+        var phone = await SeedGuardianAsync();
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var code = await RequestCodeAsync(client, phone);
+
+        var verifyResponse = await client.PostAsJsonAsync(
+            "/api/guardian/otp/verify", new GuardianAuth.VerifyOtpRequest(phone, code));
+        Assert.Equal(HttpStatusCode.OK, verifyResponse.StatusCode);
+        var cookieValue = verifyResponse.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+
+        var meRequest = new HttpRequestMessage(HttpMethod.Get, "/api/guardian/me");
+        meRequest.Headers.Add("Cookie", cookieValue);
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(meRequest)).StatusCode);
+
+        var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout");
+        logoutRequest.Headers.Add("Cookie", cookieValue);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(logoutRequest)).StatusCode);
+
+        var meAfterLogoutRequest = new HttpRequestMessage(HttpMethod.Get, "/api/guardian/me");
+        meAfterLogoutRequest.Headers.Add("Cookie", cookieValue);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(meAfterLogoutRequest)).StatusCode);
     }
 
     private async Task<string> SeedGuardianAsync()

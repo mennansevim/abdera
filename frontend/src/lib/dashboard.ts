@@ -6,6 +6,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 
+export interface UpcomingBirthday {
+  studentId: string;
+  studentName: string;
+  birthDate: string;
+  nextOccurrence: string;
+  daysUntil: number;
+  turningAge: number;
+}
+
 export interface DashboardToday {
   todayLessons: number;
   attending: number;
@@ -13,7 +22,7 @@ export interface DashboardToday {
   noResponse: number;
   pendingChangeRequests: number;
   overduePayments: number;
-  upcomingBirthdays: number;
+  upcomingBirthdays: UpcomingBirthday[];
   upcomingSchoolEvents: number;
 }
 

@@ -40,6 +40,9 @@ export function useGuardianCalendar(studentId: string | undefined, from: string,
       `/api/guardian/me/students/${studentId}/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
     ),
     enabled: !!studentId,
+    // Aynı ders WhatsApp'tan yanıtlanmışsa açık veli ekranı da otomatik güncellensin.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -64,6 +67,7 @@ export interface GuardianReceivable {
   dueDate: string;
   status: GuardianReceivableStatus;
   totalPaid: number;
+  bulkPaymentMonths: number | null;
 }
 
 export interface GuardianBillingEnrollment {

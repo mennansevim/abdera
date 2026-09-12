@@ -34,7 +34,8 @@ export type IconName =
   | "piano"
   | "guitar"
   | "violin"
-  | "drums";
+  | "drums"
+  | "cake";
 
 const paths: Record<IconName, React.ReactNode> = {
   home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-6h6v6"/></>,
@@ -75,6 +76,7 @@ const paths: Record<IconName, React.ReactNode> = {
   guitar: <><circle cx="8.5" cy="16" r="4.3"/><circle cx="11" cy="10.3" r="2.6"/><path d="M12.1 8 16 3.5M15 5l2-2.2"/></>,
   violin: <><circle cx="9.5" cy="15" r="3.3"/><circle cx="11.2" cy="10.6" r="2"/><path d="M11.9 8.7 14.5 4M5 19 18 5"/></>,
   drums: <><ellipse cx="12" cy="7.5" rx="7" ry="3"/><path d="M5 7.5v7.5a7 3 0 0 0 14 0V7.5"/><path d="m8.5 4 2 2.3M17 3.7l-2 2.6"/></>,
+  cake: <><rect x="4" y="13" width="16" height="8" rx="1.5"/><path d="M4 17h16"/><path d="M8 13V9M12 13V9M16 13V9"/><path d="M8 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor" stroke="none"/><path d="M12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor" stroke="none"/><path d="M16 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" fill="currentColor" stroke="none"/></>,
 };
 
 export function Icon({ name, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {

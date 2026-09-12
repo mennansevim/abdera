@@ -11,6 +11,10 @@ public enum TeacherStatus
 // henüz sisteme giriş yapmıyor olabilir (yalnızca yönetici tarafından yönetiliyor olabilir).
 public class Teacher
 {
+    // TeacherConfiguration.cs'teki HasMaxLength(100) ile birebir - bkz. Student.cs'teki
+    // aynı gerekçe (yakalanmayan DbUpdateException/500 canlı QA turunda bulundu).
+    private const int MaxNameLength = 100;
+
     public Guid Id { get; private set; }
     public Guid? UserId { get; private set; }
     public string FirstName { get; private set; } = null!;
@@ -23,8 +27,7 @@ public class Teacher
 
     public static Teacher Create(string firstName, string lastName, DateTimeOffset now, Guid? userId = null)
     {
-        if (string.IsNullOrWhiteSpace(firstName)) throw new ArgumentException("Ad boş olamaz.", nameof(firstName));
-        if (string.IsNullOrWhiteSpace(lastName)) throw new ArgumentException("Soyad boş olamaz.", nameof(lastName));
+        ValidateNames(firstName, lastName);
 
         return new Teacher
         {
@@ -40,8 +43,7 @@ public class Teacher
 
     public void Update(string firstName, string lastName, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(firstName)) throw new ArgumentException("Ad boş olamaz.", nameof(firstName));
-        if (string.IsNullOrWhiteSpace(lastName)) throw new ArgumentException("Soyad boş olamaz.", nameof(lastName));
+        ValidateNames(firstName, lastName);
 
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
@@ -52,5 +54,13 @@ public class Teacher
     {
         Status = status;
         UpdatedAt = now;
+    }
+
+    private static void ValidateNames(string firstName, string lastName)
+    {
+        if (string.IsNullOrWhiteSpace(firstName)) throw new ArgumentException("Ad boş olamaz.", nameof(firstName));
+        if (string.IsNullOrWhiteSpace(lastName)) throw new ArgumentException("Soyad boş olamaz.", nameof(lastName));
+        if (firstName.Trim().Length > MaxNameLength) throw new ArgumentException($"Ad en fazla {MaxNameLength} karakter olabilir.", nameof(firstName));
+        if (lastName.Trim().Length > MaxNameLength) throw new ArgumentException($"Soyad en fazla {MaxNameLength} karakter olabilir.", nameof(lastName));
     }
 }

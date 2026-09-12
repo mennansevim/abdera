@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Abdera.Api.Shared;
 
 // k6 yük testi (LOADTEST.md) için sentetik fixture üreticisi. DevelopmentMockData.cs'ten
-// kasıtlı olarak AYRI: o sabit boyutlu (3 öğretmen/12 öğrenci) bir demo hikayesi, bunu
+// kasıtlı olarak AYRI: o sabit boyutlu bir demo hikayesi, bunu
 // değiştirmek mevcut demo/test akışlarını bozar. Bu dosya yalnızca hacim üretir - CLAUDE.md
 // hedef ölçeğine (6-8 öğretmen, ~150 öğrenci) yakın, tamamen sentetik veri (gerçek kullanıcı
 // verisi YOK), gerçek domain factory'leri (Teacher.Create, Lesson.CreateFromSeries vb.)
@@ -18,7 +18,12 @@ public static class LoadTestFixtures
     private const string EmailPrefix = "loadtest.teacher";
     private const string LoadTestPassword = "LoadTest123!";
 
-    public record SeedRequest(int TeacherCount = 8, int StudentsPerTeacher = 19, int HistoryWeeks = 26, int FutureWeeks = 6);
+    private const int MaximumTeacherCount = 10;
+    private const int MaximumStudentCount = 150;
+
+    // Development bootstrapper temiz veritabanına bir öğretmen ekler; dokuz yük testi
+    // öğretmeniyle görünür toplam tam 10, öğrenci toplamı da en fazla 144 olur.
+    public record SeedRequest(int TeacherCount = 9, int StudentsPerTeacher = 16, int HistoryWeeks = 26, int FutureWeeks = 6);
 
     public record SeedResponse(string Status, int Teachers, int Students, int Enrollments, int Lessons, string TeacherPassword);
 
@@ -35,6 +40,16 @@ public static class LoadTestFixtures
         IClock clock)
     {
         var req = request ?? new SeedRequest();
+        if (req.TeacherCount is < 1 or > MaximumTeacherCount ||
+            req.StudentsPerTeacher < 1 ||
+            (long)req.TeacherCount * req.StudentsPerTeacher > MaximumStudentCount)
+        {
+            return Results.BadRequest(new
+            {
+                message = $"Yük testi demo verisi en fazla {MaximumTeacherCount} öğretmen ve {MaximumStudentCount} öğrenci içerebilir.",
+            });
+        }
+
         var schoolZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
         var now = clock.UtcNow;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, schoolZone).DateTime);
@@ -42,12 +57,24 @@ public static class LoadTestFixtures
         var until = today.AddDays(7 * req.FutureWeeks);
 
         var existingTeacherCount = await db.Users.CountAsync(u => u.Email.StartsWith(EmailPrefix));
+        var existingStudentCount = await db.Students.CountAsync(s => s.FirstName.StartsWith("LTStudent"));
+        var nonLoadTestTeacherCount = await db.Teachers.CountAsync() - existingTeacherCount;
+        var nonLoadTestStudentCount = await db.Students.CountAsync() - existingStudentCount;
+        if (nonLoadTestTeacherCount + req.TeacherCount > MaximumTeacherCount ||
+            nonLoadTestStudentCount + (long)req.TeacherCount * req.StudentsPerTeacher > MaximumStudentCount)
+        {
+            return Results.BadRequest(new
+            {
+                message = $"Mevcut kayıtlarla birlikte demo veri en fazla {MaximumTeacherCount} öğretmen ve {MaximumStudentCount} öğrenci içerebilir.",
+            });
+        }
+
         if (existingTeacherCount >= req.TeacherCount)
         {
             return Results.Ok(new SeedResponse(
                 "already-seeded",
                 existingTeacherCount,
-                await db.Students.CountAsync(s => s.FirstName.StartsWith("LTStudent")),
+                existingStudentCount,
                 await db.Enrollments.CountAsync(),
                 await db.Lessons.CountAsync(),
                 LoadTestPassword));

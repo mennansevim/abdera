@@ -3,7 +3,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 
@@ -24,19 +24,37 @@ export function useGuardianMe() {
   });
 }
 
-// /parent altındaki tüm sayfalar bunu kullanır - oturum yoksa /parent/login'e yönlendirir
-// (dashboard/lib/use-require-auth.ts'teki desenin veli karşılığı).
+// /parent altındaki tüm sayfalar bunu kullanır. Development veya Demo:Enabled ortamında
+// oturum yokken önce örnek veli girişini dener. Endpoint kapalıysa normal OTP ekranına geçilir.
 export function useRequireGuardianAuth() {
   const router = useRouter();
   const { data: guardian, isLoading, isError } = useGuardianMe();
+  const { mutate: openDemoGuardian, isPending: isDemoLoginPending } = useDebugGuardianLogin();
+  const attemptedDemoLogin = useRef(false);
 
   useEffect(() => {
-    if (isError) {
-      router.replace("/parent/login");
-    }
-  }, [isError, router]);
+    if (!isError || attemptedDemoLogin.current) return;
+    attemptedDemoLogin.current = true;
+    openDemoGuardian(undefined, { onError: () => router.replace("/parent/login") });
+  }, [isError, openDemoGuardian, router]);
 
-  return { guardian, isLoading };
+  return { guardian, isLoading: isLoading || isDemoLoginPending };
+}
+
+export interface GuardianLoginResult {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+// Karar F (ikinci) reversal: telefon + kalıcı şifre ile giriş (docs/13-...). Birincil giriş
+// yolu budur; WhatsApp OTP ikincil seçenek olarak korunur.
+export function useGuardianLogin() {
+  const queryClient = useQueryClient();
+  return useMutation<GuardianLoginResult, ApiError, { phoneNumber: string; password: string }>({
+    mutationFn: (body) => api.post<GuardianLoginResult>("/api/guardian/login", body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+  });
 }
 
 export interface RequestOtpResult {
@@ -64,12 +82,19 @@ export function useVerifyGuardianOtp() {
   });
 }
 
-// Yalnızca Development backend'inde route edilir; gerçek OTP/WhatsApp gerektirmeden
-// veli portalını hızlıca önizlemek için kullanılır.
+// Development veya açıkça demo olarak yapılandırılmış staging backend'inde route edilir.
 export function useDebugGuardianLogin() {
   const queryClient = useQueryClient();
   return useMutation<VerifyOtpResult, ApiError, void>({
     mutationFn: () => api.post<VerifyOtpResult>("/api/guardian/debug-login", {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+  });
+}
+
+export function useGuardianLogout() {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, void>({
+    mutationFn: () => api.post<void>("/api/guardian/logout"),
+    onSuccess: () => queryClient.removeQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
   });
 }

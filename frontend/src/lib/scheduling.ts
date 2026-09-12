@@ -73,6 +73,11 @@ export function useCalendar(from: string, to: string) {
   return useQuery({
     queryKey: ["calendar", from, to],
     queryFn: () => api.get<CalendarLesson[]>(`/api/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    // Veli WhatsApp hızlı yanıtını uygulama kapalıyken verebilir. Webhook cevabı
+    // veritabanına yazdıktan sonra açık öğretmen/yönetici takvimi sayfa yenilemeden
+    // kısa sürede Geliyor / Geç kalacak / Gelmiyor durumuna geçsin.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
 }
 

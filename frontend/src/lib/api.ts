@@ -1,7 +1,10 @@
 // Backend API ile konuşan tek nokta. Oturum httpOnly cookie ile tutulur (docs/10-decisions.md
 // B4) - bu yüzden her istek `credentials: "include"` ile gider, Authorization header yok.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+// Yayında frontend ve API aynı Vercel domain'inde /api üzerinden sunulur; boş taban URL
+// tarayıcının mevcut origin'ini kullanır. Yerel geliştirmede ayrı API portu korunur.
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+  ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8080");
 
 export class ApiError extends Error {
   constructor(

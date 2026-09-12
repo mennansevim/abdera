@@ -309,6 +309,20 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.True(await db.NotificationJobs.AnyAsync(item =>
             item.ReferenceType == "lesson" && item.ReferenceId == edited.Id &&
             item.Type == Abdera.Api.Modules.Messaging.Domain.NotificationJobType.LessonReminder));
+
+        // Ders detayından yapılan saat değişikliği de talep/onay akışıyla aynı şekilde
+        // öğretmenin ekran içi ziline düşmeli; yalnızca veli WhatsApp işi açılması yetmez.
+        var teacherUserId = await db.Teachers
+            .Where(item => item.Id == seeded.TeacherId)
+            .Select(item => item.UserId)
+            .SingleAsync();
+        var teacherNotice = await db.StaffNotifications.SingleOrDefaultAsync(item =>
+            item.UserId == teacherUserId &&
+            item.Type == StaffNotificationType.LessonMoved &&
+            item.ReferenceType == "lesson" &&
+            item.ReferenceId == edited.Id);
+        Assert.NotNull(teacherNotice);
+        Assert.Contains("→", teacherNotice.Body);
     }
 
     [Fact]

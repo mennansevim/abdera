@@ -170,14 +170,36 @@ test.describe.serial("Abdera critical role flows", () => {
     });
     expect(fifthSeries.status()).toBe(400);
 
+    // Demo seed'i aidat üretmez. Bu test kendi finansal fixture'ını açıkça kurar.
+    const priceLists = await (await page.request.get(`${apiUrl}/api/price-lists`)).json();
+    let pianoPriceItem = priceLists.flatMap((list: { items: Array<{ instrumentId: string }> }) => list.items)
+      .find((item: { instrumentId: string }) => item.instrumentId === piano.id);
+    if (!pianoPriceItem) {
+      const priceListResponse = await page.request.post(`${apiUrl}/api/price-lists`, {
+        data: {
+          name: `E2E Fiyat ${suffix}`,
+          effectiveFrom: localDateString(new Date()),
+          effectiveUntil: null,
+          items: [{ instrumentId: piano.id, durationMinutes: 50, billingType: "Monthly", amount: 100, currency: "TRY", packageLessonCount: null }],
+        },
+      });
+      expect(priceListResponse.status()).toBe(201);
+      pianoPriceItem = (await priceListResponse.json()).items[0];
+    }
+    expect((await page.request.post(`${apiUrl}/api/enrollments/${enrollment.id}/fee-plan`, {
+      data: { priceListItemId: pianoPriceItem.id, dueDay: 5, activeFrom: localDateString(new Date()) },
+    })).status()).toBe(201);
+    const currentPeriod = localDateString(new Date()).slice(0, 7);
+    expect((await page.request.post(`${apiUrl}/api/receivables`, {
+      data: { enrollmentId: enrollment.id, period: currentPeriod },
+    })).status()).toBe(201);
+
     await page.goto("/dashboard/billing");
     await expect(page.getByRole("heading", { name: "Aidat yönetimi" })).toBeVisible();
     await page.getByRole("button", { name: "Tahsilat", exact: true }).first().click();
     const paymentForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Ödemeyi kaydet" }) });
     await paymentForm.getByLabel("Tutar").fill("1");
-    // Kismi odemenin GERCEKTEN kaydedildigini sunucu yanitindan dogrula. Ekranda bir
-    // "Kismi odendi" rozetinin gorunmesi tek basina kanit degil: seed verisinde zaten
-    // kismi odenmis aidatlar var, yani odeme hic yazilmasa da o rozet gorunurdu.
+    // Kısmi ödemenin gerçekten kaydedildiğini sunucu yanıtından doğrula.
     const paymentSaved = page.waitForResponse((response) =>
       response.url().includes("/api/receivables/") &&
       response.url().endsWith("/payments") &&

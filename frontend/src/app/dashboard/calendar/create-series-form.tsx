@@ -74,16 +74,16 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="form-label">1 · Öğrenci<select value={studentId} onChange={(event) => { setStudentId(event.target.value); setEnrollmentId(""); setSelectedSlot(null); }} required className="field text-sm"><option value="">Öğrenci seç</option>{students?.map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
-        <label className="form-label">2 · Ders ve öğretmen<select value={enrollmentId} onChange={(event) => { setEnrollmentId(event.target.value); setSelectedSlot(null); }} required disabled={!studentId} className="field text-sm"><option value="">Aktif kayıt seç</option>{activeEnrollments.map((item) => { const itemTeacher = teachers?.find((teacherItem) => teacherItem.id === item.teacherId); const itemInstrument = instruments?.find((instrumentItem) => instrumentItem.id === item.instrumentId); return <option key={item.id} value={item.id}>{itemTeacher ? `${itemTeacher.firstName} ${itemTeacher.lastName}` : "Öğretmen"} · {itemInstrument?.name ?? "Ders"}</option>; })}</select></label>
+    <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="form-label min-w-0">1 · Öğrenci<select value={studentId} onChange={(event) => { setStudentId(event.target.value); setEnrollmentId(""); setSelectedSlot(null); }} required className="field min-w-0 text-sm"><option value="">Öğrenci seç</option>{students?.map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
+        <label className="form-label min-w-0">2 · Ders ve öğretmen<select value={enrollmentId} onChange={(event) => { setEnrollmentId(event.target.value); setSelectedSlot(null); }} required disabled={!studentId} className="field min-w-0 text-sm"><option value="">Aktif kayıt seç</option>{activeEnrollments.map((item) => { const itemTeacher = teachers?.find((teacherItem) => teacherItem.id === item.teacherId); const itemInstrument = instruments?.find((instrumentItem) => instrumentItem.id === item.instrumentId); return <option key={item.id} value={item.id}>{itemTeacher ? `${itemTeacher.firstName} ${itemTeacher.lastName}` : "Öğretmen"} · {itemInstrument?.name ?? "Ders"}</option>; })}</select></label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[12rem_14rem_1fr]">
-        <label className="form-label">Ders süresi<select value={durationMinutes} onChange={(event) => { setDurationMinutes(Number(event.target.value)); setSelectedSlot(null); }} className="field text-sm"><option value={30}>30 dakika</option><option value={45}>45 dakika</option><option value={60}>60 dakika</option></select></label>
-        <label className="form-label">Başlangıç tarihi<input type="date" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); setSelectedSlot(null); }} required className="field text-sm" /></label>
-        {enrollment && <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3"><p className="text-[.65rem] font-bold text-[var(--muted)]">Planlanan kayıt</p><p className="mt-1 text-sm font-bold">{instrument?.name} · {teacher?.firstName} {teacher?.lastName}</p><p className="mt-1 text-[.65rem] text-[var(--muted)]">{durationMinutes} dakika · haftalık seri</p></div>}
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <label className="form-label min-w-0">Ders süresi<select value={durationMinutes} onChange={(event) => { setDurationMinutes(Number(event.target.value)); setSelectedSlot(null); }} className="field min-w-0 text-sm"><option value={30}>30 dakika</option><option value={45}>45 dakika</option><option value={60}>60 dakika</option></select></label>
+        <label className="form-label min-w-0">Başlangıç tarihi<input type="date" value={effectiveFrom} onChange={(event) => { setEffectiveFrom(event.target.value); setSelectedSlot(null); }} required className="field min-w-0 text-sm" /></label>
+        {enrollment && <div className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3 sm:col-span-2"><p className="text-[.65rem] font-bold text-[var(--muted)]">Planlanan kayıt</p><p className="mt-1 break-words text-sm font-bold">{instrument?.name} · {teacher?.firstName} {teacher?.lastName}</p><p className="mt-1 text-[.65rem] text-[var(--muted)]">{durationMinutes} dakika · haftalık seri</p></div>}
       </div>
 
       <p className="text-meta">Seçilen gün ve saat her hafta tekrarlanır; bir öğrenci haftada en fazla 4 düzenli ders alabilir. Çakışmalar otomatik kontrol edilir.</p>
@@ -95,7 +95,7 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
         </section>
       )}
 
-      {showManual && <div className="grid gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2"><label className="form-label">Gün<select value={manualDay} onChange={(event) => setManualDay(event.target.value)} className="field text-sm">{DAY_KEYS.slice(1).concat(DAY_KEYS[0]!).map((day) => <option key={day} value={day}>{DAY_NAMES_TR[day]}</option>)}</select></label><label className="form-label">Saat<input type="time" value={manualTime} onChange={(event) => setManualTime(event.target.value)} className="field text-sm" /></label></div>}
+      {showManual && <div className="grid min-w-0 gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2"><label className="form-label min-w-0">Gün<select value={manualDay} onChange={(event) => setManualDay(event.target.value)} className="field min-w-0 text-sm">{DAY_KEYS.slice(1).concat(DAY_KEYS[0]!).map((day) => <option key={day} value={day}>{DAY_NAMES_TR[day]}</option>)}</select></label><label className="form-label min-w-0">Saat<input type="time" value={manualTime} onChange={(event) => setManualTime(event.target.value)} className="field min-w-0 text-sm" /></label></div>}
 
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
       {summary && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--success-strong)]">{summary}</p>}

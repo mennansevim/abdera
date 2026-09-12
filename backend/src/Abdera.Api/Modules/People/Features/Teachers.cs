@@ -170,6 +170,22 @@ public static class Teachers
         teacher.Update(request.FirstName, request.LastName, clock.UtcNow);
         teacher.SetStatus(request.Status, clock.UtcNow);
 
+        // Canlı QA turunda bulunan gerçek bug: bir öğretmen Inactive yapıldığında yalnızca
+        // bu domain durumu değişiyordu, giriş hesabı (User.IsActive) hiç etkilenmiyordu -
+        // pasife alınan bir öğretmen mevcut cookie'siyle (hatta yeni bir girişle) sisteme
+        // erişmeye devam edebiliyordu. Şimdi ikisi senkron: Inactive → hesap devre dışı +
+        // mevcut oturumlar düşer (User.Deactivate zaten SecurityStamp'i yeniler), Active →
+        // hesap tekrar açılır.
+        if (teacher.UserId is { } userId)
+        {
+            var teacherUser = await db.Users.SingleOrDefaultAsync(u => u.Id == userId);
+            if (teacherUser is not null)
+            {
+                if (request.Status == TeacherStatus.Inactive) teacherUser.Deactivate(clock.UtcNow);
+                else teacherUser.Activate(clock.UtcNow);
+            }
+        }
+
         var existingLinks = await db.TeacherInstruments.Where(ti => ti.TeacherId == teacherId).ToListAsync();
         db.TeacherInstruments.RemoveRange(existingLinks);
         foreach (var instrument in instruments)
