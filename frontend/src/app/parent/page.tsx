@@ -81,6 +81,7 @@ export default function ParentPage() {
               students={students}
               studentIndex={studentIndex}
               onSelectStudent={setStudentIndex}
+              onOpenMain={() => router.push("/login?chooseRole=1")}
               onLogout={handleLogout}
               loggingOut={logout.isPending}
             />
@@ -100,10 +101,11 @@ export default function ParentPage() {
 
 // Önceden ayrı bir "+N öğrenci" butonu ve ayrı bir çıkış butonu vardı; mockup'ta ikisi tek bir
 // "…" menüsünde toplanıyor (docs/14-ui-design-prompt.md D).
-function HeaderMenu({ students, studentIndex, onSelectStudent, onLogout, loggingOut }: {
+function HeaderMenu({ students, studentIndex, onSelectStudent, onOpenMain, onLogout, loggingOut }: {
   students: GuardianStudent[] | undefined;
   studentIndex: number;
   onSelectStudent: (index: number) => void;
+  onOpenMain: () => void;
   onLogout: () => void;
   loggingOut: boolean;
 }) {
@@ -143,6 +145,10 @@ function HeaderMenu({ students, studentIndex, onSelectStudent, onLogout, logging
                 <div className="my-1 border-t border-[var(--line)]" />
               </>
             )}
+            <button onClick={() => { onOpenMain(); setOpen(false); }} className="pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-[#756f7a] hover:bg-black/[.035]">
+              <Icon name="home" className="h-4 w-4" /> Ana giriş ekranı
+            </button>
+            <div className="my-1 border-t border-[var(--line)]" />
             <button onClick={onLogout} disabled={loggingOut} className="pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-[#756f7a] hover:bg-black/[.035] disabled:opacity-50">
               <Icon name="logout" className="h-4 w-4" /> Çıkış yap
             </button>

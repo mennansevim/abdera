@@ -28,6 +28,8 @@ public class GuardianOtpFlowTests : IClassFixture<AbderaWebApplicationFactory>
             "/api/guardian/otp/verify",
             new GuardianAuth.VerifyOtpRequest(phone, code));
         Assert.Equal(HttpStatusCode.OK, firstVerify.StatusCode);
+        var rememberedCookie = firstVerify.Headers.GetValues("Set-Cookie").Single();
+        Assert.Contains("expires=", rememberedCookie.ToLowerInvariant());
 
         var me = await firstClient.GetAsync("/api/guardian/me");
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);

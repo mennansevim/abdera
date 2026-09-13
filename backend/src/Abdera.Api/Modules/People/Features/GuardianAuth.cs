@@ -212,7 +212,22 @@ public static class GuardianAuth
             new(SecurityStampClaim.ClaimType, guardian.SecurityStamp.ToString()),
         };
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        return httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+        // Veli portalı çoğunlukla kişisel telefondan kullanılır. Kalıcı cookie sayesinde
+        // tarayıcı kapanıp açılsa da aynı veli doğrudan kendi portalına döner; güvenlik damgası
+        // kontrolü ve çıkış işlemi kopyalanmış/eski cookie'leri yine geçersiz kılar.
+        var configuration = httpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var clock = httpContext.RequestServices.GetRequiredService<IClock>();
+        var rememberedDays = Math.Clamp(configuration.GetValue("Auth:GuardianSessionDays", 30), 1, 365);
+        var properties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            AllowRefresh = true,
+            ExpiresUtc = clock.UtcNow.AddDays(rememberedDays),
+        };
+        return httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(identity),
+            properties);
     }
 
     private static async Task<IResult> MeAsync(ClaimsPrincipal principal, AbderaDbContext db)

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { SVGProps } from "react";
 
 export type IconName =
@@ -114,11 +115,19 @@ export function instrumentBadgeStyle(instrumentName: string) {
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2.5">
-      <span className="brand-mark" aria-hidden="true"><Icon name="music" className="h-5 w-5" /></span>
+      <Image
+        src="/abdera-logo.webp"
+        alt=""
+        width={44}
+        height={44}
+        sizes="44px"
+        aria-hidden="true"
+        className={`${compact ? "h-9 w-9" : "h-11 w-11"} shrink-0 rounded-full bg-white object-cover shadow-[0_7px_18px_rgba(70,34,30,.2)] ring-1 ring-white/35`}
+      />
       {!compact && (
         <span className="leading-none">
           <span className="block font-serif text-[1.25rem] font-bold italic tracking-[-0.03em]">Abdera</span>
-          <span className="mt-1 block text-[0.6rem] font-medium tracking-[0.08em] opacity-60">MÜZİK OKULU</span>
+          <span className="mt-1 block text-[0.6rem] font-medium tracking-[0.08em] opacity-60">SANAT AKADEMİ</span>
         </span>
       )}
     </span>

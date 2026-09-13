@@ -29,6 +29,8 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
             new Login.Request("admin@test.local", "Test1234!"));
 
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        var sessionCookie = loginResponse.Headers.GetValues("Set-Cookie").Single();
+        Assert.Contains("expires=", sessionCookie.ToLowerInvariant());
         var loginBody = await loginResponse.Content.ReadFromJsonAsync<Login.Response>(TestJson.Options);
         Assert.NotNull(loginBody);
         Assert.True(loginBody!.MustChangePassword); // bootstrap admin ilk girişte şifre değiştirmeli

@@ -63,7 +63,18 @@ public static class Login
             new(SecurityStampClaim.ClaimType, user.SecurityStamp.ToString()),
         };
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+        // Kalıcı cookie tarayıcı kapatılıp yeniden açıldığında da rolü hatırlar. Personel
+        // oturumu yine Program.cs'teki kısa Auth:SessionHours süresiyle sınırlıdır; güvenlik
+        // damgası değişirse veya çıkış yapılırsa sunucu cookie'yi anında reddeder.
+        var properties = new AuthenticationProperties
+        {
+            IsPersistent = true,
+            AllowRefresh = true,
+        };
+        await httpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(identity),
+            properties);
 
         return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword));
     }

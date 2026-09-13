@@ -13,20 +13,20 @@ export interface HourWindow {
   endHour: number;
 }
 
-const DEFAULT_START_HOUR = 9;
-const DEFAULT_END_HOUR = 19;
+const DEFAULT_START_HOUR = 12;
+const DEFAULT_END_HOUR = 18;
 
 /**
- * Saat penceresini haftanın gerçek en erken/en geç dersinden türetir - sabit 09-19 yerine.
- * En erken dersin başladığı saatin başı, en geç dersin bittiği saatin bir sonraki tam saati.
- * Hiç ders yoksa 09:00-19:00 varsayılanına döner. Pencere her zaman en az 1 saat.
+ * Takvim 12:00-18:00 çekirdek aralığını, o saatlerde hiç ders olmasa bile her zaman gösterir.
+ * Bu aralığın dışında ders varsa görünümü gerektiği kadar genişletir; böylece erken/geç dersler
+ * kırpılmaz. En geç dersin bitişi bir sonraki tam saate yuvarlanır.
  */
 export function computeHourWindow(lessons: GridLessonInput[]): HourWindow {
   if (!lessons.length) {
     return { startHour: DEFAULT_START_HOUR, endHour: DEFAULT_END_HOUR };
   }
-  let minHour = 24;
-  let maxHour = 0;
+  let minHour = DEFAULT_START_HOUR;
+  let maxHour = DEFAULT_END_HOUR;
   for (const lesson of lessons) {
     const start = new Date(lesson.startAt);
     const end = new Date(lesson.endAt);

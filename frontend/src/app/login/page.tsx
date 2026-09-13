@@ -1,9 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
+import { useSessionDestination } from "@/lib/session-destination";
 import { useLogin } from "@/lib/use-auth";
 
 type LoginRole = "Admin" | "Teacher" | "Guardian";
@@ -21,13 +22,32 @@ const DEMO_EMAILS: Record<Exclude<LoginRole, "Guardian">, string> = {
 };
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<SessionCheckLoading />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const login = useLogin();
+  const { destination, isResolving } = useSessionDestination();
+  const shouldChooseRole = searchParams.get("chooseRole") === "1";
   const emailRef = useRef<HTMLInputElement>(null);
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
   const [email, setEmail] = useState(DEMO_EMAILS.Admin);
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Veli portalındaki "Ana giriş ekranı" bilinçli bir rol değiştirme isteğidir; bu
+    // parametre varken mevcut oturuma otomatik dönmek yerine rol seçeneklerini göster.
+    if (!shouldChooseRole && destination) {
+      router.replace(destination);
+    }
+  }, [shouldChooseRole, destination, router]);
 
   async function submitLogin(loginEmail: string, loginPassword: string, role: LoginRole) {
     setError(null);
@@ -59,6 +79,10 @@ export default function LoginPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     await submitLogin(email, password, selectedRole);
+  }
+
+  if (!shouldChooseRole && (destination || isResolving)) {
+    return <SessionCheckLoading />;
   }
 
   return (
@@ -120,6 +144,17 @@ export default function LoginPage() {
           )}
         </div>
       </section>
+    </main>
+  );
+}
+
+function SessionCheckLoading() {
+  return (
+    <main className="grid min-h-dvh place-items-center bg-[var(--background)]">
+      <div className="flex flex-col items-center gap-3 text-sm font-semibold text-[var(--muted)]">
+        <BrandMark compact />
+        Oturum kontrol ediliyor…
+      </div>
     </main>
   );
 }

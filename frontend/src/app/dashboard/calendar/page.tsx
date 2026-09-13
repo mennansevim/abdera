@@ -14,10 +14,9 @@ import { AddButton, Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
 import { MakeupScheduler } from "./makeup-scheduler";
 
-// Saat penceresi ve çakışma yerleşimi artık dashboard önizlemesiyle (dashboard/page.tsx) aynı
-// paylaşılan modülden (lib/week-grid-layout.ts) geliyor - sabit 09:00-19:00 önceden iki ekranda
-// da ayrı ayrı kopyalanmıştı ve pencere dışı/çakışan dersleri yanlış konumlandırıyordu
-// (docs/14-ui-design-prompt.md B3).
+// Saat penceresi ve çakışma yerleşimi dashboard önizlemesiyle (dashboard/page.tsx) aynı
+// paylaşılan modülden (lib/week-grid-layout.ts) gelir. Çekirdek 12:00-18:00 aralığı boşken de
+// görünür; daha erken/geç ders varsa pencere o dersi kırpmamak için genişler.
 const GRID_HEIGHT_REM_PER_HOUR = 3.8;
 const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -187,25 +186,10 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+      <header>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="font-serif text-[1.45rem] font-bold italic tracking-[-0.02em] sm:text-[1.7rem]">Ders Programı</h1>
           <p className="text-xs font-semibold text-[var(--muted)]">{visibleLessons.length} ders · {formatLessonTotal(totalMinutes)}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
-          <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="pressable ml-1 min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
-          <span aria-live="polite" className="ml-1 inline-flex min-h-10 items-center gap-2 rounded-xl bg-white/55 px-2.5 text-xs font-bold tabular-nums text-[#5c4d3f]">
-            <Icon name="calendar" className="h-4 w-4 text-[var(--brand)]" />
-            {formatWeekRange(weekStart, addDays(weekEnd, -1))}
-          </span>
-          {isAdmin && (
-            <>
-              <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet ml-1">Telafi planla</button>
-              <AddButton label="Yeni ders" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} />
-            </>
-          )}
         </div>
       </header>
 
@@ -241,7 +225,7 @@ export default function CalendarPage() {
         </p>
       )}
 
-      <div className="app-card flex flex-wrap items-center justify-between gap-3 p-3 sm:px-4">
+      <div className="app-card flex flex-col gap-3 p-3 sm:px-4 2xl:flex-row 2xl:items-center">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           {/* Öğrenci/öğretmen filtreleri yalnızca Admin'e görünür: bir öğretmen zaten yalnızca
               kendi derslerini görüyor (backend Calendar.cs bunu zorluyor), "tüm öğretmenler"
@@ -266,12 +250,23 @@ export default function CalendarPage() {
               </button>
             ))}</div>
         </div>
-        <div className="hidden flex-wrap items-center justify-end gap-3 lg:flex" aria-label="Enstrüman renkleri">
-          {[...colors.entries()].slice(0, 5).map(([instrument, tone]) => (
-            <span key={instrument} className="inline-flex items-center gap-1.5 text-[.65rem] font-semibold text-[var(--muted)]">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: tone.border }} />{instrument}
-            </span>
-          ))}
+        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 border-t border-[var(--line)] pt-3 2xl:ml-auto 2xl:w-auto 2xl:flex-nowrap 2xl:border-t-0 2xl:pt-0" aria-label="Takvim kontrolleri">
+          <div className="flex shrink-0 items-center gap-1 rounded-[.9rem] bg-[var(--surface-muted)] p-1" aria-label="Hafta değiştir">
+            <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="pressable grid h-9 w-9 place-items-center rounded-[.7rem] border border-[var(--line)] bg-white hover:border-[var(--brand)] hover:text-[var(--brand)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
+            <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="pressable grid h-9 w-9 place-items-center rounded-[.7rem] border border-[var(--line)] bg-white hover:border-[var(--brand)] hover:text-[var(--brand)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
+          </div>
+          <button onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
+          <span aria-live="polite" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 text-xs font-bold tabular-nums text-[#5c4d3f]">
+            <Icon name="calendar" className="h-4 w-4 text-[var(--brand)]" />
+            {formatWeekRange(weekStart, addDays(weekEnd, -1))}
+          </span>
+          {isAdmin && (
+            <>
+              <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden="true" />
+              <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet">Telafi planla</button>
+              <AddButton label="Yeni ders" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} />
+            </>
+          )}
         </div>
       </div>
 
@@ -568,7 +563,7 @@ function GridTimeLabels({ hourWindow, dragging }: { hourWindow: HourWindow; drag
   return (
     <div className={`sticky left-0 border-r border-t border-[var(--line)] bg-[#fdf9f2] ${dragging ? "z-30 shadow-[8px_0_18px_rgba(80,48,24,.09)]" : "z-10"}`} style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className={`absolute right-2 -translate-y-1/2 rounded px-1 text-[.53rem] tabular-nums ${dragging ? "bg-white font-bold text-[var(--foreground)]" : "text-[var(--muted)]"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
+        <span key={index} className={`absolute right-2 rounded px-1 text-[.53rem] tabular-nums ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"} ${dragging ? "bg-white font-bold text-[var(--foreground)]" : "text-[var(--muted)]"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
           {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}

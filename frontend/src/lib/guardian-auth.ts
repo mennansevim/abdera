@@ -94,7 +94,9 @@ export function useDebugGuardianLogin() {
 export function useGuardianLogout() {
   const queryClient = useQueryClient();
   return useMutation<void, ApiError, void>({
-    mutationFn: () => api.post<void>("/api/guardian/logout"),
+    // Ortak çıkış ucu güvenlik damgasını da yeniler; 30 günlük hatırlanan veli cookie'sinin
+    // kopyası dahi çıkıştan sonra yeniden kullanılamaz.
+    mutationFn: () => api.post<void>("/api/auth/logout"),
     onSuccess: () => queryClient.removeQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
   });
 }

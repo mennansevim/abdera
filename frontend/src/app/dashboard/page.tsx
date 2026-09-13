@@ -275,7 +275,7 @@ function TimeLabels({ hourWindow }: { hourWindow: { startHour: number; endHour: 
   return (
     <div className="relative border-r border-t border-[var(--line)] bg-[#fdf9f2]" style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className="absolute right-2 -translate-y-1/2 text-[.53rem] tabular-nums text-[var(--muted)]" style={{ top: `${(index / totalHours) * 100}%` }}>
+        <span key={index} className={`absolute right-2 text-[.53rem] tabular-nums text-[var(--muted)] ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
           {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}
