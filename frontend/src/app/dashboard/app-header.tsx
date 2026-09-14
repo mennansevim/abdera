@@ -80,8 +80,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   return (
     <div className="min-h-dvh bg-[var(--background)] lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] px-3 py-5 text-white lg:flex">
-        <Link href="/dashboard" className="mb-6 px-2 text-white"><BrandMark /></Link>
-        <nav className="flex flex-1 flex-col gap-1" aria-label="Ana menü">
+        <Link href="/dashboard" className="mb-6 shrink-0 px-2 text-white"><BrandMark /></Link>
+        <nav className="min-h-0 flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,.35)_transparent] [scrollbar-width:thin]" aria-label="Ana menü">
           {links.map((link, index) => (
             <Fragment key={link.href}>
             {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-0.5 mt-2 px-3 text-[.55rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>}
@@ -101,7 +101,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             </Fragment>
           ))}
         </nav>
-        <div className="mt-4 border-t border-white/25 pt-4">
+        <div className="mt-4 shrink-0 border-t border-white/25 pt-4">
           <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold">
               {displayName(me.email).slice(0, 2).toLocaleUpperCase("tr-TR")}
