@@ -121,6 +121,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
         width={44}
         height={44}
         sizes="44px"
+        unoptimized
         aria-hidden="true"
         className={`${compact ? "h-9 w-9" : "h-11 w-11"} shrink-0 rounded-full bg-white object-cover shadow-[0_7px_18px_rgba(70,34,30,.2)] ring-1 ring-white/35`}
       />
