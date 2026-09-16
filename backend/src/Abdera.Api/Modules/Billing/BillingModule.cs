@@ -16,12 +16,13 @@ public static class BillingModule
     public static void MapBillingModule(this WebApplication app)
     {
         app.MapMakeupCredits();
-        app.MapFeePlans();
+        app.MapTuitionRates();
+        app.MapBillingPolicy();
         app.MapReceivables();
-        app.MapBulkReceivables();
+        app.MapMonthlyDueRun();
         app.MapPayments();
         app.MapPaymentCorrections();
-        app.MapBulkPayments();
+        app.MapPrepayPlans();
         app.MapExpenses();
         app.MapStudentBilling();
         app.MapSendPaymentReminder();

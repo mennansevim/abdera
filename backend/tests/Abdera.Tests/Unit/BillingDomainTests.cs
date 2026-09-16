@@ -1,5 +1,5 @@
 using Abdera.Api.Modules.Billing.Domain;
-using Abdera.Api.Modules.Pricing.Domain;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 
 namespace Abdera.Tests.Unit;
@@ -9,33 +9,30 @@ public class BillingDomainTests
     private static readonly DateTimeOffset Now = new(2026, 8, 19, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void FeePlan_CreateFromPriceListItem_throws_when_monthly_missing_valid_due_day()
+    public void TuitionRate_EndOn_rejects_a_closing_date_before_the_start()
     {
-        var item = PriceListItem.Create(Guid.NewGuid(), Guid.NewGuid(), 45, BillingType.Monthly, 2000m, "TRY", null);
+        var rate = TuitionRate.Create(CourseKind.Individual, 4, 6000m, "TRY", new DateOnly(2026, 9, 1), null, Now);
 
-        Assert.Throws<ArgumentException>(() => FeePlan.CreateFromPriceListItem(
-            Guid.NewGuid(), item, dueDay: null, new DateOnly(2026, 9, 1), Now));
-        Assert.Throws<ArgumentException>(() => FeePlan.CreateFromPriceListItem(
-            Guid.NewGuid(), item, dueDay: 30, new DateOnly(2026, 9, 1), Now));
+        Assert.Throws<ArgumentException>(() => rate.EndOn(new DateOnly(2026, 8, 31)));
     }
 
     [Fact]
-    public void FeePlan_CreateFromPriceListItem_snapshots_amount_and_currency()
+    public void TuitionRate_IsActiveOn_respects_an_open_ended_range()
     {
-        var item = PriceListItem.Create(Guid.NewGuid(), Guid.NewGuid(), 45, BillingType.Monthly, 2000m, "TRY", null);
-        var feePlan = FeePlan.CreateFromPriceListItem(Guid.NewGuid(), item, dueDay: 5, new DateOnly(2026, 9, 1), Now);
+        var rate = TuitionRate.Create(CourseKind.Group, 4, 4500m, "TRY", new DateOnly(2026, 9, 1), null, Now);
 
-        Assert.Equal(2000m, feePlan.Amount);
-        Assert.Equal("TRY", feePlan.Currency);
-        Assert.Equal(5, feePlan.DueDay);
+        Assert.False(rate.IsActiveOn(new DateOnly(2026, 8, 31)));
+        Assert.True(rate.IsActiveOn(new DateOnly(2026, 9, 1)));
+        Assert.True(rate.IsActiveOn(new DateOnly(2030, 1, 1)));
 
-        // Kaynak kalem sonradan değişse bile snapshot etkilenmez (docs/10-decisions.md A1).
-        item.ApplyPercentageChange(20);
-        Assert.Equal(2000m, feePlan.Amount);
+        rate.EndOn(new DateOnly(2027, 8, 31));
+        Assert.False(rate.IsActiveOn(new DateOnly(2027, 9, 1)));
     }
 
     private static Receivable CreateUnpaidReceivable(decimal amount, DateOnly dueDate) =>
-        Receivable.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "2026-09", amount, "TRY", dueDate, Now);
+        Receivable.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "2026-09",
+            new TuitionCalculator.Breakdown(amount, 0m, null, amount), "TRY", dueDate, Now);
 
     [Fact]
     public void Receivable_RecordPaymentEffect_transitions_unpaid_to_partial_to_paid()
@@ -100,6 +97,60 @@ public class BillingDomainTests
         receivable.RecordPaymentEffect(1000m, Now);
 
         Assert.Throws<ConflictException>(() => receivable.Cancel(Now));
+    }
+
+    [Fact]
+    public void Receivable_Reprice_rewrites_the_whole_breakdown_while_unpaid()
+    {
+        var receivable = CreateUnpaidReceivable(6000m, new DateOnly(2026, 9, 1));
+        var planId = Guid.NewGuid();
+
+        receivable.Reprice(new TuitionCalculator.Breakdown(6000m, 14.5m, "Peşin", 5130m), planId, Now);
+
+        Assert.Equal(6000m, receivable.BaseAmount);
+        Assert.Equal(14.5m, receivable.DiscountPercent);
+        Assert.Equal(5130m, receivable.Amount);
+        Assert.Equal(planId, receivable.PrepayPlanId);
+    }
+
+    [Fact]
+    public void Receivable_Reprice_is_refused_once_money_has_been_recorded()
+    {
+        // Tahsil edilmiş parayla tutarsız bir tutar yazmak, eksik/fazla bakiyeyi
+        // sessizce gizlerdi - peşin ödeme kampanyası bu aya dokunamaz.
+        var partiallyPaid = CreateUnpaidReceivable(6000m, new DateOnly(2026, 9, 1));
+        partiallyPaid.RecordPaymentEffect(1000m, Now);
+        Assert.Throws<ConflictException>(() => partiallyPaid.Reprice(
+            new TuitionCalculator.Breakdown(6000m, 10m, "Peşin", 5400m), Guid.NewGuid(), Now));
+
+        var paid = CreateUnpaidReceivable(6000m, new DateOnly(2026, 9, 1));
+        paid.RecordPaymentEffect(6000m, Now);
+        Assert.Throws<ConflictException>(() => paid.Reprice(
+            new TuitionCalculator.Breakdown(6000m, 10m, "Peşin", 5400m), Guid.NewGuid(), Now));
+
+        var cancelled = CreateUnpaidReceivable(6000m, new DateOnly(2026, 9, 1));
+        cancelled.Cancel(Now);
+        Assert.Throws<ConflictException>(() => cancelled.Reprice(
+            new TuitionCalculator.Breakdown(6000m, 10m, "Peşin", 5400m), Guid.NewGuid(), Now));
+    }
+
+    [Fact]
+    public void Enrollment_SetManualDiscount_rejects_out_of_range_percentages()
+    {
+        var enrollment = Enrollment.Create(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CourseKind.Individual, new DateOnly(2026, 9, 1), Now);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => enrollment.SetManualDiscount(-1m, null, Now));
+        Assert.Throws<ArgumentOutOfRangeException>(() => enrollment.SetManualDiscount(101m, null, Now));
+
+        enrollment.SetManualDiscount(15m, "  Burslu  ", Now);
+        Assert.Equal(15m, enrollment.ManualDiscountPercent);
+        Assert.Equal("Burslu", enrollment.ManualDiscountReason);
+
+        // null'a çekmek gerekçeyi de temizler - otomatik kurallara geri döner.
+        enrollment.SetManualDiscount(null, "Burslu", Now);
+        Assert.Null(enrollment.ManualDiscountPercent);
+        Assert.Null(enrollment.ManualDiscountReason);
     }
 
     [Fact]

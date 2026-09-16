@@ -21,9 +21,11 @@ Kod, tablo ve tip adları İngilizce; kullanıcı arayüzü ve WhatsApp metinler
 | Geldi | `PRESENT` | |
 | Gelmedi (habersiz) | `ABSENT` | |
 | Mazeretli | `EXCUSED` | |
-| Fiyat listesi | `PriceList` | Yürürlük tarihi aralığıyla |
-| Fiyat listesi kalemi | `PriceListItem` | Enstrüman × ders süresi → birim fiyat |
-| Ücret planı | `FeePlan` | Bir kayıt için aylık/paket seçimi |
+| Ücret tarifesi | `TuitionRate` | Ders türü (Birebir/Grup) → aylık tutar, yürürlük tarihiyle. `PriceList`/`PriceListItem`/`FeePlan` üçlüsünün yerini aldı (H1) |
+| Ders türü | `CourseKind` | `Individual` (Birebir) / `Group` (Grup) — aidat tutarının tek ekseni |
+| İndirim politikası | `BillingSettings` | Çoklu kurs %, kardeş %, vade günü — kurum geneli tek satır |
+| Peşin ödeme kademesi | `PrepayDiscountTier` | "N ay ve üzeri peşin ödeyene %X" |
+| Peşin ödeme planı | `PrepayPlan` | Yıl başı toplu ödeme kampanyasının bir öğrenci için uygulanmış hâli |
 | Aidat / tahakkuk | `Receivable` | Bir döneme ait borç kaydı |
 | Tahsilat / ödeme | `Payment` | `Receivable`'a karşı yapılan ödeme |
 | Ödenmedi | `UNPAID` | |

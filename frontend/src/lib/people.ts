@@ -452,3 +452,84 @@ export function useEndEnrollment(studentId: string) {
     },
   });
 }
+
+// --- Kalıcı silme -----------------------------------------------------------------
+// Projenin geri kalanında kayıt silinmez, pasife alınır. Bu uçlar kullanıcının açık
+// talebiyle eklenen bilinçli istisna ("öğretmen gitti diyelim ... tamamen silme opsiyonu
+// olmalı"). Arayüz önce ne silineceğini gösterir, sonra onay ister.
+
+export interface StudentDeletionImpact {
+  studentId: string;
+  studentName: string;
+  enrollments: number;
+  lessons: number;
+  attendances: number;
+  receivables: number;
+  payments: number;
+  collectedAmount: number;
+  currency: string;
+  makeupCredits: number;
+  assessments: number;
+  showItems: number;
+  guardiansLeftWithoutStudents: number;
+}
+
+export interface TeacherDeletionImpact {
+  teacherId: string;
+  teacherName: string;
+  enrollments: number;
+  affectedStudents: number;
+  lessons: number;
+  receivables: number;
+  payments: number;
+  collectedAmount: number;
+  currency: string;
+  availabilities: number;
+  timeOffs: number;
+  assessments: number;
+  lessonNotes: number;
+  showItems: number;
+  hasUserAccount: boolean;
+}
+
+export function useStudentDeletionImpact(studentId: string | null) {
+  return useQuery({
+    queryKey: ["student-deletion-impact", studentId],
+    queryFn: () => api.get<StudentDeletionImpact>(`/api/students/${studentId}/deletion-impact`),
+    enabled: !!studentId,
+  });
+}
+
+export function useTeacherDeletionImpact(teacherId: string | null) {
+  return useQuery({
+    queryKey: ["teacher-deletion-impact", teacherId],
+    queryFn: () => api.get<TeacherDeletionImpact>(`/api/teachers/${teacherId}/deletion-impact`),
+    enabled: !!teacherId,
+  });
+}
+
+export function useDeleteStudent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, force }: { studentId: string; force?: boolean }) =>
+      api.delete<StudentDeletionImpact>(`/api/students/${studentId}${force ? "?force=true" : ""}`),
+    onSuccess: () => {
+      // Silinen kişi neredeyse her ekranda görünüyor - hepsi tazelensin.
+      queryClient.invalidateQueries();
+    },
+  });
+}
+
+export function useDeleteTeacher() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ teacherId, force, reassignTo }: { teacherId: string; force?: boolean; reassignTo?: string | null }) => {
+      const params = new URLSearchParams();
+      if (force) params.set("force", "true");
+      if (reassignTo) params.set("reassignTo", reassignTo);
+      const query = params.toString();
+      return api.delete<TeacherDeletionImpact>(`/api/teachers/${teacherId}${query ? `?${query}` : ""}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+}

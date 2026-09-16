@@ -88,6 +88,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+        NEXT_PUBLIC_DEMO_ENABLED: ${NEXT_PUBLIC_DEMO_ENABLED:-false}
     ports:
       # Yukaridaki api ile ayni gerekce - production'da trafik Caddy uzerinden gelir.
       - "127.0.0.1:3000:3000"

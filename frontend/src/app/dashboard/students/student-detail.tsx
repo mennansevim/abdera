@@ -61,7 +61,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-serif text-lg font-bold italic">{fullName}</h3>
           <p className="text-meta mt-0.5">{student.birthDate}{ageOf(student.birthDate) !== null && ` · ${ageOf(student.birthDate)} yaş`}</p>
-          <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[.62rem] font-bold ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
+          <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[.75rem] font-bold ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
             {student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}
           </span>
         </div>
@@ -107,7 +107,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
             <ul className="divide-y divide-[var(--line)]">
               {guardians?.map((guardian) => (
                 <li key={guardian.id} className="flex items-center gap-3 px-3.5 py-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-muted)] text-[.62rem] font-bold text-[var(--brand-strong)]">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-muted)] text-[.75rem] font-bold text-[var(--brand-strong)]">
                     {initials(`${guardian.firstName} ${guardian.lastName}`)}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -117,7 +117,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
                     </span>
                   </span>
                   {guardian.isPrimary && (
-                    <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.62rem] font-bold text-[var(--success-strong)]">Birincil</span>
+                    <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">Birincil</span>
                   )}
                   <RowMenu label={`${guardian.firstName} ${guardian.lastName} için işlemler`}>
                     {(close) => (
@@ -290,7 +290,7 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
           <span className="block truncate text-sm font-bold">{instrumentName}</span>
           <span className="text-meta mt-0.5 block truncate">{teacherName}</span>
         </span>
-        <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.62rem] font-bold text-[var(--success-strong)]">{status}</span>
+        <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">{status}</span>
         {isAdmin && (
           <RowMenu label={`${instrumentName} kursu için işlemler`}>
             {(close) => (
@@ -308,16 +308,16 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
       </div>
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2">
-          <p className="text-[.66rem] font-semibold text-[var(--danger-strong)]">Kurs sonlandırılsın mı? Gelecekteki dersler durdurulur.</p>
+          <p className="text-[.75rem] font-semibold text-[var(--danger-strong)]">Kurs sonlandırılsın mı? Gelecekteki dersler durdurulur.</p>
           <span className="flex gap-1.5">
-            <button type="button" onClick={() => setConfirming(false)} className="pressable min-h-8 rounded-lg bg-white px-2.5 text-[.64rem] font-bold">Vazgeç</button>
-            <button type="button" onClick={remove} disabled={endEnrollment.isPending} className="pressable min-h-8 rounded-lg bg-[var(--danger)] px-2.5 text-[.64rem] font-bold text-white disabled:opacity-50">
+            <button type="button" onClick={() => setConfirming(false)} className="pressable min-h-8 rounded-lg bg-white px-2.5 text-[.75rem] font-bold">Vazgeç</button>
+            <button type="button" onClick={remove} disabled={endEnrollment.isPending} className="pressable min-h-8 rounded-lg bg-[var(--danger)] px-2.5 text-[.75rem] font-bold text-white disabled:opacity-50">
               {endEnrollment.isPending ? "Sonlandırılıyor…" : "Sonlandır"}
             </button>
           </span>
         </div>
       )}
-      {error && <p role="alert" className="mt-2 text-[.66rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
     </li>
   );
 }

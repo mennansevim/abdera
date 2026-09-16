@@ -11,6 +11,7 @@ public static class PeopleModule
         app.MapGuardians();
         app.MapLinkGuardianToStudent();
         app.MapTeachers();
+        app.MapDeletePerson();
         app.MapEnrollments();
         app.MapGuardianAuth();
         app.MapGuardianPortal();

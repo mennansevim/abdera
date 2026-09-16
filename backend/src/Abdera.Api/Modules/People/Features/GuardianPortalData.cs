@@ -16,7 +16,7 @@ public static class GuardianPortalData
 {
     public record GuardianReceivableResponse(
         Guid Id, string Period, decimal Amount, string Currency, DateOnly DueDate,
-        ReceivableStatus Status, decimal TotalPaid, int? BulkPaymentMonths);
+        ReceivableStatus Status, decimal TotalPaid, int? PrepayPlanMonths);
 
     public record GuardianEnrollmentBillingResponse(
         Guid EnrollmentId, Guid StudentId, string StudentName, string InstrumentName,
@@ -96,13 +96,13 @@ public static class GuardianPortalData
         var receivableIds = receivables.Select(receivable => receivable.Id).ToList();
         var paidTotals = await Receivables.ComputeTotalsPaidAsync(receivableIds, db);
         var bulkPaymentMonths = (await db.Payments
-            .Where(payment => receivableIds.Contains(payment.ReceivableId) && payment.BulkPaymentId != null)
-            .Select(payment => new { payment.ReceivableId, payment.BulkPaymentMonths, payment.CreatedAt })
+            .Where(payment => receivableIds.Contains(payment.ReceivableId) && payment.PrepayPlanId != null)
+            .Select(payment => new { payment.ReceivableId, payment.PrepayPlanMonths, payment.CreatedAt })
             .ToListAsync())
             .GroupBy(payment => payment.ReceivableId)
             .ToDictionary(
                 group => group.Key,
-                group => group.OrderByDescending(payment => payment.CreatedAt).First().BulkPaymentMonths);
+                group => group.OrderByDescending(payment => payment.CreatedAt).First().PrepayPlanMonths);
 
         var billing = enrollmentRows.Select(enrollment => new GuardianEnrollmentBillingResponse(
             enrollment.Id,

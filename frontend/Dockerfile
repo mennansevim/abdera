@@ -9,7 +9,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_DEMO_ENABLED=false
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_PUBLIC_DEMO_ENABLED=${NEXT_PUBLIC_DEMO_ENABLED}
 # Podman geliştirme makinesi 2 GB bellekle çalışıyor; derleme sırasında Next.js'in
 # worker süreçlerinin tüm belleği tüketip SIGKILL ile sonlanmasını engeller.
 ENV NODE_OPTIONS=--max-old-space-size=768

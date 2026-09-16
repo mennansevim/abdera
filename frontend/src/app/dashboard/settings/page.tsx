@@ -66,7 +66,7 @@ export default function SettingsPage() {
                 className={`pressable rounded-xl border-2 px-3 py-3 text-left ${fontSize === option.value ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[var(--brand)]/50"}`}
               >
                 <span className="block text-sm font-bold">{option.label}</span>
-                <span className="mt-0.5 block text-[.68rem] text-[var(--muted)]">{option.detail}</span>
+                <span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">{option.detail}</span>
               </button>
             ))}
           </div>
@@ -117,7 +117,7 @@ function MaintenanceSettingsPanel() {
                 Her {setting.periodDays} gün · {setting.notificationPreference === "WhatsApp" ? "WhatsApp" : "Bildirim yok"} · {setting.consentingGuardianCount} rızası açık veli · sonraki {new Date(setting.nextReminderAt).toLocaleDateString("tr-TR")}
               </p>
             </div>
-            <span className={`shrink-0 rounded-full px-2 py-1 text-[.62rem] font-bold ${setting.isEnabled ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{setting.isEnabled ? "Etkin" : "Kapalı"}</span>
+            <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${setting.isEnabled ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{setting.isEnabled ? "Etkin" : "Kapalı"}</span>
           </article>
         ))}
         {!settings?.length && <p className="text-meta px-4 py-6 text-center">Henüz bakım ayarı yok.</p>}

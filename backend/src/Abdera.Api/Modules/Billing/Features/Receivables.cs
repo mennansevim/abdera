@@ -1,5 +1,8 @@
+using System.Security.Claims;
+using System.Text.Json;
+using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
-using Abdera.Api.Modules.Pricing.Domain;
+using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,11 +24,12 @@ public static class Receivables
         Guid? CorrectsPaymentId = null,
         decimal? PreviousAmount = null,
         DateTimeOffset? RecordedAt = null,
-        Guid? BulkPaymentId = null,
-        int? BulkPaymentMonths = null);
+        Guid? PrepayPlanId = null,
+        int? PrepayPlanMonths = null);
     public record ReceivableResponse(
         Guid Id, Guid EnrollmentId, string Period, decimal Amount, string Currency,
-        DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid, List<PaymentSummary> Payments);
+        DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid, List<PaymentSummary> Payments,
+        decimal BaseAmount, decimal DiscountPercent, string? DiscountReason, Guid? PrepayPlanId);
 
     public static void MapReceivables(this IEndpointRouteBuilder app)
     {
@@ -47,23 +51,40 @@ public static class Receivables
         return Results.Ok(receivables.Select(r => ToResponse(r, totals.GetValueOrDefault(r.Id), payments.GetValueOrDefault(r.Id) ?? [])));
     }
 
-    private static async Task<IResult> CreateAsync(CreateRequest request, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> CreateAsync(
+        CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
+        BillingPeriod.Parse(request.Period);
+
         if (await db.Receivables.AnyAsync(r => r.EnrollmentId == request.EnrollmentId && r.Period == request.Period))
             throw new ConflictException($"'{request.Period}' dönemi için bu kayda ait bir aidat zaten var.");
 
-        var feePlan = await db.FeePlans
-            .SingleOrDefaultAsync(f => f.EnrollmentId == request.EnrollmentId && f.ActiveUntil == null)
-            ?? throw new NotFoundException("Bu kayıt için aktif bir ücret planı bulunamadı.");
+        var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == request.EnrollmentId)
+            ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
 
-        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
-        var dueDate = ComputeDueDate(feePlan, request.Period, today);
+        var pricer = await TuitionPricer.LoadAsync(db);
+        var priced = pricer.Price(enrollment, request.Period)
+            ?? throw new ConflictException(
+                "Bu ders türü için geçerli bir ücret tarifesi yok. Önce Fiyat politikası ekranından tarifeyi tanımlayın.");
 
+        var now = clock.UtcNow;
         var receivable = Receivable.Create(
-            request.EnrollmentId, feePlan.Id, feePlan.PriceListItemId, request.Period,
-            feePlan.Amount, feePlan.Currency, dueDate, clock.UtcNow);
+            enrollment.Id, priced.Rate.Id, request.Period, priced.Breakdown,
+            priced.Rate.Currency, pricer.DueDateFor(request.Period), now);
 
         db.Receivables.Add(receivable);
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal), "receivable.created", nameof(Receivable), receivable.Id, now,
+            afterJson: JsonSerializer.Serialize(new
+            {
+                period = receivable.Period,
+                baseAmount = receivable.BaseAmount,
+                discountPercent = receivable.DiscountPercent,
+                amount = receivable.Amount,
+                currency = receivable.Currency,
+                enrollmentId = receivable.EnrollmentId,
+            })));
+
         await db.SaveChangesAsync();
 
         return Results.Created($"/api/receivables/{receivable.Id}", ToResponse(receivable, 0, []));
@@ -80,26 +101,6 @@ public static class Receivables
         var totalPaid = (await ComputeTotalsPaidAsync([receivableId], db)).GetValueOrDefault(receivableId);
         var payments = await ComputePaymentsAsync([receivableId], db);
         return Results.Ok(ToResponse(receivable, totalPaid, payments.GetValueOrDefault(receivableId) ?? []));
-    }
-
-    // docs/03-erd.md period: "2026-09 gibi dönem etiketi". MONTHLY için ayın FeePlan.DueDay'i,
-    // PACKAGE için hemen (bugün) vade tarihi kullanılır - paket önceden ödenir.
-    private static DateOnly ComputeDueDate(FeePlan feePlan, string period, DateOnly today)
-    {
-        if (feePlan.BillingType == BillingType.Package)
-        {
-            return today;
-        }
-
-        if (!System.Text.RegularExpressions.Regex.IsMatch(period, @"^\d{4}-(0[1-9]|1[0-2])$"))
-            throw new ValidationFailedException(new Dictionary<string, string[]>
-            {
-                ["period"] = ["Aylık aidat için dönem 'yyyy-MM' biçiminde olmalı (örn. 2026-09)."],
-            });
-
-        var year = int.Parse(period[..4]);
-        var month = int.Parse(period[5..]);
-        return new DateOnly(year, month, feePlan.DueDay ?? 1);
     }
 
     internal static async Task<Dictionary<Guid, decimal>> ComputeTotalsPaidAsync(IEnumerable<Guid> receivableIds, AbderaDbContext db)
@@ -153,8 +154,8 @@ public static class Receivables
                     new(
                         payment.Id, payment.Amount, payment.PaymentDate, payment.Method, payment.Reference, payment.Note,
                         RecordedAt: payment.CreatedAt,
-                        BulkPaymentId: payment.BulkPaymentId,
-                        BulkPaymentMonths: payment.BulkPaymentMonths),
+                        PrepayPlanId: payment.PrepayPlanId,
+                        PrepayPlanMonths: payment.PrepayPlanMonths),
                 };
                 history.AddRange(corrections
                     .Where(correction => correction.PaymentId == payment.Id)
@@ -169,12 +170,13 @@ public static class Receivables
                         payment.Id,
                         correction.PreviousAmount,
                         correction.CreatedAt,
-                        payment.BulkPaymentId,
-                        payment.BulkPaymentMonths)));
+                        payment.PrepayPlanId,
+                        payment.PrepayPlanMonths)));
                 return history;
             }).OrderByDescending(item => item.RecordedAt).ToList());
     }
 
     internal static ReceivableResponse ToResponse(Receivable r, decimal totalPaid, List<PaymentSummary> payments) =>
-        new(r.Id, r.EnrollmentId, r.Period, r.Amount, r.Currency, r.DueDate, r.Status, totalPaid, payments);
+        new(r.Id, r.EnrollmentId, r.Period, r.Amount, r.Currency, r.DueDate, r.Status, totalPaid, payments,
+            r.BaseAmount, r.DiscountPercent, r.DiscountReason, r.PrepayPlanId);
 }

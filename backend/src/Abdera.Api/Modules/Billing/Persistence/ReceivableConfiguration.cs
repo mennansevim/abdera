@@ -12,10 +12,13 @@ public class ReceivableConfiguration : IEntityTypeConfiguration<Receivable>
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id).HasColumnName("id");
         builder.Property(r => r.EnrollmentId).HasColumnName("enrollment_id");
-        builder.Property(r => r.FeePlanId).HasColumnName("fee_plan_id");
-        builder.Property(r => r.PriceListItemId).HasColumnName("price_list_item_id");
+        builder.Property(r => r.TuitionRateId).HasColumnName("tuition_rate_id");
         builder.Property(r => r.Period).HasColumnName("period").HasMaxLength(20);
+        builder.Property(r => r.BaseAmount).HasColumnName("base_amount").HasColumnType("numeric(12,2)");
+        builder.Property(r => r.DiscountPercent).HasColumnName("discount_percent").HasColumnType("numeric(5,2)");
+        builder.Property(r => r.DiscountReason).HasColumnName("discount_reason").HasMaxLength(200);
         builder.Property(r => r.Amount).HasColumnName("amount").HasColumnType("numeric(12,2)");
+        builder.Property(r => r.PrepayPlanId).HasColumnName("prepay_plan_id");
         builder.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3).HasDefaultValue("TRY");
         builder.Property(r => r.DueDate).HasColumnName("due_date");
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
@@ -25,7 +28,12 @@ public class ReceivableConfiguration : IEntityTypeConfiguration<Receivable>
         builder.HasIndex(r => new { r.EnrollmentId, r.Period }).IsUnique();
         builder.HasIndex(r => r.Status);
 
+        builder.HasIndex(r => r.PrepayPlanId).HasFilter("prepay_plan_id IS NOT NULL");
+
         builder.ToTable(t => t.HasCheckConstraint("CK_receivables_amount", "amount >= 0"));
+        builder.ToTable(t => t.HasCheckConstraint("CK_receivables_base_amount", "base_amount >= 0"));
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_receivables_discount_percent", "discount_percent >= 0 AND discount_percent <= 100"));
 
         // ARC-1 (docs/13-audit-fix-prompt.md): iki admin aynı Receivable'a aynı anda ödeme
         // işlerse ikinci yazma birincisini sessizce ezmesin diye Postgres'in sistem kolonu

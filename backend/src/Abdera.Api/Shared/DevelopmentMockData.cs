@@ -214,7 +214,7 @@ public static class DevelopmentMockData
                 item.StudentId == student.Id && item.TeacherId == teacher.Id && item.InstrumentId == instrument.Id);
             if (enrollment is null)
             {
-                enrollment = Enrollment.Create(student.Id, teacher.Id, instrument.Id, from, now);
+                enrollment = Enrollment.Create(student.Id, teacher.Id, instrument.Id, CourseKind.Individual, from, now);
                 db.Enrollments.Add(enrollment);
             }
 

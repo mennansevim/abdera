@@ -67,7 +67,7 @@ export interface GuardianReceivable {
   dueDate: string;
   status: GuardianReceivableStatus;
   totalPaid: number;
-  bulkPaymentMonths: number | null;
+  prepayPlanMonths: number | null;
 }
 
 export interface GuardianBillingEnrollment {

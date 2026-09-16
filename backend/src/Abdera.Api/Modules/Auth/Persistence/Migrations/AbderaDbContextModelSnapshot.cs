@@ -342,6 +342,41 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.ToTable("virtual_ibans", (string)null);
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.BillingSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("DueDayOfMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("due_day_of_month");
+
+                    b.Property<decimal>("MultiCourseDiscountPercent")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("multi_course_discount_percent");
+
+                    b.Property<decimal>("SiblingDiscountPercent")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("sibling_discount_percent");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("billing_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_billing_settings_due_day", "due_day_of_month BETWEEN 1 AND 28");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.Expense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -398,66 +433,6 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_expenses_amount", "amount > 0");
                         });
-                });
-
-            modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.FeePlan", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateOnly>("ActiveFrom")
-                        .HasColumnType("date")
-                        .HasColumnName("active_from");
-
-                    b.Property<DateOnly?>("ActiveUntil")
-                        .HasColumnType("date")
-                        .HasColumnName("active_until");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("amount");
-
-                    b.Property<string>("BillingType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("billing_type");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasDefaultValue("TRY")
-                        .HasColumnName("currency");
-
-                    b.Property<int?>("DueDay")
-                        .HasColumnType("integer")
-                        .HasColumnName("due_day");
-
-                    b.Property<Guid>("EnrollmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("enrollment_id");
-
-                    b.Property<int?>("PackageLessonCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("package_lesson_count");
-
-                    b.Property<Guid>("PriceListItemId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("price_list_item_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EnrollmentId");
-
-                    b.ToTable("fee_plans", (string)null);
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.MakeupCredit", b =>
@@ -521,14 +496,6 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount");
 
-                    b.Property<Guid?>("BulkPaymentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("bulk_payment_id");
-
-                    b.Property<int?>("BulkPaymentMonths")
-                        .HasColumnType("integer")
-                        .HasColumnName("bulk_payment_months");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -551,6 +518,14 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("payment_date");
 
+                    b.Property<Guid?>("PrepayPlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prepay_plan_id");
+
+                    b.Property<int?>("PrepayPlanMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("prepay_plan_months");
+
                     b.Property<Guid>("ReceivableId")
                         .HasColumnType("uuid")
                         .HasColumnName("receivable_id");
@@ -562,7 +537,7 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BulkPaymentId");
+                    b.HasIndex("PrepayPlanId");
 
                     b.HasIndex("ReceivableId");
 
@@ -570,7 +545,7 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_payments_amount", "amount > 0");
 
-                            t.HasCheckConstraint("CK_payments_bulk_payment_months", "(bulk_payment_id IS NULL AND bulk_payment_months IS NULL) OR (bulk_payment_id IS NOT NULL AND bulk_payment_months BETWEEN 2 AND 24)");
+                            t.HasCheckConstraint("CK_payments_prepay_plan_months", "(prepay_plan_id IS NULL AND prepay_plan_months IS NULL) OR (prepay_plan_id IS NOT NULL AND prepay_plan_months BETWEEN 2 AND 24)");
                         });
                 });
 
@@ -619,6 +594,34 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.PrepayDiscountTier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("MinMonths")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_months");
+
+                    b.Property<decimal>("Percent")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("percent");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MinMonths")
+                        .IsUnique();
+
+                    b.ToTable("prepay_discount_tiers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_prepay_tiers_months", "min_months BETWEEN 2 AND 24");
+
+                            t.HasCheckConstraint("CK_prepay_tiers_percent", "percent >= 0 AND percent <= 100");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.Receivable", b =>
                 {
                     b.Property<Guid>("Id")
@@ -629,6 +632,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount");
+
+                    b.Property<decimal>("BaseAmount")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("base_amount");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -642,6 +649,15 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasDefaultValue("TRY")
                         .HasColumnName("currency");
 
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("discount_percent");
+
+                    b.Property<string>("DiscountReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("discount_reason");
+
                     b.Property<DateOnly>("DueDate")
                         .HasColumnType("date")
                         .HasColumnName("due_date");
@@ -650,25 +666,25 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("enrollment_id");
 
-                    b.Property<Guid>("FeePlanId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("fee_plan_id");
-
                     b.Property<string>("Period")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("period");
 
-                    b.Property<Guid>("PriceListItemId")
+                    b.Property<Guid?>("PrepayPlanId")
                         .HasColumnType("uuid")
-                        .HasColumnName("price_list_item_id");
+                        .HasColumnName("prepay_plan_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
+
+                    b.Property<Guid>("TuitionRateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tuition_rate_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -682,6 +698,9 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PrepayPlanId")
+                        .HasFilter("prepay_plan_id IS NOT NULL");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("EnrollmentId", "Period")
@@ -690,6 +709,72 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.ToTable("receivables", null, t =>
                         {
                             t.HasCheckConstraint("CK_receivables_amount", "amount >= 0");
+
+                            t.HasCheckConstraint("CK_receivables_base_amount", "base_amount >= 0");
+
+                            t.HasCheckConstraint("CK_receivables_discount_percent", "discount_percent >= 0 AND discount_percent <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Billing.Domain.TuitionRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CourseKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("course_kind");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("TRY")
+                        .HasColumnName("currency");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateOnly?>("EffectiveUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_until");
+
+                    b.Property<int>("LessonsPerMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("lessons_per_month");
+
+                    b.Property<decimal>("MonthlyAmount")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("monthly_amount");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseKind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_tuition_rates_one_open_per_kind")
+                        .HasFilter("effective_until IS NULL");
+
+                    b.HasIndex("CourseKind", "EffectiveFrom");
+
+                    b.ToTable("tuition_rates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_tuition_rates_amount", "monthly_amount >= 0");
+
+                            t.HasCheckConstraint("CK_tuition_rates_effective_range", "effective_until IS NULL OR effective_until >= effective_from");
                         });
                 });
 
@@ -1081,6 +1166,14 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CourseKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Individual")
+                        .HasColumnName("course_kind");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1092,6 +1185,15 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.Property<Guid>("InstrumentId")
                         .HasColumnType("uuid")
                         .HasColumnName("instrument_id");
+
+                    b.Property<decimal?>("ManualDiscountPercent")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("manual_discount_percent");
+
+                    b.Property<string>("ManualDiscountReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("manual_discount_reason");
 
                     b.Property<DateOnly>("StartedAt")
                         .HasColumnType("date")
@@ -1127,7 +1229,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("status = 'Active'");
 
-                    b.ToTable("enrollments", (string)null);
+                    b.ToTable("enrollments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_enrollments_manual_discount_percent", "manual_discount_percent IS NULL OR (manual_discount_percent >= 0 AND manual_discount_percent <= 100)");
+                        });
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.People.Domain.Guardian", b =>
@@ -1483,93 +1588,6 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.HasIndex("InstrumentId");
 
                     b.ToTable("teacher_instruments", (string)null);
-                });
-
-            modelBuilder.Entity("Abdera.Api.Modules.Pricing.Domain.PriceList", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateOnly>("EffectiveFrom")
-                        .HasColumnType("date")
-                        .HasColumnName("effective_from");
-
-                    b.Property<DateOnly?>("EffectiveUntil")
-                        .HasColumnType("date")
-                        .HasColumnName("effective_until");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("name");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("price_lists", (string)null);
-                });
-
-            modelBuilder.Entity("Abdera.Api.Modules.Pricing.Domain.PriceListItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("amount");
-
-                    b.Property<string>("BillingType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("billing_type");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasDefaultValue("TRY")
-                        .HasColumnName("currency");
-
-                    b.Property<int>("DurationMinutes")
-                        .HasColumnType("integer")
-                        .HasColumnName("duration_minutes");
-
-                    b.Property<Guid>("InstrumentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("instrument_id");
-
-                    b.Property<int?>("PackageLessonCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("package_lesson_count");
-
-                    b.Property<Guid>("PriceListId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("price_list_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PriceListId");
-
-                    b.HasIndex("InstrumentId", "DurationMinutes", "BillingType");
-
-                    b.ToTable("price_list_items", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_price_list_items_amount", "amount >= 0");
-                        });
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.LessonNote", b =>
@@ -2113,6 +2131,176 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Show.Domain.ShowEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CurrentItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("current_item_id");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VenueName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("venue_name");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartsAt");
+
+                    b.ToTable("show_events", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Show.Domain.ShowItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Composer")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("composer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("DurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("group_name");
+
+                    b.Property<Guid?>("InstrumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("instrument_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("PieceTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("piece_title");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<Guid>("ShowEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("show_event_id");
+
+                    b.Property<Guid?>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<Guid?>("TeacherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("teacher_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId");
+
+                    b.HasIndex("ShowEventId", "Position");
+
+                    b.ToTable("show_items", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_show_items_duration", "duration_minutes IS NULL OR duration_minutes BETWEEN 1 AND 120");
+
+                            t.HasCheckConstraint("CK_show_items_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Show.Domain.StudentPhoto", b =>
+                {
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("Version")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version");
+
+                    b.HasKey("StudentId");
+
+                    b.ToTable("student_photos", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
                 {
                     b.Property<int>("Id")
@@ -2216,15 +2404,6 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Abdera.Api.Modules.Pricing.Domain.PriceListItem", b =>
-                {
-                    b.HasOne("Abdera.Api.Modules.Pricing.Domain.PriceList", null)
-                        .WithMany()
-                        .HasForeignKey("PriceListId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.PracticeAssignment", b =>
                 {
                     b.HasOne("Abdera.Api.Modules.Scheduling.Domain.Lesson", null)
@@ -2280,6 +2459,24 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("InstrumentId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Show.Domain.ShowItem", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.Show.Domain.ShowEvent", null)
+                        .WithMany()
+                        .HasForeignKey("ShowEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Show.Domain.StudentPhoto", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

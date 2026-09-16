@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,11 +9,15 @@ namespace Abdera.Api.Modules.Billing.Features;
 // aidat geçmişi tek ekranda (Admin UX: "payment list" - docs/00-master-prompt.md).
 public static class StudentBilling
 {
-    public record StudentBillingResponse(Guid EnrollmentId, Guid InstrumentId, List<Receivables.ReceivableResponse> Receivables);
+    public record StudentBillingResponse(
+        Guid EnrollmentId, Guid InstrumentId, CourseKind CourseKind,
+        decimal? ManualDiscountPercent, string? ManualDiscountReason,
+        List<Receivables.ReceivableResponse> Receivables);
     public record DueListItemResponse(
         Guid Id, Guid EnrollmentId, Guid StudentId, string StudentName, Guid TeacherId, string TeacherName, Guid InstrumentId, string InstrumentName,
         string Period, decimal Amount, string Currency, DateOnly DueDate, ReceivableStatus Status,
-        decimal TotalPaid, List<Receivables.PaymentSummary> Payments);
+        decimal TotalPaid, List<Receivables.PaymentSummary> Payments,
+        CourseKind CourseKind, decimal BaseAmount, decimal DiscountPercent, string? DiscountReason, Guid? PrepayPlanId);
 
     public static void MapStudentBilling(this IEndpointRouteBuilder app)
     {
@@ -35,7 +40,7 @@ public static class StudentBilling
         var payments = await Receivables.ComputePaymentsAsync(receivables.Select(r => r.Id), db);
 
         var result = enrollments.Select(e => new StudentBillingResponse(
-            e.Id, e.InstrumentId,
+            e.Id, e.InstrumentId, e.CourseKind, e.ManualDiscountPercent, e.ManualDiscountReason,
                 receivables.Where(r => r.EnrollmentId == e.Id)
                 .Select(r => Receivables.ToResponse(r, totals.GetValueOrDefault(r.Id), payments.GetValueOrDefault(r.Id) ?? []))
                 .ToList()));
@@ -67,7 +72,9 @@ public static class StudentBilling
                 receivable.Id, receivable.EnrollmentId, student.Id, $"{student.FirstName} {student.LastName}", teacher.Id, $"{teacher.FirstName} {teacher.LastName}",
                 instrument.Id, instrument.Name, receivable.Period, receivable.Amount, receivable.Currency,
                 receivable.DueDate, receivable.Status, totals.GetValueOrDefault(receivable.Id),
-                payments.GetValueOrDefault(receivable.Id) ?? []);
+                payments.GetValueOrDefault(receivable.Id) ?? [],
+                enrollment.CourseKind, receivable.BaseAmount, receivable.DiscountPercent,
+                receivable.DiscountReason, receivable.PrepayPlanId);
         });
 
         return Results.Ok(result);

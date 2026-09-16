@@ -1,23 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useQueries } from "@tanstack/react-query";
 import { Icon } from "@/components/icons";
-import { AddButton, FormMessage, Modal } from "@/components/ui";
-import { api, ApiError } from "@/lib/api";
+import { FormMessage, Modal } from "@/components/ui";
+import { ApiError } from "@/lib/api";
 import {
+  COURSE_KIND_LABEL,
   useBillingDues,
-  useBulkPayment,
-  useBulkReceivablePlan,
-  useCreateBulkReceivables,
-  useCreateFeePlan,
-  useCreateReceivable,
-  usePriceLists,
+  useCreatePrepayPlan,
+  useMonthlyDuePlan,
+  usePrepayPreview,
   useRecordPayment,
+  useRunMonthlyDues,
   useStudentBilling,
   type BillingDue,
-  type BulkReceivableResult,
-  type FeePlan,
+  type MonthlyDueResult,
   type PaymentMethod,
 } from "@/lib/billing";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
@@ -37,6 +34,11 @@ import { StudentBillingSection } from "./student-billing-section";
 // Çözüm sırasıyla: tek arama kutusu + oluşturma akışını istek üzerine açılan panele almak;
 // birbirini dışlayan üç sekme (Bekleyen + Ödenen = Tümü); dönem ve vadeyi sütundan çıkarıp
 // başlıkta bir kez yazmak.
+//
+// Aidat modeli yeniden tasarlandıktan sonra (docs/10-decisions.md H1) bu ekrandan bir şey
+// daha kalktı: "ücret planı". Artık bir öğrenciden tahsilat almak için önce fiyat listesi
+// kurup her kurs kaydına ayrı plan açmak gerekmiyor - tutar okulun tarifesinden ve
+// öğrencinin indirimlerinden sunucuda hesaplanıyor, ekran yalnızca sonucu teyit ediyor.
 
 type DueFilter = "open" | "paid" | "all";
 
@@ -93,15 +95,6 @@ function formatPeriod(period: string | null | undefined) {
   return new Date(`${period}-01T00:00:00`).toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
 }
 
-function periodRange(startPeriod: string, months: number) {
-  if (!isValidPeriod(startPeriod) || !Number.isInteger(months) || months < 1) return [];
-  const [year, month] = startPeriod.split("-").map(Number);
-  return Array.from({ length: months }, (_, offset) => {
-    const date = new Date(Date.UTC(year, month - 1 + offset, 1));
-    return date.toISOString().slice(0, 7);
-  });
-}
-
 function isValidPeriod(period: string | null | undefined): period is string {
   if (!period || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return false;
   const [year] = period.split("-").map(Number);
@@ -138,18 +131,9 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   // tahsilat panelinin (QuickCollectPanel) kendi öğrenci seçimi ayrıdır.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
-  const [showBulkPanel, setShowBulkPanel] = useState(false);
+  const [showMonthlyRun, setShowMonthlyRun] = useState(false);
   const [teacherFilter, setTeacherFilter] = useState("all");
-  // Öğrenciye göre filtre - seçenekler serbest metin yerine liste dolusundan (aşağıdaki
-  // studentOptions) geliyor; kullanıcı isteği: "öğretmen öğrenci gibi" filtreler.
-  const [studentFilter, setStudentFilter] = useState("all");
-
-  // Öğrenci filtresinin seçenekleri: aidatı olan öğrenciler arasından, ada göre tekilleştirilip
-  // sıralanır. Ayrı bir /api/students isteği açmaya gerek yok - dues zaten öğrenci adını taşıyor.
-  const studentOptions = useMemo(() => {
-    const byId = new Map((dues ?? []).map((due) => [due.studentId, due.studentName]));
-    return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], "tr-TR"));
-  }, [dues]);
+  const [studentSearch, setStudentSearch] = useState("");
 
   // Dönem listesi veriden türetilir - okul ölçeğinde tüm aidatlar zaten tek istekte
   // geliyor, ayrı bir uç nokta açmaya gerek yok (CLAUDE.md: gereksiz bağımlılık ekleme).
@@ -182,7 +166,7 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   const clearFilters = useCallback(() => {
     setFilter("all");
     setTeacherFilter("all");
-    setStudentFilter("all");
+    setStudentSearch("");
     setPeriod(ALL_PERIODS);
   }, []);
 
@@ -190,9 +174,10 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   // uyarısı bu kümeye bakar, çünkü tam da dönem filtresinin gizlediği şeyi göstermesi gerekir.
   const duesMatchingFilters = useMemo(() => (dues ?? []).filter((due) => {
     const matchesTeacher = teacherFilter === "all" || due.teacherId === teacherFilter;
-    const matchesStudent = studentFilter === "all" || due.studentId === studentFilter;
+    const query = studentSearch.trim().toLocaleLowerCase("tr-TR");
+    const matchesStudent = !query || due.studentName.toLocaleLowerCase("tr-TR").includes(query);
     return matchesTeacher && matchesStudent;
-  }), [dues, studentFilter, teacherFilter]);
+  }), [dues, studentSearch, teacherFilter]);
 
   // Liste, sayaçlar ve toplamlar TEK bir filtrelenmiş diziden türetilir - ekranda bir
   // rakam, listede başka bir veri kümesi olmasın.
@@ -244,19 +229,19 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
       a.studentName.localeCompare(b.studentName, "tr-TR")),
     [baseDues, filter]);
 
-  const hasActiveFilters = teacherFilter !== "all" || studentFilter !== "all" || filter !== "all";
+  const hasActiveFilters = teacherFilter !== "all" || studentSearch.trim() !== "" || filter !== "all";
 
   return <div className="space-y-4">
     {/* Yalnızca açıkken monte edilir: pencere her açılışta temiz durumla (o anki dönem,
         önceki çalıştırmanın sonucu olmadan) başlasın diye - state'i effect'te sıfırlamak
         yerine bileşeni yeniden kurmak hem daha basit hem fazladan render turu üretmiyor. */}
-    {showBulkPanel && <BulkReceivableDialog
+    {showMonthlyRun && <MonthlyDueRunDialog
       defaultPeriod={activePeriod === ALL_PERIODS ? new Date().toISOString().slice(0, 7) : activePeriod}
-      onClose={() => setShowBulkPanel(false)}
-      onGoToStudent={(studentId) => { setShowBulkPanel(false); setSelectedStudentId(studentId); }}
+      onClose={() => setShowMonthlyRun(false)}
+      onGoToStudent={(studentId) => { setShowMonthlyRun(false); setSelectedStudentId(studentId); }}
     />}
 
-    <Modal open={showCreatePanel} title="Aidat ödemesi al" description="Öğrenciyi, ilk dönemi ve kaç aylık ödeme yaptığını seç; aylar otomatik olarak ödendi işaretlensin." onClose={() => setShowCreatePanel(false)}>
+    <Modal open={showCreatePanel} title="Tahsilat kaydet" description="Öğrenciyi, ilk dönemi ve kaç aylık ödeme yaptığını seç; aylar otomatik olarak ödendi işaretlensin." onClose={() => setShowCreatePanel(false)}>
       <QuickCollectPanel
         pickerRef={studentPickerRef}
         onOpenFullAccount={(studentId) => { setShowCreatePanel(false); setSelectedStudentId(studentId); }}
@@ -279,14 +264,14 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
           </select>
         </label>
         <div className="flex flex-wrap items-center gap-3">
-          <p className="text-[.68rem] font-semibold tabular-nums text-[var(--muted)]">
+          <p className="text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">
             {sharedDueDate && <>Vade {formatDay(sharedDueDate)} · </>}
             {counts.all} aidat
             {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
             {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
           </p>
-          <button type="button" onClick={() => setShowBulkPanel(true)} className="btn btn-quiet">Dönem aidatlarını oluştur</button>
-          <AddButton label="Aidat al" onClick={startAddingDue} />
+          <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-quiet">Dönem aidatlarını oluştur</button>
+          <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
         </div>
       </div>
 
@@ -295,20 +280,20 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
         <p className="text-xs font-bold tabular-nums text-[var(--danger-strong)]">
           Başka dönemlerde {overdueOutsideScope.count} gecikmiş aidat var · {formatMoney(overdueOutsideScope.amount, "TRY")}
         </p>
-        <button type="button" onClick={() => { setPeriod(ALL_PERIODS); setFilter("open"); }} className="pressable ml-auto min-h-9 rounded-lg bg-[var(--danger-strong)] px-3 text-[.66rem] font-bold text-white">Hepsini göster</button>
+        <button type="button" onClick={() => { setPeriod(ALL_PERIODS); setFilter("open"); }} className="pressable ml-auto min-h-9 rounded-lg bg-[var(--danger-strong)] px-3 text-[.75rem] font-bold text-white">Hepsini göster</button>
       </div>}
 
       {/* Durum sekmeleri solda, Öğretmen/Öğrenci filtreleri sağda - kullanıcı isteği. */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
-        <div className="inline-flex gap-1 rounded-xl bg-[var(--surface-muted)] p-1" aria-label="Aidat durum filtresi">{FILTERS.map((item) => <button key={item.value} type="button" onClick={() => setFilter(item.value)} aria-pressed={filter === item.value} className={`pressable flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-bold ${filter === item.value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}>{item.label}<span className="rounded-full bg-[var(--surface-muted)] px-1.5 py-0.5 text-[.58rem] tabular-nums">{counts[item.value]}</span></button>)}</div>
+        <div className="inline-flex gap-1 rounded-xl bg-[var(--surface-muted)] p-1" aria-label="Aidat durum filtresi">{FILTERS.map((item) => <button key={item.value} type="button" onClick={() => setFilter(item.value)} aria-pressed={filter === item.value} className={`pressable flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-bold ${filter === item.value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}>{item.label}<span className="rounded-full bg-[var(--surface-muted)] px-1.5 py-0.5 text-[.75rem] tabular-nums">{counts[item.value]}</span></button>)}</div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="min-w-[9rem]"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
-          <label className="min-w-[9rem]"><span className="sr-only">Öğrenciye göre filtrele</span><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğrenciler</option>{studentOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+          <label className="relative min-w-[12rem]"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 pl-9 text-xs font-semibold" /></label>
         </div>
       </div>
 
       {/* Beş sütun: Dönem ve Vade artık yukarıdaki dönem başlığında. */}
-      <div className="mt-3 hidden grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.9fr)_minmax(9rem,.9fr)_minmax(8rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.62rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci / enstrüman</span><span>Öğretmen</span><span>Tutar / kalan</span><span>Durum</span><span className="text-right">İşlem</span></div>
+      <div className="mt-3 hidden grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.9fr)_minmax(9rem,.9fr)_minmax(8rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci / enstrüman</span><span>Öğretmen</span><span>Tutar / kalan</span><span>Durum</span><span className="text-right">İşlem</span></div>
       {isLoading && <div className="space-y-2 p-4">{[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-16 rounded-xl" />)}</div>}
       {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Aidat listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="pressable mt-3 min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--foreground)] disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
       {!isLoading && !isError && visibleDues.length > 0 && <div className="divide-y divide-[var(--line)]">{visibleDues.map((due) => <DueRow key={due.id} due={due} />)}</div>}
@@ -317,15 +302,15 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
         {!dues?.length
           ? <>
               <p className="mt-3 text-sm font-bold">Henüz aidat kaydı yok</p>
-              <p className="text-meta mt-1">Bir öğrenci seçip ücret planına göre dönem aidatını oluşturarak başla. Aidat oluşturulduğunda tahsilat, kısmi ödeme ve gecikme takibi buradan yürür.</p>
-              <button type="button" onClick={startAddingDue} className="btn btn-primary mt-3">Aidat al</button>
+              <p className="text-meta mt-1">Bu ayın aidatlarını tek düğmeyle aç - tutarlar okulun tarifesinden, indirimler otomatik hesaplanır. Aidat oluşturulduğunda tahsilat, kısmi ödeme ve gecikme takibi buradan yürür.</p>
+              <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-primary mt-3">Dönem aidatı oluştur</button>
             </>
           : <>
               <p className="mt-3 text-sm font-bold">Bu dönemde aidat yok</p>
               <p className="text-meta mt-1">{hasActiveFilters ? "Seçili filtrelerle eşleşen aidat bulunamadı." : "Bu dönem için henüz aidat oluşturulmamış."} Başka bir dönem seçebilir veya yeni bir dönem aidatı ekleyebilirsin.</p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <button type="button" onClick={clearFilters} className="btn btn-quiet">Filtreleri temizle</button>
-                <button type="button" onClick={startAddingDue} className="btn btn-primary">Aidat al</button>
+                <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-primary">Dönem aidatı oluştur</button>
               </div>
             </>}
       </div></div>}
@@ -334,16 +319,13 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   </div>;
 }
 
-// "Öğrenci aidat verecek" akışının tamamı: öğrenciyi bir LİSTEDEN seç (serbest metin arama
-// değil), ardından "Elden alındı" / "Havale geldi" bas - bitsin. Önceki sürüm burada bir
-// arama kutusu açıp seçilen öğrenci için koca bir hesap yönetim panelini (dönem/kurs/ücret
-// planı seçimi) açıyordu; günlük en sık işlem olan "bu ayın aidatı şimdi ödendi" için çok
-// adımlıydı. Bu bileşen o adımları TEK ekranda, iki büyük butona indirger:
-//   - Bu ay için aidat kaydı zaten varsa (Unpaid/Partial/Overdue), kalan tutarı doğrudan öder.
-//   - Yoksa (ilk kez veya önceki ay tam ödenmiş), önce dönemi backend'in zorunlu tuttuğu
-//     ücret planından oluşturur, sonra AYNI işlemde tam ödemeyi kaydeder.
-// Farklı bir dönem eklemek/ücret planını değiştirmek gibi seyrek işler için altta "tam
-// hesabı aç" bağlantısı bırakılır - bu yüzden StudentBillingSection silinmedi.
+// "Öğrenci aidat verecek" akışının tamamı tek ekranda: öğrenciyi seç, kursu seç, ilk dönemi
+// ve kaç ay ödendiğini gir, "Elden alındı" / "Havale geldi" bas.
+//
+// Tutarı EKRAN HESAPLAMAZ. Taban tarife, öğrenci indirimi (2 kurs / kardeş / elle) ve peşin
+// ödeme kademesi sunucudaki tek bir hesaptan (`/prepay-preview`) gelir; burada yalnızca
+// gösterilir ve onaylanırken aynı toplam geri gönderilir. Ekranla sunucu ayrışmışsa
+// (araya giren bir tarife değişikliği) işlem durur, yanlış tutarla tahsilat yazılmaz.
 function QuickCollectPanel({
   pickerRef,
   onOpenFullAccount,
@@ -360,64 +342,48 @@ function QuickCollectPanel({
   const [rawEnrollmentId, setRawEnrollmentId] = useState("");
   const { data: enrollments, isLoading: enrollmentsLoading } = useEnrollments(studentId);
   const { data: billing } = useStudentBilling(studentId, { enabled: !!studentId });
-  const { data: priceLists } = usePriceLists();
-  const createReceivable = useCreateReceivable(studentId);
   const recordPayment = useRecordPayment(studentId);
   const [pendingMethod, setPendingMethod] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [startPeriod, setStartPeriod] = useState(() => new Date().toISOString().slice(0, 7));
   const [months, setMonths] = useState(1);
 
-  const activeEnrollments = useMemo(() => enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [], [enrollments]);
+  const activeEnrollments = useMemo(
+    () => enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [],
+    [enrollments],
+  );
 
-  const feePlanQueries = useQueries({
-    queries: activeEnrollments.map((enrollment) => ({
-      queryKey: ["fee-plan", enrollment.id],
-      queryFn: async () => {
-        try {
-          return await api.get<FeePlan>(`/api/enrollments/${enrollment.id}/fee-plan`);
-        } catch {
-          return null;
-        }
-      },
-    })),
-  });
-  const feePlanLoading = enrollmentsLoading || feePlanQueries.some((query) => query.isLoading);
-  const feePlanByEnrollment = new Map(activeEnrollments.map((enrollment, index) => [enrollment.id, feePlanQueries[index]?.data ?? null]));
-  const enrollmentsWithPlan = activeEnrollments.filter((enrollment) => feePlanByEnrollment.get(enrollment.id));
-  const enrollmentsWithoutPlan = feePlanLoading ? [] : activeEnrollments.filter((enrollment) => !feePlanByEnrollment.get(enrollment.id));
-
-  // Öğrenci değişince önceki öğrencinin seçimi otomatik geçersiz kalır - effect'e gerek yok.
-  const enrollmentId = enrollmentsWithPlan.some((enrollment) => enrollment.id === rawEnrollmentId)
+  // Öğrenci değişince önceki seçim otomatik geçersiz kalır - effect'e gerek yok.
+  const enrollmentId = activeEnrollments.some((enrollment) => enrollment.id === rawEnrollmentId)
     ? rawEnrollmentId
-    : (enrollmentsWithPlan.length === 1 ? enrollmentsWithPlan[0].id : "");
-  const feePlan = enrollmentId ? feePlanByEnrollment.get(enrollmentId) : null;
-  const bulkPayment = useBulkPayment(studentId, enrollmentId);
-  const paymentMonths = feePlan?.billingType === "Monthly" ? months : 1;
-  const hasStartPeriod = isValidPeriod(startPeriod);
+    : (activeEnrollments.length === 1 ? activeEnrollments[0].id : "");
 
-  const selectedReceivable = billing
+  const hasStartPeriod = isValidPeriod(startPeriod);
+  const prepay = useCreatePrepayPlan(studentId, enrollmentId);
+  const { data: preview, isLoading: previewLoading } = usePrepayPreview(enrollmentId, startPeriod, months, {
+    enabled: !!enrollmentId && hasStartPeriod,
+  });
+
+  // Tek ay ve o ayın aidatı zaten kısmen ödenmişse: kampanya akışı bu satıra dokunamaz
+  // (tahsil edilmiş parayla tutarsız bir tutar yazmamak için, bkz. Receivable.Reprice).
+  // Bu durumda yapılacak iş zaten sadece KALANI tahsil etmek.
+  const existing = billing
     ?.find((row) => row.enrollmentId === enrollmentId)
     ?.receivables.find((receivable) => hasStartPeriod && receivable.period === startPeriod && receivable.status !== "Cancelled");
-  const selectedPeriods = periodRange(startPeriod, paymentMonths);
-  const enrollmentReceivables = billing?.find((row) => row.enrollmentId === enrollmentId)?.receivables ?? [];
-  const blockedPeriods = selectedPeriods.filter((period) => enrollmentReceivables.some((receivable) =>
-    receivable.period === period && (receivable.status === "Paid" || receivable.status === "Cancelled")));
-  const dueAmount = selectedPeriods.reduce((total, period) => {
-    const receivable = enrollmentReceivables.find((item) => item.period === period && item.status !== "Cancelled");
-    return total + (receivable ? Math.max(0, receivable.amount - receivable.totalPaid) : feePlan?.amount ?? 0);
-  }, 0);
+  const settleRemainingOnly = months === 1 && !!existing && existing.status !== "Paid";
+  const remaining = existing ? Math.max(0, existing.amount - existing.totalPaid) : 0;
 
-  function enrollmentLabel(enrollment: { instrumentId: string; teacherId: string }, enrollmentIdValue: string) {
-    // "Kurs 1 / Kurs 2" ayırt ediciydi ama hangi ders olduğunu söylemiyordu - ücret planı
-    // eksik uyarısında kullanıcı neye baktığını anlayamıyordu. Enstrüman ve öğretmen adı
-    // ek istek getirmiyor: her iki liste de React Query'de aynı anahtarla zaten önbellekte
-    // (öğrenci/öğretmen ekranları ve bu sayfanın filtreleri onları çoktan çekmiş oluyor).
+  const payableTotal = settleRemainingOnly ? remaining : preview?.total ?? 0;
+  const currency = preview?.currency ?? existing?.currency ?? "TRY";
+  const blockers = settleRemainingOnly ? [] : preview?.blockers ?? [];
+  const busy = pendingMethod !== null;
+
+  function enrollmentLabel(enrollment: { instrumentId: string; teacherId: string; courseKind?: string }) {
     const instrument = instruments?.find((item) => item.id === enrollment.instrumentId)?.name;
     const teacher = teachers?.find((item) => item.id === enrollment.teacherId);
     const teacherName = teacher ? `${teacher.firstName} ${teacher.lastName}` : null;
-    if (instrument && teacherName) return `${instrument} · ${teacherName}`;
-    return instrument ?? teacherName ?? `Kurs ${activeEnrollments.findIndex((item) => item.id === enrollmentIdValue) + 1}`;
+    const kind = enrollment.courseKind === "Group" ? "Grup" : null;
+    return [instrument, teacherName, kind].filter(Boolean).join(" · ") || "Kurs";
   }
 
   async function collect(method: PaymentMethod) {
@@ -429,23 +395,21 @@ function QuickCollectPanel({
     setError(null);
     setPendingMethod(method);
     try {
-      if (paymentMonths > 1) {
-        await bulkPayment.mutateAsync({
-          startPeriod,
-          months: paymentMonths,
-          amount: dueAmount,
+      if (settleRemainingOnly && existing) {
+        await recordPayment.mutateAsync({
+          receivableId: existing.id,
+          amount: remaining,
           paymentDate: new Date().toISOString().slice(0, 10),
           method,
         });
       } else {
-        let receivableId = selectedReceivable?.id;
-        let amount = dueAmount;
-        if (!receivableId) {
-          const created = await createReceivable.mutateAsync({ enrollmentId, period: startPeriod });
-          receivableId = created.id;
-          amount = Math.max(0, created.amount - created.totalPaid);
-        }
-        await recordPayment.mutateAsync({ receivableId, amount, paymentDate: new Date().toISOString().slice(0, 10), method });
+        await prepay.mutateAsync({
+          startPeriod,
+          months,
+          paymentDate: new Date().toISOString().slice(0, 10),
+          method,
+          expectedTotal: preview?.total,
+        });
       }
       onCollected();
     } catch (err) {
@@ -464,93 +428,74 @@ function QuickCollectPanel({
       </select>
     </label>
 
-    {studentId && feePlanLoading && <div className="skeleton h-24 rounded-xl" />}
+    {studentId && enrollmentsLoading && <div className="skeleton h-24 rounded-xl" />}
 
-    {studentId && !feePlanLoading && activeEnrollments.length === 0 && (
+    {studentId && !enrollmentsLoading && activeEnrollments.length === 0 && (
       <p className="rounded-xl bg-[var(--surface-muted)] p-3 text-xs text-[var(--muted)]">Bu öğrencinin aktif kaydı bulunmuyor.</p>
     )}
 
-    {studentId && !feePlanLoading && enrollmentsWithoutPlan.length > 0 && (
-      <div className="space-y-2">
-        {enrollmentsWithoutPlan.map((enrollment) => (
-          <MissingFeePlanInline
-            key={enrollment.id}
-            enrollmentId={enrollment.id}
-            // Tek kurs olsa bile adıyla yazılır: "Bu kurs: ücret planı yok" satırı hangi
-            // enstrüman/öğretmen olduğunu söylemediği için kullanıcı doğrulayamıyordu.
-            label={enrollmentLabel(enrollment, enrollment.id)}
-            priceListItems={(priceLists ?? []).flatMap((list) => list.items).filter((item) => item.instrumentId === enrollment.instrumentId)}
-          />
-        ))}
-      </div>
-    )}
-
-    {studentId && !feePlanLoading && enrollmentsWithPlan.length > 1 && !enrollmentId && (
+    {studentId && activeEnrollments.length > 1 && (
       <label className="form-label block">
         <span>Hangi kurs?</span>
-        <select value={rawEnrollmentId} onChange={(event) => setRawEnrollmentId(event.target.value)} className="field min-h-11 text-sm">
+        <select value={enrollmentId} onChange={(event) => setRawEnrollmentId(event.target.value)} className="field min-h-11 text-sm">
           <option value="">Kurs seç…</option>
-          {enrollmentsWithPlan.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment, enrollment.id)}</option>)}
+          {activeEnrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment)}</option>)}
         </select>
       </label>
     )}
 
-    {enrollmentId && feePlan && (
+    {enrollmentId && (
       <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-3.5">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="form-label">İlk dönem<input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required aria-invalid={!hasStartPeriod} className="field min-h-10 bg-white text-xs" /></label>
-            <label className="form-label">Kaç aylık ödeme?<input type="number" min={1} max={feePlan.billingType === "Monthly" ? 24 : 1} value={paymentMonths} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} disabled={feePlan.billingType !== "Monthly"} className="field min-h-10 bg-white text-xs disabled:opacity-60" /></label>
-          </div>
-          <div className="mt-3 flex flex-wrap items-end justify-between gap-2">
-            <span><span className="block text-[.62rem] font-semibold text-[var(--muted)]">{!hasStartPeriod ? "İlk dönemi seçin" : paymentMonths === 1 ? formatPeriod(startPeriod) : `${formatPeriod(startPeriod)} – ${formatPeriod(selectedPeriods.at(-1))}`} · {paymentMonths} ay</span><strong className="mt-0.5 block text-lg tabular-nums text-[var(--brand-strong)]">{formatMoney(dueAmount, feePlan.currency)}</strong></span>
-            {paymentMonths > 1 && <span className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1 text-[.62rem] font-bold text-[var(--brand-strong)]">Toplu ödeme · {paymentMonths} ay</span>}
-          </div>
-          {blockedPeriods.length > 0 && <p role="alert" className="mt-3 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs font-semibold text-[var(--warning-strong)]">{blockedPeriods.map(formatPeriod).join(", ")} zaten ödendi veya iptal edildi. İlk dönemi değiştirin.</p>}
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => void collect("Cash")} disabled={!hasStartPeriod || pendingMethod !== null || blockedPeriods.length > 0 || dueAmount <= 0} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--success-strong)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Cash" ? "Kaydediliyor…" : paymentMonths > 1 ? `${paymentMonths} ayı nakit ödendi` : "Elden alındı"}</button>
-            <button type="button" onClick={() => void collect("Transfer")} disabled={!hasStartPeriod || pendingMethod !== null || blockedPeriods.length > 0 || dueAmount <= 0} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Transfer" ? "Kaydediliyor…" : paymentMonths > 1 ? `${paymentMonths} aylık havale geldi` : "Havale geldi"}</button>
-          </div>
-          {error && <p role="alert" className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="form-label">İlk dönem
+            <input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required aria-invalid={!hasStartPeriod} className="field min-h-10 bg-white text-xs" />
+          </label>
+          <label className="form-label">Kaç aylık ödeme?
+            <input type="number" min={1} max={24} value={months} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} className="field min-h-10 bg-white text-xs" />
+          </label>
         </div>
+
+        {previewLoading && !settleRemainingOnly && <div className="skeleton mt-3 h-20 rounded-xl" />}
+
+        {(preview || settleRemainingOnly) && <div className="mt-3 rounded-xl bg-white p-3">
+          <p className="text-[.75rem] font-semibold capitalize text-[var(--muted)]">
+            {!hasStartPeriod
+              ? "İlk dönemi seçin"
+              : months === 1
+                ? formatPeriod(startPeriod)
+                : `${formatPeriod(preview?.monthRows[0]?.period ?? startPeriod)} – ${formatPeriod(preview?.monthRows.at(-1)?.period)}`}
+            {" · "}{months} ay
+          </p>
+
+          {/* İndirim satırları: veliye "neden bu kadar" sorusunun cevabı ekranda duruyor. */}
+          {!settleRemainingOnly && preview && <dl className="mt-2 space-y-1 text-[.75rem]">
+            <div className="flex justify-between gap-2"><dt className="text-[var(--muted)]">Tarife toplamı</dt><dd className="tabular-nums">{formatMoney(preview.baseTotal, preview.currency)}</dd></div>
+            {preview.studentDiscountPercent > 0 && <div className="flex justify-between gap-2"><dt className="text-[var(--muted)]">{preview.studentDiscountReason}</dt><dd className="tabular-nums text-[var(--success-strong)]">−%{preview.studentDiscountPercent}</dd></div>}
+            {preview.prepayPercent > 0 && <div className="flex justify-between gap-2"><dt className="text-[var(--muted)]">Peşin ödeme indirimi</dt><dd className="tabular-nums text-[var(--success-strong)]">−%{preview.prepayPercent}</dd></div>}
+          </dl>}
+
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-2 border-t border-[var(--line)] pt-2">
+            <strong className="text-lg tabular-nums text-[var(--brand-strong)]">{formatMoney(payableTotal, currency)}</strong>
+            {settleRemainingOnly
+              ? <span className="rounded-full bg-[var(--warning-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--warning-strong)]">Kalan bakiye</span>
+              : preview && preview.savingTotal > 0
+                ? <span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--success-strong)]">{formatMoney(preview.savingTotal, preview.currency)} indirim</span>
+                : null}
+          </div>
+        </div>}
+
+        {blockers.length > 0 && <p role="alert" className="mt-3 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs font-semibold text-[var(--warning-strong)]">{blockers.join(" ")} İlk dönemi değiştirin.</p>}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={() => void collect("Cash")} disabled={!hasStartPeriod || busy || blockers.length > 0 || payableTotal <= 0} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--success-strong)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Cash" ? "Kaydediliyor…" : months > 1 ? `${months} ayı nakit ödendi` : "Elden alındı"}</button>
+          <button type="button" onClick={() => void collect("Transfer")} disabled={!hasStartPeriod || busy || blockers.length > 0 || payableTotal <= 0} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Transfer" ? "Kaydediliyor…" : months > 1 ? `${months} aylık havale geldi` : "Havale geldi"}</button>
+        </div>
+        {error && <p role="alert" className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+      </div>
     )}
 
-    {studentId && <button type="button" onClick={() => onOpenFullAccount(studentId)} className="text-[.68rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Farklı dönem eklemek veya ücret planını değiştirmek için tam hesabı aç →</button>}
+    {studentId && <button type="button" onClick={() => onOpenFullAccount(studentId)} className="text-[.75rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Farklı dönem eklemek veya indirimi değiştirmek için tam hesabı aç →</button>}
   </div>;
-}
-
-function MissingFeePlanInline({ enrollmentId, label, priceListItems }: { enrollmentId: string; label: string; priceListItems: { id: string; durationMinutes: number; billingType: string; amount: number; currency: string }[] }) {
-  const createFeePlan = useCreateFeePlan(enrollmentId);
-  const [itemId, setItemId] = useState("");
-  const [dueDay, setDueDay] = useState(5);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await createFeePlan.mutateAsync({ priceListItemId: itemId, dueDay, activeFrom: new Date().toISOString().slice(0, 10) });
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ücret planı oluşturulamadı.");
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-[var(--warning-soft)] bg-[var(--warning-soft)]/40 p-3">
-      <p className="text-xs font-bold">{label}: ücret planı yok</p>
-      <p className="text-meta mt-0.5">Aidat alınabilmesi için önce bir ücret planı gerekiyor.</p>
-      {priceListItems.length === 0
-        ? <p className="text-meta mt-2 font-semibold text-[var(--danger-strong)]">Bu enstrüman için fiyat listesi kalemi yok - önce Fiyat politikası ekranından ekle.</p>
-        : <form onSubmit={handleSubmit} className="mt-2 flex flex-wrap items-end gap-2">
-            <select value={itemId} onChange={(e) => setItemId(e.target.value)} required className="field min-h-10 w-auto text-sm">
-              <option value="">Fiyat kalemi seç</option>
-              {priceListItems.map((item) => <option key={item.id} value={item.id}>{item.durationMinutes} dk · {item.billingType === "Monthly" ? "Aylık" : "Paket"} · {item.amount.toLocaleString("tr-TR")} {item.currency}</option>)}
-            </select>
-            <input type="number" min={1} max={28} value={dueDay} onChange={(e) => setDueDay(Number(e.target.value))} className="field min-h-10 w-20 text-sm" title="Vade günü" />
-            <button type="submit" disabled={createFeePlan.isPending || !itemId} className="btn btn-primary">{createFeePlan.isPending ? "Oluşturuluyor…" : "Ücret planı oluştur"}</button>
-          </form>}
-      {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
-    </div>
-  );
 }
 
 function DueRow({ due }: { due: BillingDue }) {
@@ -578,16 +523,24 @@ function DueRow({ due }: { due: BillingDue }) {
 
   return <article className="px-4 py-3.5">
     <div className="grid items-center gap-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.9fr)_minmax(9rem,.9fr)_minmax(8rem,.8fr)_auto]">
-      <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.66rem] font-bold text-[var(--brand-strong)]">{due.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0"><strong className="block truncate text-sm">{due.studentName}</strong><span className="text-meta mt-0.5 block truncate">{due.instrumentName}</span></span></div>
-      <div className="text-xs"><span className="text-[.62rem] font-bold text-[var(--muted)] md:hidden">Öğretmen · </span>{due.teacherName}</div>
-      <div><strong className="block text-xs tabular-nums">{formatMoney(due.amount, due.currency)}</strong><span className={`mt-0.5 block text-[.62rem] tabular-nums ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, due.currency)} kaldı` : "Tamamı ödendi"}</span></div>
-      <div><span className={`inline-flex rounded-full px-2 py-1 text-[.6rem] font-bold ${STATUS_TONES[due.status]}`}>{lateDays > 0 ? `${lateDays} gün gecikti` : STATUS_LABELS[due.status]}</span></div>
+      <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand-strong)]">{due.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0"><strong className="block truncate text-sm">{due.studentName}</strong><span className="text-meta mt-0.5 block truncate">{due.instrumentName}</span></span></div>
+      <div className="text-xs"><span className="text-[.75rem] font-bold text-[var(--muted)] md:hidden">Öğretmen · </span>{due.teacherName}</div>
+      <div>
+        <strong className="block text-xs tabular-nums">{formatMoney(due.amount, due.currency)}</strong>
+        <span className={`mt-0.5 block text-[.75rem] tabular-nums ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, due.currency)} kaldı` : "Tamamı ödendi"}</span>
+        {/* "Bu 5.700 TL nereden geldi" sorusunun cevabı satırın kendisinde - başka
+            ekrana gitmeye gerek yok (yeni modelde hesap aidat satırına donuyor). */}
+        {due.discountPercent > 0 && <span className="text-meta mt-0.5 block truncate" title={`${formatMoney(due.baseAmount, due.currency)} üzerinden ${due.discountReason ?? ""}`}>
+          <s className="opacity-60">{formatMoney(due.baseAmount, due.currency)}</s> · {due.discountReason ?? `%${due.discountPercent} indirim`}
+        </span>}
+      </div>
+      <div><span className={`inline-flex rounded-full px-2 py-1 text-[.75rem] font-bold ${STATUS_TONES[due.status]}`}>{lateDays > 0 ? `${lateDays} gün gecikti` : STATUS_LABELS[due.status]}</span></div>
       <div className="flex justify-end gap-1.5">
         {canCollect && <button type="button" onClick={() => setShowPayment((visible) => !visible)} className="btn btn-primary">Tahsilat</button>}
         {/* "Hesap" yerine "Geçmiş": ayrı bir üst panel açmak yerine satırın hemen altında
             katlanır (collapse) bir bölüm olarak, yalnızca bu öğrencinin eski dönem
             ödemelerini gösterir - kullanıcı isteği üzerine sadeleştirildi. */}
-        <button type="button" onClick={() => setShowHistory((visible) => !visible)} aria-expanded={showHistory} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-white px-3 text-[.66rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Geçmiş<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showHistory ? "rotate-90" : ""}`} /></button>
+        <button type="button" onClick={() => setShowHistory((visible) => !visible)} aria-expanded={showHistory} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-white px-3 text-[.75rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Geçmiş<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showHistory ? "rotate-90" : ""}`} /></button>
       </div>
     </div>
     {showPayment && <form onSubmit={collect} className="mt-3 grid gap-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"><label className="form-label">Tutar<input type="number" min={0.01} max={remaining} step={0.01} value={amount} onChange={(event) => setAmount(Number(event.target.value))} required className="field min-h-10 bg-white text-xs" /></label><label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-10 bg-white text-xs" /></label><label className="form-label">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label><button type="submit" disabled={recordPayment.isPending} className="btn btn-primary">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>{error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] sm:col-span-4">{error}</p>}</form>}
@@ -626,15 +579,15 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   const activeYearIndex = years.indexOf(activeYear);
   const selectedRows = activePeriod ? rowsByPeriod.get(activePeriod) ?? [] : [];
 
-  const bulkCoverage = useMemo(() => {
+  const prepayCoverage = useMemo(() => {
     const coverage = new Map<string, Set<string>>();
     for (const [period, rows] of rowsByPeriod) {
       for (const { receivable } of rows) {
         for (const payment of receivable.payments) {
-          if (!payment.bulkPaymentId) continue;
-          const periodsForPayment = coverage.get(payment.bulkPaymentId) ?? new Set<string>();
+          if (!payment.prepayPlanId) continue;
+          const periodsForPayment = coverage.get(payment.prepayPlanId) ?? new Set<string>();
           periodsForPayment.add(period);
-          coverage.set(payment.bulkPaymentId, periodsForPayment);
+          coverage.set(payment.prepayPlanId, periodsForPayment);
         }
       }
     }
@@ -675,7 +628,7 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
             const isPartial = totalPaid > 0 && !isPaid;
             const isOverdue = activeReceivables.some(({ receivable }) => receivable.status === "Overdue");
             const hasRecord = rows.length > 0;
-            const bulkMonths = Math.max(0, ...rows.flatMap(({ receivable }) => receivable.payments.map((payment) => payment.bulkPaymentMonths ?? 0)));
+            const prepayMonths = Math.max(0, ...rows.flatMap(({ receivable }) => receivable.payments.map((payment) => payment.prepayPlanMonths ?? 0)));
             const stateLabel = !hasRecord ? "Kayıt yok" : isPaid ? "Ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? "Vadesi geçti" : "Ödenmedi";
             const stateClass = isPaid
               ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]"
@@ -694,14 +647,14 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
               aria-label={`${formatPeriod(period)}: ${stateLabel}`}
               className={`pressable relative min-h-[5.5rem] rounded-xl border p-2 text-left ${stateClass} ${activePeriod === period ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             >
-              <span className="flex items-center justify-between gap-1"><strong className="text-[.68rem]">{monthName}</strong><span className={`grid h-5 w-5 place-items-center rounded-full border ${isPaid ? "border-[var(--success-strong)] bg-[var(--success-strong)] text-white" : "border-current bg-white/60"}`}>{isPaid ? <Icon name="check" className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}</span></span>
-              <span className="mt-2 block text-[.58rem] font-bold">{stateLabel}</span>
-              {hasRecord && <span className="mt-0.5 block truncate text-[.58rem] tabular-nums">{formatMoney(isPaid || isPartial ? totalPaid : totalDue, activeReceivables[0]?.receivable.currency ?? "TRY")}</span>}
-              {bulkMonths > 1 && <span className="mt-1 inline-flex rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.52rem] font-bold text-[var(--brand-strong)]">Toplu · {bulkMonths} ay</span>}
+              <span className="flex items-center justify-between gap-1"><strong className="text-[.75rem]">{monthName}</strong><span className={`grid h-5 w-5 place-items-center rounded-full border ${isPaid ? "border-[var(--success-strong)] bg-[var(--success-strong)] text-white" : "border-current bg-white/60"}`}>{isPaid ? <Icon name="check" className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}</span></span>
+              <span className="mt-2 block text-[.75rem] font-bold">{stateLabel}</span>
+              {hasRecord && <span className="mt-0.5 block truncate text-[.75rem] tabular-nums">{formatMoney(isPaid || isPartial ? totalPaid : totalDue, activeReceivables[0]?.receivable.currency ?? "TRY")}</span>}
+              {prepayMonths > 1 && <span className="mt-1 inline-flex rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--brand-strong)]">Peşin · {prepayMonths} ay</span>}
             </button>;
           })}
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--line)] pt-2 text-[.58rem] font-semibold text-[var(--muted)]">
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--line)] pt-2 text-[.75rem] font-semibold text-[var(--muted)]">
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--success-strong)]" />Ödendi</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--warning-strong)]" />Kısmi</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--danger-strong)]" />Vadesi geçti</span>
@@ -719,17 +672,17 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
             return <article key={receivable.id} className="rounded-xl border border-[var(--line)] p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <span><strong className="block text-xs">{instrumentName}</strong><span className="text-meta mt-0.5 block">Vade {formatDay(receivable.dueDate)}</span></span>
-                <span className="text-right"><strong className="block text-sm tabular-nums">{formatMoney(receivable.amount, receivable.currency)}</strong><span className={`text-[.6rem] font-bold ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, receivable.currency)} kaldı` : "Tamamı ödendi"}</span></span>
+                <span className="text-right"><strong className="block text-sm tabular-nums">{formatMoney(receivable.amount, receivable.currency)}</strong><span className={`text-[.75rem] font-bold ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, receivable.currency)} kaldı` : "Tamamı ödendi"}</span></span>
               </div>
-              {!receivable.payments.length && <p className="mt-3 rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.62rem] font-semibold text-[var(--muted)]">Henüz ödeme alınmadı.</p>}
+              {!receivable.payments.length && <p className="mt-3 rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem] font-semibold text-[var(--muted)]">Henüz ödeme alınmadı.</p>}
               {!!receivable.payments.length && <div className="mt-3 space-y-1.5 border-t border-[var(--line)] pt-2.5">
                 {receivable.payments.map((payment) => {
-                  const coveredPeriods = payment.bulkPaymentId ? bulkCoverage.get(payment.bulkPaymentId) ?? [] : [];
-                  return <div key={payment.id} className="rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.62rem]">
+                  const coveredPeriods = payment.prepayPlanId ? prepayCoverage.get(payment.prepayPlanId) ?? [] : [];
+                  return <div key={payment.id} className="rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem]">
                     <div className="flex flex-wrap items-center justify-between gap-1.5"><span className="font-semibold">{payment.paymentDate} · {paymentMethodLabel(payment.method)}</span><strong className="tabular-nums">{payment.kind === "Correction" && payment.previousAmount != null ? `${payment.previousAmount.toLocaleString("tr-TR")} → ` : ""}{payment.amount.toLocaleString("tr-TR")} {receivable.currency}</strong></div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {payment.kind === "Correction" && <span className="rounded-full bg-[var(--warning-soft)] px-1.5 py-0.5 font-bold text-[var(--warning-strong)]">Düzeltme</span>}
-                      {payment.bulkPaymentId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-strong)]">Toplu ödeme · {payment.bulkPaymentMonths} ay</span>}
+                      {payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}
                       {coveredPeriods.length > 1 && <span className="text-[var(--muted)]">{formatPeriod(coveredPeriods[0])} – {formatPeriod(coveredPeriods.at(-1))}</span>}
                     </div>
                   </div>;
@@ -743,11 +696,15 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   </div>;
 }
 
-// Dönem başında tüm aktif kayıtların aidatını tek seferde açar. İşlemden ÖNCE ne olacağını
-// gösterir (kaç aidat açılacak, hangileri zaten var) ve en önemlisi EKSİKLERİ listeler:
-// ücret planı olmadığı için aidatı açılamayan kayıtlar. Bunlar sessizce atlanırsa ay sonunda
-// "bu öğrencinin aidatı neden yok" sorusu çıkıyordu.
-function BulkReceivableDialog({
+// Ay başının tek düğmesi: seçilen ayın aidatlarını tüm aktif kurs kayıtları için açar.
+// İşlemden ÖNCE ne olacağını gösterir - kaç aidat açılacak, TOPLAM NE KADAR İNDİRİM
+// uygulanacak, hangileri zaten var ve en önemlisi hangileri açılamıyor.
+//
+// Eskiden "eksik" listesi ücret planı olmayan kayıtları gösteriyordu ve bu liste pratikte
+// hep doluydu (her kayıt için ayrı plan açmak gerekiyordu). Artık tek eksik sebebi kalmış
+// olabilir: o ders türü için yürürlükte bir tarifenin olmaması - yani ayda bir değil,
+// sezonda bir karşılaşılacak bir durum.
+function MonthlyDueRunDialog({
   defaultPeriod,
   onClose,
   onGoToStudent,
@@ -757,21 +714,22 @@ function BulkReceivableDialog({
   onGoToStudent: (studentId: string) => void;
 }) {
   const [period, setPeriod] = useState(defaultPeriod);
-  const [result, setResult] = useState<BulkReceivableResult | null>(null);
+  const [result, setResult] = useState<MonthlyDueResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { data: plan, isLoading } = useBulkReceivablePlan(period);
-  const createBulk = useCreateBulkReceivables();
+  const { data: plan, isLoading } = useMonthlyDuePlan(period);
+  const runMonthlyDues = useRunMonthlyDues();
 
   async function run() {
     setError(null);
     try {
-      setResult(await createBulk.mutateAsync(period));
+      setResult(await runMonthlyDues.mutateAsync(period));
     } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Toplu aidat oluşturulamadı.");
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Dönem aidatları oluşturulamadı.");
     }
   }
 
   const missing = result?.missing ?? plan?.missing ?? [];
+  const discounted = plan?.ready.filter((row) => row.discountPercent > 0) ?? [];
 
   return (
     <Modal open title="Dönem aidatlarını oluştur" description="Seçilen ayın borç kayıtlarını tüm aktif kurslar için oluştur. Bu işlem ödeme almaz." onClose={onClose}>
@@ -783,24 +741,48 @@ function BulkReceivableDialog({
         {isLoading && <div className="skeleton h-20 rounded-xl" />}
 
         {!isLoading && plan && !result && (
-          <div className="grid gap-2 sm:grid-cols-3">
-            <SummaryTile label="Açılacak aidat" value={`${plan.ready.length}`} detail={plan.ready.length ? formatMoney(plan.readyTotal, plan.currency) : "—"} tone="brand" />
-            <SummaryTile label="Zaten var" value={`${plan.alreadyExists.length}`} detail="Bu dönemde açılmış" tone="muted" />
-            <SummaryTile label="Eksik" value={`${plan.missing.length}`} detail="Ücret planı bekliyor" tone={plan.missing.length ? "warning" : "muted"} />
-          </div>
+          <>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <SummaryTile label="Açılacak aidat" value={`${plan.ready.length}`} detail={plan.ready.length ? formatMoney(plan.readyTotal, plan.currency) : "—"} tone="brand" />
+              <SummaryTile label="Uygulanan indirim" value={plan.readyDiscountTotal > 0 ? formatMoney(plan.readyDiscountTotal, plan.currency) : "—"} detail={discounted.length ? `${discounted.length} kursta` : "İndirim yok"} tone={plan.readyDiscountTotal > 0 ? "warning" : "muted"} />
+              <SummaryTile label="Zaten var" value={`${plan.alreadyExists.length}`} detail="Bu dönemde açılmış" tone="muted" />
+            </div>
+
+            {plan.ready.length > 0 && <section className="rounded-xl border border-[var(--line)]">
+              <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 px-3 py-2">
+                <p className="text-[.75rem] font-bold text-[var(--muted)]">Açılacak aidatlar</p>
+                <p className="text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">Vade {formatDay(plan.dueDate)}</p>
+              </div>
+              <ul className="max-h-56 divide-y divide-[var(--line)] overflow-y-auto">
+                {plan.ready.map((row) => (
+                  <li key={row.enrollmentId} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                    <span className="min-w-0">
+                      <strong className="block truncate">{row.studentName}</strong>
+                      <span className="text-meta block truncate">{row.instrumentName} · {COURSE_KIND_LABEL[row.courseKind]} · {row.teacherName}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <strong className="block tabular-nums">{formatMoney(row.amount, row.currency)}</strong>
+                      {row.discountPercent > 0 && <span className="text-meta block truncate">{row.discountReason}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>}
+          </>
         )}
 
         {result && (
           <FormMessage tone="success">
             {result.createdCount} aidat oluşturuldu · {formatMoney(result.createdTotal, result.currency)}
+            {result.createdDiscountTotal > 0 && ` · ${formatMoney(result.createdDiscountTotal, result.currency)} indirim uygulandı`}
             {result.alreadyExistsCount > 0 && ` · ${result.alreadyExistsCount} kayıt zaten vardı`}
           </FormMessage>
         )}
 
         {missing.length > 0 && (
           <section className="rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)]/50 p-3">
-            <p className="text-xs font-bold text-[var(--warning-strong)]">Ücret planı olmayan {missing.length} kurs</p>
-            <p className="text-meta mt-0.5">Bunların aidatı açılamaz. Öğrencinin hesabını açıp ücret planını tanımla.</p>
+            <p className="text-xs font-bold text-[var(--warning-strong)]">Aidatı açılamayan {missing.length} kurs</p>
+            <p className="text-meta mt-0.5">Bu ders türü için o dönemde yürürlükte bir tarife yok. Fiyat politikası ekranından tarifeyi tanımla.</p>
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
               {missing.map((row) => (
                 <li key={row.enrollmentId}>
@@ -819,8 +801,8 @@ function BulkReceivableDialog({
         <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
           <button type="button" onClick={onClose} className="btn btn-quiet">{result ? "Kapat" : "Vazgeç"}</button>
           {!result && (
-            <button type="button" onClick={run} disabled={createBulk.isPending || !plan?.ready.length} className="btn btn-primary">
-              {createBulk.isPending ? "Oluşturuluyor…" : plan?.ready.length ? `${plan.ready.length} aidatı oluştur` : "Açılacak aidat yok"}
+            <button type="button" onClick={run} disabled={runMonthlyDues.isPending || !plan?.ready.length} className="btn btn-primary">
+              {runMonthlyDues.isPending ? "Oluşturuluyor…" : plan?.ready.length ? `${plan.ready.length} aidatı oluştur` : "Açılacak aidat yok"}
             </button>
           )}
         </div>

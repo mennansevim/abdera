@@ -78,14 +78,16 @@ public class PeopleDomainTests
     [Fact]
     public void Enrollment_create_throws_when_started_at_is_missing()
     {
-        Assert.Throws<ArgumentException>(() => Enrollment.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), default, Now));
+        Assert.Throws<ArgumentException>(() => Enrollment.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CourseKind.Individual, default, Now));
     }
 
     [Fact]
     public void Enrollment_create_accepts_a_real_started_at_date()
     {
-        var enrollment = Enrollment.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), new DateOnly(2026, 1, 1), Now);
+        var enrollment = Enrollment.Create(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CourseKind.Group, new DateOnly(2026, 1, 1), Now);
 
         Assert.Equal(new DateOnly(2026, 1, 1), enrollment.StartedAt);
+        Assert.Equal(CourseKind.Group, enrollment.CourseKind);
     }
 }

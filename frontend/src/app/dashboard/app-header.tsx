@@ -16,6 +16,7 @@ const CORE_LINKS: NavItem[] = [
   { href: "/dashboard/progress", label: "Gelişim", icon: "activity", section: "Eğitim" },
   { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers", section: "Eğitim" },
   { href: "/dashboard/calendar", label: "Takvim", icon: "calendar", section: "Planlama" },
+  { href: "/dashboard/shows", label: "Yıl Sonu Gösterisi", icon: "music", section: "Planlama" },
 ];
 
 const ADMIN_LINKS: NavItem[] = [
@@ -25,11 +26,11 @@ const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true, section: "Finans" },
   { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", alert: true, section: "İletişim" },
   { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
-  // Sona eklendi: mobilePrimary index referanslarını (ADMIN_LINKS[1]/[4]) kaydırmamak için.
   { href: "/dashboard/benchmark", label: "Performans", icon: "activity", section: "Eğitim" },
 ];
 
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };
+const SECTION_ORDER: NavItem["section"][] = ["Genel", "Eğitim", "Planlama", "Finans", "İletişim", "Sistem"];
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -51,17 +52,18 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
   // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
-  // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor
-  // (index'e dayalı mobilePrimary referanslarını kaydırmamak için).
-  const links = me.role === "Admin"
+  // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor.
+  const links = (me.role === "Admin"
     ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK]
-    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK];
+    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK])
+    .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
+  const navItem = (href: string) => links.find((link) => link.href === href)!;
   const mobilePrimary: NavItem[] = me.role === "Admin"
-    ? [CORE_LINKS[0]!, CORE_LINKS[4]!, ADMIN_LINKS[1]!, ADMIN_LINKS[4]!]
+    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), navItem("/dashboard/notifications")]
     : [
-        { ...CORE_LINKS[0], label: "Bugün" },
-        { ...CORE_LINKS[4], label: "Takvimim" },
-        { ...CORE_LINKS[2], label: "Gelişim" },
+        { ...navItem("/dashboard"), label: "Bugün" },
+        { ...navItem("/dashboard/calendar"), label: "Takvimim" },
+        { ...navItem("/dashboard/progress"), label: "Gelişim" },
       ];
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         <nav className="min-h-0 flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,.35)_transparent] [scrollbar-width:thin]" aria-label="Ana menü">
           {links.map((link, index) => (
             <Fragment key={link.href}>
-            {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-0.5 mt-2 px-3 text-[.55rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>}
+            {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-0.5 mt-2 px-3 text-[.75rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>}
             <Link
               href={link.href}
               aria-current={isActive(pathname, link.href) ? "page" : undefined}
@@ -108,7 +110,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-bold">{displayName(me.email) || me.email}</span>
-              <span className="block text-[.65rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
+              <span className="block text-[.75rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
             </span>
             {me.role === "Teacher" && <NotificationBell />}
             <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap">
@@ -135,7 +137,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden" aria-label="Mobil ana menü">
           {mobilePrimary.map((link) => <MobileNavLink key={link.href} link={link} active={isActive(pathname, link.href)} />)}
           {me.role === "Teacher" && <NotificationBell variant="mobile" />}
-          <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.61rem] font-medium text-[var(--muted)]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
+          <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
             <Icon name={me.role === "Admin" ? "more" : "teachers"} className="h-[1.05rem] w-[1.05rem]" /><span>{me.role === "Admin" ? "Daha Fazla" : "Profil"}</span>
           </button>
         </nav>
@@ -152,7 +154,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             <nav className="flex-1 space-y-1 overflow-y-auto p-3">
               {links.map((link, index) => (
                 <Fragment key={link.href}>
-                {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-1 mt-3 block px-3 text-[.58rem] font-bold uppercase tracking-[.1em] text-[var(--muted)] first:mt-1">{link.section}</span>}
+                {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-1 mt-3 block px-3 text-[.75rem] font-bold uppercase tracking-[.1em] text-[var(--muted)] first:mt-1">{link.section}</span>}
                 <Link href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[#5c4d3f] hover:bg-black/[.035]"}`}>
                   <Icon name={link.icon} className="h-5 w-5" /><span>{link.label}</span>{link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />}
                 </Link>
@@ -175,7 +177,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
 
 function MobileNavLink({ link, active }: { link: NavItem; active: boolean }) {
   return (
-    <Link href={link.href} aria-current={active ? "page" : undefined} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.61rem] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
+    <Link href={link.href} aria-current={active ? "page" : undefined} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
       <Icon name={link.icon} className="h-[1.05rem] w-[1.05rem]" /><span className="max-w-full truncate">{link.label}</span>
     </Link>
   );

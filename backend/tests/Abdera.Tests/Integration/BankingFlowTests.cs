@@ -5,9 +5,8 @@ using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Banking.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
-using Abdera.Api.Modules.Pricing.Domain;
-using Abdera.Api.Modules.Pricing.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,18 +34,17 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
     private record SeededReceivable(Guid GuardianId, Guid ReceivableId, decimal Amount, string Period);
 
-    private static int _nextDurationMinutes = 30;
 
-    // Enstrüman -> öğretmen -> öğrenci -> veli -> kayıt -> fiyat listesi -> fee plan ->
-    // Receivable zincirini kurar; diğer entegrasyon test dosyalarındaki SeedLessonAsync
-    // ile aynı desende ama Billing tarafına odaklı. Her çağrı kendine özgü bir
-    // durationMinutes kullanır ki price_list_items'ın enstrüman+süre+tip çakışma kontrolü
-    // (docs/10-decisions.md, price_list_items çakışma kısıtı) aynı test sınıfındaki
-    // birden fazla SeedReceivableAsync çağrısını birbirine çarptırmasın.
-    private static async Task<SeededReceivable> SeedReceivableAsync(HttpClient admin, string suffix, decimal amount = 1000m, string period = "2026-09")
+    // Enstrüman -> öğretmen -> öğrenci -> veli -> kurs kaydı -> Receivable zincirini kurar.
+    //
+    // Aidat satırı bilerek DOĞRUDAN DbContext ile yazılıyor, API üzerinden değil: banka
+    // eşleştirme algoritması (docs/12-bank-integration.md) tutar üzerinden çalıştığı için
+    // testin birbirine yakın ama farklı tutarlar üretebilmesi gerekiyor. Okulun gerçek
+    // tarifesi tek bir tutar verir (Birebir 6.000) ve bu testin doğruladığı şey aidatın
+    // nasıl fiyatlandığı değil, gelen havalenin hangi aidata sayıldığı.
+    private async Task<SeededReceivable> SeedReceivableAsync(
+        HttpClient admin, string suffix, decimal amount = 1000m, string period = "2026-09")
     {
-        var durationMinutes = Interlocked.Increment(ref _nextDurationMinutes);
-
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
         var piano = instruments!.Single(i => i.Code == "PIANO");
@@ -66,24 +64,18 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             new LinkGuardianToStudent.Request(guardian.Id, "anne", true));
 
         var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
-                new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 8, 1))))
+                new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 9, 1), CourseKind.Individual)))
             .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
 
-        var priceListHttpResponse = await admin.PostAsJsonAsync("/api/price-lists", new PriceLists.CreateRequest(
-            $"Banking Test {suffix}", new DateOnly(2026, 1, 1), null,
-            [new PriceLists.CreateItemRequest(piano.Id, durationMinutes, BillingType.Monthly, amount, "TRY", null)]));
-        var priceListRawBody = await priceListHttpResponse.Content.ReadAsStringAsync();
-        if (!priceListHttpResponse.IsSuccessStatusCode)
-            throw new Exception($"price-list create failed: {priceListHttpResponse.StatusCode} - {priceListRawBody}");
-        var priceList = System.Text.Json.JsonSerializer.Deserialize<PriceLists.PriceListResponse>(priceListRawBody, TestJson.Options)!;
-        var priceListItem = priceList.Items.Single();
-
-        await admin.PostAsJsonAsync($"/api/enrollments/{enrollment.Id}/fee-plan",
-            new FeePlans.CreateRequest(priceListItem.Id, DueDay: 5, new DateOnly(2026, 8, 1)));
-
-        var receivableResponse = await admin.PostAsJsonAsync("/api/receivables",
-            new Receivables.CreateRequest(enrollment.Id, period));
-        var receivable = (await receivableResponse.Content.ReadFromJsonAsync<Receivables.ReceivableResponse>(TestJson.Options))!;
+        await using var db = await _factory.CreateDbContextAsync();
+        var rate = await db.TuitionRates.AsNoTracking()
+            .FirstAsync(item => item.CourseKind == CourseKind.Individual);
+        var receivable = Receivable.Create(
+            enrollment.Id, rate.Id, period,
+            new TuitionCalculator.Breakdown(amount, 0m, null, amount),
+            "TRY", new DateOnly(int.Parse(period[..4]), int.Parse(period[5..]), 5), DateTimeOffset.UtcNow);
+        db.Receivables.Add(receivable);
+        await db.SaveChangesAsync();
 
         return new SeededReceivable(guardian.Id, receivable.Id, amount, period);
     }
@@ -160,18 +152,21 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
                 new Teachers.CreateRequest("AmbigTeacher", "Soyad", [guitar.Id], null)))
             .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
         var enrollment2 = (await (await admin.PostAsJsonAsync($"/api/students/{secondStudent.Id}/enrollments",
-                new Enrollments.CreateRequest(teacher2.Id, guitar.Id, new DateOnly(2026, 8, 1))))
+                new Enrollments.CreateRequest(teacher2.Id, guitar.Id, new DateOnly(2026, 9, 1), CourseKind.Individual)))
             .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
 
-        var priceList = (await (await admin.PostAsJsonAsync("/api/price-lists", new PriceLists.CreateRequest(
-                "Ambig Second List", new DateOnly(2026, 1, 1), null,
-                [new PriceLists.CreateItemRequest(guitar.Id, 45, BillingType.Monthly, 1200m, "TRY", null)])))
-            .Content.ReadFromJsonAsync<PriceLists.PriceListResponse>(TestJson.Options))!;
-        await admin.PostAsJsonAsync($"/api/enrollments/{enrollment2.Id}/fee-plan",
-            new FeePlans.CreateRequest(priceList.Items.Single().Id, DueDay: 5, new DateOnly(2026, 8, 1)));
-        var secondReceivableResponse = await admin.PostAsJsonAsync("/api/receivables",
-            new Receivables.CreateRequest(enrollment2.Id, "2026-09"));
-        var secondReceivable = (await secondReceivableResponse.Content.ReadFromJsonAsync<Receivables.ReceivableResponse>(TestJson.Options))!;
+        Receivable secondReceivable;
+        await using (var seedDb = await _factory.CreateDbContextAsync())
+        {
+            var rate = await seedDb.TuitionRates.AsNoTracking()
+                .FirstAsync(item => item.CourseKind == CourseKind.Individual);
+            secondReceivable = Receivable.Create(
+                enrollment2.Id, rate.Id, "2026-09",
+                new TuitionCalculator.Breakdown(1200m, 0m, null, 1200m),
+                "TRY", new DateOnly(2026, 9, 5), DateTimeOffset.UtcNow);
+            seedDb.Receivables.Add(secondReceivable);
+            await seedDb.SaveChangesAsync();
+        }
 
         var iban = await AssignVirtualIbanAsync(admin, first.GuardianId);
 

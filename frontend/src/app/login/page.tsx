@@ -16,6 +16,7 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
 ];
 
 const DEMO_PASSWORD = "AbderaDemo2026!";
+const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 const DEMO_EMAILS: Record<Exclude<LoginRole, "Guardian">, string> = {
   Admin: "demo.yonetici@abdera.com",
   Teacher: "demo.ogretmen@abdera.com",
@@ -37,8 +38,8 @@ function LoginPageContent() {
   const shouldChooseRole = searchParams.get("chooseRole") === "1";
   const emailRef = useRef<HTMLInputElement>(null);
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
-  const [email, setEmail] = useState(DEMO_EMAILS.Admin);
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [email, setEmail] = useState(DEMO_ENABLED ? DEMO_EMAILS.Admin : "");
+  const [password, setPassword] = useState(DEMO_ENABLED ? DEMO_PASSWORD : "");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,8 +72,8 @@ function LoginPageContent() {
       router.push("/parent");
       return;
     }
-    setEmail(DEMO_EMAILS[role]);
-    setPassword(DEMO_PASSWORD);
+    setEmail(DEMO_ENABLED ? DEMO_EMAILS[role] : "");
+    setPassword(DEMO_ENABLED ? DEMO_PASSWORD : "");
     requestAnimationFrame(() => emailRef.current?.focus());
   }
 
@@ -125,14 +126,16 @@ function LoginPageContent() {
 
           {selectedRole !== "Guardian" && (
             <form onSubmit={handleSubmit} className="mt-7">
-              <div className="mb-5 flex items-center gap-3 text-[.65rem] text-[var(--muted)] before:h-px before:flex-1 before:bg-[var(--line)] after:h-px after:flex-1 after:bg-[var(--line)]">
-                demo bilgileri hazır
-              </div>
+              {DEMO_ENABLED && (
+                <div className="mb-5 flex items-center gap-3 text-[.75rem] text-[var(--muted)] before:h-px before:flex-1 before:bg-[var(--line)] after:h-px after:flex-1 after:bg-[var(--line)]">
+                  demo bilgileri hazır
+                </div>
+              )}
 
-              <label htmlFor="email" className="mb-1.5 block text-[.7rem] font-semibold text-[var(--muted)]">E-posta</label>
-              <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="demo.yonetici@abdera.com" className="field text-sm" />
+              <label htmlFor="email" className={`${DEMO_ENABLED ? "" : "mt-5"} mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]`}>E-posta</label>
+              <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
 
-              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.7rem] font-semibold text-[var(--muted)]">Şifre</label>
+              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>
               <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="field text-sm tracking-[.18em]" />
 
               {error && <p role="alert" className="mt-3 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}

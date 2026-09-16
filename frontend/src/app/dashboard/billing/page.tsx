@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { AdminGate, PageHeader } from "@/components/ui";
 import { useReceivables } from "@/lib/billing";
-import { PriceListsSection } from "./price-lists-section";
+import { TuitionPolicySection } from "./tuition-policy-section";
 import { DuesListSection, type BillingFilterSummary } from "./dues-list-section";
 
 type BillingView = "collections" | "pricing";
@@ -56,7 +56,7 @@ function BillingPageContent() {
           </section>
           <DuesListSection onSummaryChange={setFilteredSummary} />
         </>
-      ) : <PriceListsSection />}
+      ) : <TuitionPolicySection />}
     </div>
   );
 }
@@ -67,5 +67,5 @@ function ViewButton({ active, onClick, icon, children }: { active: boolean; onCl
 
 function SummaryCard({ icon, label, value, detail, loading, tone = "brand" }: { icon: IconName; label: string; value: string; detail: string; loading: boolean; tone?: "brand" | "success" | "danger" | "warning" }) {
   const colors = { brand: "bg-[var(--brand-soft)] text-[var(--brand-strong)]", success: "bg-[var(--success-soft)] text-[var(--success-strong)]", danger: "bg-[var(--danger-soft)] text-[var(--danger-strong)]", warning: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" }[tone];
-  return <article className="app-card min-w-0 p-3.5 sm:p-4"><div className="flex items-start gap-3"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${colors}`}><Icon name={icon} className="h-4 w-4" /></span><div className="min-w-0"><p className="text-[.68rem] font-bold text-[var(--muted)]">{label}</p>{loading ? <span className="skeleton mt-2 block h-6 w-24 rounded-md" /> : <p className="mt-1 truncate text-lg font-bold tabular-nums tracking-[-.02em]">{value}</p>}<p className="mt-1 truncate text-[.62rem] text-[var(--muted)]">{detail}</p></div></div></article>;
+  return <article className="app-card min-w-0 p-3.5 sm:p-4"><div className="flex items-start gap-3"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${colors}`}><Icon name={icon} className="h-4 w-4" /></span><div className="min-w-0"><p className="text-[.75rem] font-bold text-[var(--muted)]">{label}</p>{loading ? <span className="skeleton mt-2 block h-6 w-24 rounded-md" /> : <p className="mt-1 truncate text-lg font-bold tabular-nums tracking-[-.02em]">{value}</p>}<p className="mt-1 truncate text-[.75rem] text-[var(--muted)]">{detail}</p></div></div></article>;
 }
