@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Icon } from "@/components/icons";
+import { BrandMark, Icon, instrumentBadgeStyle } from "@/components/icons";
 import { useMe } from "@/lib/use-auth";
 import {
   SHOW_ITEM_KIND_LABEL,
@@ -190,33 +190,66 @@ export default function StagePage() {
           )}
 
           {isLive && current && current.kind === "Performance" && (
-            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-8">
-              <span className="grid h-32 w-32 shrink-0 place-items-center overflow-hidden rounded-3xl bg-white/10 text-3xl font-bold text-white/60 sm:h-44 sm:w-44">
-                {current.hasPhoto && current.studentId
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  ? <img src={studentPhotoUrl(current.studentId, current.photoVersion)} alt={current.studentName ?? ""} className="h-full w-full object-cover" />
-                  : (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("")}
-              </span>
+            <div className="relative overflow-hidden rounded-[2rem] bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] p-5 sm:p-8">
+              {/* Dekoratif blob'lar - şablonun renkli/organik zemin hissi. Veriye bağlı
+                  değil, salt görsel doku; yüzde/blur tabanlı olduğu için ekran boyutundan
+                  bağımsız çalışır (indirilmiş bir görsel yerine gerçek CSS - bkz. sohbet). */}
+              <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+              <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
+              <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
+              <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden h-9 w-9 -rotate-12 text-white/20 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
+              <Icon name="sparkles" className="pointer-events-none absolute bottom-8 left-10 hidden h-7 w-7 rotate-12 text-white/20 sm:block" />
 
-              <div className="min-w-0 flex-1 text-center sm:text-left">
-                <p className="text-[.7rem] font-bold uppercase tracking-[.2em] text-white/40">
+              <div className="relative flex flex-wrap items-center justify-between gap-3">
+                <BrandMark compact />
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[.7rem] font-bold uppercase tracking-[.14em] text-white backdrop-blur-sm">
                   {current.groupName ? `${current.groupName} · ` : ""}{current.position + 1}. sıra
-                </p>
-                <p className="mt-1 truncate font-serif text-2xl font-bold text-white/80 sm:text-3xl">{current.studentName}</p>
+                </span>
+              </div>
 
-                {/* "Büyük punto" tam olarak burası: salondan da okunabilecek eser adı. */}
-                <p className="mt-3 font-serif text-4xl font-bold leading-[1.1] sm:text-6xl lg:text-7xl">{current.pieceTitle}</p>
-                {current.composer && <p className="mt-2 text-xl text-white/55 sm:text-2xl">{current.composer}</p>}
+              <div className="relative mt-6 flex flex-col items-center gap-6 text-white sm:flex-row sm:gap-10">
+                <div className="relative shrink-0">
+                  <div
+                    aria-hidden
+                    className="absolute -inset-3 -rotate-6 bg-white/15"
+                    style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }}
+                  />
+                  <span
+                    className="relative grid h-32 w-32 place-items-center overflow-hidden bg-white/20 text-3xl font-bold shadow-[0_16px_40px_rgba(0,0,0,.25)] sm:h-44 sm:w-44"
+                    style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }}
+                  >
+                    {current.hasPhoto && current.studentId
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      ? <img src={studentPhotoUrl(current.studentId, current.photoVersion)} alt={current.studentName ?? ""} className="h-full w-full object-cover" />
+                      : (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("")}
+                  </span>
+                </div>
 
-                <p className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-white/45 sm:justify-start">
-                  {current.instrumentName && <span>{current.instrumentName}</span>}
-                  {current.teacherName && <span>· {current.teacherName}</span>}
-                  {current.studentPieces.length > 1 && (
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 font-bold text-white/70">
-                      {current.studentPieces.length} eserden {current.studentPieceIndex + 1}.si
-                    </span>
-                  )}
-                </p>
+                <div className="min-w-0 flex-1 text-center sm:text-left">
+                  {current.instrumentName && (() => {
+                    const badge = instrumentBadgeStyle(current.instrumentName);
+                    return (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-sm font-bold backdrop-blur-sm">
+                        <Icon name={badge.icon} className="h-4 w-4" />{current.instrumentName}
+                      </span>
+                    );
+                  })()}
+
+                  <p className="mt-3 truncate font-serif text-2xl font-bold italic text-white/90 sm:text-3xl">{current.studentName}</p>
+
+                  {/* "Büyük punto" tam olarak burası: salondan da okunabilecek eser adı. */}
+                  <p className="mt-2 font-serif text-4xl font-bold leading-[1.1] sm:text-6xl lg:text-7xl">{current.pieceTitle}</p>
+                  {current.composer && <p className="mt-2 text-xl text-white/70 sm:text-2xl">{current.composer}</p>}
+
+                  <p className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-white/60 sm:justify-start">
+                    {current.teacherName && <span>{current.teacherName}</span>}
+                    {current.studentPieces.length > 1 && (
+                      <span className="rounded-full bg-white/15 px-2 py-0.5 font-bold text-white/85">
+                        {current.studentPieces.length} eserden {current.studentPieceIndex + 1}.si
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
             </div>
           )}
