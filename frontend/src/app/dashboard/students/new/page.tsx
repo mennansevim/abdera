@@ -5,7 +5,7 @@
 // veliye üretilen şifre gösterilir (WhatsApp'tan da gönderilir).
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { AdminGate, FormMessage, PageHeader } from "@/components/ui";
+import { AdminGate, FormMessage, onInvalidTurkish, PageHeader, resetValidity } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useInstruments, useRegisterStudent, useTeachers, type RegisterStudentResult } from "@/lib/people";
@@ -137,9 +137,9 @@ function NewStudentForm() {
         <fieldset className="app-card p-5">
           <legend className="text-meta mb-3 font-bold uppercase tracking-wide text-[var(--muted)]">1 · Öğrenci</legend>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="form-label">Ad<input className="field" required value={firstName} onChange={(e) => setFirstName(e.target.value)} /></label>
-            <label className="form-label">Soyad<input className="field" required value={lastName} onChange={(e) => setLastName(e.target.value)} /></label>
-            <label className="form-label">Doğum tarihi<input type="date" className="field" required max={TODAY} value={birthDate} onChange={(e) => setBirthDate(e.target.value)} /></label>
+            <label className="form-label">Ad<input className="field" required value={firstName} onChange={resetValidity((e) => setFirstName(e.target.value))} onInvalid={onInvalidTurkish} /></label>
+            <label className="form-label">Soyad<input className="field" required value={lastName} onChange={resetValidity((e) => setLastName(e.target.value))} onInvalid={onInvalidTurkish} /></label>
+            <label className="form-label">Doğum tarihi<input type="date" className="field" required max={TODAY} value={birthDate} onChange={resetValidity((e) => setBirthDate(e.target.value))} onInvalid={onInvalidTurkish} /></label>
           </div>
         </fieldset>
 
@@ -148,18 +148,18 @@ function NewStudentForm() {
           <legend className="text-meta mb-3 font-bold uppercase tracking-wide text-[var(--muted)]">2 · Eğitim</legend>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="form-label">Öğretmen
-              <select className="field" required value={teacherId} onChange={(e) => onTeacherChange(e.target.value)}>
+              <select className="field" required value={teacherId} onChange={resetValidity((e) => onTeacherChange(e.target.value))} onInvalid={onInvalidTurkish}>
                 <option value="" disabled>Öğretmen seç…</option>
                 {activeTeachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
               </select>
             </label>
             <label className="form-label">Enstrüman
-              <select className="field" required value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} disabled={!teacherId}>
+              <select className="field" required value={instrumentId} onChange={resetValidity((e) => setInstrumentId(e.target.value))} onInvalid={onInvalidTurkish} disabled={!teacherId}>
                 <option value="" disabled>{teacherId ? "Enstrüman seç…" : "Önce öğretmen seç"}</option>
                 {teacherInstruments.map((id) => <option key={id} value={id}>{instrumentName.get(id) ?? id}</option>)}
               </select>
             </label>
-            <label className="form-label">Başlangıç tarihi<input type="date" className="field" required value={startedAt} onChange={(e) => setStartedAt(e.target.value)} /></label>
+            <label className="form-label">Başlangıç tarihi<input type="date" className="field" required value={startedAt} onChange={resetValidity((e) => setStartedAt(e.target.value))} onInvalid={onInvalidTurkish} /></label>
           </div>
         </fieldset>
 
@@ -187,9 +187,9 @@ function NewStudentForm() {
         <fieldset className="app-card p-5">
           <legend className="text-meta mb-3 font-bold uppercase tracking-wide text-[var(--muted)]">4 · Veli</legend>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="form-label">Ad<input className="field" required value={gFirstName} onChange={(e) => setGFirstName(e.target.value)} /></label>
+            <label className="form-label">Ad<input className="field" required value={gFirstName} onChange={resetValidity((e) => setGFirstName(e.target.value))} onInvalid={onInvalidTurkish} /></label>
             <label className="form-label">Soyad<input className="field" placeholder={lastName || "Öğrenciyle aynı"} value={gLastName} onChange={(e) => setGLastName(e.target.value)} /></label>
-            <label className="form-label">Telefon<input type="tel" className="field" required placeholder="0555 123 45 67" value={gPhone} onChange={(e) => setGPhone(e.target.value)} /></label>
+            <label className="form-label">Telefon<input type="tel" className="field" required placeholder="0555 123 45 67" value={gPhone} onChange={resetValidity((e) => setGPhone(e.target.value))} onInvalid={onInvalidTurkish} /></label>
             <label className="form-label">Yakınlık<input className="field" value={relationship} onChange={(e) => setRelationship(e.target.value)} /></label>
           </div>
           <p className="text-meta mt-2 text-[var(--muted)]">{"Veliye giriş şifresi otomatik üretilip WhatsApp'tan gönderilir; kayıttan sonra ekranda da gösterilir."}</p>

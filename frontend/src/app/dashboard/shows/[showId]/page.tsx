@@ -198,6 +198,7 @@ function ProgramRow({
 }) {
   const deleteItem = useDeleteShowItem(showId);
   const [dragOver, setDragOver] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isPerformance = item.kind === "Performance";
 
@@ -260,13 +261,28 @@ function ProgramRow({
           <button type="button" onClick={onEdit} aria-label="Düzenle" className="icon-btn icon-btn-quiet h-9 w-9"><Icon name="pencil" className="h-3.5 w-3.5" /></button>
           <button
             type="button"
-            onClick={() => { if (window.confirm(`${index + 1}. sıra programdan çıkarılsın mı?`)) void deleteItem.mutateAsync(item.id); }}
+            onClick={() => setConfirmingDelete(true)}
             aria-label="Programdan çıkar"
             className="icon-btn icon-btn-quiet h-9 w-9 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]"
           >
             <Icon name="x" className="h-3.5 w-3.5" />
           </button>
         </div>
+      )}
+
+      {confirmingDelete && (
+        <Modal open title="Sıra programdan çıkarılsın mı?" onClose={() => setConfirmingDelete(false)} size="sm">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void deleteItem.mutateAsync(item.id).then(() => setConfirmingDelete(false));
+            }}
+            className="space-y-3.5"
+          >
+            <p className="text-sm text-[var(--muted)]">{index + 1}. sıra programdan çıkarılacak.</p>
+            <FormActions onCancel={() => setConfirmingDelete(false)} submitLabel="Çıkar" pending={deleteItem.isPending} pendingLabel="Çıkarılıyor…" />
+          </form>
+        </Modal>
       )}
     </li>
   );

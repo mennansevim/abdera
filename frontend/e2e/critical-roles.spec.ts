@@ -296,6 +296,9 @@ test.describe.serial("Abdera critical role flows", () => {
 
   test("parent sees own calendar, payment view, approved comment and records practice", async ({ page }) => {
     await page.goto("/parent/login");
+    // Varsayılan giriş modu telefon+kalıcı şifre (docs/10-decisions.md Karar F reversal) - OTP
+    // ikincil bir seçenek, önce oraya geçmek gerekiyor.
+    await page.getByRole("button", { name: "Şifreni bilmiyor musun? WhatsApp ile kod al" }).click();
     await page.getByLabel("Telefon numarası").fill("+905550000001");
     await page.getByRole("button", { name: "Kod gönder" }).click();
     const debugText = await page.getByText(/Geliştirme kodu:/).innerText();

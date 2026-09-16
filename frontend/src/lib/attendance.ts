@@ -56,10 +56,11 @@ export function useCreateChangeRequest(lessonId: string) {
   });
 }
 
-export function usePendingChangeRequests() {
+export function usePendingChangeRequests(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["change-requests", "Pending"],
     queryFn: () => api.get<ChangeRequest[]>("/api/change-requests?status=Pending"),
+    enabled: options?.enabled ?? true,
   });
 }
 

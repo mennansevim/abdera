@@ -90,6 +90,10 @@ test("veli yalnızca kendi çocuğunun verisini görebilir ve ham öğretmen not
 
 async function loginAsGuardian(page: Page) {
   await page.goto("/parent/login");
+  // Varsayılan giriş modu telefon+kalıcı şifre (docs/10-decisions.md Karar F reversal) - OTP
+  // ikincil bir seçenek, önce oraya geçmek gerekiyor. Bu geçiş eklenmeden "Kod gönder" hiç
+  // görünmüyor ve test anlamsız bir zaman aşımıyla düşüyordu.
+  await page.getByRole("button", { name: "Şifreni bilmiyor musun? WhatsApp ile kod al" }).click();
   await page.getByLabel("Telefon numarası").fill(demoGuardianPhone);
 
   // OTP isteğinin gerçekten başarılı olduğunu doğrula. Aksi halde (örn. hız sınırına

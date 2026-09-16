@@ -59,12 +59,13 @@ export interface PagedResponse<T> {
   pageSize: number;
 }
 
-export function useBankTransactions(status?: BankTransactionStatus, page: number = 1, pageSize: number = 50) {
+export function useBankTransactions(status?: BankTransactionStatus, page: number = 1, pageSize: number = 50, options?: { enabled?: boolean }) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (status) params.set("status", status);
   return useQuery({
     queryKey: ["bank-transactions", status ?? "all", page, pageSize],
     queryFn: () => api.get<PagedResponse<BankTransaction>>(`/api/bank-transactions?${params.toString()}`),
+    enabled: options?.enabled ?? true,
   });
 }
 

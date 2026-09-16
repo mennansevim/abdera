@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import { BrandMark, Icon } from "@/components/icons";
+import { AdminGate } from "@/components/ui";
 import styles from "./tasarimlar.module.css";
 
 type DesignId = "sahne" | "atolye" | "ritim";
@@ -20,7 +21,13 @@ const PROGRAMS = [
   { name: "Bateri", age: "8 yaş ve üzeri", icon: "drums" as const },
 ];
 
+// İç tasarım denemesi - herkese açık bir rotada dummy içerik, nav'dan hiç bağlanmıyor.
+// Yalnızca Admin görsün diye kapatıldı (bkz. AdminGate).
 export default function DesignLabPage() {
+  return <AdminGate><DesignLabPageContent /></AdminGate>;
+}
+
+function DesignLabPageContent() {
   const [active, setActive] = useState<DesignId>("sahne");
 
   return (

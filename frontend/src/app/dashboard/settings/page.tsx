@@ -86,10 +86,17 @@ function MaintenanceSettingsPanel() {
   const runDue = useRunDueMaintenanceReminders();
   const [showForm, setShowForm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function runReminders() {
-    const result = await runDue.mutateAsync();
-    setMessage(`${result.dueSettingCount} zamanı gelen ayar işlendi; rızası açık veliler için ${result.scheduledCount} bildirim sıraya alındı.`);
+    setError(null);
+    try {
+      const result = await runDue.mutateAsync();
+      setMessage(`${result.dueSettingCount} zamanı gelen ayar işlendi; rızası açık veliler için ${result.scheduledCount} bildirim sıraya alındı.`);
+    } catch (err) {
+      setMessage(null);
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Zamanı gelenler sıraya alınamadı.");
+    }
   }
 
   return (
@@ -106,6 +113,7 @@ function MaintenanceSettingsPanel() {
           }
         />
         {message && <p role="status" className="text-meta mt-3">{message}</p>}
+        {error && <div className="mt-3"><FormMessage tone="error">{error}</FormMessage></div>}
       </div>
 
       <div className="divide-y divide-[var(--line)]">

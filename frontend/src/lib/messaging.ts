@@ -94,12 +94,13 @@ export function useMarkAllStaffNotificationsRead() {
   });
 }
 
-export function useNotifications(status?: NotificationJobStatus, page: number = 1, pageSize: number = 50) {
+export function useNotifications(status?: NotificationJobStatus, page: number = 1, pageSize: number = 50, options?: { enabled?: boolean }) {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (status) params.set("status", status);
   return useQuery({
     queryKey: ["notifications", status ?? "all", page, pageSize],
     queryFn: () => api.get<PagedResponse<NotificationJob>>(`/api/notifications?${params.toString()}`),
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -48,6 +48,9 @@ export function useBackupRuns(page: number = 1, pageSize: number = 20) {
   return useQuery({
     queryKey: ["backup-runs", page, pageSize],
     queryFn: () => api.get<PagedResponse<BackupRun>>(`/api/backup-runs?page=${page}&pageSize=${pageSize}`),
+    // Tetiklenen bir yedekleme "Running"de kalırken kısa aralıkla otomatik yenile - aksi halde
+    // admin bitip bitmediğini görmek için sayfayı elle yenilemek zorunda kalıyordu.
+    refetchInterval: (query) => query.state.data?.items.some((item) => item.status === "Running") ? 3000 : false,
   });
 }
 

@@ -135,14 +135,22 @@ function StudentDeletionRequestsSection() {
   }
 
   if (isLoading) return <div className="skeleton h-24 rounded-2xl" />;
-  if (!requests?.length) return null;
 
   return (
     <section className="space-y-2">
       <h2 className="text-title">Öğrenci silme talepleri</h2>
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 
-      {requests.map((request) => {
+      {!requests?.length && (
+        <div className="app-card grid min-h-40 place-items-center border-dashed p-8 text-center">
+          <div>
+            <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="students" className="h-6 w-6" /></span>
+            <p className="mt-4 text-sm font-bold">Bekleyen silme talebi yok</p>
+          </div>
+        </div>
+      )}
+
+      {requests?.map((request) => {
         const stats = request.impact
           ? [
               { label: "Kurs", value: request.impact.enrollments },

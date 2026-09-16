@@ -212,6 +212,13 @@ public class ShowFlowTests : IClassFixture<AbderaWebApplicationFactory>
             await admin.PostAsync($"/api/shows/{fixture.ShowId}/finish", null));
         Assert.Equal(ShowEventStatus.Completed, finished.Status);
         Assert.Null(finished.Current);
+
+        // Regresyon: Finish() işaretçiyi (CurrentItemId) null'a çekince index=-1 oluyor;
+        // özel durum yoksa CompletedItems 0'a düşüyor ve Next/OnDeck programın ilk sıralarını
+        // "sıradaki" diye geri döndürüyordu (ShowStage.BuildAsync).
+        Assert.Equal(3, finished.CompletedItems);
+        Assert.Null(finished.Next);
+        Assert.Null(finished.OnDeck);
     }
 
     [Fact]

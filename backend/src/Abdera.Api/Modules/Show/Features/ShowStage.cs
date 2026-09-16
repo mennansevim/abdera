@@ -148,12 +148,20 @@ public static class ShowStage
             ? (int)Math.Max(0, (clock.UtcNow - startedAt).TotalMinutes)
             : 0;
 
+        // Finish() işaretçiyi (CurrentItemId) null'a çeker, bu da index'i -1'e düşürür. Completed
+        // için özel durum yoksa At(index+1)/At(index+2) programın 1. ve 2. sırasını "sıradaki"
+        // diye döndürür ve CompletedItems 0'a düşer - gösteri bitmişken sanki yeniden
+        // başlayacakmış gibi görünürdü.
+        var isCompleted = show.Status == ShowEventStatus.Completed;
+        var next = isCompleted ? null : At(index + 1);
+        var onDeck = isCompleted ? null : At(index + 2);
+        var completedItems = isCompleted ? items.Count : Math.Max(0, index);
+
         return new StageResponse(
             show.Id, show.Title, show.VenueName, show.Status, show.StartedAt, show.StartsAt,
-            At(index), At(index + 1), At(index + 2),
+            At(index), next, onDeck,
             items.Count,
-            // "Kaç sıra geride kaldı" - ilerleme çubuğunun kaynağı.
-            index < 0 ? 0 : index,
+            completedItems,
             items.Sum(item => item.DurationMinutes ?? 0),
             elapsed);
     }

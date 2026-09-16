@@ -12,6 +12,10 @@ import {
 } from "@/lib/guardian-auth";
 
 const EXAMPLE_GUARDIAN_PHONE = "0555 000 00 01";
+// login/page.tsx'teki DEMO_ENABLED ile aynı bayrak - üretimde (Demo:Enabled=false) backend
+// /api/guardian/debug-login'i hiç kaydetmiyor, bu yüzden örnek numara ve "demo veli" butonu da
+// gerçek bir veliyi yanıltmasın diye burada gizlenir.
+const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 
 // docs/10-decisions.md Karar F (ikinci) reversal: veli artık telefon + KALICI ŞİFRE ile giriş
 // yapar (şifre okul yönetimi tarafından üretilip WhatsApp'tan gönderilir). WhatsApp OTP ikincil
@@ -26,7 +30,7 @@ export default function GuardianLoginPage() {
   const debugLogin = useDebugGuardianLogin();
   const codeRef = useRef<HTMLInputElement>(null);
 
-  const [phoneNumber, setPhoneNumber] = useState(EXAMPLE_GUARDIAN_PHONE);
+  const [phoneNumber, setPhoneNumber] = useState(DEMO_ENABLED ? EXAMPLE_GUARDIAN_PHONE : "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<Mode>("password");
@@ -225,15 +229,18 @@ export default function GuardianLoginPage() {
             </form>
           )}
 
-          {/* Demo veli - yalnızca dev/demo backend'inde çalışır */}
-          <button
-            type="button"
-            onClick={handleDebugLogin}
-            disabled={debugLogin.isPending}
-            className="pressable mt-6 min-h-11 w-full rounded-lg border border-[#e3ddd3] bg-[#f4f1ea] px-4 text-xs font-bold text-[var(--muted)] hover:bg-[#eee9df] disabled:cursor-wait disabled:opacity-60"
-          >
-            {debugLogin.isPending ? "Demo veli açılıyor…" : "Demo veli olarak devam et"}
-          </button>
+          {/* Demo veli - yalnızca dev/demo backend'inde çalışır, üretimde DEMO_ENABLED false
+              olduğundan hem bu buton hem backend ucu (guardian/debug-login) birlikte kapanır. */}
+          {DEMO_ENABLED && (
+            <button
+              type="button"
+              onClick={handleDebugLogin}
+              disabled={debugLogin.isPending}
+              className="pressable mt-6 min-h-11 w-full rounded-lg border border-[#e3ddd3] bg-[#f4f1ea] px-4 text-xs font-bold text-[var(--muted)] hover:bg-[#eee9df] disabled:cursor-wait disabled:opacity-60"
+            >
+              {debugLogin.isPending ? "Demo veli açılıyor…" : "Demo veli olarak devam et"}
+            </button>
+          )}
         </div>
       </section>
     </main>

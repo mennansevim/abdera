@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import {
@@ -377,7 +378,7 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
     </div>
 
     {showForm && <form onSubmit={handleSubmit} className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
-      <input type="number" step={0.01} min={0.01} max={remaining} value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="field min-h-9 w-24 text-xs" />
+      <input type="number" step={0.01} min={0.01} max={remaining} value={amount} onChange={resetValidity((e) => setAmount(Number(e.target.value)))} onInvalid={onInvalidTurkish} className="field min-h-9 w-24 text-xs" />
       <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} className="field min-h-9 w-auto text-xs">
         <option value="Cash">Nakit</option>
         <option value="Transfer">Havale</option>

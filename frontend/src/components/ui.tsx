@@ -248,6 +248,34 @@ export function Notice({ children, onDismiss }: { children: ReactNode; onDismiss
   );
 }
 
+// Tarayıcının kendi doğrulama balonları (boş zorunlu alan, min/max) sistem diline göre
+// çıkıyor - Türkçe bir arayüzde aniden "Please fill out this field" görünmesin diye
+// `onInvalid`/`onChange` çiftiyle Türkçeleştirilir. `setCustomValidity` bir kez çağrılınca
+// alan temizlenene kadar geçersiz kalmaya devam ettiği için `onChange`'in bunu da sıfırlaması
+// gerekiyor - `resetValidity` var olan bir onChange handler'ını bu sıfırlamayla sarmalar.
+type ValidatableElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+export function turkishValidityMessage(target: ValidatableElement): string {
+  const { validity } = target;
+  if (validity.valueMissing) return "Bu alan zorunlu.";
+  if (validity.rangeOverflow) return `Değer en fazla ${(target as HTMLInputElement).max} olabilir.`;
+  if (validity.rangeUnderflow) return `Değer en az ${(target as HTMLInputElement).min} olabilir.`;
+  if (validity.typeMismatch) return "Geçerli bir değer gir.";
+  return "Bu alan geçersiz.";
+}
+
+export function onInvalidTurkish(event: React.InvalidEvent<ValidatableElement>) {
+  // React'te SyntheticEvent.target hep EventTarget'tır - doğru tipli olan currentTarget.
+  event.currentTarget.setCustomValidity(turkishValidityMessage(event.currentTarget));
+}
+
+export function resetValidity<E extends { target: ValidatableElement }>(handler: (event: E) => void) {
+  return (event: E) => {
+    event.target.setCustomValidity("");
+    handler(event);
+  };
+}
+
 // Form içindeki hata/başarı bildirimi - her ekranda aynı görünüm.
 export function FormMessage({ tone, children }: { tone: "error" | "success"; children: ReactNode }) {
   const style = tone === "error"

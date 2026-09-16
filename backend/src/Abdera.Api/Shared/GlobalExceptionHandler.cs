@@ -48,7 +48,9 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
         {
             Status = statusCode,
             Title = title,
-            Detail = exception.Message,
+            // ArgumentException.Message otomatik olarak " (Parameter 'x')" ekler (bkz. .NET
+            // kaynağı) - bu iç parametre adı kullanıcıya sızmasın diye kırpılır.
+            Detail = exception is ArgumentException ? StripParameterSuffix(exception.Message) : exception.Message,
             Instance = httpContext.Request.Path,
         };
 
@@ -60,5 +62,11 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
         httpContext.Response.StatusCode = statusCode;
         await httpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken);
         return true;
+    }
+
+    private static string StripParameterSuffix(string message)
+    {
+        var index = message.IndexOf(" (Parameter '", StringComparison.Ordinal);
+        return index < 0 ? message : message[..index];
     }
 }

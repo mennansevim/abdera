@@ -6,6 +6,10 @@ import { Fragment, useEffect, useState } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { NotificationBell } from "@/components/notification-bell";
 import type { Me } from "@/lib/api";
+import { usePendingChangeRequests } from "@/lib/attendance";
+import { useBankTransactions } from "@/lib/banking";
+import { useNotifications } from "@/lib/messaging";
+import { useStudentDeletionRequests } from "@/lib/people";
 import { useLogout } from "@/lib/use-auth";
 
 type NavItem = { href: string; label: string; icon: IconName; alert?: boolean; section: "Genel" | "Eğitim" | "Planlama" | "Finans" | "İletişim" | "Sistem" };
@@ -20,14 +24,32 @@ const CORE_LINKS: NavItem[] = [
 ];
 
 const ADMIN_LINKS: NavItem[] = [
-  { href: "/dashboard/change-requests", label: "Talepler", icon: "swap", alert: true, section: "Planlama" },
+  { href: "/dashboard/change-requests", label: "Talepler", icon: "swap", section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
   { href: "/dashboard/costs", label: "Giderler", icon: "bank", section: "Finans" },
-  { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true, section: "Finans" },
-  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", alert: true, section: "İletişim" },
+  { href: "/dashboard/banking", label: "Banka", icon: "bank", section: "Finans" },
+  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", section: "İletişim" },
   { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
   { href: "/dashboard/benchmark", label: "Performans", icon: "activity", section: "Eğitim" },
 ];
+
+// "Dikkat gereken kayıt" noktası önceden üç linkte de `alert: true` olarak sabit kodlanmıştı -
+// hiçbir zaman sönmüyordu. Şimdi her link tam olarak dashboard'un "Bugün için her şey yolunda"
+// kartının kullandığı sayılara bakıyor (Talepler: ders değişikliği VEYA öğrenci silme talebi;
+// Banka: NeedsReview; Mesaj Merkezi: Failed). Yalnızca Admin bu linkleri gördüğü için sorgular
+// Teacher oturumunda hiç çalışmasın diye `enabled` ile kapatılır.
+function useAdminAlerts(enabled: boolean): Record<string, boolean> {
+  const { data: changeRequests } = usePendingChangeRequests({ enabled });
+  const { data: deletionRequests } = useStudentDeletionRequests("Pending", { enabled });
+  const { data: bankItems } = useBankTransactions("NeedsReview", 1, 1, { enabled });
+  const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled });
+
+  return {
+    "/dashboard/change-requests": Boolean(changeRequests?.length) || Boolean(deletionRequests?.length),
+    "/dashboard/banking": Boolean(bankItems?.items.length),
+    "/dashboard/notifications": Boolean(failedNotifications?.totalCount),
+  };
+}
 
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };
 const SECTION_ORDER: NavItem["section"][] = ["Genel", "Eğitim", "Planlama", "Finans", "İletişim", "Sistem"];
@@ -50,12 +72,15 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const router = useRouter();
   const logout = useLogout();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const isAdmin = me.role === "Admin";
+  const alerts = useAdminAlerts(isAdmin);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
   // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
   // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor.
-  const links = (me.role === "Admin"
+  const links = (isAdmin
     ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK]
     : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK])
+    .map((link) => (alerts[link.href] ? { ...link, alert: true } : link))
     .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
   const navItem = (href: string) => links.find((link) => link.href === href)!;
   const mobilePrimary: NavItem[] = me.role === "Admin"
