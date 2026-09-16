@@ -108,6 +108,10 @@ export const INSTRUMENT_BADGE_STYLES: Record<string, { icon: IconName; className
   Gitar: { icon: "guitar", className: "bg-[var(--brand-soft)] text-[var(--brand-strong)]" },
   Keman: { icon: "violin", className: "bg-[#fde3ea] text-[#a8285a]" },
   Bateri: { icon: "drums", className: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+  // Çello yaylı bir çalgı - Keman'ın ikonunu paylaşır ama rengiyle ayrışır.
+  "Çello": { icon: "violin", className: "bg-[#e6efe4] text-[#3f6b46]" },
+  // Resim tek grup dersi; müzik ikonu yanıltıcı olurdu.
+  Resim: { icon: "pencil", className: "bg-[#fdefe0] text-[#9a5a18]" },
 };
 
 export function instrumentBadgeStyle(instrumentName: string) {
