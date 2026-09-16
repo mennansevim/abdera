@@ -33,7 +33,9 @@ public static class Teachers
         group.MapGet("", ListAsync);
         group.MapGet("/overview", OverviewAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
-        group.MapPost("/{teacherId:guid}/students", CreateStudentAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        // Öğretmen kendi öğrencisini ekleyebilir (J1); başkası adına ekleyemez -
+        // kontrol handler içinde PeopleAuthorization.EnsureActsAsSelfAsync ile yapılır.
+        group.MapPost("/{teacherId:guid}/students", CreateStudentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         group.MapPatch("/{teacherId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
@@ -113,6 +115,8 @@ public static class Teachers
     private static async Task<IResult> CreateStudentAsync(
         Guid teacherId, CreateStudentRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
+        await PeopleAuthorization.EnsureActsAsSelfAsync(teacherId, principal, db);
+
         var teacher = await db.Teachers.SingleOrDefaultAsync(item => item.Id == teacherId)
             ?? throw new NotFoundException("Öğretmen bulunamadı.");
         if (teacher.Status != TeacherStatus.Active)

@@ -94,6 +94,10 @@ export interface Me {
   // ekranındaki "yapıcı metne dönüştür" butonu buna göre açılır - yapılandırılmamışken
   // buton kapalı kalır ve manuel yorum akışı aynen çalışır.
   aiRewriteAvailable: boolean;
+  // Teacher oturumunda kendisine ait teacher kaydının id'si (Admin'de null). Öğretmen
+  // kendi öğrencisini ekleyebildiği için istemcinin bu id'ye ihtiyacı var
+  // (POST /api/teachers/{teacherId}/students).
+  teacherId: string | null;
   // Teacher oturumunda kendi çaldığı enstrümanlar (Admin'de her zaman boş dizi) - Takvim
   // ekranındaki enstrüman filtresini yalnızca kendi branşıyla sınırlamak için.
   instrumentIds: string[];

@@ -18,7 +18,12 @@ public static class Me
     // sınırlamak için (kullanıcı isteği: "öğretmen sadece kendi branşını görebilir").
     // Bu tamamen kendi verisi, /api/teachers zaten herkese açık olsa da ayrı bir istek
     // yerine buraya eklendi - istemci zaten her açılışta bu yanıtı okuyor.
-    public record Response(Guid Id, string Email, UserRole Role, bool MustChangePassword, bool AiRewriteAvailable, Guid[] InstrumentIds);
+    // TeacherId: öğretmen artık kendi öğrencisini ekleyebildiği için istemcinin kendi
+    // teacher kaydının id'sine ihtiyacı var (POST /api/teachers/{teacherId}/students).
+    // Admin'de null.
+    public record Response(
+        Guid Id, string Email, UserRole Role, bool MustChangePassword, bool AiRewriteAvailable,
+        Guid[] InstrumentIds, Guid? TeacherId);
 
     public static void MapMe(this IEndpointRouteBuilder app)
     {
@@ -34,13 +39,22 @@ public static class Me
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id && u.IsActive)
             ?? throw new ForbiddenException("Hesap artık aktif değil.");
 
-        var instrumentIds = user.Role == UserRole.Teacher
+        var teacherId = user.Role == UserRole.Teacher
             ? await db.Teachers.AsNoTracking()
                 .Where(teacher => teacher.UserId == user.Id)
-                .Join(db.TeacherInstruments, teacher => teacher.Id, ti => ti.TeacherId, (teacher, ti) => ti.InstrumentId)
+                .Select(teacher => (Guid?)teacher.Id)
+                .SingleOrDefaultAsync()
+            : null;
+
+        var instrumentIds = teacherId is { } scopedTeacherId
+            ? await db.TeacherInstruments.AsNoTracking()
+                .Where(ti => ti.TeacherId == scopedTeacherId)
+                .Select(ti => ti.InstrumentId)
                 .ToArrayAsync()
             : [];
 
-        return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword, rewriter.IsAvailable, instrumentIds));
+        return Results.Ok(new Response(
+            user.Id, user.Email, user.Role, user.MustChangePassword, rewriter.IsAvailable,
+            instrumentIds, teacherId));
     }
 }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -13,15 +14,20 @@ public static class LinkGuardianToStudent
 
     public static void MapLinkGuardianToStudent(this IEndpointRouteBuilder app)
     {
+        // Öğretmen kendi öğrencisinin velisini bağlayabilir ve görebilir (J1) -
+        // kapsam handler içinde PeopleAuthorization ile doğrulanır.
         app.MapPost("/api/students/{studentId:guid}/guardians", HandleAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         app.MapGet("/api/students/{studentId:guid}/guardians", ListAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
-    private static async Task<IResult> HandleAsync(Guid studentId, Request request, AbderaDbContext db)
+    private static async Task<IResult> HandleAsync(
+        Guid studentId, Request request, ClaimsPrincipal principal, AbderaDbContext db)
     {
+        await PeopleAuthorization.EnsureStudentAccessAsync(studentId, principal, db);
+
         if (!await db.Students.AnyAsync(s => s.Id == studentId))
             throw new NotFoundException("Öğrenci bulunamadı.");
         if (!await db.Guardians.AnyAsync(g => g.Id == request.GuardianId))
@@ -38,8 +44,10 @@ public static class LinkGuardianToStudent
             new StudentGuardianResponse(studentId, request.GuardianId, link.Relationship, link.IsPrimary));
     }
 
-    private static async Task<IResult> ListAsync(Guid studentId, AbderaDbContext db)
+    private static async Task<IResult> ListAsync(Guid studentId, ClaimsPrincipal principal, AbderaDbContext db)
     {
+        await PeopleAuthorization.EnsureStudentAccessAsync(studentId, principal, db);
+
         var guardians = await db.StudentGuardians
             .Where(sg => sg.StudentId == studentId)
             .Join(db.Guardians, sg => sg.GuardianId, g => g.Id, (sg, g) =>

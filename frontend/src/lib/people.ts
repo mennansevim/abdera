@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
+import type { CourseKind } from "./billing";
 
 export type StudentStatus = "Active" | "Inactive";
 export type TeacherStatus = "Active" | "Inactive";
@@ -317,7 +318,7 @@ export function useUpdateTeacher(teacherId: string) {
 export function useCreateStudentForTeacher(teacherId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { firstName: string; lastName: string; birthDate: string; instrumentId: string; startedAt: string }) =>
+    mutationFn: (body: { firstName: string; lastName: string; birthDate: string; instrumentId: string; startedAt: string; courseKind?: CourseKind }) =>
       api.post<TeacherStudentEnrollment>(`/api/teachers/${teacherId}/students`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });
@@ -530,6 +531,55 @@ export function useDeleteTeacher() {
       const query = params.toString();
       return api.delete<TeacherDeletionImpact>(`/api/teachers/${teacherId}${query ? `?${query}` : ""}`);
     },
+    onSuccess: () => queryClient.invalidateQueries(),
+  });
+}
+
+// --- Öğrenci silme talepleri -------------------------------------------------------
+// Öğretmen kendi öğrencisini ekleyip düzenleyebilir ama silemez; silme yöneticinin
+// onayından geçer (docs/10-decisions.md J2).
+
+export type StudentDeletionRequestStatus = "Pending" | "Approved" | "Rejected";
+
+export interface StudentDeletionRequestRow {
+  id: string;
+  studentId: string;
+  studentName: string;
+  requestedBy: string;
+  requestedByName: string;
+  reason: string;
+  status: StudentDeletionRequestStatus;
+  decisionNote: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  // Yalnızca yöneticiye ve yalnızca bekleyen taleplerde dolu - neyi onayladığını görsün.
+  impact: StudentDeletionImpact | null;
+}
+
+export function useStudentDeletionRequests(status?: StudentDeletionRequestStatus, options?: { enabled?: boolean }) {
+  const query = status ? `?status=${status}` : "";
+  return useQuery({
+    queryKey: ["student-deletion-requests", status ?? "all"],
+    queryFn: () => api.get<StudentDeletionRequestRow[]>(`/api/student-deletion-requests${query}`),
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useRequestStudentDeletion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, reason }: { studentId: string; reason: string }) =>
+      api.post<StudentDeletionRequestRow>(`/api/students/${studentId}/deletion-requests`, { reason }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-deletion-requests"] }),
+  });
+}
+
+export function useDecideStudentDeletionRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId, decision, note }: { requestId: string; decision: "approve" | "reject"; note?: string }) =>
+      api.post(`/api/student-deletion-requests/${requestId}/${decision}`, { note: note ?? null }),
+    // Onay bir öğrenciyi silebilir - neredeyse her liste etkilenir.
     onSuccess: () => queryClient.invalidateQueries(),
   });
 }

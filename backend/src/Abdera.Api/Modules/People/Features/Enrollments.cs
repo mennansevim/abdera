@@ -24,8 +24,9 @@ public static class Enrollments
 
     public static void MapEnrollments(this IEndpointRouteBuilder app)
     {
+        // Öğretmen kendi öğrencisine yeni bir kurs açabilir ama yalnızca KENDİ adına (J1).
         app.MapPost("/api/students/{studentId:guid}/enrollments", CreateAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         app.MapGet("/api/students/{studentId:guid}/enrollments", ListAsync)
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
@@ -41,6 +42,17 @@ public static class Enrollments
     {
         if (!await db.Students.AnyAsync(s => s.Id == studentId))
             throw new NotFoundException("Öğrenci bulunamadı.");
+
+        // İki ayrı kontrol, ikisi de gerekli:
+        //  1. Öğretmen başkası adına kurs açamaz (istekteki teacherId kendisi olmalı).
+        //  2. Öğretmen yalnızca ZATEN kendi öğrencisi olan birine yeni kurs açabilir.
+        // İkincisi olmadan bir öğretmen, kendini herhangi bir öğrencinin öğretmeni yazarak
+        // o öğrencinin verisine erişebilirdi - testle yakalanan gerçek bir açıktı.
+        var scopedTeacherId = await PeopleAuthorization.EnsureActsAsSelfAsync(request.TeacherId, principal, db);
+        if (scopedTeacherId is not null)
+        {
+            await PeopleAuthorization.EnsureStudentAccessAsync(studentId, principal, db);
+        }
 
         var teacher = await db.Teachers.SingleOrDefaultAsync(t => t.Id == request.TeacherId)
             ?? throw new NotFoundException("Öğretmen bulunamadı.");

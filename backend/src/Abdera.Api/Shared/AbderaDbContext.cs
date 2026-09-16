@@ -34,6 +34,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Teacher> Teachers => Set<Teacher>();
     public DbSet<TeacherInstrument> TeacherInstruments => Set<TeacherInstrument>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
+    public DbSet<StudentDeletionRequest> StudentDeletionRequests => Set<StudentDeletionRequest>();
     public DbSet<InstrumentMaintenanceSetting> InstrumentMaintenanceSettings => Set<InstrumentMaintenanceSetting>();
     public DbSet<InstrumentMaintenanceReminder> InstrumentMaintenanceReminders => Set<InstrumentMaintenanceReminder>();
 

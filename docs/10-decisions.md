@@ -190,6 +190,19 @@ karşı doğrulanır.
 | I8 | Öğrenci fotoğrafı | Dosya sistemine değil **veritabanına** (`student_photos`, ayrı tablo). Gerekçe: projenin günlük şifreli yedeklemesi (G-kararları) veritabanını kapsıyor, bir volume'u kapsamıyordu — fotoğraflar böylece ek iş yapılmadan yedekleniyor. `students` satırını şişirmemek için ayrı tabloda; program yanıtı yalnızca sürüm anahtarını taşır, baytları değil (ETag ile önbelleklenir). En fazla 2 MB, JPEG/PNG/WebP. |
 | I9 | Gösteri izinleri | Program ve sahne ekranı **öğretmene de açık** (kulisteki öğretmen kendi öğrencisinin kaçıncı sırada olduğunu görmek zorunda); düzenleme ve sahne kontrolü Admin. Aidattan farklı olarak program operasyonel bir belge, mali veri değil. |
 
+## J — Öğretmen kendi öğrencisini yönetir (2026-09-16)
+
+Kullanıcı isteği: "öğretmenler kendi öğrencilerini ekleyebilirler kendi portallarında. buna
+izin verelim. silme için yönetici onayı gereksin sadece. düzenleme de yapılabilir."
+
+| # | Konu | Karar |
+|---|------|-------|
+| J1 | Ekleme/düzenleme | `docs/04-permissions.md`'deki "Öğrenci/veli oluşturma, düzenleme: TEACHER ❌" satırı bilinçli olarak değiştirildi. Öğretmen kendi adına öğrenci + ilk kursunu tek çağrıda açar (`POST /api/teachers/{id}/students`), kendi öğrencisini düzenler, ona yeni kurs ekler ve **velisini girebilir**. Kurs KALDIRMA öğretmende değil — o da bir silmedir. |
+| J2 | Silme | Doğrudan silme öğretmene kapalı; gerekçeli bir talep açar (`student_deletion_requests`), yöneticiye ekran içi bildirim düşer, yönetici onaylar ya da reddeder. Scheduling'deki `LessonChangeRequest` deseninin aynısı. Onay, silmeyi `PersonEraser`'a devreder — yöneticinin doğrudan sildiği durumla birebir aynı yol, ikinci bir silme mantığı yok. |
+| J3 | Veli verisi (KVKK) | Kullanıcıya soruldu: veli telefonu şu ana kadar öğretmene kapalıydı. **Açıldı** — gerekçe pratik: veli kaydı olmadan o öğrenciye hiçbir WhatsApp bildirimi gitmiyor, öğrenciyi ekleyen kişinin velisini de girebilmesi gerekiyor. Sınır dar tutuldu: öğretmen yalnızca KENDİ öğrencisine bağlı veliyi görür/düzenler; okul geneli veli listesi (`GET /api/guardians`) hâlâ yalnızca Admin. |
+| J4 | Onay kaydının kalıcılığı | Talep satırı öğrenciyle birlikte cascade ile silinir (FK). Kararın kalıcı izi `audit_log`'dadır (`student.deletion_request_approved`, talep id'si + gerekçe + etki dökümü ile) — audit hiçbir zaman temizlenmez. |
+| J5 | Yetki sızıntısı koruması | Her uç için hem izin verilen hem REDDEDİLEN yol ayrı test edilir (`TeacherPortalFlowTests`). Bu testler yazılırken gerçek bir açık bulundu: öğretmen kendini herhangi bir öğrencinin öğretmeni yazarak verisine erişebiliyordu — bkz. `docs/04-permissions.md` J bölümü. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

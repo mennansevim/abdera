@@ -20,7 +20,7 @@ const CORE_LINKS: NavItem[] = [
 ];
 
 const ADMIN_LINKS: NavItem[] = [
-  { href: "/dashboard/change-requests", label: "Ders Talepleri", icon: "swap", section: "Planlama" },
+  { href: "/dashboard/change-requests", label: "Talepler", icon: "swap", alert: true, section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
   { href: "/dashboard/costs", label: "Giderler", icon: "bank", section: "Finans" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", alert: true, section: "Finans" },

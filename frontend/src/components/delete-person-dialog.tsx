@@ -6,6 +6,7 @@ import { FormMessage, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   useDeleteStudent,
+  useRequestStudentDeletion,
   useDeleteTeacher,
   useStudentDeletionImpact,
   useTeacherDeletionImpact,
@@ -229,6 +230,84 @@ export function DeleteTeacherDialog({
           >
             {deleteTeacher.isPending ? "Siliniyor…" : reassignTo ? "Devret ve sil" : "Kalıcı olarak sil"}
           </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+
+// Öğretmenin silme yolu: doğrudan silmez, gerekçeli bir talep açar ve yönetici karara
+// bağlar (docs/10-decisions.md J2). Gerekçe zorunlu - yöneticinin karar verebilmesi için.
+export function RequestStudentDeletionDialog({
+  studentId, studentName, onClose,
+}: {
+  studentId: string;
+  studentName: string;
+  onClose: () => void;
+}) {
+  const requestDeletion = useRequestStudentDeletion();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  async function submit() {
+    setError(null);
+    try {
+      await requestDeletion.mutateAsync({ studentId, reason });
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Talep oluşturulamadı.");
+    }
+  }
+
+  return (
+    <Modal
+      open
+      title={`${studentName} için silme talebi`}
+      description="Öğrenciyi doğrudan silemezsin; talebini yönetici karara bağlar."
+      onClose={onClose}
+    >
+      <div className="space-y-3.5">
+        {sent ? (
+          <FormMessage tone="success">
+            Talebin yöneticiye iletildi. Sonucu bu ekrandan takip edebilirsin.
+          </FormMessage>
+        ) : (
+          <>
+            <label className="form-label">Gerekçe
+              <textarea
+                value={reason}
+                onChange={(event) => { setReason(event.target.value); setError(null); }}
+                rows={3}
+                maxLength={500}
+                required
+                autoFocus
+                placeholder="Örn. Öğrenci okuldan ayrıldı."
+                className="field text-sm"
+              />
+            </label>
+            <p className="text-meta flex items-start gap-2">
+              <Icon name="alert-triangle" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              Yönetici onaylarsa öğrencinin dersleri, yoklamaları ve aidat geçmişi de kalıcı olarak silinir.
+            </p>
+          </>
+        )}
+
+        {error && <FormMessage tone="error">{error}</FormMessage>}
+
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+          <button type="button" onClick={onClose} className="btn btn-quiet">{sent ? "Kapat" : "Vazgeç"}</button>
+          {!sent && (
+            <button
+              type="button"
+              onClick={submit}
+              disabled={requestDeletion.isPending || reason.trim().length === 0}
+              className="btn btn-primary"
+            >
+              {requestDeletion.isPending ? "Gönderiliyor…" : "Silme talebi gönder"}
+            </button>
+          )}
         </div>
       </div>
     </Modal>

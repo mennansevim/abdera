@@ -11,7 +11,11 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 
 | Kaynak / işlem | ADMIN | TEACHER | GUARDIAN |
 |---|---|---|---|
-| Öğrenci/veli oluşturma, düzenleme | ✅ | ❌ | ❌ |
+| Öğrenci/veli oluşturma, düzenleme | ✅ tümü | ✅ yalnızca kendi öğrencisi ve onun velisi (J1) | ❌ |
+| Öğrenci silme | ✅ doğrudan | ⏳ gerekçeli talep açar, yönetici karara bağlar (J2) | ❌ |
+| Kurs kaydı açma | ✅ | ✅ yalnızca kendi adına ve zaten kendi öğrencisine | ❌ |
+| Kurs kaydı kaldırma | ✅ | ❌ (bir silmedir) | ❌ |
+| Okul geneli veli listesi | ✅ | ❌ (yalnızca kendi öğrencisinin velisi) | ❌ |
 | Öğrenci/veli listesi ve detayı | ✅ tümü | ✅ yalnızca kendi atanmış öğrencileri | ✅ yalnızca kendi öğrencisi (`GET /api/guardian/me/students`) |
 | Öğretmen oluşturma, düzenleme | ✅ | ❌ | ❌ |
 | Öğretmen listesi | ✅ | ✅ (isim/enstrüman görünür, kişisel veri yok) | ❌ (yalnızca kendi öğrencisinin öğretmen adı, students yanıtı içinde) |
@@ -40,3 +44,15 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 - Mali uç noktalar (`/api/receivables`, `/api/payments`, fiyat listesi) rol kontrolünü middleware/policy seviyesinde yapar, controller içinde `if (role == ...)` tekrarlanmaz.
 - `GET /api/students/{id}` gibi tekil kaynak uç noktaları, `TEACHER` için önce "bu öğrenci bana atanmış mı" kontrolü yapar — yalnızca liste uç noktasını filtrelemek yetmez.
 - Aynı ilke `GUARDIAN` için de geçerli: `/api/guardian/me/*` altındaki her uç nokta, URL'deki `studentId`/`lessonId`'ye güvenmeden önce `StudentGuardians` üzerinden "bu öğrenci/ders gerçekten bu veliye mi bağlı" kontrolü yapar (`GuardianPortal.cs::EnsureOwnsStudentAsync`) — aksi halde bir veli başka bir öğrencinin id'sini tahmin ederek verisine erişebilirdi.
+
+## J — Öğretmen portalı (2026-09-16)
+
+Öğretmen artık kendi öğrencisini ekleyebiliyor, düzenleyebiliyor ve velisini girebiliyor.
+"Kendi öğrencisi" kelimesinin tek tanımı `Modules/People/Features/PeopleAuthorization.cs`
+içindedir — öğretmenin AKTİF bir kurs kaydı üzerinden bağlı olduğu öğrenci.
+
+İki ayrı kontrolün birlikte uygulanması şart, testle yakalanan gerçek bir açık vardı:
+`POST /api/students/{id}/enrollments` yalnızca "istekteki teacherId kendisi mi" diye
+kontrol edilseydi, bir öğretmen kendini HERHANGİ bir öğrencinin öğretmeni yazarak o
+öğrencinin verisine erişebilirdi. Bu yüzden ikinci kontrol de var: öğrenci zaten o
+öğretmenin olmalı (`TeacherPortalFlowTests.Teacher_cannot_act_on_behalf_of_another_teacher`).

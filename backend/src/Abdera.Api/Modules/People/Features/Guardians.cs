@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
@@ -21,11 +22,15 @@ public static class Guardians
 
     public static void MapGuardians(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/guardians").RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        var group = app.MapGroup("/api/guardians").RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
-        group.MapGet("", ListAsync);
-        group.MapPost("", CreateAsync);
-        group.MapPatch("/{guardianId:guid}", UpdateAsync);
+        // Tüm velilerin listesi Admin'de kalır - öğretmenin okul geneli veli rehberine
+        // ihtiyacı yok. Oluşturma ve düzenleme öğretmene açıldı (J1): veli olmadan
+        // öğrenciye hiçbir WhatsApp bildirimi gitmiyor, bu yüzden öğrenciyi ekleyen
+        // kişinin velisini de girebilmesi gerekiyor.
+        group.MapGet("", ListAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        group.MapPatch("/{guardianId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         group.MapPost("/{guardianId:guid}/reset-password", ResetPasswordAsync);
     }
 
@@ -55,8 +60,12 @@ public static class Guardians
             new GuardianResponse(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, guardian.NotificationConsent));
     }
 
-    private static async Task<IResult> UpdateAsync(Guid guardianId, UpdateRequest request, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> UpdateAsync(
+        Guid guardianId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
+        // Öğretmen yalnızca kendi öğrencisine bağlı veliyi düzenleyebilir (J1).
+        await PeopleAuthorization.EnsureGuardianAccessAsync(guardianId, principal, db);
+
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId)
             ?? throw new NotFoundException("Veli bulunamadı.");
 

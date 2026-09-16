@@ -4,6 +4,8 @@ public enum StaffNotificationType
 {
     // Dersin günü/saati değişti - takvimden sürükle-bırak ya da ders detayından düzenleme.
     LessonMoved,
+    // Bir öğretmen kendi öğrencisinin silinmesini talep etti; yönetici karara bağlamalı.
+    StudentDeletionRequested,
 }
 
 // docs/03-erd.md - Messaging > staff_notifications. WhatsApp tarafındaki NotificationJob

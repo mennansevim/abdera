@@ -24,13 +24,20 @@ const ENROLLMENT_STATUS_LABEL: Record<string, string> = { Active: "aktif", Pause
 
 // isAdmin=false (Teacher) iken veli bilgisi hiç istenmez - /api/students/{id}/guardians
 // Admin-only olduğu için Teacher'a 403 dönerdi (docs/04-permissions.md).
-export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin: boolean }) {
+// canManage: öğretmen artık KENDİ öğrencisinin velisini ve kursunu ekleyebiliyor (J1).
+// isAdmin ise yalnızca geri alınamaz işlemler için ayrı tutuluyor - kurs kaldırma bir
+// silmedir ve yöneticide kalır (J2'nin aynı gerekçesi).
+export function StudentDetail({
+  student,
+  isAdmin,
+  canManage = isAdmin,
+}: { student: Student; isAdmin: boolean; canManage?: boolean }) {
   const studentId = student.id;
   const [showGuardianForm, setShowGuardianForm] = useState(false);
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
-  const { data: guardians } = useStudentGuardians(isAdmin ? studentId : "");
+  const { data: guardians } = useStudentGuardians(canManage ? studentId : "");
   const { data: enrollments } = useEnrollments(studentId);
   const { data: teachers } = useTeachers();
   const { data: instruments } = useInstruments();
@@ -69,7 +76,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
           <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet">
             <Icon name="activity" className="h-4 w-4" /> Gelişim
           </Link>
-          {isAdmin && (
+          {canManage && (
             <>
               <button type="button" onClick={() => setEditingStudent(true)} className="btn btn-quiet">
                 <Icon name="pencil" className="h-4 w-4" /> Düzenle
@@ -95,7 +102,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
       </section>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        {isAdmin && (
+        {canManage && (
           <section className="app-card overflow-hidden">
             <div className="border-b border-[var(--line)] p-3.5">
               <SectionHeader
@@ -139,7 +146,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
             <SectionHeader
               title="Kurslar"
               description={`${fullName} adına açık kurs kayıtları`}
-              actions={isAdmin ? <AddButton label="Kurs ekle" tone="quiet" onClick={() => setShowEnrollmentForm(true)} /> : undefined}
+              actions={canManage ? <AddButton label="Kurs ekle" tone="quiet" onClick={() => setShowEnrollmentForm(true)} /> : undefined}
             />
           </div>
           <ul className="divide-y divide-[var(--line)]">
@@ -164,7 +171,7 @@ export function StudentDetail({ student, isAdmin }: { student: Student; isAdmin:
         </section>
       </div>
 
-      {isAdmin && (
+      {canManage && (
         <>
           <AddGuardianForm studentId={studentId} open={showGuardianForm} onClose={() => setShowGuardianForm(false)} />
           <Modal open={showEnrollmentForm} title="Kurs ekle" description="Öğretmen ve enstrümanı seçerek bu öğrenciye bağla." onClose={() => setShowEnrollmentForm(false)} size="sm">

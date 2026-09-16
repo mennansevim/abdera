@@ -198,3 +198,18 @@ DELETE /api/students/{studentId}[?force=true]         ✅ ödeme varsa force olm
 GET    /api/teachers/{teacherId}/deletion-impact      ✅                                       Admin
 DELETE /api/teachers/{teacherId}[?force=true][&reassignTo=]  ✅ devir varsa hiçbir veri silinmez  Admin
 ```
+
+## Öğretmen portalı — öğrenci silme talepleri (J2)
+
+```
+POST   /api/students/{studentId}/deletion-requests       ✅ öğretmen kendi öğrencisi için; gerekçe zorunlu   Teacher+Admin
+GET    /api/student-deletion-requests[?status=]          ✅ öğretmen kendi talepleri, admin tümü + etki dökümü Teacher+Admin
+POST   /api/student-deletion-requests/{id}/approve       ✅ onaylar ve siler (PersonEraser)                   Admin
+POST   /api/student-deletion-requests/{id}/reject        ✅                                                    Admin
+```
+
+İzni gevşetilen mevcut uçlar (J1) — hepsi "kendi öğrencisi" kapsamıyla:
+`POST /api/teachers/{id}/students`, `PATCH /api/students/{id}`,
+`POST /api/students/{id}/enrollments`, `POST|GET /api/students/{id}/guardians`,
+`POST /api/guardians`, `PATCH /api/guardians/{id}`.
+`GET /api/guardians` (okul geneli liste) Admin'de kaldı.

@@ -34,7 +34,8 @@ public static class Students
         group.MapGet("/search", SearchAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapGet("/{studentId:guid}", GetAsync);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
-        group.MapPatch("/{studentId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        // Öğretmen kendi öğrencisini düzenleyebilir (J1); kapsam handler içinde doğrulanır.
+        group.MapPatch("/{studentId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     private static async Task<IResult> OverviewAsync(ClaimsPrincipal principal, AbderaDbContext db)
@@ -171,8 +172,12 @@ public static class Students
             new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status));
     }
 
-    private static async Task<IResult> UpdateAsync(Guid studentId, UpdateRequest request, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> UpdateAsync(
+        Guid studentId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
+        // Öğretmen yalnızca kendine atanmış öğrenciyi düzenleyebilir (J1).
+        await EnsureTeacherCanAccessAsync(studentId, principal, db);
+
         var student = await db.Students.SingleOrDefaultAsync(s => s.Id == studentId)
             ?? throw new NotFoundException("Öğrenci bulunamadı.");
 
