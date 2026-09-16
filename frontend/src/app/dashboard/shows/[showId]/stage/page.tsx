@@ -64,6 +64,143 @@ function UpNextCard({ label, item }: { label: string; item: StageItem | null }) 
   );
 }
 
+// Şablon PNG'leri /public/bg altında, 1536x1024 (3:2) - Canva/AI ile üretilmiş, kesikli
+// çemberli bir "ÖĞRENCİ FOTOĞRAFI BURAYA GELECEK" alanı ve iki noktalı satır + "ENSTRÜMAN"
+// alt çizgisi taşıyorlar. Koordinatlar görselin kendi genişlik/yüksekliğine göre yüzde -
+// dıştaki kutu aspect-[3/2] ile görselle birebir aynı orana kilitlendiği için bu yüzdeler
+// her ekran boyutunda hizalı kalır (bkz. sohbet - piksel piksel kalibre edildi).
+interface PerformerTemplate {
+  src: string;
+  photo: { x: number; y: number; w: number; h: number };
+  name: { x: number; y: number; w: number };
+  instrument: { x: number; y: number; w: number };
+}
+
+// Her enstrüman için iki varyant - art arda aynı enstrümandan gelen öğrenciler aynı
+// afişi görmesin diye `position`e göre aralarında dönülür (bkz. pickTemplate).
+const PERFORMER_TEMPLATES: Record<string, PerformerTemplate[]> = {
+  Piyano: [
+    { src: "/bg/piano_bg.png", photo: { x: 16, y: 32, w: 32, h: 42 }, name: { x: 52, y: 38.5, w: 24 }, instrument: { x: 52, y: 55, w: 24 } },
+    { src: "/bg/piano2_bg.png", photo: { x: 12, y: 32, w: 29, h: 42 }, name: { x: 46, y: 41.5, w: 25 }, instrument: { x: 46, y: 59.5, w: 25 } },
+  ],
+  Keman: [
+    { src: "/bg/keman_bg.png", photo: { x: 13, y: 32, w: 28, h: 42 }, name: { x: 45, y: 40, w: 25 }, instrument: { x: 45, y: 58.5, w: 25 } },
+    { src: "/bg/keman2_bg.png", photo: { x: 13, y: 35, w: 29, h: 39 }, name: { x: 45, y: 41.5, w: 25 }, instrument: { x: 45, y: 60, w: 25 } },
+  ],
+  Bateri: [
+    { src: "/bg/bateri_bg.png", photo: { x: 13, y: 32, w: 28, h: 42 }, name: { x: 47, y: 40, w: 25 }, instrument: { x: 47, y: 58, w: 25 } },
+    { src: "/bg/bateri2_bg.png", photo: { x: 14, y: 32, w: 28, h: 42 }, name: { x: 47, y: 39, w: 25 }, instrument: { x: 47, y: 60, w: 25 } },
+  ],
+};
+
+function pickTemplate(instrumentName: string | null, position: number): PerformerTemplate | null {
+  const variants = instrumentName ? PERFORMER_TEMPLATES[instrumentName] : undefined;
+  return variants?.[position % variants.length] ?? null;
+}
+
+// Kullanıcı isteği: "background resmin üzerine progress barı ekleyebilirsin" - hem şablon
+// görselinin hem de şablonsuz enstrümanların (gitar/çello/resim) gradyan kartının altına
+// aynı şerit biniyor, ikisi arasında geçişte tutarlı görünsün diye.
+function PerformerProgressStrip({ position, totalItems, groupName }: { position: number; totalItems: number; groupName: string | null }) {
+  const percent = totalItems > 0 ? Math.min(100, Math.round(((position + 1) / totalItems) * 100)) : 0;
+  return (
+    <div className="absolute inset-x-0 bottom-0 bg-black/35 px-[4cqw] py-[1.6cqh] backdrop-blur-[2px]">
+      <p className="truncate font-bold text-white" style={{ fontSize: "2.2cqw" }}>
+        {groupName ? `${groupName} · ` : ""}{position + 1} / {totalItems} sıra
+      </p>
+      <div className="mt-[.8cqh] h-[1.6cqh] w-full overflow-hidden rounded-full bg-white/25">
+        <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function TemplatedPerformerCard({ current, totalItems, template }: { current: StageItem; totalItems: number; template: PerformerTemplate }) {
+  const initials = (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("");
+  return (
+    <div className="relative aspect-[3/2] w-full overflow-hidden rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,.35)] [container-type:size]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={template.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
+
+      <div
+        className="absolute overflow-hidden rounded-full bg-[var(--brand-soft)]"
+        style={{ left: `${template.photo.x}%`, top: `${template.photo.y}%`, width: `${template.photo.w}%`, height: `${template.photo.h}%` }}
+      >
+        {current.hasPhoto && current.studentId
+          /* eslint-disable-next-line @next/next/no-img-element */
+          ? <img src={studentPhotoUrl(current.studentId, current.photoVersion)} alt={current.studentName ?? ""} className="h-full w-full object-cover" />
+          : <span className="grid h-full w-full place-items-center font-bold text-[var(--brand-strong)]" style={{ fontSize: "11cqw" }}>{initials}</span>}
+      </div>
+
+      <p
+        className="absolute truncate text-center font-serif font-bold text-[#2c2420]"
+        style={{ left: `${template.name.x}%`, top: `${template.name.y}%`, width: `${template.name.w}%`, fontSize: "3.4cqw" }}
+      >
+        {current.studentName}
+      </p>
+
+      {current.instrumentName && (
+        <p
+          className="absolute truncate text-center font-bold text-[#2c2420]"
+          style={{ left: `${template.instrument.x}%`, top: `${template.instrument.y}%`, width: `${template.instrument.w}%`, fontSize: "2.4cqw" }}
+        >
+          {current.instrumentName}
+        </p>
+      )}
+
+      <PerformerProgressStrip position={current.position} totalItems={totalItems} groupName={current.groupName} />
+    </div>
+  );
+}
+
+// Şablon PNG'si olmayan enstrümanlar (gitar/çello/resim) için - önceki tasarımın gradyan/blob
+// kartı, artık yalnızca kimlik bilgisini taşıyor (eser adı paylaşılan bloğa taşındı, bkz. aşağı).
+function GradientPerformerCard({ current, totalItems }: { current: StageItem; totalItems: number }) {
+  return (
+    <div className="relative aspect-[3/2] w-full overflow-hidden rounded-[2rem] bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] [container-type:size]">
+      <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+      <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
+      <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden h-9 w-9 -rotate-12 text-white/20 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
+
+      {/* Şablon görsellerinin aksine burada sabit bir "üstten %X" varsayımı yok - dikey
+          alan içerik akışıyla paylaşılıyor ki dar/mobil genişlikte (fotoğraf+metin alt alta
+          dizildiğinde) içerik alttaki ilerleme şeridinin üzerine binmesin (gerçek bir dizilim
+          hatası olarak bulundu - bkz. sohbet). `pb` alttaki şeridin yüksekliğini önden ayırır. */}
+      <div className="relative flex h-full flex-col p-[4cqw] pb-[22cqh]">
+        <BrandMark compact />
+        <div className="flex flex-1 flex-col items-center justify-center gap-[3cqw] text-white sm:flex-row sm:gap-[4cqw]">
+          <div className="relative shrink-0">
+            <div aria-hidden className="absolute -inset-[6%] -rotate-6 bg-white/15" style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }} />
+            <span
+              className="relative grid place-items-center overflow-hidden bg-white/20 font-bold shadow-[0_16px_40px_rgba(0,0,0,.25)]"
+              style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%", width: "22cqw", height: "22cqw", fontSize: "5cqw" }}
+            >
+              {current.hasPhoto && current.studentId
+                /* eslint-disable-next-line @next/next/no-img-element */
+                ? <img src={studentPhotoUrl(current.studentId, current.photoVersion)} alt={current.studentName ?? ""} className="h-full w-full object-cover" />
+                : (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("")}
+            </span>
+          </div>
+          <div className="min-w-0 text-center sm:text-left">
+            {current.instrumentName && (() => {
+              const badge = instrumentBadgeStyle(current.instrumentName);
+              return (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-[3cqw] py-[1cqw] font-bold backdrop-blur-sm" style={{ fontSize: "2.2cqw" }}>
+                  <Icon name={badge.icon} style={{ width: "2.6cqw", height: "2.6cqw" }} />{current.instrumentName}
+                </span>
+              );
+            })()}
+            <p className="mt-[2cqw] truncate font-serif font-bold italic text-white/90" style={{ fontSize: "3.2cqw" }}>{current.studentName}</p>
+          </div>
+        </div>
+      </div>
+
+      <PerformerProgressStrip position={current.position} totalItems={totalItems} groupName={current.groupName} />
+    </div>
+  );
+}
+
 export default function StagePage() {
   const params = useParams<{ showId: string }>();
   const showId = params.showId;
@@ -189,59 +326,22 @@ export default function StagePage() {
             </div>
           )}
 
-          {isLive && current && current.kind === "Performance" && (
-            <div className="relative overflow-hidden rounded-[2rem] bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] p-5 sm:p-8">
-              {/* Dekoratif blob'lar - şablonun renkli/organik zemin hissi. Veriye bağlı
-                  değil, salt görsel doku; yüzde/blur tabanlı olduğu için ekran boyutundan
-                  bağımsız çalışır (indirilmiş bir görsel yerine gerçek CSS - bkz. sohbet). */}
-              <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-              <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-              <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
-              <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden h-9 w-9 -rotate-12 text-white/20 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
-              <Icon name="sparkles" className="pointer-events-none absolute bottom-8 left-10 hidden h-7 w-7 rotate-12 text-white/20 sm:block" />
+          {isLive && current && current.kind === "Performance" && (() => {
+            const template = pickTemplate(current.instrumentName, current.position);
+            return (
+              <div>
+                {template
+                  ? <TemplatedPerformerCard current={current} totalItems={stage.totalItems} template={template} />
+                  : <GradientPerformerCard current={current} totalItems={stage.totalItems} />}
 
-              <div className="relative flex flex-wrap items-center justify-between gap-3">
-                <BrandMark compact />
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[.7rem] font-bold uppercase tracking-[.14em] text-white backdrop-blur-sm">
-                  {current.groupName ? `${current.groupName} · ` : ""}{current.position + 1}. sıra
-                </span>
-              </div>
-
-              <div className="relative mt-6 flex flex-col items-center gap-6 text-white sm:flex-row sm:gap-10">
-                <div className="relative shrink-0">
-                  <div
-                    aria-hidden
-                    className="absolute -inset-3 -rotate-6 bg-white/15"
-                    style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }}
-                  />
-                  <span
-                    className="relative grid h-32 w-32 place-items-center overflow-hidden bg-white/20 text-3xl font-bold shadow-[0_16px_40px_rgba(0,0,0,.25)] sm:h-44 sm:w-44"
-                    style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }}
-                  >
-                    {current.hasPhoto && current.studentId
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      ? <img src={studentPhotoUrl(current.studentId, current.photoVersion)} alt={current.studentName ?? ""} className="h-full w-full object-cover" />
-                      : (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("")}
-                  </span>
-                </div>
-
-                <div className="min-w-0 flex-1 text-center sm:text-left">
-                  {current.instrumentName && (() => {
-                    const badge = instrumentBadgeStyle(current.instrumentName);
-                    return (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-sm font-bold backdrop-blur-sm">
-                        <Icon name={badge.icon} className="h-4 w-4" />{current.instrumentName}
-                      </span>
-                    );
-                  })()}
-
-                  <p className="mt-3 truncate font-serif text-2xl font-bold italic text-white/90 sm:text-3xl">{current.studentName}</p>
-
-                  {/* "Büyük punto" tam olarak burası: salondan da okunabilecek eser adı. */}
-                  <p className="mt-2 font-serif text-4xl font-bold leading-[1.1] sm:text-6xl lg:text-7xl">{current.pieceTitle}</p>
+                {/* "Büyük punto" tam olarak burası: kullanıcı isteği - salondan da okunabilecek
+                    eser adı. Şablonların hiçbirinde eser adı için ayrılmış bir alan yok
+                    (yalnızca öğrenci/enstrüman), o yüzden kartın hemen altında, ortak. */}
+                <div className="mt-6 text-center">
+                  <p className="font-serif text-4xl font-bold leading-[1.1] sm:text-6xl lg:text-7xl">{current.pieceTitle}</p>
                   {current.composer && <p className="mt-2 text-xl text-white/70 sm:text-2xl">{current.composer}</p>}
 
-                  <p className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-white/60 sm:justify-start">
+                  <p className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-white/60">
                     {current.teacherName && <span>{current.teacherName}</span>}
                     {current.studentPieces.length > 1 && (
                       <span className="rounded-full bg-white/15 px-2 py-0.5 font-bold text-white/85">
@@ -251,8 +351,8 @@ export default function StagePage() {
                   </p>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* SIRADAKİ / ONDAN SONRAKİ — kulisin çalışma alanı. */}
