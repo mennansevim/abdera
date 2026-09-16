@@ -127,7 +127,7 @@ function DashboardTopbar({ email }: { email: string }) {
             <div className="app-card absolute right-0 top-[calc(100%+.45rem)] z-20 w-full min-w-[17rem] overflow-hidden p-1.5">
               {results.length ? results.map((result) => (
                 <Link key={`${result.kind}-${result.id}`} href={result.href} onClick={() => setQuery("")} className="pressable flex min-h-11 items-center justify-between rounded-xl px-3 text-sm hover:bg-[var(--surface-muted)]">
-                  <span className="font-medium">{result.label}</span><span className="text-[.65rem] text-[var(--muted)]">{result.kind}</span>
+                  <span className="font-medium">{result.label}</span><span className="text-[.75rem] text-[var(--muted)]">{result.kind}</span>
                 </Link>
               )) : <p className="px-3 py-4 text-center text-xs text-[var(--muted)]">Eşleşen kayıt bulunamadı.</p>}
             </div>
@@ -224,16 +224,16 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange 
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="text-title">Bu Hafta</h2>
-            <Link href="/dashboard/calendar" className="text-[.62rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
+            <Link href="/dashboard/calendar" className="text-[.75rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
           </div>
           <p className="text-meta mt-0.5">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p>
         </div>
         <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 lg:flex">
-          {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.62rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />{item.label}</span>)}
+          {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />{item.label}</span>)}
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => onWeekChange(-1)} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
-          <button onClick={() => onWeekChange(0)} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:bg-[var(--surface-muted)]">Bu hafta</button>
+          <button onClick={() => onWeekChange(0)} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.75rem] font-semibold hover:bg-[var(--surface-muted)]">Bu hafta</button>
           <button onClick={() => onWeekChange(1)} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
         </div>
       </div>
@@ -244,7 +244,7 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange 
               açılıyordu, 768-1279 arasında istenmeyen bir ajanda görünümüne düşüyordu. */}
           <div className="hidden grid-cols-[3.2rem_repeat(5,minmax(0,1fr))] border-t border-[var(--line)] md:grid">
             <div className="border-r border-[var(--line)]" />
-            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="block text-[.66rem] font-semibold text-[var(--muted)]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
+            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="block text-[.75rem] font-semibold text-[var(--muted)]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.75rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
             <TimeLabels hourWindow={hourWindow} />
             {weekdays.map((day) => <DayColumn key={day.toISOString()} day={day} lessons={lessons} colors={lessonColors} hourWindow={hourWindow} onOpen={setOpenLesson} />)}
           </div>
@@ -275,7 +275,7 @@ function TimeLabels({ hourWindow }: { hourWindow: { startHour: number; endHour: 
   return (
     <div className="relative border-r border-t border-[var(--line)] bg-[#fdf9f2]" style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className={`absolute right-2 text-[.53rem] tabular-nums text-[var(--muted)] ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
+        <span key={index} className={`absolute right-2 text-[.75rem] tabular-nums text-[var(--muted)] ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
           {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}
@@ -312,9 +312,9 @@ function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; le
             style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
             {dot.label && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
-            <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
-            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
-            <span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}</span>
+            <span className={`block text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span className={`mt-0.5 block truncate text-[.75rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
+            <span className="block truncate text-[.75rem] opacity-75">{lesson.instrumentName}</span>
           </button>
         );
       })}
@@ -330,10 +330,10 @@ function AgendaLesson({ lesson, tone, onOpen }: { lesson: CalendarLesson; tone: 
   return (
     <button type="button" onClick={() => onOpen(lesson)} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white p-2.5 text-left shadow-sm ${isCancelled ? "opacity-60" : ""}`}>
       <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: tone.border }} />
-      <span className={`w-20 shrink-0 text-[.65rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`} style={{ color: tone.text }}>{start.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}–{end.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}</span>
+      <span className={`w-20 shrink-0 text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`} style={{ color: tone.text }}>{start.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}–{end.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}</span>
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-xs font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
-        <span className="block truncate text-[.62rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
+        <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
       </span>
       {dot.label && <span className="shrink-0 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
     </button>
@@ -357,7 +357,7 @@ function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone
         <div className="flex items-start justify-between gap-2 border-l-4 p-4" style={{ borderLeftColor: tone.border, background: tone.bg }}>
           <div className="min-w-0">
             <p className="truncate text-sm font-bold" style={{ color: tone.text }}>{lesson.studentName}</p>
-            <p className="mt-0.5 text-[.7rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</p>
+            <p className="mt-0.5 text-[.75rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</p>
           </div>
           <button onClick={onClose} className="pressable grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-black/5" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
@@ -380,11 +380,17 @@ function ScheduleSkeleton() {
 
 function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[]; birthdays?: UpcomingBirthday[] }) {
   const { data: requests, isLoading } = usePendingChangeRequests();
-  const { data: bankItems } = useBankTransactions("NeedsReview", 1, 3);
+  const { data: bankItems, isLoading: bankLoading } = useBankTransactions("NeedsReview", 1, 3);
   const approve = useApproveChangeRequest();
   const reject = useRejectChangeRequest();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const { data: attentionStudents } = useAttentionNeededStudents();
+  const { data: attentionStudents, isLoading: attentionLoading } = useAttentionNeededStudents();
+  const hasRequests = Boolean(requests?.length);
+  const hasBankItems = Boolean(bankItems?.items.length);
+  const hasAttentionStudents = Boolean(attentionStudents?.length);
+  const hasBirthdays = Boolean(birthdays?.length);
+  const railLoading = isLoading || bankLoading || attentionLoading || birthdays === undefined;
+  const allClear = !railLoading && !hasRequests && !hasBankItems && !hasAttentionStudents && !hasBirthdays;
 
   async function act(id: string, action: "approve" | "reject") {
     setBusyId(id);
@@ -394,41 +400,46 @@ function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[];
 
   return (
     <aside className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-      <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Bekleyen Değişiklik Talepleri</h2><Link href="/dashboard/change-requests" className="text-[.62rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
-        {isLoading && <div className="skeleton h-28 rounded-xl" />}
-        {!isLoading && !requests?.length && <EmptyRail text="Bekleyen talep yok." />}
+      {railLoading && <div className="skeleton min-h-28 rounded-2xl md:col-span-2 xl:col-span-1" aria-label="Dikkat gerektiren işler yükleniyor" />}
+
+      {allClear && (
+        <section className="app-card flex items-center gap-3 p-4 md:col-span-2 xl:col-span-1">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--success-soft)] text-[var(--success-strong)]"><Icon name="check" className="h-5 w-5" /></span>
+          <div><h2 className="text-sm font-bold">Bugün için her şey yolunda</h2><p className="text-meta mt-1">Bekleyen talep, banka işlemi veya öğrenci uyarısı yok.</p></div>
+        </section>
+      )}
+
+      {hasRequests && <section className="app-card p-4">
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Bekleyen Değişiklik Talepleri</h2><Link href="/dashboard/change-requests" className="text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
         <div className="divide-y divide-[var(--line)]">
           {requests?.slice(0, 3).map((request) => {
             const lesson = lessons.find((item) => item.id === request.lessonId);
-            return <div key={request.id} className="flex items-center gap-2 py-3 first:pt-0 last:pb-0"><span className="min-w-0 flex-1"><span className="block truncate text-[.7rem] font-bold">{lesson?.studentName ?? "Ders değişikliği"}</span><span className="mt-0.5 block text-[.56rem] text-[var(--muted)]">{new Date(request.proposedStartAt).toLocaleString("tr-TR", { weekday:"short", hour:"2-digit", minute:"2-digit" })}</span></span><button disabled={busyId === request.id} onClick={() => act(request.id,"approve")} className="pressable grid h-8 w-8 place-items-center rounded-lg bg-[var(--success-soft)] text-[var(--success-strong)] disabled:opacity-50" aria-label="Talebi onayla"><Icon name="check" className="h-4 w-4" /></button><button disabled={busyId === request.id} onClick={() => act(request.id,"reject")} className="pressable grid h-8 w-8 place-items-center rounded-lg bg-[var(--danger-soft)] text-[var(--danger-strong)] disabled:opacity-50" aria-label="Talebi reddet"><Icon name="x" className="h-4 w-4" /></button></div>;
+            return <div key={request.id} className="flex items-center gap-2 py-3 first:pt-0 last:pb-0"><span className="min-w-0 flex-1"><span className="block truncate text-[.75rem] font-bold">{lesson?.studentName ?? "Ders değişikliği"}</span><span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">{new Date(request.proposedStartAt).toLocaleString("tr-TR", { weekday:"short", hour:"2-digit", minute:"2-digit" })}</span></span><button disabled={busyId === request.id} onClick={() => act(request.id,"approve")} className="pressable grid h-11 w-11 place-items-center rounded-xl bg-[var(--success-soft)] text-[var(--success-strong)] disabled:opacity-50" aria-label="Talebi onayla"><Icon name="check" className="h-4 w-4" /></button><button disabled={busyId === request.id} onClick={() => act(request.id,"reject")} className="pressable grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)] disabled:opacity-50" aria-label="Talebi reddet"><Icon name="x" className="h-4 w-4" /></button></div>;
           })}
         </div>
-      </section>
+      </section>}
 
-      <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Gözden Geçirilmesi Gereken Banka İşlemleri</h2><Link href="/dashboard/banking" className="text-[.62rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
-        {!bankItems?.items.length && <EmptyRail text="İncelenecek işlem yok." />}
+      {hasBankItems && <section className="app-card p-4">
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Gözden Geçirilmesi Gereken Banka İşlemleri</h2><Link href="/dashboard/banking" className="text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
         <div className="divide-y divide-[var(--line)]">
           {bankItems?.items.map((item) => (
             <Link key={item.id} href="/dashboard/banking" className="pressable flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
               <span className="min-w-0">
-                <span className="block truncate text-[.7rem] font-bold tabular-nums">{formatMoney(item.amount)} {item.currency}</span>
-                <span className="mt-0.5 block truncate text-[.56rem] text-[var(--muted)]">{item.senderName ?? "İsimsiz gönderici"}{item.description ? ` · ${item.description}` : ""}</span>
+                <span className="block truncate text-[.75rem] font-bold tabular-nums">{formatMoney(item.amount)} {item.currency}</span>
+                <span className="mt-0.5 block truncate text-[.75rem] text-[var(--muted)]">{item.senderName ?? "İsimsiz gönderici"}{item.description ? ` · ${item.description}` : ""}</span>
               </span>
-              <span className="pressable shrink-0 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[.62rem] font-bold text-[var(--brand)]">İncele</span>
+              <span className="pressable shrink-0 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[.75rem] font-bold text-[var(--brand)]">İncele</span>
             </Link>
           ))}
         </div>
-      </section>
+      </section>}
 
-      <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">İlgi Gerektirebilecek Öğrenciler</h2><span className="text-[.6rem] text-[var(--muted)]">Açıklanabilir sinyal</span></div>
-        {!attentionStudents?.length && <EmptyRail text="Şu an uyarı üreten bir sinyal yok." />}
-        <div className="divide-y divide-[var(--line)]">{attentionStudents?.slice(0, 4).map((student) => <Link key={student.studentId} href={`/dashboard/students#student-${student.studentId}`} className="pressable block py-3 first:pt-0 last:pb-0"><span className="block text-[.7rem] font-bold">{student.studentName}</span><span className="mt-1 block text-[.58rem] leading-relaxed text-[var(--danger-strong)]">İlgi gerektirebilir · {student.reasons.join(" · ")}</span></Link>)}</div>
-      </section>
+      {hasAttentionStudents && <section className="app-card p-4">
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">İlgi Gerektirebilecek Öğrenciler</h2><span className="text-[.75rem] text-[var(--muted)]">Açıklanabilir sinyal</span></div>
+        <div className="divide-y divide-[var(--line)]">{attentionStudents?.slice(0, 4).map((student) => <Link key={student.studentId} href={`/dashboard/students#student-${student.studentId}`} className="pressable block py-3 first:pt-0 last:pb-0"><span className="block text-[.75rem] font-bold">{student.studentName}</span><span className="mt-1 block text-[.75rem] leading-relaxed text-[var(--danger-strong)]">İlgi gerektirebilir · {student.reasons.join(" · ")}</span></Link>)}</div>
+      </section>}
 
-      <UpcomingBirthdaysRail birthdays={birthdays} />
+      {hasBirthdays && <UpcomingBirthdaysRail birthdays={birthdays} />}
     </aside>
   );
 }
@@ -445,19 +456,19 @@ function UpcomingBirthdaysRail({ birthdays }: { birthdays?: UpcomingBirthday[] }
 
   return (
     <section className="app-card p-4">
-      <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Yaklaşan Doğum Günleri</h2><span className="text-[.6rem] text-[var(--muted)]">30 gün içinde</span></div>
+      <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Yaklaşan Doğum Günleri</h2><span className="text-[.75rem] text-[var(--muted)]">30 gün içinde</span></div>
       {!birthdays?.length && <EmptyRail text="Yaklaşan doğum günü yok." />}
       <div className="divide-y divide-[var(--line)]">
         {birthdays?.slice(0, 5).map((item) => (
           <Link key={item.studentId} href={`/dashboard/students#student-${item.studentId}`} className="pressable flex items-center gap-3 py-3 first:pt-0 last:pb-0">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name="cake" className="h-4 w-4" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[.7rem] font-bold">{item.studentName}</span>
-              <span className="mt-0.5 block text-[.58rem] text-[var(--muted)]">
+              <span className="block truncate text-[.75rem] font-bold">{item.studentName}</span>
+              <span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">
                 {new Date(`${item.nextOccurrence}T00:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} · {item.turningAge} yaşına giriyor
               </span>
             </span>
-            <span className="shrink-0 text-[.62rem] font-bold text-[var(--brand)]">{dueLabel(item.daysUntil)}</span>
+            <span className="shrink-0 text-[.75rem] font-bold text-[var(--brand)]">{dueLabel(item.daysUntil)}</span>
           </Link>
         ))}
       </div>
@@ -465,17 +476,18 @@ function UpcomingBirthdaysRail({ birthdays }: { birthdays?: UpcomingBirthday[] }
   );
 }
 
-function EmptyRail({ text }: { text: string }) { return <p className="rounded-xl bg-[var(--surface-muted)] px-3 py-5 text-center text-[.65rem] text-[var(--muted)]">{text}</p>; }
+function EmptyRail({ text }: { text: string }) { return <p className="rounded-xl bg-[var(--surface-muted)] px-3 py-5 text-center text-[.75rem] text-[var(--muted)]">{text}</p>; }
 
 function TeacherDashboard({ email }: { email: string }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const weekStart = weekStartFor(new Date());
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const selectedIsToday = selectedDate.toDateString() === new Date().toDateString();
   return (
     <div className="mx-auto max-w-[32rem] xl:max-w-5xl">
       <header className="mb-3 flex items-start justify-between gap-3">
-        <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">Bugün</h1><p className="mt-0.5 text-[.65rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(new Date())}</p></div>
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.65rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
+        <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">{selectedIsToday ? "Bugün" : selectedDate.toLocaleDateString("tr-TR", { weekday: "long" })}</h1><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(selectedDate)}</p></div>
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
       </header>
       {/* Gün şeridi 390px'te taşarsa yatay kaydırılabilir (docs/14-ui-design-prompt.md C) - 7 gün
           sabit grid-cols-7 ile önceden dar ekranda okunmaz hale sıkışıyordu. */}
@@ -484,9 +496,9 @@ function TeacherDashboard({ email }: { email: string }) {
           const active = day.toDateString() === selectedDate.toDateString();
           const isToday = day.toDateString() === new Date().toDateString();
           return (
-            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} style={{ scrollSnapAlign: "start" }} className={`pressable relative flex min-h-[3.2rem] w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-[.55rem] sm:w-auto ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(168,78,31,.2)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>
+            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} style={{ scrollSnapAlign: "start" }} className={`pressable relative flex min-h-[3.2rem] w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-[.75rem] sm:w-auto ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(168,78,31,.2)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>
               <span>{day.toLocaleDateString("tr-TR", { weekday:"short" }).replace(".","")}</span>
-              <span className="mt-1 text-[.7rem] font-bold">{day.getDate()}</span>
+              <span className="mt-1 text-[.75rem] font-bold">{day.getDate()}</span>
               {isToday && !active && <span className="absolute bottom-1.5 h-1 w-1 rounded-full bg-[var(--brand)]" />}
             </button>
           );

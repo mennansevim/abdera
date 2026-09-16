@@ -12,6 +12,7 @@ export type IconName =
   | "swap"
   | "logout"
   | "search"
+  | "filter"
   | "menu"
   | "close"
   | "chevron"
@@ -49,6 +50,7 @@ const paths: Record<IconName, React.ReactNode> = {
   swap: <><path d="M7 7h11l-3-3M17 17H6l3 3M18 7l-3 3M6 17l3-3"/></>,
   logout: <><path d="M10 17l5-5-5-5M15 12H3M21 19V5a2 2 0 0 0-2-2h-6"/></>,
   search: <><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>,
+  filter: <><path d="M4 6h16M7 12h10M10 18h4"/></>,
   menu: <path d="M4 7h16M4 12h16M4 17h16"/>,
   close: <path d="m6 6 12 12M18 6 6 18"/>,
   chevron: <path d="m9 18 6-6-6-6"/>,
@@ -121,6 +123,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
         width={44}
         height={44}
         sizes="44px"
+        loading="eager"
         unoptimized
         aria-hidden="true"
         className={`${compact ? "h-9 w-9" : "h-11 w-11"} shrink-0 rounded-full bg-white object-cover shadow-[0_7px_18px_rgba(70,34,30,.2)] ring-1 ring-white/35`}
@@ -128,7 +131,7 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <span className="leading-none">
           <span className="block font-serif text-[1.25rem] font-bold italic tracking-[-0.03em]">Abdera</span>
-          <span className="mt-1 block text-[0.6rem] font-medium tracking-[0.08em] opacity-60">SANAT AKADEMİ</span>
+          <span className="mt-1 block text-[.75rem] font-medium tracking-[0.08em] opacity-60">SANAT AKADEMİ</span>
         </span>
       )}
     </span>

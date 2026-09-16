@@ -10,7 +10,7 @@ import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/
 import { useCalendar, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
-import { AddButton, Modal, Notice } from "@/components/ui";
+import { Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
 import { MakeupScheduler } from "./makeup-scheduler";
 
@@ -127,6 +127,7 @@ export default function CalendarPage() {
   const [instrumentFilter, setInstrumentFilter] = useState<InstrumentFilter>("Hepsi");
   const [teacherFilter, setTeacherFilter] = useState("all");
   const [studentFilter, setStudentFilter] = useState("all");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: teachers } = useTeachers();
@@ -178,6 +179,15 @@ export default function CalendarPage() {
   const colors = useMemo(() => buildInstrumentColorMap([...lessons, ...timelineLessons].map((lesson) => lesson.instrumentName)), [lessons, timelineLessons]);
   const hourWindow = useMemo(() => computeHourWindow(visibleLessons), [visibleLessons]);
   const totalMinutes = useMemo(() => visibleLessons.reduce((total, lesson) => total + lessonDurationMinutes(lesson), 0), [visibleLessons]);
+  const activeFilterCount = Number(instrumentFilter !== "Hepsi")
+    + Number(isAdmin && teacherFilter !== "all")
+    + Number(isAdmin && studentFilter !== "all");
+
+  function clearFilters() {
+    setInstrumentFilter("Hepsi");
+    setTeacherFilter("all");
+    setStudentFilter("all");
+  }
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -220,20 +230,36 @@ export default function CalendarPage() {
       )}
 
       {isAdmin && (
-        <p className="hidden items-center gap-1.5 text-[.65rem] text-[var(--muted)] xl:flex">
+        <p className="hidden items-center gap-1.5 text-[.75rem] text-[var(--muted)] xl:flex">
           <Icon name="swap" className="h-3.5 w-3.5" /> İpucu: boş bir alana çift tıklayarak o gün ve saati hazır gelen yeni ders formunu açabilirsin; ders kartını sürükleyerek de taşıyabilirsin.
         </p>
       )}
 
-      <div className="app-card flex flex-col gap-3 p-3 sm:px-4 2xl:flex-row 2xl:items-center">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <div className="app-card flex flex-col gap-3 p-3 sm:px-4 xl:flex-row xl:flex-nowrap xl:items-center xl:gap-2">
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen((open) => !open)}
+            aria-expanded={mobileFiltersOpen}
+            aria-controls="calendar-filters"
+            className="pressable flex min-h-11 flex-1 items-center justify-between rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold"
+          >
+            <span className="flex items-center gap-2"><Icon name="filter" className="h-4 w-4 text-[var(--brand)]" />Filtreler</span>
+            <span className="flex items-center gap-2 text-[var(--muted)]">
+              {activeFilterCount > 0 && <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] text-white">{activeFilterCount}</span>}
+              {mobileFiltersOpen ? "Gizle" : "Göster"}
+            </span>
+          </button>
+          {activeFilterCount > 0 && <button type="button" onClick={clearFilters} className="pressable min-h-11 rounded-xl px-3 text-xs font-bold text-[var(--brand-strong)]">Temizle</button>}
+        </div>
+        <div id="calendar-filters" className={`${mobileFiltersOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl bg-[var(--surface-muted)] p-2 md:flex md:bg-transparent md:p-0 xl:flex-none xl:flex-nowrap xl:gap-1.5`}>
           {/* Öğrenci/öğretmen filtreleri yalnızca Admin'e görünür: bir öğretmen zaten yalnızca
               kendi derslerini görüyor (backend Calendar.cs bunu zorluyor), "tüm öğretmenler"
               arasından seçim yapabilecekmiş gibi bir kontrol sunmak yanıltıcı ve kullanıcı
               isteği üzerine kaldırıldı ("öğretmen diğer öğretmenlerin derslerini görmemeli"). */}
           {isAdmin && <>
-            <label className="relative min-w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğrenciler</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
-            <label className="relative min-w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-8 text-xs font-bold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+            <label className="relative w-full shrink-0 md:w-48 xl:w-[8.25rem] 2xl:w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-7 text-xs font-bold"><option value="all">Öğrenci</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
+            <label className="relative w-full shrink-0 md:w-48 xl:w-36 2xl:w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-7 text-xs font-bold"><option value="all">Öğretmen</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
             <div className="h-6 w-px bg-[var(--line)] max-sm:hidden" aria-hidden="true" />
           </>}
           {/* Enstrüman filtresi de aynı kuralı izler: Teacher oturumunda yalnızca kendi
@@ -244,27 +270,27 @@ export default function CalendarPage() {
                 type="button"
                 onClick={() => setInstrumentFilter(filter)}
                 aria-pressed={instrumentFilter === filter}
-                className={`pressable min-h-9 shrink-0 rounded-xl border px-3.5 text-xs font-bold ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
+                className={`pressable min-h-9 shrink-0 rounded-xl border px-3 text-xs font-bold xl:px-1.5 2xl:px-3.5 ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
               >
                 {filter}
               </button>
             ))}</div>
         </div>
-        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 border-t border-[var(--line)] pt-3 2xl:ml-auto 2xl:w-auto 2xl:flex-nowrap 2xl:border-t-0 2xl:pt-0" aria-label="Takvim kontrolleri">
+        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 border-t border-[var(--line)] pt-3 md:border-t-0 md:pt-0 xl:ml-auto xl:w-auto xl:shrink-0 xl:flex-nowrap" aria-label="Takvim kontrolleri">
           <div className="flex shrink-0 items-center gap-1 rounded-[.9rem] bg-[var(--surface-muted)] p-1" aria-label="Hafta değiştir">
             <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="pressable grid h-9 w-9 place-items-center rounded-[.7rem] border border-[var(--line)] bg-white hover:border-[var(--brand)] hover:text-[var(--brand)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
             <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="pressable grid h-9 w-9 place-items-center rounded-[.7rem] border border-[var(--line)] bg-white hover:border-[var(--brand)] hover:text-[var(--brand)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
           </div>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.68rem] font-semibold hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
-          <span aria-live="polite" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-3 text-xs font-bold tabular-nums text-[#5c4d3f]">
-            <Icon name="calendar" className="h-4 w-4 text-[var(--brand)]" />
+          <button onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.75rem] font-semibold hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
+          <span aria-live="polite" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2 text-[.75rem] font-bold tabular-nums text-[#5c4d3f] 2xl:px-3 2xl:text-xs">
+            <Icon name="calendar" className="hidden h-4 w-4 text-[var(--brand)] 2xl:block" />
             {formatWeekRange(weekStart, addDays(weekEnd, -1))}
           </span>
           {isAdmin && (
             <>
               <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden="true" />
-              <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet">Telafi planla</button>
-              <AddButton label="Yeni ders" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} />
+              <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-2.5 text-[.75rem] font-bold text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)] 2xl:px-4 2xl:text-xs">Telafi planla</button>
+              <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand)] px-2.5 text-[.75rem] font-bold text-white 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
             </>
           )}
         </div>
@@ -440,7 +466,7 @@ function WeeklyGrid({
   return (
     <section className="app-card min-w-0 overflow-hidden">
       {toast && (
-        <div role="status" className={`flex items-center gap-2 border-b px-4 py-2.5 text-[.68rem] font-semibold ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
+        <div role="status" className={`flex items-center gap-2 border-b px-4 py-2.5 text-[.75rem] font-semibold ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
           <Icon name={toast.tone === "success" ? "check" : "x"} className="h-3.5 w-3.5 shrink-0" />
           {toast.text}
         </div>
@@ -454,8 +480,8 @@ function WeeklyGrid({
           <div className="border-r border-[var(--line)]" />
           {weekDays.map((day, index) => (
             <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}>
-              <span className="block text-[.66rem] font-semibold text-[var(--muted)]">{WEEK_DAYS_TR[index]}</span>
-              <span className="mt-1 block text-[.6rem] text-[var(--muted)]">{day.getDate()} {day.toLocaleDateString("tr-TR", { month: "short" })}</span>
+              <span className="block text-[.75rem] font-semibold text-[var(--muted)]">{WEEK_DAYS_TR[index]}</span>
+              <span className="mt-1 block text-[.75rem] text-[var(--muted)]">{day.getDate()} {day.toLocaleDateString("tr-TR", { month: "short" })}</span>
             </div>
           ))}
           <GridTimeLabels hourWindow={hourWindow} dragging={!!draggingId} />
@@ -508,7 +534,7 @@ function WeeklyGrid({
 }
 
 function FloatingDragPreview({ preview, tone }: { preview: { x: number; y: number; lesson: CalendarLesson; label: string }; tone: InstrumentTone }) {
-  return <div aria-hidden="true" className="pointer-events-none fixed z-[70] w-44 -translate-x-1/2 -translate-y-[calc(100%+.8rem)] overflow-hidden rounded-xl border-l-4 px-3 py-2.5 text-left shadow-[0_16px_40px_rgba(58,42,31,.25)]" style={{ left: preview.x, top: preview.y, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}><span className="block rounded-lg bg-white/85 px-2 py-1 text-center text-xs font-extrabold tabular-nums shadow-sm">{preview.label}</span><span className="mt-2 block truncate text-xs font-bold">{preview.lesson.studentName}</span><span className="mt-0.5 block truncate text-[.62rem] opacity-75">{preview.lesson.instrumentName} · {preview.lesson.teacherName}</span></div>;
+  return <div aria-hidden="true" className="pointer-events-none fixed z-[70] w-44 -translate-x-1/2 -translate-y-[calc(100%+.8rem)] overflow-hidden rounded-xl border-l-4 px-3 py-2.5 text-left shadow-[0_16px_40px_rgba(58,42,31,.25)]" style={{ left: preview.x, top: preview.y, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}><span className="block rounded-lg bg-white/85 px-2 py-1 text-center text-xs font-extrabold tabular-nums shadow-sm">{preview.label}</span><span className="mt-2 block truncate text-xs font-bold">{preview.lesson.studentName}</span><span className="mt-0.5 block truncate text-[.75rem] opacity-75">{preview.lesson.instrumentName} · {preview.lesson.teacherName}</span></div>;
 }
 
 function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlot; onCreated: (summary: string) => void; onClose: () => void }) {
@@ -540,7 +566,7 @@ function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlo
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
           <div>
             <h2 className="text-title">Yeni ders oluştur</h2>
-            <p className="mt-1 text-[.68rem] font-semibold text-[var(--muted)]">{slotLabel}</p>
+            <p className="mt-1 text-[.75rem] font-semibold text-[var(--muted)]">{slotLabel}</p>
           </div>
           <button type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat" title="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
@@ -563,7 +589,7 @@ function GridTimeLabels({ hourWindow, dragging }: { hourWindow: HourWindow; drag
   return (
     <div className={`sticky left-0 border-r border-t border-[var(--line)] bg-[#fdf9f2] ${dragging ? "z-30 shadow-[8px_0_18px_rgba(80,48,24,.09)]" : "z-10"}`} style={{ height: `${totalHours * GRID_HEIGHT_REM_PER_HOUR}rem` }}>
       {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className={`absolute right-2 rounded px-1 text-[.53rem] tabular-nums ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"} ${dragging ? "bg-white font-bold text-[var(--foreground)]" : "text-[var(--muted)]"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
+        <span key={index} className={`absolute right-2 rounded px-1 text-[.75rem] tabular-nums ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"} ${dragging ? "bg-white font-bold text-[var(--foreground)]" : "text-[var(--muted)]"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
           {String(hourWindow.startHour + index).padStart(2, "0")}:00
         </span>
       ))}
@@ -584,7 +610,7 @@ function CurrentTimeLine({ weekDays, hourWindow, now }: { weekDays: Date[]; hour
       style={{ top: `calc(3.9rem + ${offsetRem}rem)` }}
       aria-label={`Şu an saat ${formatTime(now)}`}
     >
-      <span className="w-[3.4rem] shrink-0 rounded-r-md bg-[var(--brand)] py-1 pr-2 text-right text-[.6rem] font-extrabold tabular-nums text-white shadow-sm">{formatTime(now)}</span>
+      <span className="w-[3.4rem] shrink-0 rounded-r-md bg-[var(--brand)] py-1 pr-2 text-right text-[.75rem] font-extrabold tabular-nums text-white shadow-sm">{formatTime(now)}</span>
       <span className="h-2 w-2 -translate-x-1/2 rounded-full bg-[var(--brand)] ring-2 ring-white" />
       <span className="h-px flex-1 -translate-x-1 bg-[var(--brand)] shadow-[0_0_0_1px_rgba(217,102,42,.08)]" />
     </div>
@@ -655,7 +681,7 @@ function GridDayColumn({
           className="pointer-events-none absolute inset-x-1 z-20 flex items-start justify-center overflow-hidden rounded-md border-2 border-dashed border-[var(--brand)] bg-[var(--brand)]/10 pt-0.5"
           style={{ top: `${(hoverSlot.minutes / totalMinutes) * 100}%`, height: `${hoverSlot.heightPercent}%`, minHeight: "1.6rem" }}
         >
-          <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.62rem] font-bold tabular-nums text-white shadow-sm">{hoverSlot.label}</span>
+          <span className="rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] font-bold tabular-nums text-white shadow-sm">{hoverSlot.label}</span>
         </span>
       )}
 
@@ -692,11 +718,11 @@ function GridDayColumn({
                 sızmaz, çünkü hook Teacher için hiç istek atmıyor (docs/04-permissions.md). */}
             {overdue && <span className="absolute right-1 top-1 z-10 grid h-3.5 w-3.5 place-items-center rounded-full bg-[var(--danger)] text-white shadow-sm" aria-hidden="true"><Icon name="alert-triangle" className="h-2.5 w-2.5" strokeWidth={2.6} /></span>}
             <span className="flex items-center justify-between gap-1">
-              <span className={`block text-[.52rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{formatTime(start)}–{formatTime(end)}</span>
-              {active && <span className="rounded-full bg-[var(--brand)] px-1.5 py-0.5 text-[.43rem] font-extrabold uppercase tracking-wide text-white">Şimdi</span>}
+              <span className={`block text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{formatTime(start)}–{formatTime(end)}</span>
+              {active && <span className="rounded-full bg-[var(--brand)] px-1.5 py-0.5 text-[.75rem] font-extrabold uppercase tracking-wide text-white">Şimdi</span>}
             </span>
-            <span className={`mt-0.5 block truncate text-[.57rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
-            <span className="block truncate text-[.46rem] opacity-75">{lesson.instrumentName}{isAdmin ? ` · ${lesson.teacherName}` : ""}</span>
+            <span className={`mt-0.5 block truncate text-[.75rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
+            <span className="block truncate text-[.75rem] opacity-75">{lesson.instrumentName}{isAdmin ? ` · ${lesson.teacherName}` : ""}</span>
           </button>
         );
       })}
@@ -710,14 +736,14 @@ function AgendaLessonCard({ lesson, tone, showTeacher, active = false, overdue =
   return (
     <button type="button" onClick={onOpen} title={overdue ? "Aidat gecikmiş" : undefined} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border bg-white p-2.5 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
       <span className="h-9 w-1 rounded-full" style={{ background: tone.border }} />
-      <span className="w-20 shrink-0 text-[.65rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
+      <span className="w-20 shrink-0 text-[.75rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="block truncate text-xs font-bold">{lesson.studentName}</span>
           {overdue && <Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-[var(--danger-strong)]" />}
-          {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.5rem] font-extrabold uppercase text-white">Şimdi</span>}
+          {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] font-extrabold uppercase text-white">Şimdi</span>}
         </span>
-        <span className="block truncate text-[.62rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
+        <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
       </span>
       <LessonStatusChip lesson={lesson} />
     </button>
@@ -768,13 +794,13 @@ function UpcomingLessonsRail({
               <div className="rounded-xl border border-dashed border-[#e7cbaa] bg-[#fffaf4] px-3 py-4 text-center">
                 <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="clock" className="h-4 w-4" /></span>
                 <p className="mt-2 text-xs font-bold">Şu anda ders yok</p>
-                <p className="mt-1 text-[.62rem] leading-relaxed text-[var(--muted)]">Sıradaki ders başladığında burada canlı olarak vurgulanacak.</p>
+                <p className="mt-1 text-[.75rem] leading-relaxed text-[var(--muted)]">Sıradaki ders başladığında burada canlı olarak vurgulanacak.</p>
               </div>
             )}
 
             <div className="mb-2 mt-4 flex items-center justify-between px-1">
               <h3 className="text-xs font-extrabold">Yaklaşan dersler</h3>
-              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.55rem] font-bold text-[var(--muted)]">{upcomingLessons.length}</span>
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.75rem] font-bold text-[var(--muted)]">{upcomingLessons.length}</span>
             </div>
 
             <div className="space-y-1.5">
@@ -805,15 +831,15 @@ function ActiveLessonCard({ lesson, tone, now }: { lesson: CalendarLesson; tone:
     <article className="overflow-hidden rounded-xl border shadow-sm" style={{ borderColor: tone.border, background: tone.bg, color: tone.text }}>
       <div className="p-3.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="rounded-full bg-white/75 px-2 py-1 text-[.52rem] font-extrabold uppercase tracking-[.08em]">Şu an derste</span>
-          <span className="text-[.62rem] font-bold tabular-nums">{formatTime(start)}–{formatTime(end)}</span>
+          <span className="rounded-full bg-white/75 px-2 py-1 text-[.75rem] font-extrabold uppercase tracking-[.08em]">Şu an derste</span>
+          <span className="text-[.75rem] font-bold tabular-nums">{formatTime(start)}–{formatTime(end)}</span>
         </div>
         <h3 className="mt-3 text-sm font-extrabold">{lesson.studentName}</h3>
-        <p className="mt-1 text-[.65rem] font-semibold opacity-75">{lesson.instrumentName} · {lesson.teacherName}</p>
+        <p className="mt-1 text-[.75rem] font-semibold opacity-75">{lesson.instrumentName} · {lesson.teacherName}</p>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/65">
           <span className="block h-full rounded-full transition-[width] duration-500" style={{ width: `${progress}%`, background: tone.border }} />
         </div>
-        <p className="mt-1.5 text-right text-[.55rem] font-bold opacity-70">Yaklaşık {remaining} dk kaldı</p>
+        <p className="mt-1.5 text-right text-[.75rem] font-bold opacity-70">Yaklaşık {remaining} dk kaldı</p>
       </div>
     </article>
   );
@@ -832,12 +858,12 @@ function UpcomingLessonItem({ lesson, tone, now, first }: { lesson: CalendarLess
     <article className={`flex items-center gap-2.5 rounded-xl border p-2.5 ${first ? "border-[var(--line)] bg-white shadow-sm" : "border-transparent bg-[#fffaf4]"}`}>
       <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: tone.border }} />
       <span className="w-12 shrink-0">
-        <span className="block text-[.53rem] font-bold text-[var(--muted)]">{dayLabel}</span>
+        <span className="block text-[.75rem] font-bold text-[var(--muted)]">{dayLabel}</span>
         <span className="mt-0.5 block text-xs font-extrabold tabular-nums">{formatTime(start)}</span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[.68rem] font-extrabold">{lesson.studentName}</span>
-        <span className="mt-0.5 block truncate text-[.57rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
+        <span className="block truncate text-[.75rem] font-extrabold">{lesson.studentName}</span>
+        <span className="mt-0.5 block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
       </span>
       {first && <Icon name="chevron" className="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />}
     </article>
@@ -853,7 +879,7 @@ function LessonStatusChip({ lesson }: { lesson: CalendarLesson }) {
     Makeup: { label: "Telafi", className: "bg-[#e0dbc4] text-[#48521f]" },
   };
   const { label, className } = config[lesson.status];
-  return <span className={`shrink-0 rounded-full px-2 py-1 text-[.56rem] font-bold ${className}`}>{label}</span>;
+  return <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${className}`}>{label}</span>;
 }
 
 function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { lesson: CalendarLesson; isAdmin: boolean; now: Date; onUpdated: () => void; onClose: () => void }) {
@@ -936,7 +962,7 @@ function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { les
               <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Durum<select value={statusValue} onChange={(event) => setStatusValue(event.target.value as "Normal" | "Cancelled")} className="field mt-1 min-h-10 bg-white text-sm font-semibold"><option value="Normal">Planlandı</option><option value="Cancelled">İptal edildi</option></select></label>
             </div>
-            <p className="mt-3 text-[.68rem] text-[var(--muted)]">Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
+            <p className="mt-3 text-[.75rem] text-[var(--muted)]">Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => { setEditing(false); setError(null); }} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold">İptal</button>

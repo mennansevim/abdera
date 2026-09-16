@@ -3,6 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { AddButton, AdminGate, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
+import { DeleteTeacherDialog } from "@/components/delete-person-dialog";
 import { ApiError } from "@/lib/api";
 import { useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
@@ -132,6 +133,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
   const [studentSearch, setStudentSearch] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const teacherInstruments = instruments.filter((instrument) => teacher.instrumentIds.includes(instrument.id));
   const groupedStudents = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string; courses: string[] }>();
@@ -183,14 +185,33 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
       {isAdmin && teacher.status === "Active" && (
         <AddButton label={`${teacher.firstName} ${teacher.lastName} öğretmenine öğrenci ekle`} tone="quiet" onClick={() => setShowAddForm(true)} />
       )}
+      {isAdmin && (
+        <button
+          type="button"
+          onClick={() => setShowDeleteDialog(true)}
+          aria-label={`${teacher.firstName} ${teacher.lastName} kaydını sil`}
+          title="Sil"
+          className="icon-btn icon-btn-quiet shrink-0 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]"
+        >
+          <Icon name="x" className="h-4 w-4" />
+        </button>
+      )}
     </div>
+
+    {showDeleteDialog && (
+      <DeleteTeacherDialog
+        teacherId={teacher.id}
+        teacherName={`${teacher.firstName} ${teacher.lastName}`}
+        onClose={() => setShowDeleteDialog(false)}
+      />
+    )}
 
     {showStudents && isAdmin && <div className="border-t border-[var(--line)] bg-[var(--surface-muted)]/35 px-4 py-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div><p className="text-xs font-bold">Öğrenciler</p><p className="text-meta mt-0.5">Bu öğretmenden aktif ders alan {groupedStudents.length} öğrenci</p></div>
         {groupedStudents.length > 6 && <label className="relative"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 w-48 pl-9 text-xs" /></label>}
       </div>
-      {visibleStudents.length > 0 ? <ul className="grid gap-2 sm:grid-cols-2">{visibleStudents.map((student) => <li key={student.id} className="flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 shadow-sm"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.62rem] font-bold text-[var(--brand-strong)]">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{student.name}</span><span className="mt-1 flex flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.55rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></span></li>)}</ul> : groupedStudents.length ? <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}
+      {visibleStudents.length > 0 ? <ul className="grid gap-2 sm:grid-cols-2">{visibleStudents.map((student) => <li key={student.id} className="flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 shadow-sm"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand-strong)]">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{student.name}</span><span className="mt-1 flex flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.75rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></span></li>)}</ul> : groupedStudents.length ? <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}
       <TeacherAvailabilityDays teacherId={teacher.id} enabled={showStudents} />
     </div>}
 

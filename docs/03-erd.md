@@ -234,63 +234,81 @@ lesson_attendances
   note                  text null
 ```
 
-## Pricing (yeni — A1)
+## Billing — ücret tarifesi ve politika (H1, 2026-09-16)
+
+Eski `price_lists` + `price_list_items` + `fee_plans` üçlüsünün yerini aldı. Fiyatın tek
+ekseni ders türü: enstrüman ve ders süresi tutarı etkilemiyor (`docs/10-decisions.md` H1).
 
 ```
-price_lists
-  id             uuid pk
-  name           text                -- "2026-2027 Sezonu Fiyatları"
-  effective_from date
-  effective_until date null
-  created_at     timestamptz
-  created_by     uuid fk -> users(id)
-
-price_list_items
+tuition_rates
   id                 uuid pk
-  price_list_id      uuid fk -> price_lists(id)
-  instrument_id      uuid fk -> instruments(id)
-  duration_minutes   smallint            -- 30, 45, 60 dk gibi standart süreler
-  billing_type       text                -- MONTHLY | PACKAGE
-  amount             numeric(12,2)
+  course_kind        text          -- Individual | Group
+  lessons_per_month  smallint      -- bilgi amaçlı (veliye "4 ders" diye yazılır)
+  monthly_amount     numeric(12,2)
   currency           text default 'TRY'
-  package_lesson_count smallint null     -- billing_type=PACKAGE ise dolu
+  effective_from     date
+  effective_until    date null     -- yeni tarife açılınca bir gün öncesinden kapanır
+  created_at         timestamptz
+  created_by         uuid null fk -> users(id)
 
-  CHECK (amount >= 0)
-  -- Aynı (instrument_id, duration_minutes, billing_type) için çakışan tarih aralığı
-  -- olamaz; genel aralık tipi yerine uygulama katmanında (Features/) kontrol edilir.
+  CHECK (monthly_amount >= 0)
+  CHECK (effective_until IS NULL OR effective_until >= effective_from)
+  UNIQUE (course_kind) WHERE effective_until IS NULL   -- tür başına tek açık tarife
+
+billing_settings                    -- tek satır (singleton, sabit id ...b1)
+  id                             uuid pk
+  multi_course_discount_percent  numeric(5,2) default 5
+  sibling_discount_percent       numeric(5,2) default 5
+  due_day_of_month               smallint default 1
+  updated_by                     uuid null fk -> users(id)
+  updated_at                     timestamptz
+
+  CHECK (due_day_of_month BETWEEN 1 AND 28)
+
+prepay_discount_tiers             -- "N ay ve üzeri peşin ödeyene %X"
+  id          uuid pk
+  min_months  smallint
+  percent     numeric(5,2)
+
+  UNIQUE (min_months)
+  CHECK (min_months BETWEEN 2 AND 24)
+  CHECK (percent >= 0 AND percent <= 100)
 ```
 
-## Billing
+Kurs kaydının aidatı etkileyen alanları `enrollments` üzerindedir:
 
 ```
-fee_plans
-  id                     uuid pk
-  enrollment_id          uuid fk -> enrollments(id)
-  price_list_item_id     uuid fk -> price_list_items(id)   -- A1: snapshot kaynağı
-  billing_type           text        -- MONTHLY | PACKAGE (price_list_item ile tutarlı)
-  amount                 numeric(12,2)   -- oluşturulduğu andaki fiyat, kopya
-  currency               text default 'TRY'
-  due_day                smallint null       -- MONTHLY: ayın kaçında
-  package_lesson_count   smallint null       -- PACKAGE
-  active_from            date
-  active_until           date null
-  created_at             timestamptz
+enrollments (ek kolonlar — H1/H5)
+  course_kind              text default 'Individual'   -- Individual | Group
+  manual_discount_percent  numeric(5,2) null           -- doluysa otomatik kuralların YERİNE geçer
+  manual_discount_reason   text null
 
+  CHECK (manual_discount_percent IS NULL OR manual_discount_percent BETWEEN 0 AND 100)
+```
+
+## Billing — aidat ve tahsilat
+
+```
 receivables
-  id             uuid pk
-  enrollment_id  uuid fk -> enrollments(id)
-  fee_plan_id    uuid fk -> fee_plans(id)
-  price_list_item_id  uuid fk -> price_list_items(id)   -- A1: tutar burada da donmuş halde
-  period         text          -- "2026-09" gibi dönem etiketi
-  amount         numeric(12,2) -- fee_plan'dan kopyalanır, sonraki zamdan etkilenmez
-  currency       text default 'TRY'
-  due_date       date
-  status         text          -- UNPAID | PARTIAL | PAID | OVERDUE | CANCELLED
-  created_at     timestamptz
-  updated_at     timestamptz
+  id               uuid pk
+  enrollment_id    uuid fk -> enrollments(id)
+  tuition_rate_id  uuid              -- hangi tarifeden türediği (izlenebilirlik)
+  period           text              -- "2026-09" gibi dönem etiketi
+  base_amount      numeric(12,2)     -- indirimden önceki tarife tutarı
+  discount_percent numeric(5,2)      -- bileşik yüzde (öğrenci + peşin)
+  discount_reason  text null         -- "2 kurs indirimi (%5) + Peşin ödeme indirimi (%10)"
+  amount           numeric(12,2)     -- tahsil edilecek net tutar (ASIL OLAN bu)
+  currency         text default 'TRY'
+  due_date         date
+  status           text              -- UNPAID | PARTIAL | PAID | OVERDUE | CANCELLED
+  prepay_plan_id   uuid null         -- aynı kampanyada üretilen ayları birbirine bağlar
+  created_at       timestamptz
+  updated_at       timestamptz
 
   UNIQUE (enrollment_id, period)
   CHECK (amount >= 0)
+  CHECK (base_amount >= 0)
+  CHECK (discount_percent >= 0 AND discount_percent <= 100)
 
 payments
   id             uuid pk
@@ -490,7 +508,7 @@ virtual_ibans
   updated_at         timestamptz
 
   -- Bir veliye aynı anda birden fazla ACTIVE sanal IBAN atanamaz - uygulama katmanında
-  -- kontrol edilir (price_list_items çakışma kontrolü örneğiyle aynı desen).
+  -- kontrol edilir (tuition_rates çakışma kontrolü örneğiyle aynı desen).
 
 bank_incoming_transactions
   id                       uuid pk
@@ -524,7 +542,7 @@ UNIQUE (iban) ON virtual_ibans
 UNIQUE (provider, provider_transaction_id) ON bank_incoming_transactions
 UNIQUE (student_id, teacher_id, instrument_id) WHERE status='Active' ON enrollments
 CHECK (end_at > start_at) ON lessons
-CHECK (amount >= 0) ON receivables, price_list_items
+CHECK (amount >= 0) ON receivables, tuition_rates
 CHECK (amount > 0) ON payments, payment_corrections, bank_incoming_transactions
 CHECK (score BETWEEN 1 AND 5) ON skill_assessments
 CHECK (duration_minutes BETWEEN 1 AND 600) ON practice_journal_entries

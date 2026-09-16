@@ -167,7 +167,7 @@ function StudentPicker({
 }) {
   return (
     <aside className="app-card h-fit overflow-hidden p-4">
-      <div className="flex items-center justify-between gap-2"><p className="text-micro">Öğrenciler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.62rem] font-bold text-[var(--muted)]">{students.length}</span></div>
+      <div className="flex items-center justify-between gap-2"><p className="text-micro">Öğrenciler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.75rem] font-bold text-[var(--muted)]">{students.length}</span></div>
       {isLoading ? (
         <div className="mt-3 skeleton h-11 rounded-xl" />
       ) : !students.length ? (
@@ -198,7 +198,7 @@ function StudentHeader({ student, progress, analysis }: { student: Student; prog
   return <div className="app-card flex flex-wrap items-center gap-4 p-4 sm:p-5">
     <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(145deg,#ea8a4c,#a84e1f)] font-serif text-lg font-bold italic text-white shadow-[0_8px_18px_rgba(168,78,31,.2)]">{initials(name)}</span>
     <div className="min-w-0 flex-1"><p className="text-micro text-[var(--brand-strong)]">ÖĞRENCİ GELİŞİMİ</p><h2 className="mt-1 truncate font-serif text-2xl font-bold italic">{name}</h2><p className="mt-1 text-xs text-[var(--muted)]">{progress?.lastEntryAt ? `Son kayıt ${formatDate(progress.lastEntryAt, true)}` : "Henüz gelişim kaydı yok"} · {analysis.pieceCount ? `${analysis.pieceCount} eser izleniyor` : "Eser kaydı bekleniyor"}</p></div>
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-right"><p className="text-[.6rem] font-bold uppercase tracking-[.08em] text-[var(--muted)]">Durum</p><p className="mt-1 text-xs font-bold text-[var(--success-strong)]">{analysis.trend === "positive" ? "İyi ilerliyor" : analysis.trend === "steady" ? "İstikrarlı" : "Yeni dönem"}</p></div>
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-right"><p className="text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)]">Durum</p><p className="mt-1 text-xs font-bold text-[var(--success-strong)]">{analysis.trend === "positive" ? "İyi ilerliyor" : analysis.trend === "steady" ? "İstikrarlı" : "Yeni dönem"}</p></div>
   </div>;
 }
 
@@ -209,7 +209,7 @@ function ProgressStats({ analysis }: { analysis: ReturnType<typeof buildProgress
     { label: "Ort. zorluk", value: analysis.averageDifficulty ? analysis.averageDifficulty.toFixed(1) : "—", suffix: "/ 5", icon: "target" as const },
     { label: "Hedefli ders", value: analysis.goalCount, suffix: "kayıt", icon: "activity" as const },
   ];
-  return <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{stats.map((stat) => <div key={stat.label} className="app-card flex items-center gap-3 p-3.5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name={stat.icon} className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-[.66rem] font-bold text-[var(--muted)]">{stat.label}</span><span className="mt-0.5 block text-lg font-bold tabular-nums">{stat.value} <small className="text-[.65rem] font-semibold text-[var(--muted)]">{stat.suffix}</small></span></span></div>)}</div>;
+  return <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{stats.map((stat) => <div key={stat.label} className="app-card flex items-center gap-3 p-3.5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name={stat.icon} className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-[.75rem] font-bold text-[var(--muted)]">{stat.label}</span><span className="mt-0.5 block text-lg font-bold tabular-nums">{stat.value} <small className="text-[.75rem] font-semibold text-[var(--muted)]">{stat.suffix}</small></span></span></div>)}</div>;
 }
 
 function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; lessons: CalendarLesson[]; onClose: () => void }) {
@@ -248,7 +248,7 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
       <div className="grid gap-3 sm:grid-cols-2"><label className="form-label"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label><label className="form-label"><span>Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-sm" placeholder="Örn. Bach · Minuet in G" /></label></div>
       {pieceTitle && <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="form-label">Besteci<input value={pieceComposer} onChange={(event) => setPieceComposer(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Eser durumu<select value={pieceStatus} onChange={(event) => setPieceStatus(event.target.value as typeof pieceStatus)} className="field bg-white text-sm"><option value="Learning">Çalışılıyor</option><option value="Polishing">Pekiştiriliyor</option><option value="PerformanceReady">Sahneye hazır</option><option value="Archived">Arşivlendi</option></select></label><label className="form-label">Hedef tarih<input type="date" value={pieceTargetDate} onChange={(event) => setPieceTargetDate(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Nota / bağlantı<input type="url" value={pieceResourceUrl} onChange={(event) => setPieceResourceUrl(event.target.value)} placeholder="https://…" className="field bg-white text-sm" /></label><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)] sm:col-span-2 lg:col-span-4"><input type="checkbox" checked={pieceResourceVisibleToGuardian} onChange={(event) => setPieceResourceVisibleToGuardian(event.target.checked)} disabled={!pieceResourceUrl} /> Bağlantıyı veli portalında göster</label></div>}
       <label className="form-label"><span>Ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /></label>
-      <div className="grid gap-3 sm:grid-cols-3"><label className="form-label"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="form-label"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label><label className="form-label"><span>Eser zorluğu <span className="font-medium">· isteğe bağlı</span></span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-sm"><option value="">Otomatik öner</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select><span className="block text-[.62rem] font-medium leading-relaxed">Boş bırakırsan ders notuna göre kural tabanlı önerilir.</span></label></div>
+      <div className="grid gap-3 sm:grid-cols-3"><label className="form-label"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="form-label"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label><label className="form-label"><span>Eser zorluğu <span className="font-medium">· isteğe bağlı</span></span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-sm"><option value="">Otomatik öner</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select><span className="block text-[.75rem] font-medium leading-relaxed">Boş bırakırsan ders notuna göre kural tabanlı önerilir.</span></label></div>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Gelişim notunu kaydet" pending={createNote.isPending} disabled={!lessons.length} />
     </div>}
@@ -258,7 +258,7 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
 function Timeline({ entries, isLoading, filter, onFilter, studentId, canWrite }: { entries: ProgressEntry[]; isLoading: boolean; filter: TimelineFilter; onFilter: (filter: TimelineFilter) => void; studentId: string; canWrite: boolean }) {
   const filters: Array<[TimelineFilter, string]> = [["all", "Tümü"], ["pieces", "Eserler"], ["homework", "Ödev ve hedefler"]];
   return <section className="app-card overflow-hidden">
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] p-4 sm:p-5"><div><p className="text-micro">GELİŞİM ZAMAN AKIŞI</p><h2 className="mt-1 text-title">Derslerden kalan izler</h2></div><div className="flex flex-wrap gap-1 rounded-xl bg-[var(--surface-muted)] p-1">{filters.map(([value, label]) => <button key={value} onClick={() => onFilter(value)} className={`pressable rounded-lg px-2.5 py-1.5 text-[.62rem] font-bold ${filter === value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)]"}`}>{label}</button>)}</div></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] p-4 sm:p-5"><div><p className="text-micro">GELİŞİM ZAMAN AKIŞI</p><h2 className="mt-1 text-title">Derslerden kalan izler</h2></div><div className="flex flex-wrap gap-1 rounded-xl bg-[var(--surface-muted)] p-1">{filters.map(([value, label]) => <button key={value} onClick={() => onFilter(value)} className={`pressable rounded-lg px-2.5 py-1.5 text-[.75rem] font-bold ${filter === value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)]"}`}>{label}</button>)}</div></div>
     {isLoading && <div className="space-y-4 p-5">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-28 rounded-xl" />)}</div>}
     {!isLoading && !entries.length && <div className="grid min-h-64 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface-muted)] text-[var(--brand)]"><Icon name="note" className="h-5 w-5" /></span><p className="mt-4 text-sm font-bold">Henüz bu filtrede kayıt yok</p><p className="mt-1 max-w-sm text-xs text-[var(--muted)]">İlk ders notunu eklediğinde gelişim akışı ve açıklanabilir özet birlikte oluşur.</p></div></div>}
     {!isLoading && entries.length > 0 && <div className="divide-y divide-[var(--line)]">{entries.map((entry) => <TimelineEntry key={entry.id} entry={entry} studentId={studentId} canWrite={canWrite} />)}</div>}
@@ -266,11 +266,11 @@ function Timeline({ entries, isLoading, filter, onFilter, studentId, canWrite }:
 }
 
 function TimelineEntry({ entry, studentId, canWrite }: { entry: ProgressEntry; studentId: string; canWrite: boolean }) {
-  return <article className="relative p-4 sm:p-5"><div className="flex gap-3 sm:gap-4"><div className="flex w-14 shrink-0 flex-col items-center text-center"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="music" className="h-4 w-4" /></span><span className="mt-2 text-[.62rem] font-bold leading-tight text-[var(--muted)]">{formatDate(entry.lessonStartAt, true)}</span></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold">{entry.instrumentName} dersi</h3><p className="mt-1 text-[.68rem] text-[var(--muted)]">{entry.teacherName} · {formatTime(entry.lessonStartAt)} · Kayıt {formatDate(entry.createdAt, true)}</p></div>{entry.pieceTitle && <span className={`rounded-full px-2 py-1 text-[.6rem] font-bold ${difficultyTone(entry.pieceDifficulty)}`}>Zorluk {entry.pieceDifficulty ?? "—"}/5</span>}</div>
-      {entry.pieceTitle && <div className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2"><Icon name="music" className="h-4 w-4 shrink-0 text-[var(--brand)]" /><span className="min-w-0 flex-1 truncate text-xs font-bold">{entry.pieceTitle}</span><span className="shrink-0 text-[.64rem] font-semibold text-[var(--muted)]">{difficultyLabel(entry.pieceDifficulty)}</span></div>}
+  return <article className="relative p-4 sm:p-5"><div className="flex gap-3 sm:gap-4"><div className="flex w-14 shrink-0 flex-col items-center text-center"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="music" className="h-4 w-4" /></span><span className="mt-2 text-[.75rem] font-bold leading-tight text-[var(--muted)]">{formatDate(entry.lessonStartAt, true)}</span></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-bold">{entry.instrumentName} dersi</h3><p className="mt-1 text-[.75rem] text-[var(--muted)]">{entry.teacherName} · {formatTime(entry.lessonStartAt)} · Kayıt {formatDate(entry.createdAt, true)}</p></div>{entry.pieceTitle && <span className={`rounded-full px-2 py-1 text-[.75rem] font-bold ${difficultyTone(entry.pieceDifficulty)}`}>Zorluk {entry.pieceDifficulty ?? "—"}/5</span>}</div>
+      {entry.pieceTitle && <div className="mt-3 flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2"><Icon name="music" className="h-4 w-4 shrink-0 text-[var(--brand)]" /><span className="min-w-0 flex-1 truncate text-xs font-bold">{entry.pieceTitle}</span><span className="shrink-0 text-[.75rem] font-semibold text-[var(--muted)]">{difficultyLabel(entry.pieceDifficulty)}</span></div>}
       {entry.note && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-[#5c4d3f]">{entry.note}</p>}
       {entry.practiced && <p className="mt-3 text-xs"><span className="font-bold text-[var(--brand-strong)]">Çalışıldı:</span> <span className="text-[var(--muted)]">{entry.practiced}</span></p>}
-      {(entry.homework || entry.nextGoal) && <div className="mt-3 grid gap-2 sm:grid-cols-2">{entry.homework && <div className="rounded-xl bg-[var(--warning-soft)]/60 px-3 py-2"><p className="text-[.6rem] font-bold uppercase tracking-[.08em] text-[var(--warning-strong)]">Ödev</p><p className="mt-1 text-xs leading-relaxed">{entry.homework}</p></div>}{entry.nextGoal && <div className="rounded-xl bg-[var(--success-soft)]/60 px-3 py-2"><p className="text-[.6rem] font-bold uppercase tracking-[.08em] text-[var(--success-strong)]">Sonraki hedef</p><p className="mt-1 text-xs leading-relaxed">{entry.nextGoal}</p></div>}</div>}
+      {(entry.homework || entry.nextGoal) && <div className="mt-3 grid gap-2 sm:grid-cols-2">{entry.homework && <div className="rounded-xl bg-[var(--warning-soft)]/60 px-3 py-2"><p className="text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--warning-strong)]">Ödev</p><p className="mt-1 text-xs leading-relaxed">{entry.homework}</p></div>}{entry.nextGoal && <div className="rounded-xl bg-[var(--success-soft)]/60 px-3 py-2"><p className="text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--success-strong)]">Sonraki hedef</p><p className="mt-1 text-xs leading-relaxed">{entry.nextGoal}</p></div>}</div>}
       {canWrite && <ParentCommentEditor entry={entry} studentId={studentId} />}
       </div></div></article>;
 }
@@ -328,10 +328,10 @@ function ParentCommentEditor({ entry, studentId }: { entry: ProgressEntry; stude
       : "Ham notu veliye uygun yapıcı bir metne çevirir";
 
   return <div className="mt-3 rounded-xl border border-[var(--line)] bg-white p-3">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[.62rem] font-bold text-[var(--brand-strong)]">Veliye sunulacak yorum</p><p className="mt-0.5 text-[.58rem] text-[var(--muted)]">{entry.parentCommentApprovedAt ? "Onaylandı ve veliye görünür" : entry.parentComment ? "Taslak — veliye görünmez" : "Henüz hazırlanmadı"}</p></div><button type="button" onClick={() => setOpen((value) => !value)} className="pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold">{open ? "Kapat" : entry.parentComment ? "Düzenle" : "Yorum hazırla"}</button></div>
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[.75rem] font-bold text-[var(--brand-strong)]">Veliye sunulacak yorum</p><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{entry.parentCommentApprovedAt ? "Onaylandı ve veliye görünür" : entry.parentComment ? "Taslak — veliye görünmez" : "Henüz hazırlanmadı"}</p></div><button type="button" onClick={() => setOpen((value) => !value)} className="pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold">{open ? "Kapat" : entry.parentComment ? "Düzenle" : "Yorum hazırla"}</button></div>
     {open && <div className="mt-3 space-y-2">
       <textarea value={comment} onChange={(event) => { setCommentValue(event.target.value); setTextBeforeSuggestion(null); }} rows={3} className="field resize-y text-sm" placeholder="Ham notu veliye uygun, yapıcı bir yorum olarak düzenleyin." />
-      {textBeforeSuggestion !== null && <p className="text-[.62rem] font-semibold text-[var(--muted)]">Bu bir AI önerisi — veliye açılmadan önce düzenleyebilir veya geri alabilirsin.</p>}
+      {textBeforeSuggestion !== null && <p className="text-[.75rem] font-semibold text-[var(--muted)]">Bu bir AI önerisi — veliye açılmadan önce düzenleyebilir veya geri alabilirsin.</p>}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => void applySuggestion()} disabled={!canRewrite || suggest.isPending} title={rewriteTitle} className={canRewrite ? "pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold disabled:opacity-50" : "min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold text-[var(--muted)] opacity-60"}>
           {suggest.isPending ? "Dönüştürülüyor…" : aiAvailable ? "Yapıcı metne dönüştür" : "Yapıcı metne dönüştür · kullanılamıyor"}
@@ -343,7 +343,7 @@ function ParentCommentEditor({ entry, studentId }: { entry: ProgressEntry; stude
       </div>
       {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
     </div>}
-    {entry.parentCommentApprovedAt && !open && <button type="button" onClick={() => void revokeComment.mutateAsync(entry.id)} disabled={revokeComment.isPending} className="mt-2 text-[.62rem] font-bold text-[var(--danger-strong)] underline">Veli görünürlüğünü geri çek</button>}
+    {entry.parentCommentApprovedAt && !open && <button type="button" onClick={() => void revokeComment.mutateAsync(entry.id)} disabled={revokeComment.isPending} className="mt-2 text-[.75rem] font-bold text-[var(--danger-strong)] underline">Veli görünürlüğünü geri çek</button>}
   </div>;
 }
 
@@ -352,28 +352,28 @@ function AnalysisPanel({ analysis }: { analysis: ReturnType<typeof buildProgress
     <div className="relative overflow-hidden bg-[#3e2d29] p-5 text-white">
       <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#d9662a]/25 blur-2xl" />
       <div className="relative">
-        <div className="flex items-center gap-2 text-[.62rem] font-bold uppercase tracking-[.12em] text-[#f4c4a3]"><Icon name="sparkles" className="h-4 w-4" /> Gelişim özeti</div>
+        <div className="flex items-center gap-2 text-[.75rem] font-bold uppercase tracking-[.12em] text-[#f4c4a3]"><Icon name="sparkles" className="h-4 w-4" /> Gelişim özeti</div>
         <h2 className="mt-3 font-serif text-xl font-bold italic">{analysis.headline}</h2>
         <p className="mt-2 text-xs leading-relaxed text-white/75">{analysis.summary}</p>
-        <p className="mt-4 text-[.62rem] text-white/45">Kaynak: öğretmenlerin girdiği ders notları ve eser bilgileri</p>
+        <p className="mt-4 text-[.75rem] text-white/45">Kaynak: öğretmenlerin girdiği ders notları ve eser bilgileri</p>
       </div>
     </div>
 
     <div className="space-y-5 p-5">
       <section>
-        <div className="flex items-center justify-between gap-3"><p className="text-micro">Çalışılan eserler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.62rem] font-bold text-[var(--muted)]">{analysis.pieceCount} eser</span></div>
+        <div className="flex items-center justify-between gap-3"><p className="text-micro">Çalışılan eserler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.75rem] font-bold text-[var(--muted)]">{analysis.pieceCount} eser</span></div>
         {analysis.pieces.length ? <div className="mt-3 max-h-[26rem] space-y-2 overflow-y-auto pr-1">{analysis.pieces.map((piece, index) => <PieceListItem key={piece.title} piece={piece} index={index} />)}</div> : <p className="mt-3 rounded-xl bg-[var(--surface-muted)] p-3 text-xs leading-relaxed text-[var(--muted)]">Ders notuna eser adı eklendiğinde öğrencinin repertuvarı ve önerilen zorluk seviyesi burada listelenir.</p>}
       </section>
 
       <section className="border-t border-[var(--line)] pt-5">
         <p className="text-micro">Önerilen odaklar</p>
-        <div className="mt-3 flex flex-wrap gap-2">{analysis.focusAreas.map((area) => <span key={area} className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1.5 text-[.66rem] font-bold text-[var(--brand-strong)]">{area}</span>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{analysis.focusAreas.map((area) => <span key={area} className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1.5 text-[.75rem] font-bold text-[var(--brand-strong)]">{area}</span>)}</div>
       </section>
 
       <section className="border-t border-[var(--line)] pt-5">
         <div className="flex items-center justify-between text-xs"><span className="font-bold">Kayıt sürekliliği</span><span className="font-bold text-[var(--brand-strong)]">{analysis.practiceRate}%</span></div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]"><span className="block h-full rounded-full bg-[var(--brand)] transition-all" style={{ width: `${analysis.practiceRate}%` }} /></div>
-        <p className="mt-2 text-[.66rem] leading-relaxed text-[var(--muted)]">Derslerin ne kadarında çalışılan konu veya gelişim notu bulunuyor.</p>
+        <p className="mt-2 text-[.75rem] leading-relaxed text-[var(--muted)]">Derslerin ne kadarında çalışılan konu veya gelişim notu bulunuyor.</p>
       </section>
     </div>
   </aside>;
@@ -382,17 +382,17 @@ function AnalysisPanel({ analysis }: { analysis: ReturnType<typeof buildProgress
 function PieceListItem({ piece, index }: { piece: PieceInsight; index: number }) {
   return <article className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-3">
     <div className="flex items-start gap-3">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[.66rem] font-bold text-[var(--brand)] shadow-sm">{index + 1}</span>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white text-[.75rem] font-bold text-[var(--brand)] shadow-sm">{index + 1}</span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h3 className="min-w-0 flex-1 text-xs font-bold leading-relaxed">{piece.title}</h3>
-          <span className={`shrink-0 rounded-full px-2 py-1 text-[.6rem] font-bold ${difficultyTone(piece.averageDifficulty)}`}>{piece.averageDifficulty.toFixed(1)}/5 · {difficultyLabel(piece.averageDifficulty)}</span>
+          <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${difficultyTone(piece.averageDifficulty)}`}>{piece.averageDifficulty.toFixed(1)}/5 · {difficultyLabel(piece.averageDifficulty)}</span>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[.62rem]">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[.75rem]">
           <span className={`font-bold ${piece.difficultySource === "assistant" ? "text-[var(--brand-strong)]" : "text-[var(--success-strong)]"}`}>{piece.difficultySource === "assistant" ? "Kural tabanlı öneri" : "Öğretmen"}</span>
           <span className="text-[var(--muted)]">{piece.difficultyReason}</span>
         </div>
-        <p className="mt-1.5 text-[.62rem] text-[var(--muted)]">{piece.appearances} ders kaydı · son çalışma {formatDate(piece.latestAt, true)}</p>
+        <p className="mt-1.5 text-[.75rem] text-[var(--muted)]">{piece.appearances} ders kaydı · son çalışma {formatDate(piece.latestAt, true)}</p>
       </div>
     </div>
   </article>;

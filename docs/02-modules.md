@@ -1,6 +1,6 @@
 # Modül Haritası
 
-10 modül, master prompt'un 8'ine ek olarak **Pricing** (`docs/10-decisions.md` A1) ve **Banking** (`docs/10-decisions.md` E1 — master prompt'un başlangıçta hariç tuttuğu, sonradan onaylanan bir kapsam). Her modül `Domain/ Features/ Persistence/` dikey dilimiyle organize edilir — `CLAUDE.md`'deki katman kuralına bak.
+10 modül, master prompt'un 8'ine ek olarak **Banking** (`docs/10-decisions.md` E1 — master prompt'un başlangıçta hariç tuttuğu, sonradan onaylanan bir kapsam). Her modül `Domain/ Features/ Persistence/` dikey dilimiyle organize edilir — `CLAUDE.md`'deki katman kuralına bak.
 
 ```
 Modules/
@@ -8,7 +8,6 @@ Modules/
 ├── People/        öğrenci, veli, öğretmen, enstrüman, kayıt
 ├── Scheduling/     ders serisi, ders, öğretmen izni/uygunluğu, okul takvimi
 ├── Attendance/     RSVP, gerçek yoklama
-├── Pricing/       fiyat listesi ve kalemleri            ← yeni (A1)
 ├── Billing/        ücret planı, aidat, ödeme, telafi kredisi
 ├── Progress/       ders notu, yetenek tanımı/değerlendirme, ödev
 ├── Messaging/       bildirim işi, WhatsApp mesajı/webhook, şablon
@@ -30,10 +29,9 @@ Banking    → (yazar) Billing'e - eşleşen bir banka işlemi `Payment` oluştu
              doğrudan sorgular (Messaging'in Lesson/Student/Teacher'ı doğrudan sorgulamasıyla
              aynı, kurulu pratik - bkz. `NotificationMessageBuilder.cs`); kendi verisine
              (virtual_ibans, bank_incoming_transactions) sahip
-Billing    → People (kim borçlu), Pricing (tutar), Scheduling (hangi ders paketten düşer)
+Billing    → People (kim borçlu + ders türü + kardeşlik), Scheduling (hangi ders telafiye sayılır)
 Attendance → Scheduling (hangi Lesson), People (hangi Guardian/Teacher)
 Scheduling → People (hangi Student/Teacher/Instrument)
-Pricing    → People'a bağımlı değil, bağımsız referans veri
 Progress   → People, Scheduling (hangi Lesson'a not düşülüyor)
 Auth       → hiçbir modüle bağımlı değil; herkes Auth'a bağımlı (kimlik/izin)
 ```
@@ -46,7 +44,7 @@ Kural: bir modül başka modülün **iç** entity'sine EF navigation property il
 
 ## Fazlara bölünerek açılan modüller
 
-`Billing` Phase 4 ile tamamlandı (`makeup_credits` Phase 3'te, `fee_plans`/`receivables`/`payments` Phase 4'te). `Progress` de önce ders notu, sonra ölçülebilir gelişim kayıtları şeklinde tamamlandı:
+`Billing` Phase 4 ile tamamlandı (`makeup_credits` Phase 3'te, `receivables`/`payments` Phase 4'te). `Progress` de önce ders notu, sonra ölçülebilir gelişim kayıtları şeklinde tamamlandı:
 
 | Modül | Açılan | Kalan |
 |---|---|---|
@@ -63,8 +61,8 @@ people     : students, guardians, student_guardians, teachers,
 scheduling : lesson_series, lessons, lesson_change_requests,
              teacher_availability, teacher_time_off, school_calendar_days
 attendance : lesson_rsvps, lesson_attendances
-pricing    : price_lists, price_list_items
-billing    : fee_plans, receivables, payments, makeup_credits
+billing    : tuition_rates, billing_settings, prepay_discount_tiers, receivables, payments, makeup_credits
+show       : show_events, show_items, student_photos
 progress   : lesson_notes, skill_definitions, skill_assessments,
              practice_assignments
 messaging  : notification_jobs, whatsapp_messages,

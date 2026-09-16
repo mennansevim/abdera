@@ -5,9 +5,9 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.People.Domain;
-using Abdera.Api.Modules.Pricing.Domain;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
+using Abdera.Api.Modules.Show.Domain;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,14 +54,13 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PracticeJournalEntry> PracticeJournalEntries => Set<PracticeJournalEntry>();
 
     public DbSet<MakeupCredit> MakeupCredits => Set<MakeupCredit>();
-    public DbSet<FeePlan> FeePlans => Set<FeePlan>();
+    public DbSet<TuitionRate> TuitionRates => Set<TuitionRate>();
+    public DbSet<BillingSettings> BillingSettings => Set<BillingSettings>();
+    public DbSet<PrepayDiscountTier> PrepayDiscountTiers => Set<PrepayDiscountTier>();
     public DbSet<Receivable> Receivables => Set<Receivable>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentCorrection> PaymentCorrections => Set<PaymentCorrection>();
     public DbSet<Expense> Expenses => Set<Expense>();
-
-    public DbSet<PriceList> PriceLists => Set<PriceList>();
-    public DbSet<PriceListItem> PriceListItems => Set<PriceListItem>();
 
     public DbSet<NotificationJob> NotificationJobs => Set<NotificationJob>();
     public DbSet<StaffNotification> StaffNotifications => Set<StaffNotification>();
@@ -72,6 +71,10 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<VirtualIban> VirtualIbans => Set<VirtualIban>();
     public DbSet<BankIncomingTransaction> BankIncomingTransactions => Set<BankIncomingTransaction>();
+
+    public DbSet<ShowEvent> ShowEvents => Set<ShowEvent>();
+    public DbSet<ShowItem> ShowItems => Set<ShowItem>();
+    public DbSet<StudentPhoto> StudentPhotos => Set<StudentPhoto>();
 
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<SystemHealthStatus> SystemHealthStatuses => Set<SystemHealthStatus>();

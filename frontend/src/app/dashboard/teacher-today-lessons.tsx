@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
@@ -8,16 +9,29 @@ import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 
 export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
-  const todayStart = new Date(date);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
-  const { data: rawLessons, isLoading } = useCalendar(todayStart.toISOString(), todayEnd.toISOString());
+  const dateTime = date.getTime();
+  const { todayStart, todayEnd, rangeEnd } = useMemo(() => {
+    const start = new Date(dateTime);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    const range = new Date(start);
+    range.setDate(range.getDate() + 22);
+    return { todayStart: start, todayEnd: end, rangeEnd: range };
+  }, [dateTime]);
+  const { data: rawLessons, isLoading } = useCalendar(todayStart.toISOString(), rangeEnd.toISOString());
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bugünden başka bir güne taşınan bir ders,
   // bu filtre olmadan hâlâ "bugün" listesinde normal bir ders gibi görünüp yoklama/not almaya
   // açık kalırdı.
-  const lessons = useMemo(() => rawLessons?.filter((lesson) => lesson.status !== "Rescheduled"), [rawLessons]);
+  const allLessons = useMemo(() => rawLessons?.filter((lesson) => lesson.status !== "Rescheduled") ?? [], [rawLessons]);
+  const lessons = useMemo(() => allLessons.filter((lesson) => {
+    const start = new Date(lesson.startAt);
+    return start >= todayStart && start < todayEnd;
+  }), [allLessons, todayEnd, todayStart]);
+  const nextLesson = useMemo(() => allLessons
+    .filter((lesson) => new Date(lesson.startAt) >= todayEnd && lesson.status !== "Cancelled")
+    .sort((a, b) => a.startAt.localeCompare(b.startAt))[0], [allLessons, todayEnd]);
   const [expanded, setExpanded] = useState<{ id: string; mode: "attendance" | "note" } | null>(null);
   // Enstrüman renkleri artık dashboard'daki haftalık ızgara ile aynı paletten (lesson-colors.ts) -
   // önceden burada ayrı, karakter-hash'ine dayalı bir renk kümesi kullanılıyordu (docs/14-ui-design-prompt.md C).
@@ -25,8 +39,9 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-36 rounded-2xl" />)}</div>;
 
-  if (!lessons?.length) {
-    return <div className="app-card grid min-h-52 place-items-center border-dashed p-8 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="music" className="h-6 w-6" /></span><p className="mt-4 text-sm font-bold">Bugün dersin yok</p><p className="mt-1 text-xs text-[var(--muted)]">Takvimde planlanan yeni dersler burada görünür.</p></div></div>;
+  if (!lessons.length) {
+    const nextStart = nextLesson ? new Date(nextLesson.startAt) : null;
+    return <div className="app-card grid min-h-52 place-items-center border-dashed p-6 text-center sm:p-8"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="music" className="h-6 w-6" /></span><p className="mt-4 text-sm font-bold">Bu gün dersin yok</p>{nextLesson && nextStart ? <div className="mt-3 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-left"><p className="text-micro">Sıradaki ders</p><p className="mt-1 text-sm font-bold">{nextLesson.studentName} · {nextLesson.instrumentName}</p><p className="text-meta mt-1">{nextStart.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · {nextStart.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</p></div> : <p className="mt-1 text-xs text-[var(--muted)]">Önümüzdeki 3 hafta içinde planlanmış ders yok.</p>}<Link href="/dashboard/calendar" className="btn btn-quiet mt-4">Haftalık takvimi aç</Link></div></div>;
   }
 
   return (
@@ -41,7 +56,7 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
             <div className="flex items-center gap-3 p-3 sm:p-4">
               <span className="flex h-14 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-[var(--surface-muted)] text-center">
                 <span className="text-title tabular-nums leading-none">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
-                <span className="mt-1 text-[.6rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</span>
+                <span className="mt-1 text-[.75rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</span>
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2"><h2 className="truncate text-sm font-bold">{lesson.studentName}</h2><StatusBadge lesson={lesson} /></div>
@@ -77,7 +92,7 @@ function StatusBadge({ lesson }: { lesson: CalendarLesson }) {
         : lesson.status === "Normal"
           ? { label: "Cevap yok", className: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" }
           : config[lesson.status];
-  return <span className={`shrink-0 rounded-full px-2 py-1 text-[.56rem] font-bold ${rsvp.className}`}>{rsvp.label}</span>;
+  return <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${rsvp.className}`}>{rsvp.label}</span>;
 }
 
 function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson; initialMode: "attendance" | "note"; onDone: () => void }) {
@@ -119,12 +134,12 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
       {saved ? <p className="flex items-center gap-2 rounded-xl bg-[var(--success-soft)] p-3 text-xs font-bold text-[var(--success-strong)]"><Icon name="check" className="h-4 w-4" /> Ders bilgileri kaydedildi.</p> : (
         <>
           <div>
-            <p className="mb-2 text-[.68rem] font-bold text-[var(--muted)]">Yoklama</p>
+            <p className="mb-2 text-[.75rem] font-bold text-[var(--muted)]">Yoklama</p>
             <div className="grid grid-cols-3 gap-2">
               {(["Present","Absent","Excused"] as const).map((item) => {
                 const labels = { Present:"Geldi", Absent:"Gelmedi", Excused:"Mazeretli" };
                 const active = status === item;
-                return <button key={item} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.68rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{labels[item]}</button>;
+                return <button key={item} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.75rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{labels[item]}</button>;
               })}
             </div>
           </div>

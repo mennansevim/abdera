@@ -7,6 +7,7 @@ import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchI
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useCreateStudent, useStudentOverviews, type Student, type StudentInstrumentSummary } from "@/lib/people";
+import { DeleteStudentDialog } from "@/components/delete-person-dialog";
 import { StudentDetail } from "./student-detail";
 
 // docs/04-permissions.md: öğrenci oluşturma/veli/kayıt yönetimi yalnızca Admin - Teacher
@@ -18,6 +19,7 @@ export default function StudentsPage() {
   // "İçine girmeden anlayabilelim" - liste artık her satırda enstrüman rozetlerini de
   // taşıyan tek bir toplu istekten (overview) besleniyor, N+1 sorgu açmadan.
   const { data: overviews, isLoading } = useStudentOverviews();
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
@@ -93,9 +95,10 @@ export default function StudentsPage() {
         <ul className="divide-y divide-[var(--line)]">
           {visibleRows.map(({ student, instruments }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
+              <div className="flex items-center gap-1 pr-2">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
-                className="pressable flex min-h-14 w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
+                className="pressable flex min-h-14 w-full flex-1 items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]"
                 aria-expanded={expandedId === student.id}
               >
                 <span className="min-w-0 flex-1">
@@ -104,14 +107,35 @@ export default function StudentsPage() {
                 </span>
                 {instruments.length
                   ? <InstrumentBadgeRow instruments={instruments} />
-                  : <span className="shrink-0 rounded-full bg-[var(--warning-soft)] px-2 py-1 text-[.62rem] font-bold text-[var(--warning-strong)]">Kurs yok</span>}
+                  : <span className="shrink-0 rounded-full bg-[var(--warning-soft)] px-2 py-1 text-[.75rem] font-bold text-[var(--warning-strong)]">Kurs yok</span>}
                 <Icon name="chevron" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${expandedId === student.id ? "rotate-90" : ""}`} />
               </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setDeleting({ id: student.id, name: `${student.firstName} ${student.lastName}` })}
+                  aria-label={`${student.firstName} ${student.lastName} kaydını sil`}
+                  title="Sil"
+                  className="icon-btn icon-btn-quiet shrink-0 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]"
+                >
+                  <Icon name="x" className="h-4 w-4" />
+                </button>
+              )}
+              </div>
               {expandedId === student.id && <StudentDetail student={student} isAdmin={isAdmin} />}
             </li>
           ))}
         </ul>
       </div>
+
+      {isAdmin && deleting && (
+        <DeleteStudentDialog
+          studentId={deleting.id}
+          studentName={deleting.name}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => setExpandedId(null)}
+        />
+      )}
 
       {isAdmin && (
         <Modal open={showCreate} title="Öğrenci ekle" onClose={() => setShowCreate(false)} size="sm">

@@ -2,9 +2,8 @@ using System.Net.Http.Json;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
-using Abdera.Api.Modules.Pricing.Domain;
-using Abdera.Api.Modules.Pricing.Features;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Tests.Integration;
@@ -32,21 +31,15 @@ public class ConcurrencyFlowTests : IClassFixture<AbderaWebApplicationFactory>
         return client;
     }
 
+    // Tarife ve indirim politikası migration ile seed edildiği için (bkz.
+    // TuitionAndDuesFlowTests) aidat açmak yalnızca kurs kaydı gerektiriyor - eski
+    // "fiyat listesi + ücret planı" zinciri ve onun çakışma kontrolünü aşmak için
+    // uydurulan tekil durationMinutes hilesi artık gereksiz.
     private static async Task<Guid> SeedReceivableAsync(HttpClient admin, string suffix)
     {
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
         var piano = instruments!.Single(i => i.Code == "PIANO");
-
-        // price_list_items'daki "aynı enstrüman x süre için çakışan yürürlük tarihi aralığı
-        // olamaz" kuralına takılmamak için süreyi tekilleştiriyoruz (bkz. BankingFlowTests
-        // yorumundaki aynı desen).
-        var durationMinutes = 30 + (Math.Abs(suffix.GetHashCode()) % 90);
-        var priceListResponse = await admin.PostAsJsonAsync("/api/price-lists", new PriceLists.CreateRequest(
-            $"Concurrency Testi {suffix}", new DateOnly(2026, 1, 1), null,
-            [new PriceLists.CreateItemRequest(piano.Id, durationMinutes, BillingType.Monthly, 1000m, "TRY", null)]));
-        var priceList = (await priceListResponse.Content.ReadFromJsonAsync<PriceLists.PriceListResponse>(TestJson.Options))!;
-        var item = priceList.Items.Single();
 
         var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
                 new Teachers.CreateRequest($"Concurrency{suffix}", "Teacher", [piano.Id], null)))
@@ -55,11 +48,8 @@ public class ConcurrencyFlowTests : IClassFixture<AbderaWebApplicationFactory>
                 new Students.CreateRequest($"Concurrency{suffix}", "Student", new DateOnly(2014, 1, 1))))
             .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
         var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
-                new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 1, 1))))
+                new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 9, 1), CourseKind.Individual)))
             .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
-
-        await admin.PostAsJsonAsync($"/api/enrollments/{enrollment.Id}/fee-plan",
-            new FeePlans.CreateRequest(item.Id, DueDay: 5, new DateOnly(2026, 1, 1)));
 
         var receivableResponse = await admin.PostAsJsonAsync("/api/receivables",
             new Receivables.CreateRequest(enrollment.Id, "2026-09"));
@@ -82,7 +72,7 @@ public class ConcurrencyFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var receivable1 = await context1.Receivables.SingleAsync(r => r.Id == receivableId);
         var receivable2 = await context2.Receivables.SingleAsync(r => r.Id == receivableId);
 
-        receivable1.RecordPaymentEffect(1000m, DateTimeOffset.UtcNow); // -> Paid
+        receivable1.RecordPaymentEffect(6000m, DateTimeOffset.UtcNow); // -> Paid (Birebir tarifesi)
         receivable2.RecordPaymentEffect(500m, DateTimeOffset.UtcNow); // -> Partial
 
         // İlk yazma başarılı - xmin ilerler.

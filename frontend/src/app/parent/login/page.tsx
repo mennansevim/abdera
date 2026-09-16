@@ -98,7 +98,7 @@ export default function GuardianLoginPage() {
           <button
             type="button"
             onClick={() => router.push("/login")}
-            className="pressable mb-5 flex items-center gap-1.5 text-[.68rem] font-semibold text-[var(--muted)]"
+            className="pressable mb-5 flex items-center gap-1.5 text-[.75rem] font-semibold text-[var(--muted)]"
           >
             <Icon name="arrow-left" className="h-3.5 w-3.5" /> Ana sayfaya dön
           </button>
@@ -111,7 +111,7 @@ export default function GuardianLoginPage() {
           {/* --- Birincil: telefon + şifre --- */}
           {mode === "password" && (
             <form onSubmit={handlePasswordLogin}>
-              <label htmlFor="phoneNumber" className="mb-1.5 block text-[.7rem] font-semibold text-[#625c68]">Telefon numarası</label>
+              <label htmlFor="phoneNumber" className="mb-1.5 block text-[.75rem] font-semibold text-[#625c68]">Telefon numarası</label>
               <input
                 id="phoneNumber"
                 type="tel"
@@ -124,7 +124,7 @@ export default function GuardianLoginPage() {
                 className="field text-sm"
               />
 
-              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.7rem] font-semibold text-[#625c68]">Şifre</label>
+              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[#625c68]">Şifre</label>
               <input
                 id="password"
                 type="password"
@@ -155,7 +155,7 @@ export default function GuardianLoginPage() {
           {/* --- İkincil: OTP telefon adımı --- */}
           {mode === "otp-phone" && (
             <form onSubmit={handleRequestOtp}>
-              <label htmlFor="otpPhone" className="mb-1.5 block text-[.7rem] font-semibold text-[#625c68]">Telefon numarası</label>
+              <label htmlFor="otpPhone" className="mb-1.5 block text-[.75rem] font-semibold text-[#625c68]">Telefon numarası</label>
               <input
                 id="otpPhone"
                 type="tel"
@@ -187,7 +187,7 @@ export default function GuardianLoginPage() {
           {/* --- İkincil: OTP kod adımı --- */}
           {mode === "otp-code" && (
             <form onSubmit={handleVerifyOtp}>
-              <label htmlFor="code" className="mb-1.5 block text-[.7rem] font-semibold text-[#625c68]">Doğrulama kodu</label>
+              <label htmlFor="code" className="mb-1.5 block text-[.75rem] font-semibold text-[#625c68]">Doğrulama kodu</label>
               <input
                 ref={codeRef}
                 id="code"
@@ -204,7 +204,7 @@ export default function GuardianLoginPage() {
               />
 
               {debugCode && (
-                <p className="mt-2 rounded-xl bg-[#fff9e8] px-3 py-2 text-center text-[.68rem] font-semibold text-[#7f5d0d]">
+                <p className="mt-2 rounded-xl bg-[#fff9e8] px-3 py-2 text-center text-[.75rem] font-semibold text-[#7f5d0d]">
                   Geliştirme kodu: {debugCode}
                 </p>
               )}

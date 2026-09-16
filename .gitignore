@@ -72,3 +72,7 @@ frontend/test-results/
 loadtest/results/
 .vercel
 .env*
+
+# Toplu kurulum araci ciktilari - veli sifreleri ve kosu raporlari repoya girmemeli.
+tools/bulk-seed/sample-credentials.json
+tools/bulk-seed/last-run-report.*

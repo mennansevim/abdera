@@ -137,7 +137,7 @@ public static class LoadTestFixtures
                     now);
                 db.Students.Add(student);
 
-                var enrollment = Enrollment.Create(student.Id, teacher.Id, instrument.Id, from, now);
+                var enrollment = Enrollment.Create(student.Id, teacher.Id, instrument.Id, CourseKind.Individual, from, now);
                 db.Enrollments.Add(enrollment);
                 enrollmentCount++;
 

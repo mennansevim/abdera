@@ -1,0 +1,110 @@
+using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.People.Domain;
+using Abdera.Api.Shared;
+using Microsoft.EntityFrameworkCore;
+
+namespace Abdera.Api.Modules.Billing.Infrastructure;
+
+// Bir aidatın tutarını belirleyen HER ŞEYİ tek seferde yükler: tarife, indirim politikası,
+// kademeler ve "bu öğrenci 2 kursa mı gidiyor / kardeşi var mı" olguları.
+//
+// Tek sınıfta toplanmasının sebebi: aylık üretim (MonthlyDueRun) ile peşin ödeme
+// (PrepayPlans) aynı hesabı yapmak zorunda. Eskiden bu iş BulkReceivables ve BulkPayments
+// içinde iki ayrı kopya hâlindeydi ve biri diğerinden farklı davranıyordu (toplu ödeme
+// tutarın indirimsiz toplama birebir eşit olmasını şart koşuyordu - kampanyanın sisteme
+// girilememesinin sebebi tam olarak buydu).
+public sealed class TuitionPricer
+{
+    private readonly List<TuitionRate> _rates;
+    private readonly HashSet<Guid> _multiCourseStudents;
+    private readonly HashSet<Guid> _studentsWithSibling;
+
+    private TuitionPricer(
+        BillingSettings settings,
+        List<TuitionRate> rates,
+        List<PrepayDiscountTier> tiers,
+        HashSet<Guid> multiCourseStudents,
+        HashSet<Guid> studentsWithSibling)
+    {
+        Settings = settings;
+        _rates = rates;
+        PrepayTiers = tiers;
+        _multiCourseStudents = multiCourseStudents;
+        _studentsWithSibling = studentsWithSibling;
+    }
+
+    public BillingSettings Settings { get; }
+    public IReadOnlyList<PrepayDiscountTier> PrepayTiers { get; }
+
+    public static async Task<TuitionPricer> LoadAsync(AbderaDbContext db)
+    {
+        var settings = await BillingSettings.GetCurrentAsync(db);
+        var rates = await db.TuitionRates.AsNoTracking().ToListAsync();
+        var tiers = await db.PrepayDiscountTiers.AsNoTracking().OrderBy(tier => tier.MinMonths).ToListAsync();
+
+        // İndirimler yalnızca AKTİF kayıtlara bakar. Biten bir kurs "2. kurs" saymaz,
+        // okuldan ayrılmış bir kardeş kardeş indirimi doğurmaz.
+        var activeEnrollments = await db.Enrollments
+            .Where(enrollment => enrollment.Status == EnrollmentStatus.Active)
+            .Select(enrollment => new { enrollment.StudentId })
+            .ToListAsync();
+
+        var multiCourse = activeEnrollments
+            .GroupBy(enrollment => enrollment.StudentId)
+            .Where(group => group.Count() >= 2)
+            .Select(group => group.Key)
+            .ToHashSet();
+
+        // Kardeşlik, ortak veli üzerinden tanımlanır (ayrı bir "aile" kavramı yok -
+        // StudentGuardian zaten çoktan-çoğa). Yalnızca DERS ALAN kardeşler sayılır:
+        // velinin ders almayan ikinci çocuğu indirim doğurmaz.
+        var enrolledStudentIds = activeEnrollments.Select(enrollment => enrollment.StudentId).Distinct().ToList();
+        var guardianLinks = await db.StudentGuardians
+            .Where(link => enrolledStudentIds.Contains(link.StudentId))
+            .Select(link => new { link.GuardianId, link.StudentId })
+            .ToListAsync();
+
+        var siblings = guardianLinks
+            .GroupBy(link => link.GuardianId)
+            .Where(group => group.Select(link => link.StudentId).Distinct().Count() >= 2)
+            .SelectMany(group => group.Select(link => link.StudentId))
+            .ToHashSet();
+
+        return new TuitionPricer(settings, rates, tiers, multiCourse, siblings);
+    }
+
+    // Verilen günde yürürlükte olan tarife. Yoksa null - çağıran bunu "eksik" olarak
+    // kullanıcıya gösterir, sessizce 0 TL'lik aidat üretmez.
+    public TuitionRate? RateFor(CourseKind courseKind, DateOnly on) =>
+        _rates
+            .Where(rate => rate.CourseKind == courseKind && rate.IsActiveOn(on))
+            .OrderByDescending(rate => rate.EffectiveFrom)
+            .FirstOrDefault();
+
+    public TuitionCalculator.DiscountContext ContextFor(Enrollment enrollment) => new(
+        AttendsMultipleCourses: _multiCourseStudents.Contains(enrollment.StudentId),
+        HasSibling: _studentsWithSibling.Contains(enrollment.StudentId),
+        ManualPercent: enrollment.ManualDiscountPercent,
+        ManualReason: enrollment.ManualDiscountReason,
+        MultiCoursePercent: Settings.MultiCourseDiscountPercent,
+        SiblingPercent: Settings.SiblingDiscountPercent);
+
+    public decimal PrepayPercentFor(int months) => TuitionCalculator.ResolvePrepayPercent(PrepayTiers, months);
+
+    // Tek ayın aidatı. prepayPercent 0 ise yalnızca öğrenci indirimi uygulanır.
+    public (TuitionRate Rate, TuitionCalculator.Breakdown Breakdown)? Price(
+        Enrollment enrollment, string period, decimal prepayPercent = 0m)
+    {
+        var rate = RateFor(enrollment.CourseKind, BillingPeriod.FirstDay(period));
+        if (rate is null) return null;
+
+        var context = ContextFor(enrollment);
+        var breakdown = prepayPercent > 0
+            ? TuitionCalculator.ComputePrepaidMonthly(rate.MonthlyAmount, context, prepayPercent)
+            : TuitionCalculator.ComputeMonthly(rate.MonthlyAmount, context);
+
+        return (rate, breakdown);
+    }
+
+    public DateOnly DueDateFor(string period) => BillingPeriod.DueDate(period, Settings.DueDayOfMonth);
+}

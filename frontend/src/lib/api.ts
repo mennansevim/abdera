@@ -3,7 +3,7 @@
 
 // Yayında frontend ve API aynı Vercel domain'inde /api üzerinden sunulur; boş taban URL
 // tarayıcının mevcut origin'ini kullanır. Yerel geliştirmede ayrı API portu korunur.
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
   ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8080");
 
 export class ApiError extends Error {

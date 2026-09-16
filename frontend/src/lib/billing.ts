@@ -4,114 +4,95 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 
-export type BillingType = "Monthly" | "Package";
+export type CourseKind = "Individual" | "Group";
 export type PaymentMethod = "Cash" | "Transfer" | "Card" | "Other";
 export type ReceivableStatus = "Unpaid" | "Partial" | "Paid" | "Overdue" | "Cancelled";
 
-export interface PriceListItem {
-  id: string;
-  instrumentId: string;
-  durationMinutes: number;
-  billingType: BillingType;
-  amount: number;
-  currency: string;
-  packageLessonCount: number | null;
-}
+export const COURSE_KIND_LABEL: Record<CourseKind, string> = { Individual: "Birebir", Group: "Grup" };
 
-export interface PriceList {
+// Ücret tarifesi - eski PriceList + PriceListItem + FeePlan üçlüsünün yerini alır.
+// Fiyat yalnızca ders türüne (birebir/grup) bağlı; enstrüman ve ders süresi tutarı
+// değiştirmiyor (docs/10-decisions.md H1).
+export interface TuitionRate {
   id: string;
-  name: string;
+  courseKind: CourseKind;
+  lessonsPerMonth: number;
+  monthlyAmount: number;
+  currency: string;
   effectiveFrom: string;
   effectiveUntil: string | null;
-  items: PriceListItem[];
+  isCurrent: boolean;
 }
 
-export function usePriceLists() {
-  return useQuery({ queryKey: ["price-lists"], queryFn: () => api.get<PriceList[]>("/api/price-lists") });
+export function useTuitionRates() {
+  return useQuery({ queryKey: ["tuition-rates"], queryFn: () => api.get<TuitionRate[]>("/api/tuition-rates") });
 }
 
-export interface CreatePriceListItemInput {
-  instrumentId: string;
-  durationMinutes: number;
-  billingType: BillingType;
-  amount: number;
-  currency?: string;
-  packageLessonCount?: number | null;
-}
-
-export function useCreatePriceList() {
+// Zam ayrı bir "toplu güncelleme" işlemi değil: yeni yürürlük tarihiyle yeni satır açılır,
+// öncekisi sunucuda otomatik kapanır. Geçmiş aidatlar tutarını kendi satırında taşıdığı
+// için değişmez.
+export function useCreateTuitionRate() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; effectiveFrom: string; effectiveUntil?: string | null; items: CreatePriceListItemInput[] }) =>
-      api.post<PriceList>("/api/price-lists", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["price-lists"] }),
-  });
-}
-
-export interface BulkUpdatePreviewItem {
-  itemId: string;
-  instrumentName: string;
-  durationMinutes: number;
-  billingType: string;
-  oldAmount: number;
-  newAmount: number;
-  activeFeePlanCount: number;
-}
-
-export function usePreviewBulkUpdate() {
-  return useMutation({
-    mutationFn: ({ priceListId, percentageChange }: { priceListId: string; percentageChange: number }) =>
-      api.post<BulkUpdatePreviewItem[]>(`/api/price-lists/${priceListId}/preview-bulk-update`, { percentageChange }),
-  });
-}
-
-export function useApplyBulkUpdate() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ priceListId, percentageChange }: { priceListId: string; percentageChange: number }) =>
-      api.post<BulkUpdatePreviewItem[]>(`/api/price-lists/${priceListId}/apply`, { percentageChange }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["price-lists"] }),
-  });
-}
-
-export interface FeePlan {
-  id: string;
-  enrollmentId: string;
-  billingType: BillingType;
-  amount: number;
-  currency: string;
-  dueDay: number | null;
-  packageLessonCount: number | null;
-  activeFrom: string;
-  activeUntil: string | null;
-}
-
-export function useFeePlan(enrollmentId: string) {
-  return useQuery({
-    queryKey: ["fee-plan", enrollmentId],
-    queryFn: async () => {
-      try {
-        return await api.get<FeePlan>(`/api/enrollments/${enrollmentId}/fee-plan`);
-      } catch {
-        return null;
-      }
+    mutationFn: (body: { courseKind: CourseKind; lessonsPerMonth: number; monthlyAmount: number; effectiveFrom: string; currency?: string }) =>
+      api.post<TuitionRate>("/api/tuition-rates", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tuition-rates"] });
+      queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
     },
-    enabled: !!enrollmentId,
   });
 }
 
-export function useCreateFeePlan(enrollmentId: string) {
+export interface PrepayTier {
+  id?: string;
+  minMonths: number;
+  percent: number;
+}
+
+export interface BillingPolicy {
+  multiCourseDiscountPercent: number;
+  siblingDiscountPercent: number;
+  dueDayOfMonth: number;
+  prepayTiers: PrepayTier[];
+}
+
+export function useBillingPolicy() {
+  return useQuery({ queryKey: ["billing-policy"], queryFn: () => api.get<BillingPolicy>("/api/billing-policy") });
+}
+
+export function useUpdateBillingPolicy() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { priceListItemId: string; dueDay?: number; activeFrom: string }) =>
-      api.post<FeePlan>(`/api/enrollments/${enrollmentId}/fee-plan`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["fee-plan", enrollmentId] }),
+    mutationFn: (body: BillingPolicy) => api.put<BillingPolicy>("/api/billing-policy", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-policy"] });
+      queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
+      queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
+    },
+  });
+}
+
+// Kurs kaydının aidatı etkileyen iki alanı: ders türü ve o kayda özel elle indirim.
+export function useUpdateEnrollmentBilling(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ enrollmentId, ...body }: { enrollmentId: string; courseKind?: CourseKind; manualDiscountPercent?: number | null; manualDiscountReason?: string | null }) =>
+      api.patch(`/api/students/${studentId}/enrollments/${enrollmentId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
+      queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
+    },
   });
 }
 
 export interface StudentBillingRow {
   enrollmentId: string;
   instrumentId: string;
+  courseKind: CourseKind;
+  manualDiscountPercent: number | null;
+  manualDiscountReason: string | null;
   receivables: Receivable[];
 }
 
@@ -125,6 +106,11 @@ export interface Receivable {
   status: ReceivableStatus;
   totalPaid: number;
   payments: PaymentRecord[];
+  // İndirimin nereden geldiğini satırın kendisi açıklar - başka tabloya gitmeye gerek yok.
+  baseAmount: number;
+  discountPercent: number;
+  discountReason: string | null;
+  prepayPlanId: string | null;
 }
 
 export interface BillingDue extends Receivable {
@@ -134,6 +120,7 @@ export interface BillingDue extends Receivable {
   teacherName: string;
   instrumentId: string;
   instrumentName: string;
+  courseKind: CourseKind;
 }
 
 export interface PaymentRecord {
@@ -147,8 +134,8 @@ export interface PaymentRecord {
   correctsPaymentId: string | null;
   previousAmount: number | null;
   recordedAt: string | null;
-  bulkPaymentId: string | null;
-  bulkPaymentMonths: number | null;
+  prepayPlanId: string | null;
+  prepayPlanMonths: number | null;
 }
 
 export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other";
@@ -234,62 +221,72 @@ export function useBillingDues(options?: { enabled?: boolean }) {
   });
 }
 
-// Toplu aidat (BulkReceivables.cs): bir dönemin aidatlarını tüm aktif kayıtlar için tek
-// çağrıda açar. Önizleme ayrı bir uçtan gelir; ekran "kaç aidat açılacak, hangileri zaten
-// var, hangi kayıtta ücret planı eksik" bilgisini işlemden ÖNCE gösterebilsin diye.
-export type BulkReceivableTarget = {
+// Ay başı üretimi (MonthlyDueRun.cs): bir dönemin aidatlarını tüm aktif kurs kayıtları
+// için tek çağrıda açar. Önizleme ayrı bir uçtan gelir; ekran "kim ne kadar ödeyecek,
+// hangi indirimle, hangileri zaten var, hangisinde tarife eksik" bilgisini işlemden
+// ÖNCE gösterebilsin diye.
+export type MonthlyDueTarget = {
   enrollmentId: string;
   studentId: string;
   studentName: string;
   instrumentName: string;
   teacherName: string;
+  courseKind: CourseKind;
+  baseAmount: number;
+  discountPercent: number;
+  discountReason: string | null;
   amount: number;
   currency: string;
 };
 
-export type BulkReceivableMissing = {
+export type MonthlyDueMissing = {
   enrollmentId: string;
   studentId: string;
   studentName: string;
   instrumentName: string;
   teacherName: string;
+  courseKind: CourseKind;
   reason: string;
 };
 
-export type BulkReceivablePlan = {
+export type MonthlyDuePlan = {
   period: string;
-  ready: BulkReceivableTarget[];
-  alreadyExists: BulkReceivableTarget[];
-  missing: BulkReceivableMissing[];
+  dueDate: string;
+  ready: MonthlyDueTarget[];
+  alreadyExists: MonthlyDueTarget[];
+  missing: MonthlyDueMissing[];
+  readyBaseTotal: number;
   readyTotal: number;
+  readyDiscountTotal: number;
   currency: string;
 };
 
-export type BulkReceivableResult = {
+export type MonthlyDueResult = {
   period: string;
   createdCount: number;
   createdTotal: number;
+  createdDiscountTotal: number;
   currency: string;
   alreadyExistsCount: number;
-  missing: BulkReceivableMissing[];
+  missing: MonthlyDueMissing[];
 };
 
-export function useBulkReceivablePlan(period: string, options?: { enabled?: boolean }) {
+export function useMonthlyDuePlan(period: string, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: ["bulk-receivable-plan", period],
-    queryFn: () => api.get<BulkReceivablePlan>(`/api/receivables/bulk-preview?period=${encodeURIComponent(period)}`),
+    queryKey: ["monthly-due-run", period],
+    queryFn: () => api.get<MonthlyDuePlan>(`/api/receivables/monthly-run?period=${encodeURIComponent(period)}`),
     enabled: !!period && (options?.enabled ?? true),
   });
 }
 
-export function useCreateBulkReceivables() {
+export function useRunMonthlyDues() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (period: string) => api.post<BulkReceivableResult>("/api/receivables/bulk", { period }),
+    mutationFn: (period: string) => api.post<MonthlyDueResult>("/api/receivables/monthly-run", { period }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
-      queryClient.invalidateQueries({ queryKey: ["bulk-receivable-plan"] });
+      queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
       queryClient.invalidateQueries({ queryKey: ["student-billing"] });
     },
   });
@@ -333,15 +330,72 @@ export function useCorrectPayment(studentId: string) {
   });
 }
 
-export function useBulkPayment(studentId: string, enrollmentId: string) {
+// Yıl başı peşin ödeme kampanyası (PrepayPlans.cs). Tutarı SUNUCU hesaplar - ekran
+// yalnızca gördüğü toplamı teyit eder (expectedTotal). Eski akış istemcinin gönderdiği
+// tutarın indirimsiz toplama birebir eşit olmasını şart koştuğu için kampanya indirimi
+// sisteme hiç girilemiyordu.
+export type PrepayMonthRow = {
+  period: string;
+  dueDate: string;
+  baseAmount: number;
+  amount: number;
+  alreadyExists: boolean;
+  blockedReason: string | null;
+};
+
+export type PrepayPreview = {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  instrumentName: string;
+  courseKind: CourseKind;
+  startPeriod: string;
+  months: number;
+  studentDiscountPercent: number;
+  studentDiscountReason: string | null;
+  prepayPercent: number;
+  baseTotal: number;
+  total: number;
+  savingTotal: number;
+  currency: string;
+  monthRows: PrepayMonthRow[];
+  blockers: string[];
+};
+
+export type PrepayResult = {
+  prepayPlanId: string;
+  startPeriod: string;
+  months: number;
+  prepayPercent: number;
+  baseTotal: number;
+  total: number;
+  savingTotal: number;
+  currency: string;
+  receivables: Receivable[];
+};
+
+export function usePrepayPreview(enrollmentId: string, startPeriod: string, months: number, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["prepay-preview", enrollmentId, startPeriod, months],
+    queryFn: () =>
+      api.get<PrepayPreview>(
+        `/api/enrollments/${enrollmentId}/prepay-preview?startPeriod=${encodeURIComponent(startPeriod)}&months=${months}`,
+      ),
+    enabled: !!enrollmentId && !!startPeriod && months >= 1 && (options?.enabled ?? true),
+  });
+}
+
+export function useCreatePrepayPlan(studentId: string, enrollmentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { startPeriod: string; months: number; amount: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string }) =>
-      api.post<Receivable[]>(`/api/enrollments/${enrollmentId}/bulk-payments`, { enrollmentId, ...body }),
+    mutationFn: (body: { startPeriod: string; months: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string; expectedTotal?: number }) =>
+      api.post<PrepayResult>(`/api/enrollments/${enrollmentId}/prepay-plans`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
+      queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
     },
   });
 }

@@ -32,7 +32,7 @@ Modules/Billing/
 - Zaman: veritabanında her zaman `timestamptz` (UTC instant). Yerel gösterim/hesaplama `Europe/Istanbul` ile uygulama katmanında yapılır, saat dilimi konfigürasyondan okunur — hardcode etme.
 - Dışa açık kaynak id'leri: UUID. Sıralı int public API'de görünmez.
 - Mutasyona açık her tabloda `created_at`, `updated_at`. Eşzamanlı düzenleme riski olan tablolarda optimistic concurrency (`xmin` veya `rowversion` kolonu).
-- Finansal/audit kayıt **silinmez** — durum kolonu veya soft delete kullanılır (`CancelledAt`, `Status=INACTIVE`).
+- Finansal/audit kayıt **silinmez** — durum kolonu veya soft delete kullanılır (`CancelledAt`, `Status=INACTIVE`). **Tek istisna:** yöneticinin bir öğrenciyi/öğretmeni kalıcı silmesi (`docs/10-decisions.md` I1) — kullanıcının açık talebi. O yol `Modules/People/Infrastructure/PersonEraser.cs` üzerinden gider; ne silineceğini önce sayar, para varsa açık onay ister ve `audit_log`'a yazar. `audit_log`'un kendisi bu akışta da asla temizlenmez.
 - Para, takvim ve rıza (consent) değiştiren her use-case `audit_log`'a yazar: kim, ne zaman, hangi kayıt, önceki/yeni değer.
 
 ## Kritik veritabanı kısıtları (bunları migration'dan düşürme)
@@ -47,11 +47,16 @@ CHECK (end_at > start_at)
 CHECK (amount >= 0)
 ```
 
-`price_list_items`: aynı enstrüman × ders süresi için çakışan yürürlük tarihi aralığı olamaz — uygulama katmanında kontrol edilir (aralık çakışması genel `EXCLUDE` kısıtıyla ifade edilemeyecek kadar tabloya özeldir).
+`tuition_rates`: aynı ders türü (`course_kind`) için **açık uçlu yalnızca bir tarife** olabilir — `UNIQUE (course_kind) WHERE effective_until IS NULL`. Yeni tarife açılırken öncekisi bir gün öncesinden kapatılır, böylece hiçbir gün iki tarifeye birden düşmez. Tam aralık çakışması kontrolü yine uygulama katmanındadır (genel `EXCLUDE` kısıtıyla ifade edilemeyecek kadar tabloya özel).
 
 ## İş kuralları — kodda unutulmaması gerekenler
 
-- **Fiyat snapshot'ı:** `Receivable` oluşurken tutar `PriceListItem`'dan kopyalanır ve birlikte saklanır (`priceListItemId` + `amount`). Sonraki bir zam geçmiş `Receivable`'ları değiştirmez.
+- **Fiyat snapshot'ı:** `Receivable` oluşurken hesabın TAMAMI satıra donar — `tuitionRateId` + `baseAmount` + `discountPercent` + `discountReason` + `amount`. Sonraki bir zam veya politika değişikliği geçmiş `Receivable`'ları değiştirmez. Bir aidat satırına bakan admin "bu tutar nereden geldi" sorusunu başka tabloya gitmeden yanıtlayabilmeli.
+- **Aidat tutarının tek ekseni ders türü:** fiyat enstrümana ve ders süresine göre DEĞİŞMEZ; yalnızca `Enrollment.CourseKind` (Birebir/Grup) belirler (`docs/10-decisions.md` H1). Yeni bir fiyat ekseni eklemeden önce onay al — eski dört katmanlı model (fiyat listesi → kalem → ücret planı → aidat) tam olarak bu yüzden kaldırıldı.
+- **İndirim birleşimi:** birden fazla otomatik indirim (çoklu kurs / kardeş) uygulanabiliyorsa **en yükseği** alınır, toplanmaz. `Enrollment.ManualDiscountPercent` doluysa otomatik kuralların **yerine** geçer. Peşin ödeme indirimi bunun **üstüne**, bileşik olarak biner (%5 + %10 = %14,5). Hesabın tek yeri `TuitionCalculator` — kopyasını çıkarma.
+- **Kardeşlik ortak veli üzerinden tanımlanır** (`student_guardians`), ayrı bir "aile" kavramı yok. Yalnızca aktif kaydı olan kardeşler sayılır.
+- **Ödeme görmüş aidat yeniden fiyatlanamaz:** `Receivable.Reprice` `Paid`/`Partial`/`Cancelled` durumda `ConflictException` fırlatır. Peşin ödeme kampanyası daha önce açılmış ama ödenmemiş bir ayı kampanya oranına çekebilir; para girmiş bir aya dokunamaz.
+- **Peşin ödeme tutarını sunucu hesaplar:** istemci yalnızca gördüğü toplamı (`expectedTotal`) teyit eder, ayrışma varsa işlem durur. İstemcinin gönderdiği tutara güvenme.
 - **Ders değişince eski job iptali:** bir `Lesson` `RESCHEDULED`/`CANCELLED` olduğunda, o derse bağlı bekleyen (`PENDING`) `NotificationJob` iptal edilir ve gerekiyorsa yeni saate göre yenisi kurulur. Bu invariant'ı bozan her değişiklik testle korunmalı.
 - **Telafi kredisi:** dersten ≥24 saat önce iptal edilirse `MakeupCredit` oluşur (kaynak ders + son kullanma tarihi ile). Habersiz gelmeme (no-show) kredi doğurmaz, ücret tahakkuk eder.
 - **Sessiz saat:** aidat hatırlatması ve doğum günü mesajı gibi zamanlanmış (cron kaynaklı) bildirimler yalnızca `Notifications__QuietHoursStart/End` penceresinde gönderilir; pencere dışı job bir sonraki pencere başına ötelenir. Ders hatırlatması (dersten 1 saat önce) bu kurala tabi değil.
@@ -113,6 +118,12 @@ Otomatik eşleşen ödemelerde `Payment.CreatedBy` `null`'dır (bir admin yok) �
 ## Dil
 
 Kod, tip adı, değişken adı, commit mesajı gövdesi: **İngilizce**. Kullanıcı arayüzü metni ve WhatsApp mesaj şablonları: **Türkçe**. Domain terimleri için `docs/01-glossary.md`'deki eşleşmeyi kullan (örn. aidat → `Receivable`, telafi → `MakeupCredit`, veli → `Guardian`).
+
+## Kişi silme — yeni tablo eklerken
+
+`PersonEraser.cs`, bir öğrenciye/öğretmene bağlı satırları 15 tabloda tek tek temizler; bu tabloların çoğunda veritabanı FK'sı yoktur (modüller arası bağlar açık id sorgularıyla kurulur), dolayısıyla eksiksizliği ne EF ne de DB garanti eder. **Kişiye, kurs kaydına, derse veya aidata referans veren yeni bir tablo eklediğinde `PersonEraser`'a da ekle.** Unutursan `PersonDeletionFlowTests.Deleting_a_student_leaves_no_orphan_row_anywhere` kırılır — o test bu kuralın bekçisidir, listeyi genişletirken testi de genişlet.
+
+`PersonEraser`'daki SQL betikleri ifade ifade çalıştırılır ve ayırmadan önce satır yorumları temizlenir: bir yorumun içindeki noktalı virgül daha önce ifade ayırıcı sanılıp betiği bozmuştu.
 
 ## Yapılmayacaklar
 

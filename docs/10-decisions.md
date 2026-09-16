@@ -138,6 +138,58 @@ Kullanıcının açık talebi ("aidatlar konusu çok önemli, burayı backup sis
 | G8 | Alarm sıklığı | Sorun devam ettiği sürece e-posta her kontrol turunda tekrar gitmesin diye `Ops__AlertCooldownMinutes` (varsayılan 60 dk) soğuma süresi var. Durum tekrar `Healthy`'ye dönünce ayrıca bir "düzeldi" e-postası gider (soğuma süresine tabi değil - tek seferlik iyi haber). |
 | G9 | Geri yükleme | Uygulama içinde bir "restore" düğmesi **bilinçli olarak eklenmedi** - bir yedeği geri yüklemek mevcut veriyi yok edebilecek, tek yönlü bir işlem; bu, arayüzden kazayla tetiklenebilecek bir risk taşır. Bunun yerine `BackupEncryption.DecryptFileAsync` (manuel kurtarma için) yazıldı ve docs/15-product-phases.md'nin "örnek geri yükleme provası" kabul kriteri elle, `docker compose` ile bir doğrulama turu olarak yapılacak - kalıcı bir uygulama özelliği değil. |
 
+## H — Aidat modelinin yeniden tasarımı (2026-09-16)
+
+Kullanıcının tespiti: "Aidat sistemini baştan tasarla, bana nedense hâlâ çok karmaşık geliyor.
+Müzik okulunda öğrencilerin aidatlarını gireceğiz, bu kadar basit. Tek bir farklı nokta var:
+yıl başlarında toplu aidat kampanyası."
+
+Teşhis: tek bir aidat satırı görebilmek için dört kavramdan geçmek gerekiyordu — `price_lists`
+(tarihli kap) → `price_list_items` (enstrüman × ders süresi × aylık/paket × paket ders sayısı)
+→ `fee_plans` (kurs kaydı başına, kalemden snapshot + vade günü) → `receivables`. Okulun gerçek
+fiyat tablosu ise **iki satır**: Birebir 4 ders 6.000 TL, Grup (Resim) 4 ders 4.500 TL — ve
+fiyat ne enstrümana ne de ders süresine göre değişiyor. Model, önemsiz eksenlerde fazla
+ayrıntılı; gerçekten gereken eksenleri (%5 çoklu kurs/kardeş indirimi, toplu ödeme indirimi)
+ise **hiç ifade edemiyordu**. Kanıt: canlı veritabanında 0 fiyat listesi, 0 ücret planı,
+0 aidat vardı — ekran boş değildi, sistem üç adım öncesinde takılıydı.
+
+| # | Konu | Karar |
+|---|------|-------|
+| H1 | Fiyat ekseni | `price_lists` + `price_list_items` + `fee_plans` ve **Pricing modülünün tamamı kaldırıldı**. Yerine tek tablo: `tuition_rates (course_kind, lessons_per_month, monthly_amount, effective_from, effective_until)`. Fiyatın tek belirleyicisi `Enrollment.CourseKind` (Birebir/Grup) — enstrüman ve ders süresi tutarı etkilemiyor. Migration sırasında veri kaybı riski yoktu (ilgili tabloların tamamı boştu). |
+| H2 | Grup dersi | Kullanıcıya iki seçenek sunuldu: kurs kaydına `Birebir/Grup` alanı eklemek, ya da fiyatı doğrudan kursa (Resim → 4.500) bağlamak. **Alan eklendi** — ileride "grup piyano" veya "birebir resim" açılırsa model kırılmıyor. `Resim` enstrümanı migration ile seed edildi. |
+| H3 | Zam | Ayrı bir "toplu güncelleme" işlemi (eski `Pricing/BulkUpdate.cs`) kaldırıldı. Zam = yeni `effective_from` ile yeni satır; öncekisi bir gün öncesinden otomatik kapanır. Geçmiş aidatlar tutarını kendi satırında taşıdığı için değişmez (A1 korunuyor, kapsamı genişledi — artık taban tutar, indirim yüzdesi ve gerekçesi de donuyor). |
+| H4 | İndirim birleşimi | Kullanıcıya üç seçenek sunuldu (en yüksek / toplama / ardışık). **En yüksek olan uygulanır** seçildi: %5 + %5 = %5. Gerekçe — veliye açıklaması en kolay olan ve sürpriz indirim üretmeyen kural. |
+| H5 | İndirimin yeri | Öğrenci başına saklanan bir veri değil, kurum geneli bir politika: `billing_settings` (çoklu kurs %, kardeş %, vade günü) + `prepay_discount_tiers`. Kurs kaydına özel istisna için `enrollments.manual_discount_percent/reason` — doluysa otomatik kuralların **yerine** geçer (admin bilinçli karar vermiştir). |
+| H6 | Kardeşlik | Ayrı bir "aile" entity'si açılmadı — `student_guardians` zaten çoktan-çoğa. Ortak velisi olan ve **aktif kaydı bulunan** öğrenciler kardeş sayılır; velinin ders almayan ikinci çocuğu indirim doğurmaz. |
+| H7 | Toplu ödeme kampanyası | Kullanıcıya üç seçenek sunuldu (kademeli / tek oran / her seferinde elle). **Ay sayısına göre kademeli** seçildi; başlangıç kademeleri 4 ay %5, 10 ay %10 olarak seed edildi, ekrandan değiştirilebilir. Peşin indirimi öğrenci indiriminin **üstüne**, bileşik uygulanır (%5 ve %10 birlikte %15 değil %14,5 eder). |
+| H8 | Peşin ödemede tutarı kim hesaplar | **Sunucu.** Eski `BulkPayments.cs` istemcinin gönderdiği tutarın seçilen ayların *indirimsiz* toplamına birebir eşit olmasını şart koşuyordu ("Ödeme tutarı bu toplamla aynı olmalı") — kampanya indirimi uygulanmış bir ödeme bu kontrolden asla geçemezdi, yani **kampanya sisteme hiç girilemiyordu**. Artık istemci yalnızca gördüğü toplamı (`expectedTotal`) teyit eder; ekranla sunucu ayrışmışsa işlem 409 ile durur. |
+| H9 | Açılmış ama ödenmemiş ay | Kampanya, normal tarifeyle açılmış ödenmemiş bir ayı iptal edip yenisini açmaz — aynı satırı kampanya oranıyla **yeniden fiyatlar** (`Receivable.Reprice`). Üzerinde ödeme bulunan bir aya dokunamaz: tahsil edilmiş parayla tutarsız bir tutar yazmak eksik/fazla bakiyeyi sessizce gizlerdi. |
+| H10 | Vade günü | Ücret planı başına sorulan `due_day` kaldırıldı, okul geneli tek ayara taşındı (`billing_settings.due_day_of_month`, 1–28). Plan başına sormak gereksiz bir soruydu. |
+| H11 | Adlandırma | `payments.bulk_payment_id/months` → `prepay_plan_id/months`. "Toplu ödeme" hem "ay başında toplu aidat üretimi" hem "peşin ödeme" için kullanılıyordu; iki farklı iş aynı adı taşıyordu. |
+
+Kaldırılan uçlar: `/api/price-lists*`, `/api/enrollments/{id}/fee-plan`, `/api/receivables/bulk*`,
+`/api/enrollments/{id}/bulk-payments`. Yerine: `/api/tuition-rates`, `/api/billing-policy`,
+`/api/receivables/monthly-run`, `/api/enrollments/{id}/prepay-preview` + `/prepay-plans`,
+`PATCH /api/students/{id}/enrollments/{id}`.
+
+Hesabın tamamı tek bir saf sınıfta: `Modules/Billing/Domain/TuitionCalculator.cs` (birim testleri
+`TuitionCalculatorTests.cs`). Uçtan uca akış `TuitionAndDuesFlowTests.cs` ile gerçek Postgres'e
+karşı doğrulanır.
+
+## I — Yıl sonu gösterisi ve kalıcı kişi silme (2026-09-16)
+
+| # | Konu | Karar |
+|---|------|-------|
+| I1 | Kalıcı silme | Kullanıcının açık talebi: "öğretmen gitti diyelim neden pasife alıyorsun? tamamen silme opsiyonu olmalı." Master prompt ve CLAUDE.md "mali/devamsızlık geçmişi olan kayıt silinmez" diyordu ve arayüzde hiçbir kaldırma yolu yoktu (API'de yalnızca `PATCH ... Status=Inactive` vardı, o da ekrana bağlanmamıştı). **Gerçek `DELETE` eklendi**, üç korumayla: (1) `/deletion-impact` işlemden önce ne silineceğini sayar, (2) kaydedilmiş ödeme varsa 409 döner ve devam etmek için açık `force` gerekir, (3) öğretmende `reassignTo` ile öğrenciler başka öğretmene devredilebilir — öğrencilerin ders/aidat geçmişine hiç dokunmadan. Silme işlemi `audit_log`'a yazılır, audit hiçbir zaman temizlenmez. |
+| I2 | Silmenin uygulanışı | Tek transaction içinde ham SQL (`PersonEraser.cs`). EF cascade veya DB cascade tek başına yetmiyordu: referans veren 15 tablonun çoğunda FK yok (modüller arası bağlar açık id sorgularıyla kurulur). Eksiksizlik `PersonDeletionFlowTests`'teki yetim-satır testiyle korunuyor. |
+| I3 | Veli silinmez | Öğrenci silinince velisi otomatik silinmez; yalnızca "N veli artık hiçbir öğrenciye bağlı değil" olarak raporlanır. Kişisel veriyi kullanıcının haberi olmadan silmek yerine kararı ona bırakmak tercih edildi. |
+| I4 | Banka işlemi silinmez | Silinen bir aidata bağlı `bank_incoming_transaction` harici bir kayıttır: silinmez, yalnızca eşleşmesi kopar ve `NeedsReview`'a döner (E1'deki "belirsizlikte insan onayı" ilkesiyle tutarlı). |
+| I5 | Yıl sonu gösterisi — kapsam | Kullanıcı isteği: "öğrenciler belli bir grupta ve sırayla enstrümanlarını çalacağı bir organizasyon, öğrencinin bir fotosu, çaldığı eserler, ve şu an çalacağı eser büyük punto ile." Benzer araçlar araştırıldı (resital yazılımları: Pembee/RecitalDash/CompuDance; run-of-show araçları: StageManager.tech, Rundown Studio, VI-Stage) ve iki standart yüzey alındı: **Program** (sıralı akış, eser + besteci, öğretmen, süre, basılabilir seyirci programı) ve **Sahne** (ŞU AN / SIRADAKİ / ONDAN SONRAKİ, tek tuşla ilerletme, geçen süre ile planlanan sürenin karşılaştırılması). |
+| I6 | Gösteri veri modeli | Ayrı bir "bölüm" tablosu **açılmadı**: grup adı satırın kendisinde (`show_items.group_name`) taşınır. Bir okul resitalinde bölüm sıralamayı değiştiren bir yapı değil yalnızca bir başlık; ayrı tablo sürükle-bırak sıralamayı iki boyutlu hâle getirip karşılığı olmayan bir karmaşıklık eklerdi. Bir öğrencinin her eseri ayrı satırdır — sahne işaretçisi eser bazında ilerlemek zorunda. |
+| I7 | Sahne işaretçisi nerede durur | Veritabanında (`show_events.current_item_id`), tarayıcıda değil. Sahne ekranı, kulis tableti ve yöneticinin ekranı aynı anı görmek zorunda. Websocket eklenmedi (CLAUDE.md'nin "bu ölçekte gerçekten gerekli mi" kuralı); ekran birkaç saniyede bir yeniler. Satır `xmin` ile optimistic concurrency taşır — iki ekrandan aynı anda ilerletme sırayı atlatmasın. |
+| I8 | Öğrenci fotoğrafı | Dosya sistemine değil **veritabanına** (`student_photos`, ayrı tablo). Gerekçe: projenin günlük şifreli yedeklemesi (G-kararları) veritabanını kapsıyor, bir volume'u kapsamıyordu — fotoğraflar böylece ek iş yapılmadan yedekleniyor. `students` satırını şişirmemek için ayrı tabloda; program yanıtı yalnızca sürüm anahtarını taşır, baytları değil (ETag ile önbelleklenir). En fazla 2 MB, JPEG/PNG/WebP. |
+| I9 | Gösteri izinleri | Program ve sahne ekranı **öğretmene de açık** (kulisteki öğretmen kendi öğrencisinin kaçıncı sırada olduğunu görmek zorunda); düzenleme ve sahne kontrolü Admin. Aidattan farklı olarak program operasyonel bir belge, mali veri değil. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

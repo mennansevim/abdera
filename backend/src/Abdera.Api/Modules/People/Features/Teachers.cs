@@ -23,7 +23,8 @@ public static class Teachers
         Guid InstrumentId, string InstrumentName, DateOnly StartedAt);
     public record TeacherOverviewResponse(TeacherResponse Teacher, List<TeacherStudentResponse> Students);
     public record CreateStudentRequest(
-        string FirstName, string LastName, DateOnly BirthDate, Guid InstrumentId, DateOnly StartedAt);
+        string FirstName, string LastName, DateOnly BirthDate, Guid InstrumentId, DateOnly StartedAt,
+        CourseKind? CourseKind = null);
 
     public static void MapTeachers(this IEndpointRouteBuilder app)
     {
@@ -132,7 +133,9 @@ public static class Teachers
 
         var now = clock.UtcNow;
         var student = Student.Create(request.FirstName, request.LastName, request.BirthDate, now);
-        var enrollment = Enrollment.Create(student.Id, teacherId, request.InstrumentId, request.StartedAt, now);
+        var enrollment = Enrollment.Create(
+            student.Id, teacherId, request.InstrumentId,
+            request.CourseKind ?? People.Domain.CourseKind.Individual, request.StartedAt, now);
         db.Students.Add(student);
         db.Enrollments.Add(enrollment);
         db.AuditLogs.Add(AuditLog.Record(

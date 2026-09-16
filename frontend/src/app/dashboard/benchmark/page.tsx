@@ -62,7 +62,7 @@ function ScoreBar({ score }: { score: number }) {
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <span className="inline-flex flex-col rounded-lg bg-[var(--surface-muted)] px-2.5 py-1">
-      <span className="text-[.62rem] font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</span>
+      <span className="text-[.75rem] font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</span>
       <span className="text-sm font-bold tabular-nums">{value}</span>
     </span>
   );

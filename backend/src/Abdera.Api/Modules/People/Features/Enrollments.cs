@@ -13,9 +13,13 @@ namespace Abdera.Api.Modules.People.Features;
 // bağlı olduğu için öğrenci altında iç içe (nested resource) sunuluyor.
 public static class Enrollments
 {
-    public record CreateRequest(Guid TeacherId, Guid InstrumentId, DateOnly StartedAt);
+    public record CreateRequest(Guid TeacherId, Guid InstrumentId, DateOnly StartedAt, CourseKind? CourseKind = null);
+    // Aidat tutarını etkileyen iki alan (ders türü ve elle indirim) kayıt açıldıktan sonra
+    // da değiştirilebilir - yeni bir kayıt açmak geçmiş aidatları kopardığı için doğru yol değil.
+    public record UpdateRequest(CourseKind? CourseKind, decimal? ManualDiscountPercent, string? ManualDiscountReason);
     public record EnrollmentResponse(
-        Guid Id, Guid StudentId, Guid TeacherId, Guid InstrumentId,
+        Guid Id, Guid StudentId, Guid TeacherId, Guid InstrumentId, CourseKind CourseKind,
+        decimal? ManualDiscountPercent, string? ManualDiscountReason,
         EnrollmentStatus Status, DateOnly StartedAt, DateOnly? EndedAt);
 
     public static void MapEnrollments(this IEndpointRouteBuilder app)
@@ -25,6 +29,9 @@ public static class Enrollments
 
         app.MapGet("/api/students/{studentId:guid}/enrollments", ListAsync)
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+
+        app.MapPatch("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}", UpdateAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
 
         app.MapDelete("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}", EndAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
@@ -60,7 +67,9 @@ public static class Enrollments
         if (alreadyEnrolled)
             throw new ConflictException("Öğrenci bu öğretmen ve enstrüman için zaten aktif bir kayda sahip.");
 
-        var enrollment = Enrollment.Create(studentId, request.TeacherId, request.InstrumentId, request.StartedAt, clock.UtcNow);
+        var enrollment = Enrollment.Create(
+            studentId, request.TeacherId, request.InstrumentId,
+            request.CourseKind ?? People.Domain.CourseKind.Individual, request.StartedAt, clock.UtcNow);
         db.Enrollments.Add(enrollment);
         db.AuditLogs.Add(AuditLog.Record(
             AuthContext.GetUserId(principal),
@@ -73,6 +82,7 @@ public static class Enrollments
                 enrollment.StudentId,
                 enrollment.TeacherId,
                 enrollment.InstrumentId,
+                CourseKind = enrollment.CourseKind.ToString(),
                 enrollment.StartedAt,
                 Status = enrollment.Status.ToString(),
             })));
@@ -144,18 +154,46 @@ public static class Enrollments
             }
         }
 
-        var activeFeePlans = await db.FeePlans
-            .Where(plan => plan.EnrollmentId == enrollmentId && plan.ActiveUntil == null)
-            .ToListAsync();
-        foreach (var plan in activeFeePlans)
-        {
-            plan.End(today < plan.ActiveFrom ? plan.ActiveFrom : today);
-        }
-
         await db.SaveChangesAsync();
         return Results.NoContent();
     }
 
+    private static async Task<IResult> UpdateAsync(
+        Guid studentId, Guid enrollmentId, UpdateRequest request, ClaimsPrincipal principal,
+        AbderaDbContext db, IClock clock)
+    {
+        var enrollment = await db.Enrollments
+            .SingleOrDefaultAsync(e => e.Id == enrollmentId && e.StudentId == studentId)
+            ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
+
+        var now = clock.UtcNow;
+        var before = JsonSerializer.Serialize(new
+        {
+            CourseKind = enrollment.CourseKind.ToString(),
+            enrollment.ManualDiscountPercent,
+            enrollment.ManualDiscountReason,
+        });
+
+        if (request.CourseKind is { } courseKind) enrollment.SetCourseKind(courseKind, now);
+        enrollment.SetManualDiscount(request.ManualDiscountPercent, request.ManualDiscountReason, now);
+
+        // Aidat tutarını değiştiren bir karar - CLAUDE.md: parayı etkileyen her use-case
+        // audit_log'a kim/ne zaman/önceki/yeni değeriyle yazar.
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal), "enrollment.billing_updated", nameof(Enrollment), enrollment.Id, now,
+            beforeJson: before,
+            afterJson: JsonSerializer.Serialize(new
+            {
+                CourseKind = enrollment.CourseKind.ToString(),
+                enrollment.ManualDiscountPercent,
+                enrollment.ManualDiscountReason,
+            })));
+
+        await db.SaveChangesAsync();
+        return Results.Ok(ToResponse(enrollment));
+    }
+
     private static EnrollmentResponse ToResponse(Enrollment e) =>
-        new(e.Id, e.StudentId, e.TeacherId, e.InstrumentId, e.Status, e.StartedAt, e.EndedAt);
+        new(e.Id, e.StudentId, e.TeacherId, e.InstrumentId, e.CourseKind,
+            e.ManualDiscountPercent, e.ManualDiscountReason, e.Status, e.StartedAt, e.EndedAt);
 }

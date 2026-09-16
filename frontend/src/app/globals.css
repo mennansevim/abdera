@@ -1,19 +1,18 @@
 @import "tailwindcss";
 
-/* Yönetim panelinin yoğunluğu, kullanıcıların tarayıcıyı yaklaşık %85'e
-   küçülttüğünde oluşan dengeli yerleşime göre ayarlandı. Rem tabanlı tipografi,
-   aralıklar, kartlar ve form kontrolleri birlikte küçülür; responsive kırılma
-   noktaları da aynı ölçeği izler. */
+/* Tarayıcının ve işletim sisteminin varsayılan yazı boyutuna saygı duyulur.
+   Yoğun ekranları sığdırmak için bütün arayüzü küçültmek yerine bileşenlerin
+   kendi aralıkları ve responsive yerleşimleri kullanılır. */
 html {
-  font-size: 85%;
+  font-size: 100%;
 }
 
 /* Ayarlar > Yazı boyutu seçimi. Ölçek rem tabanlı olduğu için responsive
    kırılımları ve yerleşim korunur; yalnızca tipografi ve ona bağlı aralıklar
    kullanıcının tercihine göre büyür veya küçülür. */
-html[data-font-size="small"] { font-size: 78%; }
-html[data-font-size="standard"] { font-size: 85%; }
-html[data-font-size="large"] { font-size: 94%; }
+html[data-font-size="small"] { font-size: 90%; }
+html[data-font-size="standard"] { font-size: 100%; }
+html[data-font-size="large"] { font-size: 112.5%; }
 
 :root {
   /* "Sıcak Atölye" yön değişimi (redesign/sicak-atolye) - mor/krem kimlikten sıcak
@@ -24,7 +23,7 @@ html[data-font-size="large"] { font-size: 94%; }
   --surface: #ffffff;
   --surface-muted: #fbeadb;
   --line: #f0ddc4;
-  --muted: #9c8570;
+  --muted: #74604f;
   --brand: #d9662a;
   --brand-strong: #a84e1f;
   --brand-soft: #fce4d0;
@@ -52,8 +51,8 @@ html[data-font-size="large"] { font-size: 94%; }
   --text-display: 1.75rem;
   --text-title: 1rem;
   --text-body: .875rem;
-  --text-meta: .75rem;
-  --text-micro: .6875rem;
+  --text-meta: .8125rem;
+  --text-micro: .75rem;
 }
 
 @theme inline {

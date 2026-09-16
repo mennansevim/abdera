@@ -17,16 +17,16 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(p => p.Method).HasColumnName("method").HasConversion<string>().HasMaxLength(20);
         builder.Property(p => p.Reference).HasColumnName("reference").HasMaxLength(200);
         builder.Property(p => p.Note).HasColumnName("note");
-        builder.Property(p => p.BulkPaymentId).HasColumnName("bulk_payment_id");
-        builder.Property(p => p.BulkPaymentMonths).HasColumnName("bulk_payment_months");
+        builder.Property(p => p.PrepayPlanId).HasColumnName("prepay_plan_id");
+        builder.Property(p => p.PrepayPlanMonths).HasColumnName("prepay_plan_months");
         builder.Property(p => p.CreatedBy).HasColumnName("created_by");
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(p => p.ReceivableId);
-        builder.HasIndex(p => p.BulkPaymentId);
+        builder.HasIndex(p => p.PrepayPlanId);
         builder.ToTable(t => t.HasCheckConstraint("CK_payments_amount", "amount > 0"));
         builder.ToTable(t => t.HasCheckConstraint(
-            "CK_payments_bulk_payment_months",
-            "(bulk_payment_id IS NULL AND bulk_payment_months IS NULL) OR (bulk_payment_id IS NOT NULL AND bulk_payment_months BETWEEN 2 AND 24)"));
+            "CK_payments_prepay_plan_months",
+            "(prepay_plan_id IS NULL AND prepay_plan_months IS NULL) OR (prepay_plan_id IS NOT NULL AND prepay_plan_months BETWEEN 2 AND 24)"));
     }
 }

@@ -1,6 +1,6 @@
 # İlk REST API Yüzeyi
 
-Master prompt'un önerdiği yüzeye ek olarak Pricing, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6, Dashboard denetim sonrası E2).
+Master prompt'un önerdiği yüzeye ek olarak ücret tarifesi/indirim politikası, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1→H1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6, Dashboard denetim sonrası E2).
 
 ```
 POST   /api/auth/login                          ✅
@@ -72,20 +72,19 @@ GET    /api/guardian/me/students/{studentId}/practice-journal ✅ yalnızca bağ
 POST   /api/guardian/me/students/{studentId}/practice-journal ✅ veli girişi
 POST   /api/guardian/me/practice-journal/{entryId}/approve    ✅ veli onayı
 
-GET    /api/price-lists                         ✅ A1
-POST   /api/price-lists                         ✅ liste + tüm kalemleri tek seferde
-POST   /api/price-lists/{priceListId}/preview-bulk-update   ✅ A1: uygulamadan önce önizleme
-POST   /api/price-lists/{priceListId}/apply     ✅ yalnızca bu listenin kalemleri, geçmiş Receivable etkilenmez
+GET    /api/tuition-rates                       ✅ H1 - yürürlükteki + geçmiş tarifeler
+POST   /api/tuition-rates                       ✅ zam = yeni satır; öncekisi bir gün öncesinden otomatik kapanır
+GET    /api/billing-policy                      ✅ H5 - çoklu kurs/kardeş %, vade günü, peşin kademeleri
+PUT    /api/billing-policy                      ✅ kademeler tam değişimle yazılır
 
-POST   /api/enrollments/{enrollmentId}/fee-plan ✅ eklendi - docs'ta yoktu, Receivable'ın ön koşulu
-GET    /api/enrollments/{enrollmentId}/fee-plan ✅ eklendi
+PATCH  /api/students/{studentId}/enrollments/{enrollmentId}  ✅ H1/H5 - ders türü + kursa özel elle indirim
 
 GET    /api/receivables                         ✅ ?status= filtresiyle
-POST   /api/receivables                         ✅ aktif FeePlan'dan snapshot alır
+POST   /api/receivables                         ✅ tarife + indirimlerden hesaplanır, satıra donar
 POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edilemez
 POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
-GET    /api/receivables/bulk-preview            ✅ ?period=yyyy-MM - açılacak/zaten var/eksik (ücret planı yok) dökümü
-POST   /api/receivables/bulk                    ✅ dönemin aidatını tüm aktif kayıtlar için tek çağrıda açar; yeni kayıt yoksa 409
+GET    /api/receivables/monthly-run             ✅ ?period=yyyy-MM - açılacak/zaten var/tarifesiz dökümü + indirim toplamı
+POST   /api/receivables/monthly-run             ✅ dönemin aidatını tüm aktif kayıtlar için tek çağrıda açar; yeni kayıt yoksa 409
 POST   /api/payments/{paymentId}/corrections    ✅ değiştirilemez düzeltme satırı; fazla ödeme reddi + audit
 GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
 POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar
@@ -111,7 +110,8 @@ PATCH  /api/message-templates/{templateId}       ✅ gövde/dil/aktiflik güncel
 GET    /api/notification-automation-settings     ✅ Faz 3 - hatırlatma süresi/aktiflik/3. RSVP seçeneği (tek satırlık kurum ayarı)
 PUT    /api/notification-automation-settings     ✅ günceller; bekleyen LessonReminder job'larını yeniden hesaplar veya (kapatılırsa) iptal eder, audit_log'a yazar
 
-POST   /api/enrollments/{enrollmentId}/bulk-payments  ✅ Faz 2 - seçilen aydan başlayarak 1-24 ay arası toplu tahsilat, eksik Receivable'ları kendisi oluşturur
+GET    /api/enrollments/{enrollmentId}/prepay-preview ✅ H7/H8 - ?startPeriod=&months= - taban/indirim/net toplam, sunucu hesaplar
+POST   /api/enrollments/{enrollmentId}/prepay-plans   ✅ H8 - 1-24 ay peşin tahsilat; expectedTotal ekranla sunucu ayrışmışsa 409
 
 GET    /api/instrument-maintenance-settings      ✅ Admin; bakım periyodu/aktiflik/kanal ve rızalı veli sayısı
 PUT    /api/instruments/{instrumentId}/maintenance-setting ✅ Admin upsert + audit
@@ -163,3 +163,38 @@ POST   /api/backup-runs/trigger                 ✅ Faz 4 - manuel yedeklemeyi a
 Rol bazlı davranış: `TEACHER` bu uç noktayı çağırdığında sayılar okul geneli değil, yalnızca kendi dersleri üzerinden hesaplanır (bkz. `docs/04-permissions.md`).
 
 `upcomingBirthdays` önceden yalnızca bir sayıydı (hiçbir ekranda gösterilmiyordu) - kullanıcı isteğiyle 30 günlük pencere içindeki öğrencilerin gerçek listesine (`daysUntil`'e göre artan sırayla) çevrildi, `/dashboard` ana ekranında "Yaklaşan Doğum Günleri" bölümü olarak gösterilir.
+
+## Show — yıl sonu gösterisi (I5–I9)
+
+```
+GET    /api/shows                                    ✅ özet liste (sıra/öğrenci/süre)      Teacher+Admin
+GET    /api/shows/{showId}                           ✅ tam program                          Teacher+Admin
+POST   /api/shows                                    ✅                                      Admin
+PATCH  /api/shows/{showId}                           ✅                                      Admin
+DELETE /api/shows/{showId}                           ✅ programı da siler (cascade)          Admin
+POST   /api/shows/{showId}/items                     ✅ sona ekler                           Admin
+PATCH  /api/shows/{showId}/items/{itemId}            ✅                                      Admin
+DELETE /api/shows/{showId}/items/{itemId}            ✅ kalan sıraları yeniden numaralar      Admin
+POST   /api/shows/{showId}/items/reorder             ✅ tüm sıra tek çağrıda; eksik liste 400 Admin
+
+GET    /api/shows/{showId}/stage                     ✅ ŞU AN / SIRADAKİ / ONDAN SONRAKİ      Teacher+Admin
+POST   /api/shows/{showId}/start                     ✅ başlatır ve ilk sıraya geçer          Admin
+POST   /api/shows/{showId}/advance                   ✅ program bittiyse 409                  Admin
+POST   /api/shows/{showId}/back                      ✅ ilk sıradaysa 409                     Admin
+POST   /api/shows/{showId}/goto/{itemId}             ✅ araya atlama                          Admin
+POST   /api/shows/{showId}/finish                    ✅                                       Admin
+POST   /api/shows/{showId}/reopen                    ✅ yanlışlıkla bitirilirse geri alır     Admin
+
+GET    /api/students/{studentId}/photo                ✅ ETag'li, 304 döner                   Teacher+Admin
+PUT    /api/students/{studentId}/photo                ✅ multipart, ≤2 MB, JPEG/PNG/WebP      Admin
+DELETE /api/students/{studentId}/photo                ✅                                      Admin
+```
+
+## Kalıcı kişi silme (I1–I4)
+
+```
+GET    /api/students/{studentId}/deletion-impact      ✅ ne silineceğinin dökümü               Admin
+DELETE /api/students/{studentId}[?force=true]         ✅ ödeme varsa force olmadan 409         Admin
+GET    /api/teachers/{teacherId}/deletion-impact      ✅                                       Admin
+DELETE /api/teachers/{teacherId}[?force=true][&reassignTo=]  ✅ devir varsa hiçbir veri silinmez  Admin
+```
