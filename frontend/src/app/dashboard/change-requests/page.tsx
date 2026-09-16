@@ -7,6 +7,10 @@ import { ApiError } from "@/lib/api";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useDecideStudentDeletionRequest, useStudentDeletionRequests } from "@/lib/people";
 
+function initials(name: string) {
+  return name.split(" ").map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toLocaleUpperCase("tr-TR");
+}
+
 // docs/00-master-prompt.md Admin UX: "lesson-change queue". docs/05-state-models.md:
 // PENDING -> APPROVED/REJECTED (ALTERNATIVE_PROPOSED/PARENT_* Phase 5'te - WhatsApp gerekir).
 export default function ChangeRequestsPage() {
@@ -138,56 +142,68 @@ function StudentDeletionRequestsSection() {
       <h2 className="text-title">Öğrenci silme talepleri</h2>
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 
-      {requests.map((request) => (
-        <article key={request.id} className="app-card border-l-4 border-l-[var(--danger)] p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-bold">{request.studentName}</p>
-              <p className="text-meta mt-0.5">
-                {request.requestedByName} · {new Date(request.createdAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}
-              </p>
-              <p className="mt-2 rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs">{request.reason}</p>
+      {requests.map((request) => {
+        const stats = request.impact
+          ? [
+              { label: "Kurs", value: request.impact.enrollments },
+              { label: "Ders", value: request.impact.lessons },
+              { label: "Yoklama", value: request.impact.attendances },
+              { label: "Aidat", value: request.impact.receivables },
+              { label: "Ödeme", value: request.impact.payments },
+            ].filter((cell) => cell.value > 0)
+          : [];
+
+        return (
+          <article key={request.id} className="app-card border-l-4 border-l-[var(--danger)] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--danger-soft)] text-sm font-bold text-[var(--danger-strong)]">
+                  {initials(request.studentName)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold">{request.studentName}</p>
+                  <p className="text-meta mt-0.5 truncate">
+                    {request.requestedByName} · {new Date(request.createdAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 gap-2">
+                <button type="button" onClick={() => handle(request.id, "reject")} disabled={busyId === request.id} className="btn btn-quiet">
+                  {busyId === request.id ? "…" : "Reddet"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handle(request.id, "approve")}
+                  disabled={busyId === request.id}
+                  className="pressable min-h-11 rounded-xl bg-[var(--danger-strong)] px-4 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {busyId === request.id ? "Siliniyor…" : "Onayla ve sil"}
+                </button>
+              </div>
             </div>
 
-            {request.impact && (
-              <dl className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 text-[.75rem] sm:grid-cols-3">
-                {[
-                  { label: "Kurs", value: request.impact.enrollments },
-                  { label: "Ders", value: request.impact.lessons },
-                  { label: "Yoklama", value: request.impact.attendances },
-                  { label: "Aidat", value: request.impact.receivables },
-                  { label: "Ödeme", value: request.impact.payments },
-                ].filter((cell) => cell.value > 0).map((cell) => (
-                  <div key={cell.label}>
-                    <dt className="text-[var(--muted)]">{cell.label}</dt>
-                    <dd className="font-bold tabular-nums">{cell.value}</dd>
-                  </div>
+            <p className="mt-3 rounded-lg bg-[var(--surface-muted)] px-3 py-2 text-xs">{request.reason}</p>
+
+            {stats.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {stats.map((cell) => (
+                  <span key={cell.label} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--surface-muted)] px-2.5 py-1 text-xs">
+                    <strong className="tabular-nums">{cell.value}</strong>
+                    <span className="text-[var(--muted)]">{cell.label}</span>
+                  </span>
                 ))}
-              </dl>
+              </div>
             )}
-          </div>
 
-          {request.impact && request.impact.payments > 0 && (
-            <p className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-bold text-[var(--danger-strong)]">
-              {request.impact.payments} ödeme kaydı da silinecek · {request.impact.collectedAmount.toLocaleString("tr-TR")} {request.impact.currency}
-            </p>
-          )}
-
-          <div className="mt-3 flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={() => handle(request.id, "reject")} disabled={busyId === request.id} className="btn btn-quiet">
-              {busyId === request.id ? "…" : "Reddet"}
-            </button>
-            <button
-              type="button"
-              onClick={() => handle(request.id, "approve")}
-              disabled={busyId === request.id}
-              className="pressable min-h-11 rounded-xl bg-[var(--danger-strong)] px-4 text-sm font-bold text-white disabled:opacity-50"
-            >
-              {busyId === request.id ? "Siliniyor…" : "Onayla ve sil"}
-            </button>
-          </div>
-        </article>
-      ))}
+            {request.impact && request.impact.payments > 0 && (
+              <p className="mt-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-bold text-[var(--danger-strong)]">
+                {request.impact.payments} ödeme kaydı da silinecek · {request.impact.collectedAmount.toLocaleString("tr-TR")} {request.impact.currency}
+              </p>
+            )}
+          </article>
+        );
+      })}
     </section>
   );
 }
