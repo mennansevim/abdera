@@ -56,21 +56,23 @@ export function StudentDetail({
   }
 
   return (
-    <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:p-4">
+    <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
       {/* Künye: satır kapalıyken yalnızca ad ve doğum tarihi görünüyor; açılınca öğrencinin
           kim olduğu (yaş, durum) ve üzerinde yapılabilecek işler tek bakışta belli olsun.
           Eylemler tek bir "düzenle" ikonu değil: birincil eylem yazıyla, ikincil olanlar
           "⋮" menüsünde (kullanıcı isteği). */}
-      <section className="app-card flex flex-wrap items-center gap-3 p-3.5 sm:gap-4">
+      <section className="app-card flex flex-wrap items-center gap-3 p-4 sm:gap-4">
         <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--brand-soft)] font-serif text-lg font-bold italic text-[var(--brand-strong)]">
           {initials(fullName)}
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-serif text-lg font-bold italic">{fullName}</h3>
-          <p className="text-meta mt-0.5">{student.birthDate}{ageOf(student.birthDate) !== null && ` · ${ageOf(student.birthDate)} yaş`}</p>
-          <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[.75rem] font-bold ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
-            {student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}
-          </span>
+          <h3 className="truncate font-serif text-lg font-bold italic leading-tight">{fullName}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="text-meta">{student.birthDate}{ageOf(student.birthDate) !== null && ` · ${ageOf(student.birthDate)} yaş`}</p>
+            <span className={`inline-flex rounded-full px-2 py-0.5 text-[.75rem] font-bold ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
+              {student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}
+            </span>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet">
@@ -104,16 +106,16 @@ export function StudentDetail({
       <div className="grid gap-3 lg:grid-cols-2">
         {canManage && (
           <section className="app-card overflow-hidden">
-            <div className="border-b border-[var(--line)] p-3.5">
+            <div className="border-b border-[var(--line)] p-4">
               <SectionHeader
                 title="Veliler"
-                description={`${fullName} adına iletişime geçilecek kişiler`}
+                description="İletişime geçilecek kişiler"
                 actions={<AddButton label="Veli ekle" tone="quiet" onClick={() => setShowGuardianForm(true)} />}
               />
             </div>
             <ul className="divide-y divide-[var(--line)]">
               {guardians?.map((guardian) => (
-                <li key={guardian.id} className="flex items-center gap-3 px-3.5 py-3">
+                <li key={guardian.id} className="flex items-center gap-3 px-4 py-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-muted)] text-[.75rem] font-bold text-[var(--brand-strong)]">
                     {initials(`${guardian.firstName} ${guardian.lastName}`)}
                   </span>
@@ -136,16 +138,16 @@ export function StudentDetail({
                   </RowMenu>
                 </li>
               ))}
-              {guardians?.length === 0 && <li className="text-meta px-3.5 py-6 text-center">Henüz veli eklenmemiş.</li>}
+              {guardians?.length === 0 && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz veli eklenmemiş.</li>}
             </ul>
           </section>
         )}
 
         <section className="app-card overflow-hidden">
-          <div className="border-b border-[var(--line)] p-3.5">
+          <div className="border-b border-[var(--line)] p-4">
             <SectionHeader
               title="Kurslar"
-              description={`${fullName} adına açık kurs kayıtları`}
+              description="Açık kurs kayıtları"
               actions={canManage ? <AddButton label="Kurs ekle" tone="quiet" onClick={() => setShowEnrollmentForm(true)} /> : undefined}
             />
           </div>
@@ -166,7 +168,7 @@ export function StudentDetail({
                 />
               );
             })}
-            {!activeEnrollments.length && <li className="text-meta px-3.5 py-6 text-center">Henüz aktif kurs yok.</li>}
+            {!activeEnrollments.length && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz aktif kurs yok.</li>}
           </ul>
         </section>
       </div>
@@ -286,7 +288,7 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
   }
 
   return (
-    <li className="px-3.5 py-3">
+    <li className="px-4 py-3">
       <div className="flex items-center gap-3">
         {/* Enstrüman rozeti liste satırındakiyle aynı kimlikte (icons.tsx) - öğrenci
             listesinde gördüğü ikonu detayda da görsün. */}

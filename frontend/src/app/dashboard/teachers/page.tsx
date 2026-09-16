@@ -99,7 +99,7 @@ function TeachersPageContent() {
       {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
       {temporaryPassword && (
-        <div className="app-card flex flex-wrap items-center justify-between gap-3 border-[var(--warning)]/40 bg-[var(--warning-soft)] p-3.5">
+        <div className="app-card flex flex-wrap items-center justify-between gap-3 border-[var(--warning)]/40 bg-[var(--warning-soft)] p-4">
           <p className="text-xs font-semibold text-[var(--warning-strong)]">
             Geçici şifre: <code className="font-mono font-bold">{temporaryPassword}</code> — öğretmene ilet, bir daha gösterilmeyecek.
           </p>

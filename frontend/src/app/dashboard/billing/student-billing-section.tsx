@@ -242,7 +242,7 @@ function EnrollmentDiscountBlock({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-3.5">
+    <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-4">
       <p className="mb-2 text-xs font-bold">{label}</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="form-label">Ders türü
@@ -300,7 +300,7 @@ function PrepayBlock({ studentId, enrollmentId, label }: { studentId: string; en
   const blocked = (preview?.blockers.length ?? 0) > 0;
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-3.5">
+    <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-4">
       <p className="mb-2 text-xs font-bold">{label}</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="form-label">Başlangıç<input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required className="field min-h-10 text-xs" /></label>
@@ -361,7 +361,7 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
     }
   }
 
-  return <div className="p-3.5 sm:px-4">
+  return <div className="p-4">
     <div className="flex flex-wrap items-center gap-3">
       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--brand-strong)]"><Icon name="calendar" className="h-4 w-4" /></span>
       <span className="min-w-0 flex-1">

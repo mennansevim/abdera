@@ -151,7 +151,7 @@ function ActivityPanel() {
     <section className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {(["all", "Pending", "Sent", "Failed", "Cancelled"] as const).map((status) => (
-          <button key={status} type="button" onClick={() => { setFilter(status); setPage(1); }} className={`pressable min-h-10 rounded-full px-3.5 text-xs font-bold ${filter === status ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}>
+          <button key={status} type="button" onClick={() => { setFilter(status); setPage(1); }} className={`pressable min-h-10 rounded-full px-4 text-xs font-bold ${filter === status ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}>
             {status === "all" ? "Tümü" : STATUS_LABELS[status]}
           </button>
         ))}
@@ -294,7 +294,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
           </label>
         </div>
 
-        <section aria-labelledby={`fields-${template.id}`} className="rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-3.5">
+        <section aria-labelledby={`fields-${template.id}`} className="rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-4">
           <div className="flex items-start gap-3">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-[var(--brand-strong)] shadow-sm"><Icon name="plus" className="h-4 w-4" /></span>
             <div><h3 id={`fields-${template.id}`} className="text-xs font-bold">Otomatik bilgi ekle</h3><p className="text-meta mt-0.5">Kartı mesaja sürükle. Telefonda veya klavyeyle dokunman yeterli.</p></div>
@@ -358,7 +358,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
       <div className="app-card h-fit overflow-hidden p-4 sm:sticky sm:top-5 sm:p-5">
         <div className="mb-4 flex items-center justify-between"><div><h2 className="text-title">Veli ne görecek?</h2><p className="text-meta mt-0.5">Yazdıkların anında burada görünür.</p></div><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--success-strong)]">WhatsApp</span></div>
         <div className="rounded-[1.6rem] bg-[#e7e1d7] p-3 shadow-inner">
-          <div className="ml-auto max-w-[95%] rounded-2xl rounded-tr-md bg-[#dcf8c6] p-3.5 text-sm leading-relaxed text-[#243522] shadow-sm">
+          <div className="ml-auto max-w-[95%] rounded-2xl rounded-tr-md bg-[#dcf8c6] p-4 text-sm leading-relaxed text-[#243522] shadow-sm">
             <p className="mb-2 text-[.75rem] font-bold uppercase tracking-[.06em] text-[#5f7a59]">Abdera Müzik Okulu</p>
             <p className="whitespace-pre-wrap">{preview || "Mesaj metni burada görünecek."}</p>
             <p className="mt-2 text-right text-[.75rem] text-[#6e806a]">şimdi ✓✓</p>

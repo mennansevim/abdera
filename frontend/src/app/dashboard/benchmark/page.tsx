@@ -92,7 +92,7 @@ function TeachersTab() {
       <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Öğretmen ara…" />
       <div className="app-card divide-y divide-[var(--line)]">
         {rows.map((r: TeacherBenchmarkRow, i) => (
-          <div key={r.teacherId} className="flex flex-col gap-2 p-3.5 sm:flex-row sm:items-center sm:gap-4">
+          <div key={r.teacherId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
               <RankBadge rank={search ? i + 1 : (data ?? []).indexOf(r) + 1} />
               <span className="truncate text-sm font-bold">{r.teacherName}</span>
@@ -136,7 +136,7 @@ function StudentsTab() {
         {rows.map((r: StudentBenchmarkRow) => {
           const rank = (data ?? []).indexOf(r) + 1;
           return (
-            <div key={r.studentId} className="flex flex-col gap-2 p-3.5 sm:flex-row sm:items-center sm:gap-4">
+            <div key={r.studentId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
                 <RankBadge rank={rank} />
                 <span className="truncate text-sm font-bold">{r.studentName}</span>

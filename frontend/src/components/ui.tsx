@@ -209,7 +209,7 @@ export function Modal({
         aria-label={title}
         className={`app-card relative z-10 flex max-h-[calc(100vh-1.5rem)] w-full ${width} flex-col overflow-hidden focus:outline-none`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5 sm:px-5">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-4 sm:px-5">
           <div className="min-w-0">
             <h2 className="text-title">{title}</h2>
             {description && <p className="text-meta mt-1">{description}</p>}
@@ -227,7 +227,7 @@ export function Modal({
 // Modal içindeki formların alt şeridi - solda vazgeç, sağda asıl eylem.
 export function FormActions({ onCancel, submitLabel, pending, pendingLabel, disabled = false }: { onCancel: () => void; submitLabel: string; pending?: boolean; pendingLabel?: string; disabled?: boolean }) {
   return (
-    <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+    <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
       <button type="button" onClick={onCancel} className="btn btn-quiet">Vazgeç</button>
       <button type="submit" disabled={pending || disabled} className="btn btn-primary">
         {pending ? (pendingLabel ?? "Kaydediliyor…") : submitLabel}

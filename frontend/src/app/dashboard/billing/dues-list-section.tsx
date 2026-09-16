@@ -445,7 +445,7 @@ function QuickCollectPanel({
     )}
 
     {enrollmentId && (
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-3.5">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="form-label">İlk dönem
             <input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required aria-invalid={!hasStartPeriod} className="field min-h-10 bg-white text-xs" />
@@ -521,7 +521,7 @@ function DueRow({ due }: { due: BillingDue }) {
     }
   }
 
-  return <article className="px-4 py-3.5">
+  return <article className="px-4 py-3">
     <div className="grid items-center gap-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.9fr)_minmax(9rem,.9fr)_minmax(8rem,.8fr)_auto]">
       <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand-strong)]">{due.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0"><strong className="block truncate text-sm">{due.studentName}</strong><span className="text-meta mt-0.5 block truncate">{due.instrumentName}</span></span></div>
       <div className="text-xs"><span className="text-[.75rem] font-bold text-[var(--muted)] md:hidden">Öğretmen · </span>{due.teacherName}</div>
@@ -662,7 +662,7 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-[var(--line)] bg-white p-3.5" aria-live="polite">
+      <section className="rounded-xl border border-[var(--line)] bg-white p-4" aria-live="polite">
         <p className="text-micro text-[var(--brand-strong)]">Seçili dönem</p>
         <h4 className="mt-1 font-serif text-base font-bold capitalize">{formatPeriod(activePeriod)}</h4>
         {!selectedRows.length && <div className="mt-4 grid min-h-36 place-items-center rounded-xl bg-[var(--surface-muted)] p-4 text-center"><div><Icon name="calendar" className="mx-auto h-5 w-5 text-[var(--muted)]" /><p className="text-meta mt-2">Bu ay için aidat kaydı bulunmuyor.</p></div></div>}
@@ -798,7 +798,7 @@ function MonthlyDueRunDialog({
 
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
-        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
           <button type="button" onClick={onClose} className="btn btn-quiet">{result ? "Kapat" : "Vazgeç"}</button>
           {!result && (
             <button type="button" onClick={run} disabled={runMonthlyDues.isPending || !plan?.ready.length} className="btn btn-primary">

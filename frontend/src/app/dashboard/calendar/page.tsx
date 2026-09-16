@@ -270,7 +270,7 @@ export default function CalendarPage() {
                 type="button"
                 onClick={() => setInstrumentFilter(filter)}
                 aria-pressed={instrumentFilter === filter}
-                className={`pressable min-h-9 shrink-0 rounded-xl border px-3 text-xs font-bold xl:px-1.5 2xl:px-3.5 ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
+                className={`pressable min-h-9 shrink-0 rounded-xl border px-3 text-xs font-bold xl:px-1.5 2xl:px-4 ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
               >
                 {filter}
               </button>
@@ -829,7 +829,7 @@ function ActiveLessonCard({ lesson, tone, now }: { lesson: CalendarLesson; tone:
 
   return (
     <article className="overflow-hidden rounded-xl border shadow-sm" style={{ borderColor: tone.border, background: tone.bg, color: tone.text }}>
-      <div className="p-3.5">
+      <div className="p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="rounded-full bg-white/75 px-2 py-1 text-[.75rem] font-extrabold uppercase tracking-[.08em]">Şu an derste</span>
           <span className="text-[.75rem] font-bold tabular-nums">{formatTime(start)}–{formatTime(end)}</span>

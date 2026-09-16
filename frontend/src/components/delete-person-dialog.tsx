@@ -110,7 +110,7 @@ export function DeleteStudentDialog({
 
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
-        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
           <button type="button" onClick={onClose} className="btn btn-quiet">Vazgeç</button>
           <button
             type="button"
@@ -220,7 +220,7 @@ export function DeleteTeacherDialog({
 
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
-        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
           <button type="button" onClick={onClose} className="btn btn-quiet">Vazgeç</button>
           <button
             type="button"
@@ -296,7 +296,7 @@ export function RequestStudentDeletionDialog({
 
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
-        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3.5">
+        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
           <button type="button" onClick={onClose} className="btn btn-quiet">{sent ? "Kapat" : "Vazgeç"}</button>
           {!sent && (
             <button

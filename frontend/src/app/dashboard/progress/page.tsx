@@ -209,7 +209,7 @@ function ProgressStats({ analysis }: { analysis: ReturnType<typeof buildProgress
     { label: "Ort. zorluk", value: analysis.averageDifficulty ? analysis.averageDifficulty.toFixed(1) : "—", suffix: "/ 5", icon: "target" as const },
     { label: "Hedefli ders", value: analysis.goalCount, suffix: "kayıt", icon: "activity" as const },
   ];
-  return <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{stats.map((stat) => <div key={stat.label} className="app-card flex items-center gap-3 p-3.5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name={stat.icon} className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-[.75rem] font-bold text-[var(--muted)]">{stat.label}</span><span className="mt-0.5 block text-lg font-bold tabular-nums">{stat.value} <small className="text-[.75rem] font-semibold text-[var(--muted)]">{stat.suffix}</small></span></span></div>)}</div>;
+  return <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">{stats.map((stat) => <div key={stat.label} className="app-card flex items-center gap-3 p-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name={stat.icon} className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-[.75rem] font-bold text-[var(--muted)]">{stat.label}</span><span className="mt-0.5 block text-lg font-bold tabular-nums">{stat.value} <small className="text-[.75rem] font-semibold text-[var(--muted)]">{stat.suffix}</small></span></span></div>)}</div>;
 }
 
 function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; lessons: CalendarLesson[]; onClose: () => void }) {

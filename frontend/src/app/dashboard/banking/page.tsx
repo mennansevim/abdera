@@ -114,7 +114,7 @@ function TransactionsSection() {
       <div className="flex flex-wrap gap-2">
         {(["NeedsReview", "Matched", "Ignored", "all"] as const).map((f) => (
           <button key={f} onClick={() => handleFilterChange(f)}
-            className={`pressable min-h-10 rounded-full px-3.5 text-xs font-bold ${
+            className={`pressable min-h-10 rounded-full px-4 text-xs font-bold ${
               filter === f ? "bg-[var(--brand)] text-white" : "border-2 border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"
             }`}>
             {f === "all" ? "Tümü" : STATUS_LABELS[f]}
@@ -192,14 +192,14 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
 
   return (
     <tr className="border-b border-[var(--line)] align-top last:border-0">
-      <td className="text-meta px-4 py-3.5">{new Date(transaction.receivedAt).toLocaleString("tr-TR")}</td>
-      <td className="px-4 py-3.5 font-semibold">{transaction.senderName ?? "—"}</td>
-      <td className="text-meta px-4 py-3.5">{transaction.description ?? "—"}</td>
-      <td className="px-4 py-3.5 font-bold tabular-nums">{transaction.amount.toLocaleString("tr-TR")} {transaction.currency}</td>
-      <td className="px-4 py-3.5">
+      <td className="text-meta px-4 py-3">{new Date(transaction.receivedAt).toLocaleString("tr-TR")}</td>
+      <td className="px-4 py-3 font-semibold">{transaction.senderName ?? "—"}</td>
+      <td className="text-meta px-4 py-3">{transaction.description ?? "—"}</td>
+      <td className="px-4 py-3 font-bold tabular-nums">{transaction.amount.toLocaleString("tr-TR")} {transaction.currency}</td>
+      <td className="px-4 py-3">
         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${STATUS_CLASSES[transaction.status]}`}>{STATUS_LABELS[transaction.status]}</span>
       </td>
-      <td className="px-4 py-3.5">
+      <td className="px-4 py-3">
         {transaction.status === "NeedsReview" && (
           <div className="flex flex-wrap items-center gap-1.5">
             <input value={receivableId} onChange={(e) => setReceivableId(e.target.value)}

@@ -99,7 +99,7 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
 
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
       {summary && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--success-strong)]">{summary}</p>}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-4">
         <button type="button" onClick={() => setShowManual((value) => !value)} className="btn btn-quiet">{showManual ? "Akıllı önerilere dön" : "Özel saat belirle"}</button>
         <span className="flex gap-2">
           {onCancel && <button type="button" onClick={onCancel} className="btn btn-quiet">Vazgeç</button>}
