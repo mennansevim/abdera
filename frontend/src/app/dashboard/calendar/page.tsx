@@ -210,7 +210,7 @@ export default function CalendarPage() {
       {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
       {canSchedule && (
-        <Modal open={showSeriesForm && !quickAddSlot} title="Yeni ders" description="Öğrenciyi seç; sistem öğretmen ve öğrenci takvimini birlikte tarasın." onClose={() => setShowSeriesForm(false)}>
+        <Modal open={showSeriesForm && !quickAddSlot} title="Yeni ders" description={isAdmin ? "Öğrenciyi seç; sistem öğretmen ve öğrenci takvimini birlikte tarasın." : "Öğrenciyi ve ders gününü seç."} onClose={() => setShowSeriesForm(false)}>
           <CreateSeriesForm
             key="manual"
             onCreated={(summary) => { setShowSeriesForm(false); setQuickAddSlot(null); announce(summary); }}
