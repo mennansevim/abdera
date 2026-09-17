@@ -88,6 +88,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
     : [
         { ...navItem("/dashboard"), label: "Bugün" },
         { ...navItem("/dashboard/calendar"), label: "Takvimim" },
+        { ...navItem("/dashboard/students"), label: "Öğrenciler" },
         { ...navItem("/dashboard/progress"), label: "Gelişim" },
       ];
 
@@ -159,7 +160,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
 
         {/* Öğretmende üst çubuk gizli (yalnızca alt menü var) - ders taşıma bildirimi her
             ekranda görünsün diye zil buraya bir sekme olarak giriyor. */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden" aria-label="Mobil ana menü">
+        <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${me.role === "Teacher" ? "grid-cols-6" : "grid-cols-5"} border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden`} aria-label="Mobil ana menü">
           {mobilePrimary.map((link) => <MobileNavLink key={link.href} link={link} active={isActive(pathname, link.href)} />)}
           {me.role === "Teacher" && <NotificationBell variant="mobile" />}
           <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>

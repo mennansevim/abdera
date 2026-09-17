@@ -9,8 +9,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Scheduling.Features;
 
-// docs/10-decisions.md A2: telafi kredisi burada doğar. Öğretmen/veli değil, Admin işler -
-// ders değişikliği (reschedule) LessonChangeRequest akışından ayrı, doğrudan bir iptaldir.
+// docs/10-decisions.md A2: telafi kredisi burada doğar. Öğretmen yalnızca kendi dersini,
+// Admin okulun tüm derslerini iptal edebilir; işlem doğrudan audit kaydına düşer.
 public static class CancelLesson
 {
     public enum CancelledBy { Guardian, School }
@@ -21,7 +21,7 @@ public static class CancelLesson
     public static void MapCancelLesson(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/lessons/{lessonId:guid}/cancel", HandleAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     private static async Task<IResult> HandleAsync(
@@ -29,6 +29,10 @@ public static class CancelLesson
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
+
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        if (teacherScope is { } scopedTeacherId && scopedTeacherId != lesson.TeacherId)
+            throw new ForbiddenException("Bu ders size atanmamış.");
 
         var now = clock.UtcNow;
         lesson.Cancel(now);

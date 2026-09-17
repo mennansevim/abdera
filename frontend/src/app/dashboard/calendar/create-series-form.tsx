@@ -145,10 +145,10 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
         <div className="grid min-w-0 gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2">
           <fieldset className="min-w-0">
             <legend className="form-label">Gün</legend>
-            <div className="mt-1 flex gap-1.5 overflow-x-auto pb-1" role="radiogroup" aria-label="Ders günü">
+            <div className="mt-1 grid grid-cols-7 gap-1" role="radiogroup" aria-label="Ders günü">
               {WEEKDAY_ORDER.map((day) => {
                 const active = manualDay === day;
-                return <button key={day} type="button" role="radio" aria-checked={active} onClick={() => setManualDay(day)} className={`pressable grid min-h-11 min-w-11 flex-1 place-items-center rounded-xl border px-2 text-xs font-bold ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm" : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)]"}`}>{DAY_SHORT_TR[day]}</button>;
+                return <button key={day} type="button" role="radio" aria-checked={active} onClick={() => setManualDay(day)} className={`pressable grid min-h-11 place-items-center rounded-xl border px-1 text-xs font-bold ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm" : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)]"}`}>{DAY_SHORT_TR[day]}</button>;
               })}
             </div>
           </fieldset>

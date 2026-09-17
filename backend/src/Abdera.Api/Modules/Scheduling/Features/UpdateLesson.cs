@@ -26,7 +26,7 @@ public static class UpdateLesson
     public static void MapUpdateLesson(this IEndpointRouteBuilder app)
     {
         app.MapPatch("/api/lessons/{lessonId:guid}", HandleAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     private static async Task<IResult> HandleAsync(
@@ -55,6 +55,15 @@ public static class UpdateLesson
             .FromSqlInterpolated($"SELECT * FROM lessons WHERE id = {lessonId} FOR UPDATE")
             .SingleOrDefaultAsync()
             ?? throw new NotFoundException("Ders bulunamadı.");
+
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        if (teacherScope is { } scopedTeacherId)
+        {
+            if (lesson.TeacherId != scopedTeacherId)
+                throw new ForbiddenException("Bu ders size atanmamış.");
+            if (request.TeacherId != lesson.TeacherId || request.StudentId != lesson.StudentId)
+                throw new ForbiddenException("Öğretmen yalnızca kendi dersinin gün, saat, süre veya durumunu değiştirebilir.");
+        }
 
         if (lesson.Status != LessonStatus.Normal)
             throw new ConflictException($"'{lesson.Status}' durumundaki bir ders düzenlenemez.");

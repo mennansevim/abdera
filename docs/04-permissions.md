@@ -80,6 +80,8 @@ Ders serisi takvimi değiştirdiği için oluşturma ve sonlandırma artık `aud
 (`lesson_series.created`, `lesson_series.ended`) — aktörün admin olduğu artık garanti değil,
 "kim yaptı" sorusunun yanıtı gerekiyor.
 
-Bu iki grubun dışında kalan ders işlemleri **değişmedi**: var olan bir dersi taşımak/iptal
-etmek (`PATCH /api/lessons/{id}`, `POST /api/lessons/{id}/cancel`) ve telafi yerleştirmek hâlâ
-yalnızca Admin'de — öğretmen bunlar için `LessonChangeRequest` açar.
+Öğretmen ayrıca kendi dersini tek seferlik taşıyabilir (`PATCH /api/lessons/{id}`), kendi
+serisini seçilen tarihten itibaren yeniden planlayabilir ve kendi dersini okul kaynaklı iptal
+ederek öğrenciye telafi hakkı tanımlayabilir (`POST /api/lessons/{id}/cancel`). Başka bir
+öğretmenin dersinde bu uçlar `403` döner. Telafi hakkını yeni bir derse yerleştirmek hâlâ
+yalnızca Admin'dedir.

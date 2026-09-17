@@ -110,6 +110,7 @@ export function formatWeeklySchedule(series: { dayOfWeek: string; startTime: str
 
 export interface CalendarLesson {
   id: string;
+  lessonSeriesId: string | null;
   startAt: string;
   endAt: string;
   status: LessonStatus;

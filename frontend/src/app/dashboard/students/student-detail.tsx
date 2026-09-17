@@ -7,7 +7,6 @@ import { Icon, instrumentBadgeStyle } from "@/components/icons";
 import { AddButton, FormActions, FormMessage, Modal, RowMenu, RowMenuItem, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  DAY_NAMES_TR,
   formatWeeklySchedule,
   useCreateLessonSeries,
   useRescheduleLessonSeries,
@@ -45,6 +44,7 @@ export function StudentDetail({
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
+  const [programEnrollmentId, setProgramEnrollmentId] = useState<string | null>(null);
   const { data: guardians } = useStudentGuardians(canManage ? studentId : "");
   const { data: enrollments } = useEnrollments(studentId);
   // "Her hafta Pazartesi 18:00 piyano" - kurs satırının altında haftalık program görünür ve
@@ -55,6 +55,10 @@ export function StudentDetail({
   const updateStudent = useUpdateStudent();
   const activeEnrollments = enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [];
   const fullName = `${student.firstName} ${student.lastName}`;
+  const selectedProgramEnrollment = activeEnrollments.find((enrollment) => enrollment.id === programEnrollmentId) ?? null;
+  const selectedProgramSeries = lessonSeries?.find((item) => item.enrollmentId === programEnrollmentId) ?? null;
+  const selectedProgramInstrument = instruments?.find((item) => item.id === selectedProgramEnrollment?.instrumentId);
+  const selectedProgramTeacher = teachers?.find((item) => item.id === selectedProgramEnrollment?.teacherId);
 
   function toggleStatus() {
     updateStudent.mutate({
@@ -86,6 +90,11 @@ export function StudentDetail({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {canManage && activeEnrollments.length > 0 && (
+            <button type="button" onClick={() => setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__")} className="btn btn-quiet">
+              <Icon name="calendar" className="h-4 w-4" /> Program
+            </button>
+          )}
           <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet">
             <Icon name="activity" className="h-4 w-4" /> Gelişim
           </Link>
@@ -198,6 +207,36 @@ export function StudentDetail({
           {editingGuardian && (
             <Modal open title="Veliyi düzenle" onClose={() => setEditingGuardian(null)} size="sm">
               <EditGuardianForm studentId={studentId} guardian={editingGuardian} onClose={() => setEditingGuardian(null)} />
+            </Modal>
+          )}
+          {programEnrollmentId && (
+            <Modal open title="Ders programı" description={fullName} onClose={() => setProgramEnrollmentId(null)}>
+              {programEnrollmentId === "__choose__" ? (
+                <div className="space-y-3">
+                  <p className="text-meta">Düzenlemek istediğin dersi seç.</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {activeEnrollments.map((enrollment) => {
+                      const instrument = instruments?.find((item) => item.id === enrollment.instrumentId);
+                      const teacher = teachers?.find((item) => item.id === enrollment.teacherId);
+                      return (
+                        <button key={enrollment.id} type="button" onClick={() => setProgramEnrollmentId(enrollment.id)} className="pressable flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-3 text-left hover:border-[var(--brand)]">
+                          <Icon name="calendar" className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+                          <span><span className="block text-sm font-bold">{instrument?.name ?? "Ders"}</span><span className="text-meta mt-0.5 block">{teacher ? `${teacher.firstName} ${teacher.lastName}` : "Öğretmen"}</span></span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : selectedProgramEnrollment ? (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-bold text-[var(--brand-strong)]">
+                    {selectedProgramInstrument?.name ?? "Ders"}{selectedProgramTeacher ? ` · ${selectedProgramTeacher.firstName} ${selectedProgramTeacher.lastName}` : ""}
+                  </div>
+                  <ScheduleForm studentId={studentId} enrollmentId={selectedProgramEnrollment.id} series={selectedProgramSeries} onClose={() => setProgramEnrollmentId(null)} />
+                </div>
+              ) : (
+                <p className="text-meta">Aktif kurs bulunamadı.</p>
+              )}
             </Modal>
           )}
         </>
@@ -396,6 +435,7 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
 // geçmiş dersler eski programa bağlı kalır, bu yüzden "geçerlilik başlangıcı" alanı
 // gerçek bir tarih seçimi - varsayılanı bugün, yani "bu haftadan itibaren".
 const SCHEDULE_DAY_KEYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const SCHEDULE_DAY_SHORT: Record<string, string> = { Monday: "Pzt", Tuesday: "Sal", Wednesday: "Çar", Thursday: "Per", Friday: "Cum", Saturday: "Cmt", Sunday: "Paz" };
 const SCHEDULE_DURATIONS = [30, 45, 60];
 
 function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId: string; enrollmentId: string; series: StudentLessonSeries | null; onClose: () => void }) {
@@ -434,14 +474,6 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="form-label">Gün
-          <select value={dayOfWeek} onChange={(event) => setDayOfWeek(event.target.value)} className="field text-sm">
-            {SCHEDULE_DAY_KEYS.map((day) => <option key={day} value={day}>{DAY_NAMES_TR[day]}</option>)}
-          </select>
-        </label>
-        <label className="form-label">Saat
-          <input type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} className="field text-sm" />
-        </label>
         <label className="form-label">Ders süresi
           <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-sm">
             {durationOptions.map((minutes) => <option key={minutes} value={minutes}>{minutes} dakika</option>)}
@@ -449,6 +481,21 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
         </label>
         <label className="form-label">{series ? "Bu tarihten itibaren" : "Başlangıç tarihi"}
           <input type="date" required value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} className="field text-sm" />
+        </label>
+      </div>
+
+      <div className="grid min-w-0 gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2">
+        <fieldset className="min-w-0">
+          <legend className="form-label">Gün</legend>
+          <div className="mt-1 grid grid-cols-7 gap-1" role="radiogroup" aria-label="Ders günü">
+            {SCHEDULE_DAY_KEYS.map((day) => {
+              const active = dayOfWeek === day;
+              return <button key={day} type="button" role="radio" aria-checked={active} onClick={() => setDayOfWeek(day)} className={`pressable grid min-h-11 place-items-center rounded-xl border px-1 text-xs font-bold ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm" : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)]"}`}>{SCHEDULE_DAY_SHORT[day]}</button>;
+            })}
+          </div>
+        </fieldset>
+        <label className="form-label min-w-0">Saat
+          <input type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} className="field min-w-0 text-base tabular-nums" />
         </label>
       </div>
 

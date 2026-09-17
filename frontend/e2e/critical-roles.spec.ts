@@ -145,6 +145,9 @@ test.describe.serial("Abdera critical role flows", () => {
     expect(bounds).not.toBeNull();
     const approved = page.waitForResponse((response) => response.url().includes("/api/change-requests/") && response.url().endsWith("/approve") && response.request().method() === "POST");
     await movableLesson.dragTo(dayColumn, { targetPosition: { x: Math.max(8, bounds!.width / 2), y: Math.max(8, bounds!.height * targetRatio) } });
+    const moveDialog = page.getByRole("dialog", { name: "Dersi taşıma kapsamı" });
+    await expect(moveDialog).toBeVisible();
+    await moveDialog.getByRole("button", { name: "Yalnız bu dersi taşı" }).click();
     expect((await approved).ok()).toBeTruthy();
     await expect(page.getByText(new RegExp(`dersi .* ${targetLabel} olarak güncellendi`))).toBeVisible();
     await page.reload();

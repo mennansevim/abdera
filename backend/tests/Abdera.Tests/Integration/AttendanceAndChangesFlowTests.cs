@@ -326,6 +326,58 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
     }
 
     [Fact]
+    public async Task Teacher_edits_own_lesson_occurrence_but_cannot_edit_another_teachers_lesson()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var own = await SeedLessonAsync(admin, "teacher-detail-own");
+        var foreign = await SeedLessonAsync(admin, "teacher-detail-foreign");
+
+        using var teacher = _factory.CreateClient();
+        (await teacher.PostAsJsonAsync("/api/auth/login", new Login.Request(own.TeacherEmail, own.TeacherTempPassword)))
+            .EnsureSuccessStatusCode();
+
+        var original = await db.Lessons.AsNoTracking().SingleAsync(item => item.Id == own.LessonId);
+        var movedStart = original.StartAt.AddDays(1).AddMinutes(15);
+        var ownResponse = await teacher.PatchAsJsonAsync(
+            $"/api/lessons/{own.LessonId}",
+            new UpdateLesson.Request(own.StudentId, own.TeacherId, movedStart, 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.OK, ownResponse.StatusCode);
+
+        var foreignLesson = await db.Lessons.AsNoTracking().SingleAsync(item => item.Id == foreign.LessonId);
+        var foreignResponse = await teacher.PatchAsJsonAsync(
+            $"/api/lessons/{foreign.LessonId}",
+            new UpdateLesson.Request(foreign.StudentId, foreign.TeacherId, foreignLesson.StartAt.AddDays(1), 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.Forbidden, foreignResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Teacher_cancels_own_lesson_with_makeup_but_cannot_cancel_another_teachers_lesson()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var own = await SeedLessonAsync(admin, "teacher-cancel-own");
+        var foreign = await SeedLessonAsync(admin, "teacher-cancel-foreign");
+
+        using var teacher = _factory.CreateClient();
+        (await teacher.PostAsJsonAsync("/api/auth/login", new Login.Request(own.TeacherEmail, own.TeacherTempPassword)))
+            .EnsureSuccessStatusCode();
+
+        var ownResponse = await teacher.PostAsJsonAsync(
+            $"/api/lessons/{own.LessonId}/cancel",
+            new CancelLesson.Request(CancelLesson.CancelledBy.School, "Telafi hakkıyla iptal"));
+        Assert.Equal(HttpStatusCode.OK, ownResponse.StatusCode);
+        var result = (await ownResponse.Content.ReadFromJsonAsync<CancelLesson.Response>(TestJson.Options))!;
+        Assert.True(result.MakeupCreditEarned);
+        Assert.True(await db.MakeupCredits.AnyAsync(item => item.SourceLessonId == own.LessonId));
+
+        var foreignResponse = await teacher.PostAsJsonAsync(
+            $"/api/lessons/{foreign.LessonId}/cancel",
+            new CancelLesson.Request(CancelLesson.CancelledBy.School, "Yetkisiz deneme"));
+        Assert.Equal(HttpStatusCode.Forbidden, foreignResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Admin_lesson_detail_edit_rejects_invalid_duration_and_conflicting_slot()
     {
         await using var db = await _factory.CreateDbContextAsync();

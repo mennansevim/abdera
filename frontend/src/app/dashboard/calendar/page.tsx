@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent } from "react";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { useRescheduleLesson } from "@/lib/attendance";
+import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/attendance";
 import { useBillingDues } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
-import { useCalendar, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
+import { useCalendar, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
 import { Modal, Notice } from "@/components/ui";
@@ -23,6 +23,7 @@ const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
 const ALL_INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
 type InstrumentFilter = (typeof ALL_INSTRUMENT_FILTERS)[number];
 type QuickAddSlot = { date: string; day: string; time: string; x: number; y: number };
+type PendingMove = { lesson: CalendarLesson; newStart: Date; newEnd: Date };
 
 // Haftanın Pazartesi'sini bulur - takvim her zaman Pazartesi'den başlar.
 function startOfWeek(date: Date): Date {
@@ -106,8 +107,8 @@ export default function CalendarPage() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
   // Öğretmen kendi ders programını girer (docs/10-decisions.md K2): seri açma ve boş slota
-  // çift tıklama ona da açık. Ders taşıma/iptal ve telafi yerleştirme hâlâ yalnızca Admin -
-  // onlar var olan bir dersi değiştiriyor ve LessonChangeRequest akışından geçmeli.
+  // çift tıklama ona da açık. Kendi dersini tek seferlik ya da seri olarak taşıyabilir ve
+  // telafi hakkıyla iptal edebilir; telafi dersini takvime yerleştirmek hâlâ yalnızca Admin'de.
   const canSchedule = isAdmin || me?.role === "Teacher";
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [now, setNow] = useState(() => new Date());
@@ -235,7 +236,7 @@ export default function CalendarPage() {
 
       {canSchedule && (
         <p className="hidden items-center gap-1.5 text-[.75rem] text-[var(--muted)] xl:flex">
-          <Icon name="swap" className="h-3.5 w-3.5" /> İpucu: boş bir alana çift tıklayarak o gün ve saati hazır gelen yeni ders formunu açabilirsin{isAdmin ? "; ders kartını sürükleyerek de taşıyabilirsin" : ""}.
+          <Icon name="swap" className="h-3.5 w-3.5" /> İpucu: boş bir alana çift tıklayarak o gün ve saati hazır gelen yeni ders formunu açabilir, ders kartını sürükleyerek tek dersi veya tüm programı taşıyabilirsin.
         </p>
       )}
 
@@ -333,6 +334,7 @@ function WeeklyGrid({
 }) {
   const windowMinutes = (hourWindow.endHour - hourWindow.startHour) * 60;
   const reschedule = useRescheduleLesson();
+  const updateLesson = useUpdateLesson();
   const draggingRef = useRef<CalendarLesson | null>(null);
   const transparentDragImageRef = useRef<HTMLCanvasElement | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -341,6 +343,8 @@ function WeeklyGrid({
   const [hoverSlot, setHoverSlot] = useState<{ day: string; minutes: number; label: string; heightPercent: number } | null>(null);
   const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [openLesson, setOpenLesson] = useState<CalendarLesson | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  const rescheduleSeries = useRescheduleLessonSeries(pendingMove?.lesson.studentId ?? "");
 
   function showToast(tone: "success" | "error", text: string) {
     setToast({ tone, text });
@@ -430,7 +434,7 @@ function WeeklyGrid({
     });
   }
 
-  async function handleDrop(event: DragEvent<HTMLDivElement>, day: Date) {
+  function handleDrop(event: DragEvent<HTMLDivElement>, day: Date) {
     event.preventDefault();
     const lesson = draggingRef.current;
     transparentDragImageRef.current?.remove();
@@ -454,10 +458,38 @@ function WeeklyGrid({
       return;
     }
 
+    setPendingMove({ lesson, newStart, newEnd });
+  }
+
+  async function commitPendingMove(scope: "single" | "series") {
+    if (!pendingMove) return;
+    const { lesson, newStart, newEnd } = pendingMove;
     setMovingId(lesson.id);
     try {
-      await reschedule.mutateAsync({ lessonId: lesson.id, proposedStartAt: newStart.toISOString(), proposedEndAt: newEnd.toISOString() });
-      showToast("success", `${lesson.studentName} dersi ${WEEK_DAYS_TR[(day.getDay() + 6) % 7]} ${formatTime(newStart)} olarak güncellendi.`);
+      if (scope === "series" && lesson.lessonSeriesId) {
+        await rescheduleSeries.mutateAsync({
+          seriesId: lesson.lessonSeriesId,
+          dayOfWeek: DAY_KEYS[newStart.getDay()]!,
+          startTime: `${timeInputValue(newStart)}:00`,
+          durationMinutes: Math.round((newEnd.getTime() - newStart.getTime()) / 60000),
+          effectiveFrom: dateInputValue(new Date(lesson.startAt)),
+        });
+        showToast("success", `${lesson.studentName} için tüm program ${WEEK_DAYS_TR[(newStart.getDay() + 6) % 7]} ${formatTime(newStart)} olarak güncellendi.`);
+      } else if (isAdmin) {
+        await reschedule.mutateAsync({ lessonId: lesson.id, proposedStartAt: newStart.toISOString(), proposedEndAt: newEnd.toISOString() });
+        showToast("success", `${lesson.studentName} dersi ${WEEK_DAYS_TR[(newStart.getDay() + 6) % 7]} ${formatTime(newStart)} olarak güncellendi.`);
+      } else {
+        await updateLesson.mutateAsync({
+          lessonId: lesson.id,
+          studentId: lesson.studentId,
+          teacherId: lesson.teacherId,
+          startAt: newStart.toISOString(),
+          durationMinutes: Math.round((newEnd.getTime() - newStart.getTime()) / 60000),
+          status: "Normal",
+        });
+        showToast("success", `${lesson.studentName} dersi yalnızca bu hafta için ${WEEK_DAYS_TR[(newStart.getDay() + 6) % 7]} ${formatTime(newStart)} saatine taşındı.`);
+      }
+      setPendingMove(null);
     } catch (err) {
       showToast("error", err instanceof ApiError ? (err.detail ?? err.title) : "Ders taşınamadı.");
     } finally {
@@ -476,6 +508,15 @@ function WeeklyGrid({
           <Icon name={toast.tone === "success" ? "check" : "x"} className="h-3.5 w-3.5 shrink-0" />
           {toast.text}
         </div>
+      )}
+
+      {pendingMove && (
+        <MoveDecisionDialog
+          move={pendingMove}
+          pending={reschedule.isPending || updateLesson.isPending || rescheduleSeries.isPending}
+          onChoose={commitPendingMove}
+          onClose={() => setPendingMove(null)}
+        />
       )}
 
       {dragPreview && <FloatingDragPreview preview={dragPreview} tone={colors.get(dragPreview.lesson.instrumentName) ?? INSTRUMENT_TONES[0]} />}
@@ -498,6 +539,7 @@ function WeeklyGrid({
               lessons={lessons}
               colors={colors}
               isAdmin={isAdmin}
+              canManage={canSchedule}
               hourWindow={hourWindow}
               overdueStudentIds={overdueStudentIds}
               draggingId={draggingId}
@@ -534,13 +576,38 @@ function WeeklyGrid({
           );
         })}
       </div>
-      {openLesson && <LessonDetailsDialog lesson={openLesson} isAdmin={isAdmin} now={now} onUpdated={() => showToast("success", "Ders ayrıntıları güncellendi.")} onClose={() => setOpenLesson(null)} />}
+      {openLesson && <LessonDetailsDialog lesson={openLesson} isAdmin={isAdmin} canManage={canSchedule} now={now} onUpdated={(message) => showToast("success", message ?? "Ders ayrıntıları güncellendi.")} onClose={() => setOpenLesson(null)} />}
     </section>
   );
 }
 
 function FloatingDragPreview({ preview, tone }: { preview: { x: number; y: number; lesson: CalendarLesson; label: string }; tone: InstrumentTone }) {
   return <div aria-hidden="true" className="pointer-events-none fixed z-[70] w-44 -translate-x-1/2 -translate-y-[calc(100%+.8rem)] overflow-hidden rounded-xl border-l-4 px-3 py-2.5 text-left shadow-[0_16px_40px_rgba(58,42,31,.25)]" style={{ left: preview.x, top: preview.y, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}><span className="block rounded-lg bg-white/85 px-2 py-1 text-center text-xs font-extrabold tabular-nums shadow-sm">{preview.label}</span><span className="mt-2 block truncate text-xs font-bold">{preview.lesson.studentName}</span><span className="mt-0.5 block truncate text-[.75rem] opacity-75">{preview.lesson.instrumentName} · {preview.lesson.teacherName}</span></div>;
+}
+
+function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: PendingMove; pending: boolean; onChoose: (scope: "single" | "series") => void; onClose: () => void }) {
+  const source = new Date(move.lesson.startAt);
+  const hasSeries = Boolean(move.lesson.lessonSeriesId);
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-end p-3 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Dersi taşıma kapsamı">
+      <button type="button" onClick={onClose} disabled={pending} aria-label="Taşıma seçimini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
+      <section className="relative z-10 w-full max-w-md rounded-2xl border border-white/60 bg-[rgba(255,253,249,.96)] p-4 shadow-[0_24px_70px_rgba(52,35,24,.28)] backdrop-blur-2xl sm:p-5">
+        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" aria-hidden="true" />
+        <p className="text-micro text-[var(--brand-strong)]">Yeni saat seçildi</p>
+        <h2 className="mt-1 font-serif text-xl font-bold italic">{move.lesson.studentName}</h2>
+        <p className="text-meta mt-2 leading-relaxed">
+          {source.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(source)} → {move.newStart.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(move.newStart)}
+        </p>
+        <div className="mt-4 grid gap-2">
+          <button type="button" onClick={() => onChoose("single")} disabled={pending} className="pressable min-h-12 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
+            {pending ? "Güncelleniyor…" : "Yalnız bu dersi taşı"}
+          </button>
+          {hasSeries && <button type="button" onClick={() => onChoose("series")} disabled={pending} className="pressable min-h-12 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60">Bu ders ve tüm programı güncelle</button>}
+          <button type="button" onClick={onClose} disabled={pending} className="pressable min-h-11 rounded-xl px-4 text-sm font-bold text-[var(--muted)] disabled:opacity-60">Vazgeç</button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlot; onCreated: (summary: string) => void; onClose: () => void }) {
@@ -628,6 +695,7 @@ function GridDayColumn({
   lessons,
   colors,
   isAdmin,
+  canManage,
   hourWindow,
   overdueStudentIds,
   draggingId,
@@ -645,6 +713,7 @@ function GridDayColumn({
   lessons: CalendarLesson[];
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
+  canManage: boolean;
   hourWindow: HourWindow;
   overdueStudentIds: Set<string>;
   draggingId: string | null;
@@ -698,7 +767,7 @@ function GridDayColumn({
         if (!position) return null;
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
         const isPast = end.getTime() <= now.getTime();
-        const draggable = isAdmin && lesson.status === "Normal" && !isPast;
+        const draggable = canManage && lesson.status === "Normal" && !isPast;
         const isCancelled = lesson.status === "Cancelled";
         const active = isLessonActive(lesson, now);
         const overdue = overdueStudentIds.has(lesson.studentId);
@@ -888,11 +957,13 @@ function LessonStatusChip({ lesson }: { lesson: CalendarLesson }) {
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${className}`}>{label}</span>;
 }
 
-function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { lesson: CalendarLesson; isAdmin: boolean; now: Date; onUpdated: () => void; onClose: () => void }) {
+function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClose }: { lesson: CalendarLesson; isAdmin: boolean; canManage: boolean; now: Date; onUpdated: (message?: string) => void; onClose: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   const duration = Math.round((end.getTime() - start.getTime()) / 60000);
   const updateLesson = useUpdateLesson();
+  const markAttendance = useMarkAttendance(lesson.id);
+  const cancelLesson = useCancelLesson();
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
   const [editing, setEditing] = useState(false);
@@ -903,11 +974,14 @@ function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { les
   const [timeValue, setTimeValue] = useState(() => timeInputValue(start));
   const [durationValue, setDurationValue] = useState(() => String(duration));
   const [error, setError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"absent" | "cancel-with-makeup" | null>(null);
   const { data: enrollments } = useEnrollments(studentId);
   const eligibleEnrollments = enrollments?.filter((item) => item.status === "Active" && item.instrumentId === lesson.instrumentId) ?? [];
   const eligibleTeacherIds = new Set(eligibleEnrollments.map((item) => item.teacherId));
   const eligibleTeachers = teachers?.filter((teacher) => teacher.status === "Active" && eligibleTeacherIds.has(teacher.id)) ?? [];
-  const canEdit = isAdmin && lesson.status === "Normal" && start.getTime() >= now.getTime();
+  const canEdit = canManage && lesson.status === "Normal" && start.getTime() >= now.getTime();
+  const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
+  const canCancelWithMakeup = canManage && lesson.status === "Normal" && start.getTime() > now.getTime();
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -938,6 +1012,23 @@ function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { les
     }
   }
 
+  async function handleConfirmedAction() {
+    if (!confirmAction) return;
+    setError(null);
+    try {
+      if (confirmAction === "absent") {
+        await markAttendance.mutateAsync({ status: "Absent", note: "Takvimden öğrenci gelmedi olarak işaretlendi." });
+        onUpdated("Ders, öğrenci gelmedi olarak tamamlandı.");
+      } else {
+        const result = await cancelLesson.mutateAsync({ lessonId: lesson.id, cancelledBy: "School", reason: "Öğretmen tarafından telafi hakkıyla iptal edildi." });
+        onUpdated(result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders iptal edildi.");
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "İşlem tamamlanamadı.");
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
       <button type="button" onClick={onClose} aria-label="Ders detay penceresini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
@@ -961,14 +1052,14 @@ function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { les
         {editing ? (
           <form onSubmit={handleSave} className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-5">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
-              <label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required><option value="">Öğretmen seç</option>{eligibleTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>}
+              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required><option value="">Öğretmen seç</option>{eligibleTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>}
               <label className="text-micro text-[var(--muted)]">Yeni tarih<input type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Yeni saat<input type="time" value={timeValue} onChange={(event) => setTimeValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
-              <label className="text-micro text-[var(--muted)]">Durum<select value={statusValue} onChange={(event) => setStatusValue(event.target.value as "Normal" | "Cancelled")} className="field mt-1 min-h-10 bg-white text-sm font-semibold"><option value="Normal">Planlandı</option><option value="Cancelled">İptal edildi</option></select></label>
+              {isAdmin && <label className="text-micro text-[var(--muted)]">Durum<select value={statusValue} onChange={(event) => setStatusValue(event.target.value as "Normal" | "Cancelled")} className="field mt-1 min-h-10 bg-white text-sm font-semibold"><option value="Normal">Planlandı</option><option value="Cancelled">İptal edildi</option></select></label>}
             </div>
-            <p className="mt-3 text-[.75rem] text-[var(--muted)]">Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
+            <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
             <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={() => { setEditing(false); setError(null); }} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold">İptal</button>
@@ -976,10 +1067,25 @@ function LessonDetailsDialog({ lesson, isAdmin, now, onUpdated, onClose }: { les
             </div>
           </form>
         ) : (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] p-4">
-            {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-5 text-sm font-bold text-[var(--brand-strong)]">Düzenle</button>}
-            <button type="button" onClick={onClose} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-sm font-bold text-white">Kapat</button>
-          </div>
+          <>
+            {confirmAction && (
+              <div className={`border-t border-[var(--line)] p-4 ${confirmAction === "absent" ? "bg-[var(--warning-soft)]" : "bg-[var(--danger-soft)]"}`}>
+                <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : "Ders iptal edilip telafi hakkı tanımlansın mı?"}</p>
+                <p className="text-meta mt-1">{confirmAction === "absent" ? "Ders tamamlandı sayılır ve yoklama Gelmedi olarak kaydedilir." : "Bu ders iptal edilir; öğrenci için kullanılabilir bir telafi hakkı oluşturulur."}</p>
+                {error && <p role="alert" className="mt-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+                <div className="mt-3 flex justify-end gap-2">
+                  <button type="button" onClick={() => { setConfirmAction(null); setError(null); }} disabled={markAttendance.isPending || cancelLesson.isPending} className="btn btn-quiet">Vazgeç</button>
+                  <button type="button" onClick={handleConfirmedAction} disabled={markAttendance.isPending || cancelLesson.isPending} className={`btn ${confirmAction === "absent" ? "btn-primary" : "bg-[var(--danger)] text-white"}`}>{markAttendance.isPending || cancelLesson.isPending ? "Kaydediliyor…" : "Onayla"}</button>
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] p-4">
+              {canMarkAbsent && <button type="button" onClick={() => setConfirmAction("absent")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--warning-strong)]">Öğrenci gelmedi</button>}
+              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-with-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--danger)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">İptal et + telafi</button>}
+              {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-5 text-sm font-bold text-[var(--brand-strong)]">Düzenle</button>}
+              <button type="button" onClick={onClose} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-sm font-bold text-white">Kapat</button>
+            </div>
+          </>
         )}
       </section>
     </div>

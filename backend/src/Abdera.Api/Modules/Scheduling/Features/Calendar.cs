@@ -12,7 +12,7 @@ namespace Abdera.Api.Modules.Scheduling.Features;
 public static class Calendar
 {
     public record LessonResponse(
-        Guid Id, DateTimeOffset StartAt, DateTimeOffset EndAt, LessonStatus Status,
+        Guid Id, Guid? LessonSeriesId, DateTimeOffset StartAt, DateTimeOffset EndAt, LessonStatus Status,
         Guid StudentId, string StudentName, Guid TeacherId, string TeacherName,
         Guid InstrumentId, string InstrumentName, RsvpResponse? RsvpResponse);
 
@@ -65,7 +65,7 @@ public static class Calendar
             .Join(db.Instruments, x => x.Lesson.InstrumentId, i => i.Id, (x, i) => new { x.Lesson, x.Student, x.Teacher, Instrument = i })
             .OrderBy(x => x.Lesson.StartAt)
             .Select(x => new LessonResponse(
-                x.Lesson.Id, x.Lesson.StartAt, x.Lesson.EndAt, x.Lesson.Status,
+                x.Lesson.Id, x.Lesson.LessonSeriesId, x.Lesson.StartAt, x.Lesson.EndAt, x.Lesson.Status,
                 x.Student.Id, x.Student.FirstName + " " + x.Student.LastName,
                 x.Teacher.Id, x.Teacher.FirstName + " " + x.Teacher.LastName,
                 x.Instrument.Id, x.Instrument.Name, null))
