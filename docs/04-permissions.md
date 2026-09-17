@@ -19,9 +19,10 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 | Öğrenci/veli listesi ve detayı | ✅ tümü | ✅ yalnızca kendi atanmış öğrencileri | ✅ yalnızca kendi öğrencisi (`GET /api/guardian/me/students`) |
 | Öğretmen oluşturma, düzenleme | ✅ | ❌ | ❌ |
 | Öğretmen listesi | ✅ | ✅ (isim/enstrüman görünür, kişisel veri yok) | ❌ (yalnızca kendi öğrencisinin öğretmen adı, students yanıtı içinde) |
+| Uygunluk (müsait gün) tanımlama | ✅ tümü | ✅ yalnızca kendisi (K1) | ❌ |
 | Enstrüman/kayıt (enrollment) yönetimi | ✅ | ❌ | ❌ |
 | Fiyat listesi görüntüleme/düzenleme | ✅ | ❌ | ❌ |
-| Ders serisi oluşturma/düzenleme | ✅ | ❌ (yalnızca talep açabilir) | ❌ |
+| Ders serisi oluşturma/sonlandırma | ✅ tümü | ✅ yalnızca kendi kurs kaydı (enrollment) üzerinden (K2) | ❌ |
 | Haftalık takvim — tüm okul | ✅ | ❌ | ❌ |
 | Kendi programı ("Bugünkü Derslerim") | ✅ (herkesinkini görebilir) | ✅ yalnızca kendisi | ✅ yalnızca kendi öğrencisinin dersleri (`GET /api/guardian/me/students/{id}/calendar`) |
 | Ders değişikliği talebi açma | ✅ | ✅ kendi dersi için | ❌ |
@@ -56,3 +57,29 @@ içindedir — öğretmenin AKTİF bir kurs kaydı üzerinden bağlı olduğu ö
 kontrol edilseydi, bir öğretmen kendini HERHANGİ bir öğrencinin öğretmeni yazarak o
 öğrencinin verisine erişebilirdi. Bu yüzden ikinci kontrol de var: öğrenci zaten o
 öğretmenin olmalı (`TeacherPortalFlowTests.Teacher_cannot_act_on_behalf_of_another_teacher`).
+
+## K — Öğretmen kendi ders programını kurar (2026-09-17)
+
+Kullanıcı isteği: "öğretmenler kendi programları yapsınlar, ders programlarını girebilsinler."
+
+İki uç grubu Admin'den `TeacherOrAdmin`'e açıldı; "kendi" kelimesinin bu modüldeki tek tanımı
+`Modules/Scheduling/Features/SchedulingAuthorization.cs` içindedir (People'daki
+`PeopleAuthorization` ile aynı desen, modül sınırı gereği kopyası duruyor):
+
+- `POST`/`DELETE /api/teachers/{teacherId}/availability` — hedef `teacherId` oturumdan çözülen
+  id ile aynı olmalı, aksi halde `403`.
+- `POST /api/lesson-series`, `PATCH /api/lesson-series/{id}`, `POST /api/lesson-series/{id}/generate`,
+  `POST /api/lesson-series/{id}/reschedule` — kapsam kontrolü **istekteki id üzerinden değil**,
+  serinin `Enrollment.TeacherId`'si üzerinden yapılır. Bir öğretmen başka bir öğretmenin kurs
+  kaydına seri açamaz, var olan serisini yeniden üretemez, taşıyamaz ve sonlandıramaz.
+- `GET /api/students/{id}/lesson-series` — öğretmene yalnızca KENDİ kurs kaydından doğan
+  seriler döner; aynı öğrencinin başka bir öğretmenle olan programı görünmez (boş liste,
+  404 değil - öğrencinin varlığı da sızdırılmaz).
+
+Ders serisi takvimi değiştirdiği için oluşturma ve sonlandırma artık `audit_log`'a yazıyor
+(`lesson_series.created`, `lesson_series.ended`) — aktörün admin olduğu artık garanti değil,
+"kim yaptı" sorusunun yanıtı gerekiyor.
+
+Bu iki grubun dışında kalan ders işlemleri **değişmedi**: var olan bir dersi taşımak/iptal
+etmek (`PATCH /api/lessons/{id}`, `POST /api/lessons/{id}/cancel`) ve telafi yerleştirmek hâlâ
+yalnızca Admin'de — öğretmen bunlar için `LessonChangeRequest` açar.

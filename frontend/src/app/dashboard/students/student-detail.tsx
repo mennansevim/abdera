@@ -7,6 +7,14 @@ import { Icon, instrumentBadgeStyle } from "@/components/icons";
 import { AddButton, FormActions, FormMessage, Modal, RowMenu, RowMenuItem, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
+  DAY_NAMES_TR,
+  formatWeeklySchedule,
+  useCreateLessonSeries,
+  useRescheduleLessonSeries,
+  useStudentLessonSeries,
+  type StudentLessonSeries,
+} from "@/lib/scheduling";
+import {
   useCreateAndLinkGuardian,
   useCreateEnrollment,
   useEndEnrollment,
@@ -39,6 +47,9 @@ export function StudentDetail({
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
   const { data: guardians } = useStudentGuardians(canManage ? studentId : "");
   const { data: enrollments } = useEnrollments(studentId);
+  // "Her hafta Pazartesi 18:00 piyano" - kurs satırının altında haftalık program görünür ve
+  // buradan taşınabilir (kullanıcı isteği). Liste kurs kaydına göre eşlenir.
+  const { data: lessonSeries } = useStudentLessonSeries(studentId);
   const { data: teachers } = useTeachers();
   const { data: instruments } = useInstruments();
   const updateStudent = useUpdateStudent();
@@ -164,7 +175,9 @@ export function StudentDetail({
                   instrumentName={instrument?.name ?? "Enstrüman"}
                   teacherName={teacher ? `${teacher.firstName} ${teacher.lastName}` : "Öğretmen"}
                   status={ENROLLMENT_STATUS_LABEL[enrollment.status] ?? enrollment.status}
+                  series={lessonSeries?.find((item) => item.enrollmentId === enrollment.id) ?? null}
                   isAdmin={isAdmin}
+                  canManage={canManage}
                 />
               );
             })}
@@ -270,10 +283,11 @@ function EditGuardianForm({ studentId, guardian, onClose }: { studentId: string;
   );
 }
 
-function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, teacherName, status, isAdmin }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; teacherName: string; status: string; isAdmin: boolean }) {
+function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, teacherName, status, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; teacherName: string; status: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
   const endEnrollment = useEndEnrollment(studentId);
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const badge = instrumentBadgeStyle(instrumentName);
 
@@ -300,21 +314,66 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
           <span className="text-meta mt-0.5 block truncate">{teacherName}</span>
         </span>
         <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">{status}</span>
-        {isAdmin && (
+        {(isAdmin || canManage) && (
           <RowMenu label={`${instrumentName} kursu için işlemler`}>
             {(close) => (
               <>
-                <RowMenuItem icon="teachers" onClick={() => { close(); router.push(`/dashboard/teachers#teacher-${teacherId}`); }}>
-                  Öğretmene git
-                </RowMenuItem>
-                <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setConfirming(true); }}>
-                  Kursu sonlandır
-                </RowMenuItem>
+                {canManage && (
+                  <RowMenuItem icon="calendar" onClick={() => { close(); setEditingSchedule(true); }}>
+                    {series ? "Ders saatini değiştir" : "Ders programı gir"}
+                  </RowMenuItem>
+                )}
+                {isAdmin && (
+                  <RowMenuItem icon="teachers" onClick={() => { close(); router.push(`/dashboard/teachers#teacher-${teacherId}`); }}>
+                    Öğretmene git
+                  </RowMenuItem>
+                )}
+                {isAdmin && (
+                  <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setConfirming(true); }}>
+                    Kursu sonlandır
+                  </RowMenuItem>
+                )}
               </>
             )}
           </RowMenu>
         )}
       </div>
+
+      {/* Haftalık program satırı: kullanıcı isteği "öğrenci altında program görünebilir
+          olmalı, buradan ders saatini güncelleyebilmeliyim". Program yoksa bunu da açıkça
+          söylüyoruz - sessiz boşluk "ders yok mu, veri mi gelmedi" sorusunu doğuruyordu. */}
+      <div className="mt-2 flex flex-wrap items-center gap-2 pl-12">
+        {series ? (
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--brand-strong)]">
+            <Icon name="calendar" className="h-3.5 w-3.5" />
+            {formatWeeklySchedule(series)}
+          </span>
+        ) : (
+          <span className="text-meta">Haftalık program girilmemiş.</span>
+        )}
+        {canManage && (
+          <button type="button" onClick={() => setEditingSchedule(true)} className="pressable min-h-8 rounded-lg px-2 text-[.75rem] font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
+            {series ? "Değiştir" : "Program gir"}
+          </button>
+        )}
+      </div>
+
+      {editingSchedule && (
+        <Modal
+          open
+          title={series ? "Ders saatini değiştir" : "Ders programı gir"}
+          description={`${instrumentName} · ${teacherName}`}
+          onClose={() => setEditingSchedule(false)}
+          size="sm"
+        >
+          <ScheduleForm
+            studentId={studentId}
+            enrollmentId={enrollmentId}
+            series={series}
+            onClose={() => setEditingSchedule(false)}
+          />
+        </Modal>
+      )}
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2">
           <p className="text-[.75rem] font-semibold text-[var(--danger-strong)]">Kurs sonlandırılsın mı? Gelecekteki dersler durdurulur.</p>
@@ -328,6 +387,88 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
       )}
       {error && <p role="alert" className="mt-2 text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
     </li>
+  );
+}
+
+
+// Hem ilk programı girmek hem de var olanı taşımak için tek form. Taşıma sunucuda
+// "eskisini kapat + yenisini aç" olarak işlenir (LessonSeriesFeatures.RescheduleAsync);
+// geçmiş dersler eski programa bağlı kalır, bu yüzden "geçerlilik başlangıcı" alanı
+// gerçek bir tarih seçimi - varsayılanı bugün, yani "bu haftadan itibaren".
+const SCHEDULE_DAY_KEYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const SCHEDULE_DURATIONS = [30, 45, 60];
+
+function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId: string; enrollmentId: string; series: StudentLessonSeries | null; onClose: () => void }) {
+  const createSeries = useCreateLessonSeries();
+  const rescheduleSeries = useRescheduleLessonSeries(studentId);
+  const [dayOfWeek, setDayOfWeek] = useState(series?.dayOfWeek ?? "Monday");
+  const [startTime, setStartTime] = useState(series ? series.startTime.slice(0, 5) : "18:00");
+  const [durationMinutes, setDurationMinutes] = useState(series?.durationMinutes ?? 45);
+  const [effectiveFrom, setEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  // Mevcut program hazır seçeneklerden biri olmayan bir süre taşıyabilir (örn. 50 dk).
+  // Listeye eklenmezse select eşleşme bulamayıp ilk seçeneği ("30 dakika") gösterir ve
+  // kullanıcı hiç dokunmadığı bir alanda yanlış bilgi okur.
+  const durationOptions = SCHEDULE_DURATIONS.includes(durationMinutes)
+    ? SCHEDULE_DURATIONS
+    : [...SCHEDULE_DURATIONS, durationMinutes].sort((a, b) => a - b);
+  const [error, setError] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const pending = createSeries.isPending || rescheduleSeries.isPending;
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSummary(null);
+    try {
+      const body = { dayOfWeek, startTime: `${startTime}:00`, durationMinutes, effectiveFrom };
+      const result = series
+        ? await rescheduleSeries.mutateAsync({ seriesId: series.id, ...body })
+        : await createSeries.mutateAsync({ enrollmentId, ...body });
+      const skipped = result.generation.skippedHolidays.length + result.generation.skippedTeacherTimeOff.length;
+      setSummary(`${result.generation.created} ders takvime yerleştirildi${skipped ? ` · ${skipped} uygun olmayan tarih atlandı` : ""}.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ders programı kaydedilemedi.");
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="form-label">Gün
+          <select value={dayOfWeek} onChange={(event) => setDayOfWeek(event.target.value)} className="field text-sm">
+            {SCHEDULE_DAY_KEYS.map((day) => <option key={day} value={day}>{DAY_NAMES_TR[day]}</option>)}
+          </select>
+        </label>
+        <label className="form-label">Saat
+          <input type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} className="field text-sm" />
+        </label>
+        <label className="form-label">Ders süresi
+          <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-sm">
+            {durationOptions.map((minutes) => <option key={minutes} value={minutes}>{minutes} dakika</option>)}
+          </select>
+        </label>
+        <label className="form-label">{series ? "Bu tarihten itibaren" : "Başlangıç tarihi"}
+          <input type="date" required value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} className="field text-sm" />
+        </label>
+      </div>
+
+      <p className="text-meta">
+        {series
+          ? `Şu anki program: ${formatWeeklySchedule(series)}. Seçilen tarihten önceki dersler olduğu gibi kalır, sonrasındakiler yeni saate taşınır.`
+          : "Seçilen gün ve saat her hafta tekrarlanır; öğretmen ve öğrenci çakışmaları otomatik kontrol edilir."}
+      </p>
+
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      {summary && <FormMessage tone="success">{summary}</FormMessage>}
+
+      {summary ? (
+        <div className="flex justify-end border-t border-[var(--line)] pt-4">
+          <button type="button" onClick={onClose} className="btn btn-primary">Kapat</button>
+        </div>
+      ) : (
+        <FormActions onCancel={onClose} submitLabel={series ? "Saati güncelle" : "Programı kaydet"} pending={pending} pendingLabel="Kaydediliyor…" />
+      )}
+    </form>
   );
 }
 

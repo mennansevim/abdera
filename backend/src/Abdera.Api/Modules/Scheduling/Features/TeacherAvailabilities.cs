@@ -1,11 +1,13 @@
+using System.Security.Claims;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Scheduling.Features;
 
-// docs/07-api.md GET /api/teachers/{teacherId}/availability. Uygunluk tanımlamak Admin
-// işi; öğretmen kendi uygunluğunu görebilir ama değiştiremez (talep üzerinden gider - Phase 3).
+// docs/07-api.md GET /api/teachers/{teacherId}/availability. Öğretmen KENDİ uygunluk
+// pencerelerini açıp kapatır (docs/10-decisions.md K1) - başkasınınkine dokunamaz; admin
+// hepsini yönetir. Kontrol SchedulingAuthorization.EnsureActsAsSelfAsync'te tek yerde.
 public static class TeacherAvailabilities
 {
     public record CreateRequest(DayOfWeek DayOfWeek, TimeOnly StartTime, TimeOnly EndTime);
@@ -17,7 +19,7 @@ public static class TeacherAvailabilities
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         app.MapPost("/api/teachers/{teacherId:guid}/availability", CreateAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         // Öğretmenler sayfasındaki "uygun günler" tek-tık aç/kapa arayüzü bunu kullanır -
         // bir günü kapatmak, o güne ait uygunluk penceresini kaldırmaktır. Finansal/audit
@@ -25,7 +27,7 @@ public static class TeacherAvailabilities
         // ve denetim izi gerektiren kayıtlar için) - bu yalnızca bir zamanlama tercihi,
         // gerçek silme burada uygun.
         app.MapDelete("/api/teachers/{teacherId:guid}/availability/{availabilityId:guid}", DeleteAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     private static async Task<IResult> ListAsync(Guid teacherId, AbderaDbContext db)
@@ -39,8 +41,11 @@ public static class TeacherAvailabilities
         return Results.Ok(items);
     }
 
-    private static async Task<IResult> CreateAsync(Guid teacherId, CreateRequest request, AbderaDbContext db)
+    private static async Task<IResult> CreateAsync(
+        Guid teacherId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db)
     {
+        await SchedulingAuthorization.EnsureActsAsSelfAsync(teacherId, principal, db);
+
         if (!await db.Teachers.AnyAsync(t => t.Id == teacherId))
             throw new NotFoundException("Öğretmen bulunamadı.");
 
@@ -53,8 +58,11 @@ public static class TeacherAvailabilities
             new AvailabilityResponse(availability.Id, availability.DayOfWeek, availability.StartTime, availability.EndTime));
     }
 
-    private static async Task<IResult> DeleteAsync(Guid teacherId, Guid availabilityId, AbderaDbContext db)
+    private static async Task<IResult> DeleteAsync(
+        Guid teacherId, Guid availabilityId, ClaimsPrincipal principal, AbderaDbContext db)
     {
+        await SchedulingAuthorization.EnsureActsAsSelfAsync(teacherId, principal, db);
+
         var availability = await db.TeacherAvailabilities
             .SingleOrDefaultAsync(a => a.Id == availabilityId && a.TeacherId == teacherId)
             ?? throw new NotFoundException("Uygunluk kaydı bulunamadı.");

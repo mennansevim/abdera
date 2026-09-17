@@ -105,6 +105,10 @@ function formatMinutesOfDay(totalMinutes: number) {
 export default function CalendarPage() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
+  // Öğretmen kendi ders programını girer (docs/10-decisions.md K2): seri açma ve boş slota
+  // çift tıklama ona da açık. Ders taşıma/iptal ve telafi yerleştirme hâlâ yalnızca Admin -
+  // onlar var olan bir dersi değiştiriyor ve LessonChangeRequest akışından geçmeli.
+  const canSchedule = isAdmin || me?.role === "Teacher";
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [now, setNow] = useState(() => new Date());
   const [timelineRange] = useState(() => {
@@ -205,7 +209,7 @@ export default function CalendarPage() {
 
       {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
-      {isAdmin && (
+      {canSchedule && (
         <Modal open={showSeriesForm && !quickAddSlot} title="Yeni ders" description="Öğrenciyi seç; sistem öğretmen ve öğrenci takvimini birlikte tarasın." onClose={() => setShowSeriesForm(false)}>
           <CreateSeriesForm
             key="manual"
@@ -215,7 +219,7 @@ export default function CalendarPage() {
         </Modal>
       )}
 
-      {isAdmin && quickAddSlot && (
+      {canSchedule && quickAddSlot && (
         <QuickAddLessonPopover
           slot={quickAddSlot}
           onCreated={announce}
@@ -229,9 +233,9 @@ export default function CalendarPage() {
         </Modal>
       )}
 
-      {isAdmin && (
+      {canSchedule && (
         <p className="hidden items-center gap-1.5 text-[.75rem] text-[var(--muted)] xl:flex">
-          <Icon name="swap" className="h-3.5 w-3.5" /> İpucu: boş bir alana çift tıklayarak o gün ve saati hazır gelen yeni ders formunu açabilirsin; ders kartını sürükleyerek de taşıyabilirsin.
+          <Icon name="swap" className="h-3.5 w-3.5" /> İpucu: boş bir alana çift tıklayarak o gün ve saati hazır gelen yeni ders formunu açabilirsin{isAdmin ? "; ders kartını sürükleyerek de taşıyabilirsin" : ""}.
         </p>
       )}
 
@@ -286,10 +290,10 @@ export default function CalendarPage() {
             <Icon name="calendar" className="hidden h-4 w-4 text-[var(--brand)] 2xl:block" />
             {formatWeekRange(weekStart, addDays(weekEnd, -1))}
           </span>
-          {isAdmin && (
+          {canSchedule && (
             <>
               <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden="true" />
-              <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-2.5 text-[.75rem] font-bold text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)] 2xl:px-4 2xl:text-xs">Telafi planla</button>
+              {isAdmin && <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-2.5 text-[.75rem] font-bold text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)] 2xl:px-4 2xl:text-xs">Telafi planla</button>}
               <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand)] px-2.5 text-[.75rem] font-bold text-white 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
             </>
           )}
@@ -297,7 +301,7 @@ export default function CalendarPage() {
       </div>
 
       <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
-        <WeeklyGrid weekDays={weekDays} lessons={visibleLessons} loading={isLoading} colors={colors} isAdmin={isAdmin} hourWindow={hourWindow} now={now} overdueStudentIds={overdueStudentIds} onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setShowSeriesForm(false); }} />
+        <WeeklyGrid weekDays={weekDays} lessons={visibleLessons} loading={isLoading} colors={colors} isAdmin={isAdmin} canSchedule={!!canSchedule} hourWindow={hourWindow} now={now} overdueStudentIds={overdueStudentIds} onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setShowSeriesForm(false); }} />
         <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
       </div>
     </div>
@@ -310,6 +314,7 @@ function WeeklyGrid({
   loading,
   colors,
   isAdmin,
+  canSchedule,
   hourWindow,
   now,
   overdueStudentIds,
@@ -320,6 +325,7 @@ function WeeklyGrid({
   loading: boolean;
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
+  canSchedule: boolean;
   hourWindow: HourWindow;
   now: Date;
   overdueStudentIds: Set<string>;
@@ -382,7 +388,7 @@ function WeeklyGrid({
   }
 
   function handleDoubleClick(event: MouseEvent<HTMLDivElement>, day: Date) {
-    if (!isAdmin) return;
+    if (!canSchedule) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
     const minutes = Math.round((ratio * windowMinutes) / 15) * 15;

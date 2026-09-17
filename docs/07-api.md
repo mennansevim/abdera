@@ -29,7 +29,7 @@ GET    /api/teachers                            ✅
 POST   /api/teachers                            ✅ email verilirse giriş hesabı da açılır (B4)
 PATCH  /api/teachers/{teacherId}                ✅
 GET    /api/teachers/{teacherId}/availability   ✅
-POST   /api/teachers/{teacherId}/availability   ✅ eklendi
+POST   /api/teachers/{teacherId}/availability   ✅ eklendi - Teacher yalnızca kendisi (K1)
 GET    /api/teachers/{teacherId}/time-off       ✅ A3
 POST   /api/teachers/{teacherId}/time-off       ✅ A3
 
@@ -38,9 +38,11 @@ POST   /api/instruments                         ✅
 
 GET    /api/calendar                            ✅ ?from=&to=&teacherId=&instrumentId= - aralık en fazla 3 ay (ARC-3), aşarsa 400
 GET    /api/lessons                             ✅ /api/calendar ile aynı handler
-POST   /api/lesson-series                       ✅ oluşturur + ilk rolling window'u üretir
-PATCH  /api/lesson-series/{seriesId}            ✅ seriyi sonlandırır (EffectiveUntil)
-POST   /api/lesson-series/{seriesId}/generate   ✅ eklendi - üretim penceresini elle uzatır
+POST   /api/lesson-series                       ✅ oluşturur + ilk rolling window'u üretir - Teacher yalnızca kendi enrollment'ı (K2)
+PATCH  /api/lesson-series/{seriesId}            ✅ seriyi sonlandırır (EffectiveUntil) - Teacher yalnızca kendi serisi
+POST   /api/lesson-series/{seriesId}/generate   ✅ eklendi - üretim penceresini elle uzatır - Teacher yalnızca kendi serisi
+POST   /api/lesson-series/{seriesId}/reschedule ✅ eklendi - programı yeni gün/saate taşır (eskisini kapatır, yenisini açar) - K7/K8
+GET    /api/students/{studentId}/lesson-series  ✅ eklendi - öğrenci künyesindeki haftalık program listesi - Teacher yalnızca kendi kayıtları
 POST   /api/lessons/{lessonId}/change-requests  ✅ Teacher(kendi dersi)/Admin açar
 GET    /api/change-requests                     ✅ eklendi - Admin onay kuyruğu (?status=)
 POST   /api/change-requests/{requestId}/approve ✅ reschedule: eski ders RESCHEDULED, yeni NORMAL

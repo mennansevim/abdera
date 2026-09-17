@@ -51,8 +51,61 @@ export function useCreateLessonSeries() {
       effectiveFrom: string;
       effectiveUntil?: string | null;
     }) => api.post<CreateLessonSeriesResponse>("/api/lesson-series", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["student-lesson-series"] });
+    },
   });
+}
+
+// Öğrenci künyesindeki "Ders programı" satırı - hangi kurs/öğretmen olduğu da aynı yanıtta
+// geldiği için istemci ayrıca öğretmen/enstrüman listesi eşlemek zorunda kalmaz.
+export interface StudentLessonSeries {
+  id: string;
+  enrollmentId: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentId: string;
+  instrumentName: string;
+  dayOfWeek: string;
+  // Backend TimeOnly'yi "18:00:00" olarak serialize eder.
+  startTime: string;
+  durationMinutes: number;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+  status: LessonSeriesStatus;
+}
+
+export function useStudentLessonSeries(studentId: string) {
+  return useQuery({
+    queryKey: ["student-lesson-series", studentId],
+    queryFn: () => api.get<StudentLessonSeries[]>(`/api/students/${studentId}/lesson-series`),
+    enabled: !!studentId,
+  });
+}
+
+// Taşıma sunucuda "eskisini kapat + yenisini aç" olarak işlenir, bu yüzden dönen seri
+// yeni bir id taşır; istemci listeyi tazeleyip yeni satırı gösterir.
+export function useRescheduleLessonSeries(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ seriesId, ...body }: {
+      seriesId: string;
+      dayOfWeek: string;
+      startTime: string;
+      durationMinutes: number;
+      effectiveFrom?: string | null;
+    }) => api.post<CreateLessonSeriesResponse>(`/api/lesson-series/${seriesId}/reschedule`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-lesson-series", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+    },
+  });
+}
+
+// "Her hafta Pazartesi 18:00 · 45 dk" - künyedeki tek satırlık özet.
+export function formatWeeklySchedule(series: { dayOfWeek: string; startTime: string; durationMinutes: number }) {
+  return `Her hafta ${DAY_NAMES_TR[series.dayOfWeek] ?? series.dayOfWeek} ${series.startTime.slice(0, 5)} · ${series.durationMinutes} dk`;
 }
 
 export interface CalendarLesson {

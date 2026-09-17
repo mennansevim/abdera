@@ -41,9 +41,18 @@ test.describe.serial("Abdera critical role flows", () => {
     const instrumentsResponse = await page.request.get(`${apiUrl}/api/instruments`);
     const instruments = await instrumentsResponse.json();
     const piano = instruments.find((item: { code: string }) => item.code === "PIANO");
+    // Haftalık 4 ders sınırı ancak FARKLI branşlarla doldurulabilir: bir öğrenci aynı
+    // enstrüman için tek program alabiliyor (docs/10-decisions.md K9).
+    const otherBranches = ["GUITAR", "VIOLIN", "DRUMS", "CELLO"].map((code) =>
+      instruments.find((item: { code: string }) => item.code === code));
     const suffix = Date.now().toString();
     const teacherResponse = await page.request.post(`${apiUrl}/api/teachers`, {
-      data: { firstName: "E2E", lastName: `Öğretmen ${suffix}`, instrumentIds: [piano.id], email: null },
+      data: {
+        firstName: "E2E",
+        lastName: `Öğretmen ${suffix}`,
+        instrumentIds: [piano.id, ...otherBranches.map((item: { id: string }) => item.id)],
+        email: null,
+      },
     });
     expect(teacherResponse.status()).toBe(201);
     const teacher = (await teacherResponse.json()).teacher;
@@ -157,18 +166,27 @@ test.describe.serial("Abdera critical role flows", () => {
     await expect(page.getByText("İptal edildi", { exact: true })).toBeVisible();
     await page.getByRole("dialog", { name: "Ders detayları" }).getByRole("button", { name: "Kapat", exact: true }).first().click();
 
-    // Aynı öğrencinin beşinci düzenli haftalık serisi, UI'dan bağımsız olarak API/domain
-    // katmanında da reddedilmelidir.
-    for (const [dayOfWeek, startTime] of [["Tuesday", "08:00:00"], ["Wednesday", "08:15:00"], ["Thursday", "08:30:00"]]) {
-      const extraSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
-        data: { enrollmentId: enrollment.id, dayOfWeek, startTime, durationMinutes: 30, effectiveFrom: date },
-      });
-      expect(extraSeries.status()).toBe(201);
-    }
-    const fifthSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
-      data: { enrollmentId: enrollment.id, dayOfWeek: "Friday", startTime: "08:45:00", durationMinutes: 30, effectiveFrom: date },
+    // Aynı enstrümandan ikinci bir haftalık program açılamaz - saat farklı olsa bile (K9).
+    const duplicateInstrumentSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
+      data: { enrollmentId: enrollment.id, dayOfWeek: "Tuesday", startTime: "08:00:00", durationMinutes: 30, effectiveFrom: date },
     });
-    expect(fifthSeries.status()).toBe(400);
+    expect(duplicateInstrumentSeries.status()).toBe(409);
+
+    // Aynı öğrencinin beşinci düzenli haftalık serisi, UI'dan bağımsız olarak API/domain
+    // katmanında da reddedilmelidir. Piyano programı yukarıda UI'dan açıldı, geri kalan
+    // üçü farklı branşlardan geliyor - beşinci branş haftalık sınıra takılır.
+    const branchSchedule: Array<[string, string]> = [["Tuesday", "08:00:00"], ["Wednesday", "08:15:00"], ["Thursday", "08:30:00"], ["Friday", "08:45:00"]];
+    for (const [index, branch] of otherBranches.entries()) {
+      const branchEnrollment = await page.request.post(`${apiUrl}/api/students/${student.id}/enrollments`, {
+        data: { teacherId: teacher.id, instrumentId: branch.id, startedAt: localDateString(new Date()) },
+      });
+      expect(branchEnrollment.status()).toBe(201);
+      const [dayOfWeek, startTime] = branchSchedule[index]!;
+      const branchSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
+        data: { enrollmentId: (await branchEnrollment.json()).id, dayOfWeek, startTime, durationMinutes: 30, effectiveFrom: date },
+      });
+      expect(branchSeries.status()).toBe(index === otherBranches.length - 1 ? 400 : 201);
+    }
 
     // Demo seed'i aidat üretmez. Bu test kendi finansal fixture'ını açıkça kurar.
     const priceLists = await (await page.request.get(`${apiUrl}/api/price-lists`)).json();

@@ -24,9 +24,13 @@ export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation<LoginResponse, ApiError, { email: string; password: string }>({
     mutationFn: (credentials) => api.post<LoginResponse>("/api/auth/login", credentials),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
-    },
+    // invalidate yerine BEKLENEN bir refetch: giriş ekranı açılırken /api/auth/me bir kez 401
+    // alır ve React Query bu hatayı önbellekte tutar. Sadece invalidate edip hemen
+    // /dashboard'a geçersek, dashboard layout'u henüz tazelenmemiş sorguyu okur, eski 401'i
+    // görür ve kullanıcıyı giriş ekranına geri atar - "ilk girişte hata verdi, tekrar
+    // denedim girdi" şikâyetinin sebebi buydu. onSuccess bir promise döndürdüğü için
+    // mutateAsync oturum bilgisi tazelenmeden çözülmez.
+    onSuccess: () => queryClient.refetchQueries({ queryKey: ME_QUERY_KEY }),
   });
 }
 

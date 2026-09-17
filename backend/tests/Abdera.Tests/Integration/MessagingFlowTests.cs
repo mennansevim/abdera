@@ -36,16 +36,23 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         return client;
     }
 
-    private record SeededLesson(Guid LessonId, Guid StudentId, Guid GuardianId, string GuardianPhone, Guid EnrollmentId);
+    // TeacherId ve yedek enstrümanlar, aynı öğrenciye İKİNCİ bir ders programı açması gereken
+    // testler için: "bir öğrenci aynı enstrüman için tek program" kuralı (LessonSeriesFeatures
+    // .EnsureSingleSeriesPerInstrumentAsync) aynı kayıt üzerinden ikinci seriyi reddediyor,
+    // bu yüzden ikinci program farklı bir enstrümandan açılır.
+    private record SeededLesson(
+        Guid LessonId, Guid StudentId, Guid GuardianId, string GuardianPhone, Guid EnrollmentId,
+        Guid TeacherId, Guid[] SpareInstrumentIds);
 
     private static async Task<SeededLesson> SeedLessonAsync(HttpClient admin, string suffix)
     {
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
         var piano = instruments!.Single(i => i.Code == "PIANO");
+        var spares = instruments!.Where(i => i.Code is "GUITAR" or "VIOLIN").Select(i => i.Id).ToArray();
 
         var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
-                new Teachers.CreateRequest($"Öğretmen{suffix}", "Soyad", [piano.Id], null)))
+                new Teachers.CreateRequest($"Öğretmen{suffix}", "Soyad", [piano.Id, .. spares], null)))
             .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
 
         var student = (await (await admin.PostAsJsonAsync("/api/students",
@@ -76,7 +83,18 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var lessons = await lessonsResponse.Content.ReadFromJsonAsync<List<Calendar.LessonResponse>>(TestJson.Options);
         var lesson = lessons!.OrderBy(l => l.StartAt).First();
 
-        return new SeededLesson(lesson.Id, student.Id, guardian.Id, guardianPhone, enrollment.Id);
+        return new SeededLesson(
+            lesson.Id, student.Id, guardian.Id, guardianPhone, enrollment.Id, teacher.Id, spares);
+    }
+
+    // Aynı öğrenciye farklı bir enstrümandan ikinci bir kurs kaydı - ikinci ders programı
+    // ancak böyle açılabilir (bkz. SeededLesson yorumu).
+    private static async Task<Guid> AddSpareEnrollmentAsync(HttpClient admin, SeededLesson seeded, int spareIndex)
+    {
+        var response = await admin.PostAsJsonAsync($"/api/students/{seeded.StudentId}/enrollments",
+            new Enrollments.CreateRequest(seeded.TeacherId, seeded.SpareInstrumentIds[spareIndex], new DateOnly(2026, 8, 1)));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!.Id;
     }
 
     [Fact]
@@ -601,7 +619,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         // Sıradaki ders üretimi de artık yeni süreyi kullanmalı (kalıcı ayar, tek seferlik değil).
         var secondSeriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
-            seeded.EnrollmentId, DayOfWeek.Friday, new TimeOnly(9, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
+            await AddSpareEnrollmentAsync(admin, seeded, 0), DayOfWeek.Friday, new TimeOnly(9, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
         Assert.Equal(HttpStatusCode.Created, secondSeriesResponse.StatusCode);
         var created = (await secondSeriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
         var newLessonIds = await db.Lessons.AsNoTracking()
@@ -639,7 +657,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.All(existingJobs, j => Assert.Equal(NotificationJobStatus.Cancelled, j.Status));
 
         var newSeriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
-            seeded.EnrollmentId, DayOfWeek.Saturday, new TimeOnly(11, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
+            await AddSpareEnrollmentAsync(admin, seeded, 0), DayOfWeek.Saturday, new TimeOnly(11, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
         Assert.Equal(HttpStatusCode.Created, newSeriesResponse.StatusCode);
         var created = (await newSeriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
         var newLessonIds = await db.Lessons.AsNoTracking()
@@ -654,7 +672,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
 
         var reEnabledSeriesResponse = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
-            seeded.EnrollmentId, DayOfWeek.Sunday, new TimeOnly(11, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
+            await AddSpareEnrollmentAsync(admin, seeded, 1), DayOfWeek.Sunday, new TimeOnly(11, 0), 45, DateOnly.FromDateTime(DateTime.UtcNow), null));
         Assert.Equal(HttpStatusCode.Created, reEnabledSeriesResponse.StatusCode);
         var reEnabledCreated = (await reEnabledSeriesResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
         var reEnabledLessonIds = await db.Lessons.AsNoTracking()

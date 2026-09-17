@@ -12,10 +12,13 @@ export function useRequireAuth() {
   const isUnauthorized = error instanceof ApiError && (error.status === 401 || error.status === 403);
 
   useEffect(() => {
-    if (isError && isUnauthorized) {
+    // isFetching koşulu şart: React Query tazeleme sürerken bir önceki hatayı da taşır.
+    // Giriş sonrası ilk /dashboard render'ında bu hata giriş ekranındaki 401 olabilir ve
+    // kullanıcı daha oturumu okunmadan /login'e geri atılırdı.
+    if (isError && isUnauthorized && !isFetching) {
       router.replace("/login");
     }
-  }, [isError, isUnauthorized, router]);
+  }, [isError, isUnauthorized, isFetching, router]);
 
   return { me, isLoading: isLoading || (!me && isFetching), authError: isError && !isUnauthorized };
 }

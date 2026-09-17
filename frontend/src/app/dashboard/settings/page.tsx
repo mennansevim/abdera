@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { AddButton, FormActions, FormMessage, Modal, PageHeader, SectionHeader } from "@/components/ui";
+import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
 import { ApiError } from "@/lib/api";
 import { applyFontSizePreference, FONT_SIZE_CHANGE_EVENT, readFontSizePreference, type FontSizePreference } from "@/lib/font-size";
 import { useInstruments, useInstrumentMaintenanceSettings, useRunDueMaintenanceReminders, useSaveInstrumentMaintenanceSetting } from "@/lib/people";
@@ -72,6 +73,21 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* Öğretmen kendi uygunluk penceresini buradan açıp kapatır (docs/10-decisions.md K1).
+          Öğretmenler ekranı Admin'e özel olduğu için (app-header.tsx menüden de kaldırıyor)
+          öğretmenin ulaşabildiği tek yüzey Ayarlar; yönetici aynı denetimi Öğretmenler
+          ekranındaki öğretmen kartından kullanır. */}
+      {me?.role === "Teacher" && me.teacherId && (
+        <section className="app-card overflow-hidden">
+          <div className="border-b border-[var(--line)] p-4 sm:p-5">
+            <SectionHeader title="Uygun günlerim" description="Ders programı ve telafi önerileri bu günleri kullanır; bir günü kapatmak o güne ders yerleştirilmesini engeller." />
+          </div>
+          <div className="p-4 sm:p-5">
+            <TeacherAvailabilityDays teacherId={me.teacherId} self />
+          </div>
+        </section>
+      )}
 
       <section className="app-card p-4 sm:p-5">
         <SectionHeader title="Mesaj Merkezi" description="Ders hatırlatmaları, WhatsApp şablonları ve gönderim tercihleri Mesaj Merkezi'nde yönetilir." />
