@@ -115,10 +115,14 @@ function PerformerProgressStrip({ position, totalItems, groupName }: { position:
   );
 }
 
-function TemplatedPerformerCard({ current, totalItems, template }: { current: StageItem; totalItems: number; template: PerformerTemplate }) {
+function TemplatedPerformerCard({ current, totalItems, template, fillHeight }: { current: StageItem; totalItems: number; template: PerformerTemplate; fillHeight?: boolean }) {
   const initials = (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("");
   return (
-    <div className="relative aspect-[3/2] w-full overflow-hidden rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,.35)] [container-type:size]">
+    <div
+      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,.35)] [container-type:size] ${
+        fillHeight ? "mx-auto h-full max-w-full" : "w-full"
+      }`}
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={template.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
 
@@ -155,9 +159,13 @@ function TemplatedPerformerCard({ current, totalItems, template }: { current: St
 
 // Şablon PNG'si olmayan enstrümanlar (gitar/çello/resim) için - önceki tasarımın gradyan/blob
 // kartı, artık yalnızca kimlik bilgisini taşıyor (eser adı paylaşılan bloğa taşındı, bkz. aşağı).
-function GradientPerformerCard({ current, totalItems }: { current: StageItem; totalItems: number }) {
+function GradientPerformerCard({ current, totalItems, fillHeight }: { current: StageItem; totalItems: number; fillHeight?: boolean }) {
   return (
-    <div className="relative aspect-[3/2] w-full overflow-hidden rounded-[2rem] bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] [container-type:size]">
+    <div
+      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] [container-type:size] ${
+        fillHeight ? "mx-auto h-full max-w-full" : "w-full"
+      }`}
+    >
       <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
       <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
       <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
@@ -208,6 +216,7 @@ export default function StagePage() {
   const { data: stage, isLoading } = useStage(showId);
   const control = useStageControl(showId);
   const [error, setError] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const isAdmin = me?.role === "Admin";
   const isLive = stage?.status === "Live";
 
@@ -240,6 +249,18 @@ export default function StagePage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isAdmin, isLive, send]);
 
+  // Tam ekranda ekran boyu sabit (projeksiyon/TV) - şablon kartı ve alt metinler artık
+  // genişliğe göre değil, bu durumda paylaşılan yüksekliğe göre ölçekleniyor (bkz.
+  // aşağıdaki fillHeight kullanımı). Normal sayfa akışında (tam ekran değilken) sayfa zaten
+  // kayabildiği için eski genişlik odaklı boyutlandırma korunuyor.
+  useEffect(() => {
+    function onFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement?.id === "stage-screen");
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
   if (isLoading) return <div className="skeleton h-[70vh] rounded-3xl" />;
   if (!stage) return <p className="app-card p-6 text-sm text-[var(--muted)]">Gösteri bulunamadı.</p>;
 
@@ -270,8 +291,13 @@ export default function StagePage() {
         </div>
       </div>
 
-      <section id="stage-screen" className="overflow-hidden rounded-3xl bg-[#1a1512] p-5 text-white sm:p-8">
-        <header className="flex flex-wrap items-baseline justify-between gap-2">
+      <section
+        id="stage-screen"
+        className={`overflow-hidden rounded-3xl bg-[#1a1512] p-5 text-white sm:p-8 ${
+          isFullscreen ? "flex h-screen flex-col" : ""
+        }`}
+      >
+        <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-2">
           <h1 className="font-serif text-lg font-bold">{stage.title}</h1>
           <p className="text-sm tabular-nums text-white/50">
             {stage.completedItems}/{stage.totalItems} sıra
@@ -284,12 +310,15 @@ export default function StagePage() {
           </p>
         </header>
 
-        <div className="mt-3"><ProgressBar value={stage.completedItems} total={stage.totalItems} /></div>
+        <div className="mt-3 shrink-0"><ProgressBar value={stage.completedItems} total={stage.totalItems} /></div>
 
-        {/* ŞU AN — ekranın asıl işi. */}
-        <div className="mt-6 min-h-[16rem] sm:mt-8">
+        {/* ŞU AN — ekranın asıl işi. Tam ekranda bu blok kalan yüksekliği paylaşan bir
+            flex kutusu (min-h-0 olmadan flex-1 büyüyen çocuk kendi içeriğine göre taşar -
+            bkz. sohbet, şablon kartı ekranın tamamını genişliğe göre kaplayıp geri kalan
+            her şeyi ekran dışına itiyordu). */}
+        <div className={`mt-6 sm:mt-8 ${isFullscreen ? "flex min-h-0 flex-1 flex-col" : "min-h-[16rem]"}`}>
           {stage.status === "Draft" && (
-            <div className="grid min-h-[16rem] place-items-center text-center">
+            <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
                 <p className="font-serif text-2xl text-white/70">Gösteri henüz başlamadı</p>
                 <p className="mt-2 text-sm text-white/40">
@@ -302,7 +331,7 @@ export default function StagePage() {
           )}
 
           {stage.status === "Completed" && (
-            <div className="grid min-h-[16rem] place-items-center text-center">
+            <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
                 <p className="font-serif text-3xl text-white">Gösteri tamamlandı</p>
                 <p className="mt-2 text-sm text-white/40">{stage.totalItems} sıra sahnelendi.</p>
@@ -311,13 +340,13 @@ export default function StagePage() {
           )}
 
           {isLive && !current && (
-            <div className="grid min-h-[16rem] place-items-center text-center">
+            <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <p className="font-serif text-2xl text-white/60">Sahne boş</p>
             </div>
           )}
 
           {isLive && current && current.kind !== "Performance" && (
-            <div className="grid min-h-[16rem] place-items-center text-center">
+            <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
                 <p className="text-[.7rem] font-bold uppercase tracking-[.2em] text-white/40">{SHOW_ITEM_KIND_LABEL[current.kind]}</p>
                 <p className="mt-3 font-serif text-5xl font-bold leading-tight sm:text-7xl">{current.pieceTitle ?? SHOW_ITEM_KIND_LABEL[current.kind]}</p>
@@ -329,19 +358,28 @@ export default function StagePage() {
           {isLive && current && current.kind === "Performance" && (() => {
             const template = pickTemplate(current.instrumentName, current.position);
             return (
-              <div>
-                {template
-                  ? <TemplatedPerformerCard current={current} totalItems={stage.totalItems} template={template} />
-                  : <GradientPerformerCard current={current} totalItems={stage.totalItems} />}
+              <div className={isFullscreen ? "flex min-h-0 flex-1 flex-col items-center" : ""}>
+                <div className={isFullscreen ? "min-h-0 flex-1" : ""}>
+                  {template
+                    ? <TemplatedPerformerCard current={current} totalItems={stage.totalItems} template={template} fillHeight={isFullscreen} />
+                    : <GradientPerformerCard current={current} totalItems={stage.totalItems} fillHeight={isFullscreen} />}
+                </div>
 
                 {/* "Büyük punto" tam olarak burası: kullanıcı isteği - salondan da okunabilecek
                     eser adı. Şablonların hiçbirinde eser adı için ayrılmış bir alan yok
-                    (yalnızca öğrenci/enstrüman), o yüzden kartın hemen altında, ortak. */}
-                <div className="mt-6 text-center">
-                  <p className="font-serif text-4xl font-bold leading-[1.1] sm:text-6xl lg:text-7xl">{current.pieceTitle}</p>
-                  {current.composer && <p className="mt-2 text-xl text-white/70 sm:text-2xl">{current.composer}</p>}
+                    (yalnızca öğrenci/enstrüman), o yüzden kartın hemen altında, ortak. Tam
+                    ekranda genişliğe göre değil (sm:/lg:) sabit, ekran yüksekliğiyle uyumlu
+                    puntolar kullanılıyor - aksi halde geniş bir projeksiyonda lg:text-7xl
+                    tek başına kalan yüksekliği taşırıyordu. */}
+                <div className={`shrink-0 text-center ${isFullscreen ? "mt-3" : "mt-6"}`}>
+                  <p className={`font-serif font-bold leading-[1.1] ${isFullscreen ? "text-3xl" : "text-4xl sm:text-6xl lg:text-7xl"}`}>
+                    {current.pieceTitle}
+                  </p>
+                  {current.composer && (
+                    <p className={`text-white/70 ${isFullscreen ? "mt-1 text-base" : "mt-2 text-xl sm:text-2xl"}`}>{current.composer}</p>
+                  )}
 
-                  <p className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm text-white/60">
+                  <p className={`flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-white/60 ${isFullscreen ? "mt-2 text-xs" : "mt-4 text-sm"}`}>
                     {current.teacherName && <span>{current.teacherName}</span>}
                     {current.studentPieces.length > 1 && (
                       <span className="rounded-full bg-white/15 px-2 py-0.5 font-bold text-white/85">
@@ -356,7 +394,7 @@ export default function StagePage() {
         </div>
 
         {/* SIRADAKİ / ONDAN SONRAKİ — kulisin çalışma alanı. */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <div className={`mt-6 flex flex-col gap-3 sm:flex-row ${isFullscreen ? "shrink-0" : ""}`}>
           <UpNextCard label="Sıradaki" item={stage.next} />
           <UpNextCard label="Ondan sonraki" item={stage.onDeck} />
         </div>
