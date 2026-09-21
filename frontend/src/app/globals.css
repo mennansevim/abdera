@@ -97,11 +97,15 @@ a {
   touch-action: manipulation;
 }
 
+/* .field:not() ile hariç tutuluyor - .field zaten kendi odak halkasını taşıyor (aşağıda,
+   .field:focus). Bu kural katmansız (unlayered) olduğu için @layer components'i her zaman
+   ezer (bkz. aşağıdaki not) - .field'ı da kapsasaydı iki halka üst üste binerdi (gerçek bir
+   UX hatası olarak bulundu: Besteci gibi alanlarda odaklanınca çift/bulanık kenarlık). */
 button:focus-visible,
 a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
+input:focus-visible:not(.field),
+select:focus-visible:not(.field),
+textarea:focus-visible:not(.field) {
   outline: 3px solid rgba(217, 102, 42, 0.3);
   outline-offset: 2px;
 }
