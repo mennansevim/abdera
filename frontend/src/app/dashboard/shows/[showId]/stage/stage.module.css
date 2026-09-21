@@ -1,0 +1,115 @@
+.screen {
+  position: relative;
+  isolation: isolate;
+  color: #3e2d28;
+  background:
+    radial-gradient(circle at 8% 12%, rgba(255, 194, 148, .42), transparent 24%),
+    radial-gradient(circle at 91% 18%, rgba(211, 92, 105, .22), transparent 28%),
+    linear-gradient(145deg, #fffaf3 0%, #fff4e9 56%, #f8dfd3 100%);
+  border: 1px solid rgba(210, 143, 116, .34);
+  box-shadow: 0 24px 80px rgba(119, 61, 42, .14);
+}
+
+.screen::before,
+.screen::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  border-radius: 999px;
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+.screen:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.screen::before {
+  width: 18rem;
+  height: 18rem;
+  left: -8rem;
+  bottom: -10rem;
+  background: rgba(240, 130, 91, .14);
+}
+
+.screen::after {
+  width: 14rem;
+  height: 14rem;
+  right: -5rem;
+  top: 18%;
+  background: rgba(176, 66, 87, .1);
+}
+
+.motionLayer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.floatingNote {
+  position: absolute;
+  color: rgba(167, 68, 75, .16);
+  animation: noteFloat 8s ease-in-out infinite;
+}
+
+.noteOne { width: 2.3rem; left: 4%; top: 38%; transform: rotate(-14deg); }
+.noteTwo { width: 1.8rem; right: 5%; top: 48%; animation-delay: -2.7s; transform: rotate(12deg); }
+.noteThree { width: 2rem; right: 15%; bottom: 7%; animation-delay: -5.2s; transform: rotate(-8deg); }
+
+.slideReveal {
+  animation: slideReveal 560ms cubic-bezier(.2, .82, .24, 1) both;
+}
+
+.slideImage {
+  animation: imageBreathe 12s ease-in-out infinite alternate;
+  transform-origin: 52% 50%;
+}
+
+.performerDetails {
+  animation: detailsReveal 700ms 120ms cubic-bezier(.2, .82, .24, 1) both;
+  text-wrap: balance;
+}
+
+.pieceTitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-wrap: balance;
+}
+
+@keyframes slideReveal {
+  from { opacity: 0; transform: translateY(1.4rem) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes detailsReveal {
+  from { opacity: 0; transform: translateY(.8rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes imageBreathe {
+  from { transform: scale(1); }
+  to { transform: scale(1.018); }
+}
+
+@keyframes noteFloat {
+  0%, 100% { translate: 0 0; rotate: 0deg; opacity: .45; }
+  50% { translate: 0 -1.1rem; rotate: 7deg; opacity: .8; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floatingNote,
+  .slideReveal,
+  .slideImage,
+  .performerDetails {
+    animation: none;
+  }
+}

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { BrandMark, Icon, instrumentBadgeStyle } from "@/components/icons";
 import { useMe } from "@/lib/use-auth";
+import styles from "./stage.module.css";
 import {
   SHOW_ITEM_KIND_LABEL,
   studentPhotoUrl,
@@ -27,20 +28,20 @@ import {
 function ProgressBar({ value, total }: { value: number; total: number }) {
   const percent = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/15" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={total}>
-      <div className="h-full rounded-full bg-[var(--brand)] transition-[width] duration-500" style={{ width: `${percent}%` }} />
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#c7755a]/20" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={total}>
+      <div className="h-full rounded-full bg-[linear-gradient(90deg,#dc694f,#f49a58)] transition-[width] duration-500" style={{ width: `${percent}%` }} />
     </div>
   );
 }
 
 function UpNextCard({ label, item }: { label: string; item: StageItem | null }) {
   return (
-    <article className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 p-4">
-      <p className="text-[.7rem] font-bold uppercase tracking-[.18em] text-white/40">{label}</p>
-      {!item && <p className="mt-2 text-sm text-white/40">—</p>}
+    <article className="min-w-0 flex-1 rounded-2xl border border-[#e9cfc0] bg-white/65 p-4 shadow-[0_10px_30px_rgba(126,65,45,.08)] backdrop-blur-md">
+      <p className="text-[.7rem] font-bold uppercase tracking-[.18em] text-[#9d5a4d]">{label}</p>
+      {!item && <p className="mt-2 text-sm text-[#9a7c6f]">—</p>}
       {item && (
         <div className="mt-2 flex items-center gap-3">
-          <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-white/10 text-sm font-bold text-white/70">
+          <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-[#fae5d8] text-sm font-bold text-[#9d4f43]">
             {item.hasPhoto && item.studentId
               /* eslint-disable-next-line @next/next/no-img-element */
               ? <img src={studentPhotoUrl(item.studentId, item.photoVersion)} alt="" className="h-full w-full object-cover" />
@@ -49,10 +50,10 @@ function UpNextCard({ label, item }: { label: string; item: StageItem | null }) 
                 : <Icon name={item.kind === "Intermission" ? "clock" : "bell"} className="h-4 w-4" />}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-base font-bold text-white">
+            <p className="truncate text-base font-bold text-[#3e2d28]">
               {item.kind === "Performance" ? item.studentName : (item.pieceTitle ?? SHOW_ITEM_KIND_LABEL[item.kind])}
             </p>
-            <p className="truncate text-sm text-white/55">
+            <p className="truncate text-sm text-[#7f675e]">
               {item.kind === "Performance"
                 ? `${item.pieceTitle ?? ""}${item.composer ? ` · ${item.composer}` : ""}`
                 : (item.note ?? "")}
@@ -72,29 +73,42 @@ function UpNextCard({ label, item }: { label: string; item: StageItem | null }) 
 interface PerformerTemplate {
   src: string;
   photo: { x: number; y: number; w: number; h: number };
-  name: { x: number; y: number; w: number };
-  instrument: { x: number; y: number; w: number };
+  details: { x: number; y: number; w: number };
 }
 
-// Her enstrüman için iki varyant - art arda aynı enstrümandan gelen öğrenciler aynı
-// afişi görmesin diye `position`e göre aralarında dönülür (bkz. pickTemplate).
+// /public/bg içindeki bütün yıl sonu gösterisi şablonları tek eşleme üzerinden seçilir.
+// Piyano için iki varyant olduğu için art arda gelen öğrencilerde `position` ile dönüşür.
 const PERFORMER_TEMPLATES: Record<string, PerformerTemplate[]> = {
-  Piyano: [
-    { src: "/bg/piano_bg.png", photo: { x: 16, y: 32, w: 32, h: 42 }, name: { x: 52, y: 38.5, w: 24 }, instrument: { x: 52, y: 55, w: 24 } },
-    { src: "/bg/piano2_bg.png", photo: { x: 12, y: 32, w: 29, h: 42 }, name: { x: 46, y: 41.5, w: 25 }, instrument: { x: 46, y: 59.5, w: 25 } },
+  piyano: [
+    { src: "/bg/piano_bg.png", photo: { x: 13.5, y: 32, w: 27.5, h: 41.5 }, details: { x: 45, y: 39, w: 27 } },
+    { src: "/bg/piano2_bg.png", photo: { x: 17, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 48, y: 39, w: 28 } },
   ],
-  Keman: [
-    { src: "/bg/keman_bg.png", photo: { x: 13, y: 32, w: 28, h: 42 }, name: { x: 45, y: 40, w: 25 }, instrument: { x: 45, y: 58.5, w: 25 } },
-    { src: "/bg/keman2_bg.png", photo: { x: 13, y: 35, w: 29, h: 39 }, name: { x: 45, y: 41.5, w: 25 }, instrument: { x: 45, y: 60, w: 25 } },
+  keman: [
+    { src: "/bg/keman_bg.png", photo: { x: 7.5, y: 32.5, w: 31.5, h: 41.5 }, details: { x: 43, y: 39, w: 29 } },
   ],
-  Bateri: [
-    { src: "/bg/bateri_bg.png", photo: { x: 13, y: 32, w: 28, h: 42 }, name: { x: 47, y: 40, w: 25 }, instrument: { x: 47, y: 58, w: 25 } },
-    { src: "/bg/bateri2_bg.png", photo: { x: 14, y: 32, w: 28, h: 42 }, name: { x: 47, y: 39, w: 25 }, instrument: { x: 47, y: 60, w: 25 } },
+  bateri: [
+    { src: "/bg/bateri_bg.png", photo: { x: 15.2, y: 32.5, w: 27.5, h: 41.5 }, details: { x: 47, y: 39, w: 28 } },
+  ],
+  gitar: [
+    { src: "/bg/gitar_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
+  ],
+  "çello": [
+    { src: "/bg/cello_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
+  ],
+  cello: [
+    { src: "/bg/cello_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
+  ],
+  viyolonsel: [
+    { src: "/bg/cello_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
+  ],
+  resim: [
+    { src: "/bg/resim_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
   ],
 };
 
 function pickTemplate(instrumentName: string | null, position: number): PerformerTemplate | null {
-  const variants = instrumentName ? PERFORMER_TEMPLATES[instrumentName] : undefined;
+  const key = instrumentName?.trim().toLocaleLowerCase("tr-TR");
+  const variants = key ? PERFORMER_TEMPLATES[key] : undefined;
   return variants?.[position % variants.length] ?? null;
 }
 
@@ -104,12 +118,12 @@ function pickTemplate(instrumentName: string | null, position: number): Performe
 function PerformerProgressStrip({ position, totalItems, groupName }: { position: number; totalItems: number; groupName: string | null }) {
   const percent = totalItems > 0 ? Math.min(100, Math.round(((position + 1) / totalItems) * 100)) : 0;
   return (
-    <div className="absolute inset-x-0 bottom-0 bg-black/35 px-[4cqw] py-[1.6cqh] backdrop-blur-[2px]">
-      <p className="truncate font-bold text-white" style={{ fontSize: "2.2cqw" }}>
+    <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(255,250,246,0),rgba(255,250,246,.95)_42%)] px-[4cqw] pb-[1.4cqh] pt-[4.2cqh] backdrop-blur-[1px]">
+      <p className="truncate font-bold text-[#76483e]" style={{ fontSize: "1.75cqw" }}>
         {groupName ? `${groupName} · ` : ""}{position + 1} / {totalItems} sıra
       </p>
-      <div className="mt-[.8cqh] h-[1.6cqh] w-full overflow-hidden rounded-full bg-white/25">
-        <div className="h-full rounded-full bg-white transition-[width] duration-500" style={{ width: `${percent}%` }} />
+      <div className="mt-[.7cqh] h-[1.2cqh] w-full overflow-hidden rounded-full bg-[#c47560]/20">
+        <div className="h-full rounded-full bg-[linear-gradient(90deg,#d7564b,#f19a58)] transition-[width] duration-500" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -119,12 +133,12 @@ function TemplatedPerformerCard({ current, totalItems, template, fillHeight }: {
   const initials = (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("");
   return (
     <div
-      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,.35)] [container-type:size] ${
+      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] border border-white/80 shadow-[0_24px_70px_rgba(124,65,48,.2)] [container-type:size] ${styles.slideReveal} ${
         fillHeight ? "mx-auto h-full max-w-full" : "w-full"
       }`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={template.src} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <img src={template.src} alt="" className={`absolute inset-0 h-full w-full object-cover ${styles.slideImage}`} />
 
       <div
         className="absolute overflow-hidden rounded-full bg-[var(--brand-soft)]"
@@ -136,21 +150,14 @@ function TemplatedPerformerCard({ current, totalItems, template, fillHeight }: {
           : <span className="grid h-full w-full place-items-center font-bold text-[var(--brand-strong)]" style={{ fontSize: "11cqw" }}>{initials}</span>}
       </div>
 
-      <p
-        className="absolute truncate text-center font-serif font-bold text-[#2c2420]"
-        style={{ left: `${template.name.x}%`, top: `${template.name.y}%`, width: `${template.name.w}%`, fontSize: "3.4cqw" }}
+      <div
+        className={`absolute text-center ${styles.performerDetails}`}
+        style={{ left: `${template.details.x}%`, top: `${template.details.y}%`, width: `${template.details.w}%` }}
       >
-        {current.studentName}
-      </p>
-
-      {current.instrumentName && (
-        <p
-          className="absolute truncate text-center font-bold text-[#2c2420]"
-          style={{ left: `${template.instrument.x}%`, top: `${template.instrument.y}%`, width: `${template.instrument.w}%`, fontSize: "2.4cqw" }}
-        >
-          {current.instrumentName}
-        </p>
-      )}
+        <p className="truncate font-serif font-bold text-[#6f302e]" style={{ fontSize: "2.9cqw", lineHeight: 1.05 }}>{current.studentName}</p>
+        <p className={`mt-[1cqh] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "1.95cqw", lineHeight: 1.12 }}>{current.pieceTitle}</p>
+        {current.composer && <p className="mt-[.55cqh] truncate font-semibold text-[#775d55]" style={{ fontSize: "1.25cqw" }}>{current.composer}</p>}
+      </div>
 
       <PerformerProgressStrip position={current.position} totalItems={totalItems} groupName={current.groupName} />
     </div>
@@ -162,14 +169,14 @@ function TemplatedPerformerCard({ current, totalItems, template, fillHeight }: {
 function GradientPerformerCard({ current, totalItems, fillHeight }: { current: StageItem; totalItems: number; fillHeight?: boolean }) {
   return (
     <div
-      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] [container-type:size] ${
+      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] border border-white/80 bg-[linear-gradient(145deg,#fffaf3_0%,#fde2cf_52%,#ef9f8e_100%)] shadow-[0_24px_70px_rgba(124,65,48,.2)] [container-type:size] ${styles.slideReveal} ${
         fillHeight ? "mx-auto h-full max-w-full" : "w-full"
       }`}
     >
-      <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-      <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-      <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-black/10 blur-3xl" />
-      <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden h-9 w-9 -rotate-12 text-white/20 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
+      <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-[#f29070]/20 blur-2xl" />
+      <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/45 blur-2xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-[#b74f5d]/10 blur-3xl" />
+      <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden h-9 w-9 -rotate-12 text-[#b74f5d]/30 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
 
       {/* Şablon görsellerinin aksine burada sabit bir "üstten %X" varsayımı yok - dikey
           alan içerik akışıyla paylaşılıyor ki dar/mobil genişlikte (fotoğraf+metin alt alta
@@ -177,11 +184,11 @@ function GradientPerformerCard({ current, totalItems, fillHeight }: { current: S
           hatası olarak bulundu - bkz. sohbet). `pb` alttaki şeridin yüksekliğini önden ayırır. */}
       <div className="relative flex h-full flex-col p-[4cqw] pb-[22cqh]">
         <BrandMark compact />
-        <div className="flex flex-1 flex-col items-center justify-center gap-[3cqw] text-white sm:flex-row sm:gap-[4cqw]">
+        <div className="flex flex-1 flex-col items-center justify-center gap-[3cqw] text-[#3e2d28] sm:flex-row sm:gap-[4cqw]">
           <div className="relative shrink-0">
-            <div aria-hidden className="absolute -inset-[6%] -rotate-6 bg-white/15" style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }} />
+            <div aria-hidden className="absolute -inset-[6%] -rotate-6 bg-[#d45f52]/20" style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }} />
             <span
-              className="relative grid place-items-center overflow-hidden bg-white/20 font-bold shadow-[0_16px_40px_rgba(0,0,0,.25)]"
+              className="relative grid place-items-center overflow-hidden bg-white/75 font-bold text-[#a84943] shadow-[0_16px_40px_rgba(124,65,48,.18)]"
               style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%", width: "22cqw", height: "22cqw", fontSize: "5cqw" }}
             >
               {current.hasPhoto && current.studentId
@@ -194,12 +201,14 @@ function GradientPerformerCard({ current, totalItems, fillHeight }: { current: S
             {current.instrumentName && (() => {
               const badge = instrumentBadgeStyle(current.instrumentName);
               return (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-[3cqw] py-[1cqw] font-bold backdrop-blur-sm" style={{ fontSize: "2.2cqw" }}>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/65 px-[3cqw] py-[1cqw] font-bold backdrop-blur-sm" style={{ fontSize: "2.2cqw" }}>
                   <Icon name={badge.icon} style={{ width: "2.6cqw", height: "2.6cqw" }} />{current.instrumentName}
                 </span>
               );
             })()}
-            <p className="mt-[2cqw] truncate font-serif font-bold italic text-white/90" style={{ fontSize: "3.2cqw" }}>{current.studentName}</p>
+            <p className="mt-[2cqw] truncate font-serif font-bold italic text-[#6f302e]" style={{ fontSize: "3.2cqw" }}>{current.studentName}</p>
+            <p className={`mt-[1.2cqw] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "2.7cqw", lineHeight: 1.12 }}>{current.pieceTitle}</p>
+            {current.composer && <p className="mt-[.8cqw] truncate font-semibold text-[#775d55]" style={{ fontSize: "1.6cqw" }}>{current.composer}</p>}
           </div>
         </div>
       </div>
@@ -293,17 +302,23 @@ export default function StagePage() {
 
       <section
         id="stage-screen"
-        className={`overflow-hidden rounded-3xl bg-[#1a1512] p-5 text-white sm:p-8 ${
-          isFullscreen ? "flex h-screen flex-col" : ""
+        className={`overflow-hidden rounded-3xl p-5 sm:p-8 ${styles.screen} ${
+          isFullscreen ? "flex h-screen w-screen flex-col rounded-none" : ""
         }`}
       >
+        <div key={current?.id ?? stage.status} aria-hidden className={styles.motionLayer}>
+          <Icon name="music" className={`${styles.floatingNote} ${styles.noteOne}`} />
+          <Icon name="music" className={`${styles.floatingNote} ${styles.noteTwo}`} />
+          <Icon name="music" className={`${styles.floatingNote} ${styles.noteThree}`} />
+        </div>
+
         <header className="flex shrink-0 flex-wrap items-baseline justify-between gap-2">
-          <h1 className="font-serif text-lg font-bold">{stage.title}</h1>
-          <p className="text-sm tabular-nums text-white/50">
+          <h1 className="font-serif text-lg font-bold text-[#623b33]">{stage.title}</h1>
+          <p className="text-sm tabular-nums text-[#8c6c60]">
             {stage.completedItems}/{stage.totalItems} sıra
             {stage.startedAt && <> · {stage.elapsedMinutes} dk geçti</>}
             {stage.startedAt && stage.totalDurationMinutes > 0 && (
-              <> · <span className={behindMinutes > 5 ? "text-[var(--danger)]" : "text-white/50"}>
+              <> · <span className={behindMinutes > 5 ? "text-[var(--danger-strong)]" : "text-[#8c6c60]"}>
                 {behindMinutes > 0 ? `${behindMinutes} dk gerideyiz` : `${Math.abs(behindMinutes)} dk öndeyiz`}
               </span></>
             )}
@@ -320,8 +335,8 @@ export default function StagePage() {
           {stage.status === "Draft" && (
             <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
-                <p className="font-serif text-2xl text-white/70">Gösteri henüz başlamadı</p>
-                <p className="mt-2 text-sm text-white/40">
+                <p className="font-serif text-2xl text-[#6f443a]">Gösteri henüz başlamadı</p>
+                <p className="mt-2 text-sm text-[#8c6c60]">
                   {stage.totalItems > 0
                     ? `Programda ${stage.totalItems} sıra hazır.`
                     : "Programda hiç sıra yok - önce program ekranından ekleyin."}
@@ -333,24 +348,24 @@ export default function StagePage() {
           {stage.status === "Completed" && (
             <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
-                <p className="font-serif text-3xl text-white">Gösteri tamamlandı</p>
-                <p className="mt-2 text-sm text-white/40">{stage.totalItems} sıra sahnelendi.</p>
+                <p className="font-serif text-3xl text-[#6f302e]">Gösteri tamamlandı</p>
+                <p className="mt-2 text-sm text-[#8c6c60]">{stage.totalItems} sıra sahnelendi.</p>
               </div>
             </div>
           )}
 
           {isLive && !current && (
             <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
-              <p className="font-serif text-2xl text-white/60">Sahne boş</p>
+              <p className="font-serif text-2xl text-[#8c6c60]">Sahne boş</p>
             </div>
           )}
 
           {isLive && current && current.kind !== "Performance" && (
             <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
-                <p className="text-[.7rem] font-bold uppercase tracking-[.2em] text-white/40">{SHOW_ITEM_KIND_LABEL[current.kind]}</p>
-                <p className="mt-3 font-serif text-5xl font-bold leading-tight sm:text-7xl">{current.pieceTitle ?? SHOW_ITEM_KIND_LABEL[current.kind]}</p>
-                {current.note && <p className="mt-3 text-lg text-white/50">{current.note}</p>}
+                <p className="text-[.7rem] font-bold uppercase tracking-[.2em] text-[#9d5a4d]">{SHOW_ITEM_KIND_LABEL[current.kind]}</p>
+                <p className="mt-3 font-serif text-5xl font-bold leading-tight text-[#623b33] sm:text-7xl">{current.pieceTitle ?? SHOW_ITEM_KIND_LABEL[current.kind]}</p>
+                {current.note && <p className="mt-3 text-lg text-[#8c6c60]">{current.note}</p>}
               </div>
             </div>
           )}
@@ -361,32 +376,8 @@ export default function StagePage() {
               <div className={isFullscreen ? "flex min-h-0 flex-1 flex-col items-center" : ""}>
                 <div className={isFullscreen ? "min-h-0 flex-1" : ""}>
                   {template
-                    ? <TemplatedPerformerCard current={current} totalItems={stage.totalItems} template={template} fillHeight={isFullscreen} />
-                    : <GradientPerformerCard current={current} totalItems={stage.totalItems} fillHeight={isFullscreen} />}
-                </div>
-
-                {/* "Büyük punto" tam olarak burası: kullanıcı isteği - salondan da okunabilecek
-                    eser adı. Şablonların hiçbirinde eser adı için ayrılmış bir alan yok
-                    (yalnızca öğrenci/enstrüman), o yüzden kartın hemen altında, ortak. Tam
-                    ekranda genişliğe göre değil (sm:/lg:) sabit, ekran yüksekliğiyle uyumlu
-                    puntolar kullanılıyor - aksi halde geniş bir projeksiyonda lg:text-7xl
-                    tek başına kalan yüksekliği taşırıyordu. */}
-                <div className={`shrink-0 text-center ${isFullscreen ? "mt-3" : "mt-6"}`}>
-                  <p className={`font-serif font-bold leading-[1.1] ${isFullscreen ? "text-3xl" : "text-4xl sm:text-6xl lg:text-7xl"}`}>
-                    {current.pieceTitle}
-                  </p>
-                  {current.composer && (
-                    <p className={`text-white/70 ${isFullscreen ? "mt-1 text-base" : "mt-2 text-xl sm:text-2xl"}`}>{current.composer}</p>
-                  )}
-
-                  <p className={`flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-white/60 ${isFullscreen ? "mt-2 text-xs" : "mt-4 text-sm"}`}>
-                    {current.teacherName && <span>{current.teacherName}</span>}
-                    {current.studentPieces.length > 1 && (
-                      <span className="rounded-full bg-white/15 px-2 py-0.5 font-bold text-white/85">
-                        {current.studentPieces.length} eserden {current.studentPieceIndex + 1}.si
-                      </span>
-                    )}
-                  </p>
+                    ? <TemplatedPerformerCard key={current.id} current={current} totalItems={stage.totalItems} template={template} fillHeight={isFullscreen} />
+                    : <GradientPerformerCard key={current.id} current={current} totalItems={stage.totalItems} fillHeight={isFullscreen} />}
                 </div>
               </div>
             );
