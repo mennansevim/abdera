@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { AddButton, AdminGate, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
+import { AddButton, AdminGate, FormActions, FormMessage, Modal, Notice, PageHeader, RowMenu, RowMenuItem, SearchInput } from "@/components/ui";
 import { DeleteTeacherDialog } from "@/components/delete-person-dialog";
 import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
 import { ApiError } from "@/lib/api";
@@ -39,6 +39,9 @@ function TeachersPageContent() {
   const { data: students } = useStudents();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
+  const [instrumentId, setInstrumentId] = useState("");
+  const [status, setStatus] = useState<"all" | TeacherStatus>("Active");
+  const [expandedTeacherId, setExpandedTeacherId] = useState<string | null>(null);
   // Geçici şifre yalnızca oluşturma yanıtında bir kez döner - pencere kapandıktan sonra da
   // görünmesi gerektiği için sayfa seviyesinde tutulur, admin kapatana kadar durur.
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
@@ -51,29 +54,45 @@ function TeachersPageContent() {
   // Liste ada göre sıralanır ve arama kutusuyla daraltılır: okul büyüdükçe (E2E/demo
   // kayıtlarıyla birlikte) sıralamasız bir listede kaydı gözle bulmak zorlaşıyordu.
   // Arama enstrümanı da kapsar - "keman öğretmeni kimdi" en sık sorulan soru.
-  const teacherRows = useMemo(() => {
+  const allTeacherRows = useMemo(() => {
     const rows = isAdmin
       ? (overviews ?? []).map((overview) => ({ teacher: overview.teacher, teacherStudents: overview.students }))
       : (teachers ?? []).map((teacher) => ({ teacher, teacherStudents: [] as TeacherStudentEnrollment[] }));
+    return rows.sort((a, b) => `${a.teacher.firstName} ${a.teacher.lastName}`.localeCompare(`${b.teacher.firstName} ${b.teacher.lastName}`, "tr-TR"));
+  }, [isAdmin, overviews, teachers]);
+
+  const teacherRows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("tr-TR");
     const instrumentNames = new Map((instruments ?? []).map((instrument) => [instrument.id, instrument.name]));
-    return rows
+    return allTeacherRows
       .filter(({ teacher }) => {
+        if (status !== "all" && teacher.status !== status) return false;
+        if (instrumentId && !teacher.instrumentIds.includes(instrumentId)) return false;
         if (!query) return true;
         const haystack = [
           `${teacher.firstName} ${teacher.lastName}`,
           ...teacher.instrumentIds.map((id) => instrumentNames.get(id) ?? ""),
         ].join(" ").toLocaleLowerCase("tr-TR");
         return haystack.includes(query);
-      })
-      .sort((a, b) => `${a.teacher.firstName} ${a.teacher.lastName}`.localeCompare(`${b.teacher.firstName} ${b.teacher.lastName}`, "tr-TR"));
-  }, [isAdmin, overviews, teachers, instruments, search]);
+      });
+  }, [allTeacherRows, instrumentId, instruments, search, status]);
+
+  const activeTeacherCount = allTeacherRows.filter(({ teacher }) => teacher.status === "Active").length;
+  const studentCount = new Set(allTeacherRows.flatMap(({ teacherStudents }) => teacherStudents.map((student) => student.studentId))).size;
+  const loading = isLoading || (isAdmin && overviewsLoading);
+  const hasFilters = Boolean(search || instrumentId || status !== "Active");
+
+  function clearFilters() {
+    setSearch("");
+    setInstrumentId("");
+    setStatus("Active");
+  }
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Öğretmenler"
-        description="Öğretmenler, verdikleri dersler ve öğrencileri."
+        description={loading ? "Öğretmenler ve öğrenci dağılımları." : `${activeTeacherCount} aktif öğretmen · ${studentCount} öğrenci`}
         actions={<>
           <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Ad veya enstrüman ara…" />
           {isAdmin && <AddButton label="Öğretmen ekle" onClick={() => setShowCreate(true)} />}
@@ -91,12 +110,33 @@ function TeachersPageContent() {
         </div>
       )}
 
-      <div className="app-card overflow-hidden">
-        {(isLoading || (isAdmin && overviewsLoading)) && <div className="space-y-3 p-4">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-16 rounded-xl" />)}</div>}
-        {!isLoading && teacherRows.length === 0 && <p className="p-6 text-center text-sm text-[var(--muted)]">{search ? `"${search}" ile eşleşen öğretmen yok.` : "Henüz öğretmen yok."}</p>}
-        <ul className="divide-y divide-[var(--line)]">
-          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} isAdmin={isAdmin} />)}
-        </ul>
+      <div className="app-card relative">
+        <div className="flex flex-wrap items-center gap-2 rounded-t-[1.3rem] border-b border-[var(--line)] bg-[var(--surface-muted)]/30 px-3 py-2">
+          <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{teacherRows.length}</strong> öğretmen gösteriliyor</p>
+          <label className="relative min-w-44 flex-1 sm:flex-none">
+            <span className="sr-only">Enstrümana göre filtrele</span>
+            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-10 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
+              <option value="">Tüm enstrümanlar</option>
+              {(instruments ?? []).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
+            </select>
+            <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
+          </label>
+          <label className="relative min-w-28 flex-1 sm:flex-none">
+            <span className="sr-only">Duruma göre filtrele</span>
+            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | TeacherStatus)} className="field min-h-10 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
+              <option value="Active">Aktif</option>
+              <option value="Inactive">Pasif</option>
+              <option value="all">Tümü</option>
+            </select>
+            <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
+          </label>
+        </div>
+        {!loading && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_7rem_6rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-center">Durum</span><span /></div>}
+        {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
+        {!loading && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
+        {!loading && <ul className="divide-y divide-[var(--line)]">
+          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
+        </ul>}
       </div>
 
       {isAdmin && (
@@ -112,9 +152,9 @@ function TeachersPageContent() {
   );
 }
 
-function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; isAdmin: boolean }) {
-  const [showStudents, setShowStudents] = useState(false);
+function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
   const [studentSearch, setStudentSearch] = useState("");
+  const [detailTab, setDetailTab] = useState<"students" | "availability">("students");
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -142,44 +182,21 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
   }, [groupedStudents, studentSearch]);
 
   return <li id={`teacher-${teacher.id}`} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
-    <div className="flex min-h-16 items-center gap-3 px-4 py-3">
-      <button type="button" onClick={() => setShowStudents((visible) => !visible)} aria-expanded={isAdmin ? showStudents : undefined} disabled={!isAdmin} className="pressable flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left disabled:cursor-default disabled:active:transform-none">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-xs font-bold text-[var(--brand-strong)]">{teacher.firstName[0]}{teacher.lastName[0]}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>
-          <span className="text-meta mt-0.5 block truncate">
-            {teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"}
-            {isAdmin && ` · ${groupedStudents.length} öğrenci`}
-            {teacher.status === "Active" ? "" : " · pasif"}
-          </span>
+    <div className="grid min-h-14 grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 md:grid-cols-[minmax(0,1fr)_2.75rem]">
+      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_7rem_6rem]">
+        <span className="min-w-0">
+          <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
+          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
         </span>
-        {isAdmin && <Icon name="chevron" className={`h-4 w-4 shrink-0 text-[var(--muted)] transition-transform ${showStudents ? "rotate-90" : ""}`} />}
+        <span className="text-meta hidden truncate md:block">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"}</span>
+        <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{groupedStudents.length}</strong></span>
+        <span className={`hidden justify-self-center rounded-full px-2 py-1 text-[.75rem] font-bold md:block ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
       </button>
-      {isAdmin && (
-        <button
-          type="button"
-          onClick={() => setShowEditForm(true)}
-          aria-label={`${teacher.firstName} ${teacher.lastName} bilgilerini düzenle`}
-          title="Düzenle"
-          className="icon-btn icon-btn-quiet shrink-0"
-        >
-          <Icon name="pencil" className="h-4 w-4" />
-        </button>
-      )}
-      {isAdmin && teacher.status === "Active" && (
-        <AddButton label={`${teacher.firstName} ${teacher.lastName} öğretmenine öğrenci ekle`} tone="quiet" onClick={() => setShowAddForm(true)} />
-      )}
-      {isAdmin && (
-        <button
-          type="button"
-          onClick={() => setShowDeleteDialog(true)}
-          aria-label={`${teacher.firstName} ${teacher.lastName} kaydını sil`}
-          title="Sil"
-          className="icon-btn icon-btn-quiet shrink-0 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]"
-        >
-          <Icon name="x" className="h-4 w-4" />
-        </button>
-      )}
+      {isAdmin && <RowMenu label={`${teacher.firstName} ${teacher.lastName} işlemleri`}>{(close) => <>
+        {teacher.status === "Active" && <RowMenuItem icon="plus" onClick={() => { close(); setShowAddForm(true); }}>Öğrenci ekle</RowMenuItem>}
+        <RowMenuItem icon="pencil" onClick={() => { close(); setShowEditForm(true); }}>Bilgileri düzenle</RowMenuItem>
+        <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil</RowMenuItem>
+      </>}</RowMenu>}
     </div>
 
     {showDeleteDialog && (
@@ -190,13 +207,18 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
       />
     )}
 
-    {showStudents && isAdmin && <div className="border-t border-[var(--line)] bg-[var(--surface-muted)]/35 px-4 py-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div><p className="text-xs font-bold">Öğrenciler</p><p className="text-meta mt-0.5">Bu öğretmenden aktif ders alan {groupedStudents.length} öğrenci</p></div>
-        {groupedStudents.length > 6 && <label className="relative"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 w-48 pl-9 text-xs" /></label>}
+    {expanded && isAdmin && <div className="border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="tablist" aria-label="Öğretmen ayrıntıları">
+          <button type="button" role="tab" aria-selected={detailTab === "students"} onClick={() => setDetailTab("students")} className={`pressable min-h-10 rounded-lg px-3 text-xs font-bold ${detailTab === "students" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Öğrenciler <span className="ml-1 tabular-nums opacity-70">{groupedStudents.length}</span></button>
+          <button type="button" role="tab" aria-selected={detailTab === "availability"} onClick={() => setDetailTab("availability")} className={`pressable min-h-10 rounded-lg px-3 text-xs font-bold ${detailTab === "availability" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Uygunluk</button>
+        </div>
+        {detailTab === "students" && groupedStudents.length > 6 && <label className="relative ml-auto w-full sm:w-56"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci veya branş ara…" className="field min-h-10 pl-9 py-1.5 text-xs" /></label>}
       </div>
-      {visibleStudents.length > 0 ? <ul className="grid gap-2 sm:grid-cols-2">{visibleStudents.map((student) => <li key={student.id} className="flex min-h-14 items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-3 py-2.5 shadow-sm"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand-strong)]">{student.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-bold">{student.name}</span><span className="mt-1 flex flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.75rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></span></li>)}</ul> : groupedStudents.length ? <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="rounded-xl bg-white p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}
-      <TeacherAvailabilityDays teacherId={teacher.id} enabled={showStudents} />
+      {detailTab === "students" && <div className="mt-3 overflow-hidden rounded-xl border border-[var(--line)] bg-white">
+        {visibleStudents.length > 0 ? <><div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(7rem,.7fr)] items-center gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/45 px-3 py-2 text-micro text-[var(--muted)]"><span>#</span><span>Öğrenci</span><span>Branş</span></div><ol className="max-h-80 divide-y divide-[var(--line)] overflow-y-auto">{visibleStudents.map((student, index) => <li key={student.id} className="grid min-h-10 grid-cols-[2rem_minmax(0,1fr)_minmax(7rem,.7fr)] items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--surface-muted)]/35"><span className="text-[.75rem] tabular-nums text-[var(--muted)]">{index + 1}</span><span className="truncate font-semibold">{student.name}</span><span className="flex min-w-0 flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.75rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></li>)}</ol></> : groupedStudents.length ? <p className="p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}
+      </div>}
+      {detailTab === "availability" && <div className="mt-3 rounded-xl border border-[var(--line)] bg-white p-3"><TeacherAvailabilityDays teacherId={teacher.id} enabled={expanded && detailTab === "availability"} embedded /></div>}
     </div>}
 
     <Modal
@@ -211,7 +233,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
         teacherInstruments={teacherInstruments}
         students={students}
         onClose={() => setShowAddForm(false)}
-        onAdded={() => { setShowAddForm(false); setShowStudents(true); }}
+        onAdded={() => { setShowAddForm(false); setDetailTab("students"); if (!expanded) onToggle(); }}
       />
     </Modal>
 

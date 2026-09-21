@@ -40,7 +40,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
         <h1 className="text-display font-serif italic">{title}</h1>
         {description && <p className="text-meta mt-1">{description}</p>}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">{actions}</div>}
     </header>
   );
 }
@@ -79,7 +79,7 @@ export function AddButton({ label, onClick, disabled = false, tone = "brand" }: 
 // yerine yazarak daraltmak için - ekranın kendi verisini filtreler, sunucuya istek atmaz.
 export function SearchInput({ value, onChange, label, placeholder }: { value: string; onChange: (value: string) => void; label: string; placeholder?: string }) {
   return (
-    <label className="relative block w-full sm:w-56">
+    <label className="relative block min-w-0 flex-1 sm:w-56 sm:flex-none">
       <span className="sr-only">{label}</span>
       <Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
       <input

@@ -29,7 +29,7 @@ const DEFAULT_AVAILABILITY_END = "19:00";
 // İki yerden kullanılır: Öğretmenler ekranı (yönetici, herhangi bir öğretmen için) ve Ayarlar
 // ekranı (öğretmen, yalnızca kendisi için - docs/10-decisions.md K1). Yetki sınırını backend
 // zorlar (SchedulingAuthorization), buradaki `self` yalnızca metni doğru kişiye göre yazar.
-export function TeacherAvailabilityDays({ teacherId, enabled = true, self = false }: { teacherId: string; enabled?: boolean; self?: boolean }) {
+export function TeacherAvailabilityDays({ teacherId, enabled = true, self = false, embedded = false }: { teacherId: string; enabled?: boolean; self?: boolean; embedded?: boolean }) {
   const { data: availability, isLoading } = useTeacherAvailability(teacherId, { enabled });
   const createAvailability = useCreateTeacherAvailability(teacherId);
   const deleteAvailability = useDeleteTeacherAvailability(teacherId);
@@ -61,7 +61,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
   }
 
   return (
-    <div className={self ? "" : "mt-3 border-t border-[var(--line)] pt-3"}>
+    <div className={self || embedded ? "" : "mt-3 border-t border-[var(--line)] pt-3"}>
       {!self && <p className="text-meta font-bold">Uygun günler</p>}
       {isLoading ? (
         <div className="mt-2 flex gap-1.5">{AVAILABILITY_DAYS.map((day) => <div key={day.key} className="skeleton h-9 w-14 rounded-lg" />)}</div>

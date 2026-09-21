@@ -3,8 +3,8 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Icon, instrumentBadgeStyle } from "@/components/icons";
-import { AddButton, FormActions, FormMessage, Modal, RowMenu, RowMenuItem, SectionHeader } from "@/components/ui";
+import { Icon } from "@/components/icons";
+import { FormActions, FormMessage, Modal, RowMenu, RowMenuItem } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   formatWeeklySchedule,
@@ -27,8 +27,6 @@ import {
   type StudentGuardianLink,
 } from "@/lib/people";
 
-const ENROLLMENT_STATUS_LABEL: Record<string, string> = { Active: "aktif", Paused: "durduruldu", Ended: "sona erdi" };
-
 // isAdmin=false (Teacher) iken veli bilgisi hiç istenmez - /api/students/{id}/guardians
 // Admin-only olduğu için Teacher'a 403 dönerdi (docs/04-permissions.md).
 // canManage: öğretmen artık KENDİ öğrencisinin velisini ve kursunu ekleyebiliyor (J1).
@@ -38,7 +36,8 @@ export function StudentDetail({
   student,
   isAdmin,
   canManage = isAdmin,
-}: { student: Student; isAdmin: boolean; canManage?: boolean }) {
+  onDelete,
+}: { student: Student; isAdmin: boolean; canManage?: boolean; onDelete?: () => void }) {
   const studentId = student.id;
   const [showGuardianForm, setShowGuardianForm] = useState(false);
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
@@ -71,74 +70,30 @@ export function StudentDetail({
   }
 
   return (
-    <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
-      {/* Künye: satır kapalıyken yalnızca ad ve doğum tarihi görünüyor; açılınca öğrencinin
-          kim olduğu (yaş, durum) ve üzerinde yapılabilecek işler tek bakışta belli olsun.
-          Eylemler tek bir "düzenle" ikonu değil: birincil eylem yazıyla, ikincil olanlar
-          "⋮" menüsünde (kullanıcı isteği). */}
-      <section className="app-card flex flex-wrap items-center gap-3 p-4 sm:gap-4">
-        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[var(--brand-soft)] font-serif text-lg font-bold italic text-[var(--brand-strong)]">
-          {initials(fullName)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate font-serif text-lg font-bold italic leading-tight">{fullName}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="text-meta">{student.birthDate}{ageOf(student.birthDate) !== null && ` · ${ageOf(student.birthDate)} yaş`}</p>
-            <span className={`inline-flex rounded-full px-2 py-0.5 text-[.75rem] font-bold ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>
-              {student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}
-            </span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {canManage && activeEnrollments.length > 0 && (
-            <button type="button" onClick={() => setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__")} className="btn btn-quiet">
-              <Icon name="calendar" className="h-4 w-4" /> Program
-            </button>
-          )}
-          <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet">
-            <Icon name="activity" className="h-4 w-4" /> Gelişim
-          </Link>
-          {canManage && (
-            <>
-              <button type="button" onClick={() => setEditingStudent(true)} className="btn btn-quiet">
-                <Icon name="pencil" className="h-4 w-4" /> Düzenle
-              </button>
-              <RowMenu label={`${fullName} için diğer işlemler`}>
-                {(close) => (
-                  <>
-                    <RowMenuItem icon="plus" onClick={() => { close(); setShowEnrollmentForm(true); }}>Kurs ekle</RowMenuItem>
-                    <RowMenuItem icon="students" onClick={() => { close(); setShowGuardianForm(true); }}>Veli ekle</RowMenuItem>
-                    <RowMenuItem
-                      icon={student.status === "Active" ? "x" : "check"}
-                      tone={student.status === "Active" ? "danger" : "default"}
-                      onClick={() => { close(); toggleStatus(); }}
-                    >
-                      {student.status === "Active" ? "Pasife al" : "Yeniden aktif et"}
-                    </RowMenuItem>
-                  </>
-                )}
-              </RowMenu>
-            </>
-          )}
-        </div>
-      </section>
+    <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span></p>
+        <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet h-9 min-h-9 text-xs"><Icon name="activity" className="h-3.5 w-3.5" /> Gelişim</Link>
+        {canManage && <RowMenu label={`${fullName} için işlemler`}>{(close) => <>
+          {activeEnrollments.length > 0 && <RowMenuItem icon="calendar" onClick={() => { close(); setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__"); }}>Ders programı</RowMenuItem>}
+          <RowMenuItem icon="pencil" onClick={() => { close(); setEditingStudent(true); }}>Bilgileri düzenle</RowMenuItem>
+          <RowMenuItem icon="plus" onClick={() => { close(); setShowEnrollmentForm(true); }}>Kurs ekle</RowMenuItem>
+          <RowMenuItem icon="students" onClick={() => { close(); setShowGuardianForm(true); }}>Veli ekle</RowMenuItem>
+          <RowMenuItem icon={student.status === "Active" ? "x" : "check"} tone={student.status === "Active" ? "danger" : "default"} onClick={() => { close(); toggleStatus(); }}>{student.status === "Active" ? "Pasife al" : "Yeniden aktif et"}</RowMenuItem>
+          {onDelete && <RowMenuItem icon="x" tone="danger" onClick={() => { close(); onDelete(); }}>{isAdmin ? "Kalıcı olarak sil" : "Silme talebi oluştur"}</RowMenuItem>}
+        </>}</RowMenu>}
+      </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         {canManage && (
-          <section className="app-card overflow-hidden">
-            <div className="border-b border-[var(--line)] p-4">
-              <SectionHeader
-                title="Veliler"
-                description="İletişime geçilecek kişiler"
-                actions={<AddButton label="Veli ekle" tone="quiet" onClick={() => setShowGuardianForm(true)} />}
-              />
+          <section className="app-card relative">
+            <div className="flex min-h-12 items-center gap-2 border-b border-[var(--line)] px-3 py-2">
+              <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Veliler</h3><p className="text-meta">{guardians?.length ?? 0} kayıtlı kişi</p></div>
+              <button type="button" onClick={() => setShowGuardianForm(true)} className="pressable min-h-9 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Veli</button>
             </div>
             <ul className="divide-y divide-[var(--line)]">
               {guardians?.map((guardian) => (
-                <li key={guardian.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-muted)] text-[.75rem] font-bold text-[var(--brand-strong)]">
-                    {initials(`${guardian.firstName} ${guardian.lastName}`)}
-                  </span>
+                <li key={guardian.id} className="flex min-h-12 items-center gap-2 px-3 py-2">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">{guardian.firstName} {guardian.lastName}</span>
                     <span className="text-meta mt-0.5 block truncate">
@@ -163,13 +118,10 @@ export function StudentDetail({
           </section>
         )}
 
-        <section className="app-card overflow-hidden">
-          <div className="border-b border-[var(--line)] p-4">
-            <SectionHeader
-              title="Kurslar"
-              description="Açık kurs kayıtları"
-              actions={canManage ? <AddButton label="Kurs ekle" tone="quiet" onClick={() => setShowEnrollmentForm(true)} /> : undefined}
-            />
+        <section className="app-card relative">
+          <div className="flex min-h-12 items-center gap-2 border-b border-[var(--line)] px-3 py-2">
+            <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Kurslar</h3><p className="text-meta">{activeEnrollments.length} aktif kayıt</p></div>
+            {canManage && <button type="button" onClick={() => setShowEnrollmentForm(true)} className="pressable min-h-9 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Kurs</button>}
           </div>
           <ul className="divide-y divide-[var(--line)]">
             {activeEnrollments.map((enrollment) => {
@@ -183,7 +135,6 @@ export function StudentDetail({
                   teacherId={enrollment.teacherId}
                   instrumentName={instrument?.name ?? "Enstrüman"}
                   teacherName={teacher ? `${teacher.firstName} ${teacher.lastName}` : "Öğretmen"}
-                  status={ENROLLMENT_STATUS_LABEL[enrollment.status] ?? enrollment.status}
                   series={lessonSeries?.find((item) => item.enrollmentId === enrollment.id) ?? null}
                   isAdmin={isAdmin}
                   canManage={canManage}
@@ -243,10 +194,6 @@ export function StudentDetail({
       )}
     </div>
   );
-}
-
-function initials(name: string) {
-  return name.split(" ").map((part) => part[0]).filter(Boolean).slice(0, 2).join("").toLocaleUpperCase("tr-TR");
 }
 
 // Doğum tarihi "yyyy-MM-dd" gelir; geçersiz/boş değerde yaş yazılmaz (uydurma bilgi göstermeyiz).
@@ -322,13 +269,12 @@ function EditGuardianForm({ studentId, guardian, onClose }: { studentId: string;
   );
 }
 
-function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, teacherName, status, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; teacherName: string; status: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
+function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, teacherName, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; teacherName: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
   const endEnrollment = useEndEnrollment(studentId);
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const badge = instrumentBadgeStyle(instrumentName);
 
   async function remove() {
     setError(null);
@@ -341,18 +287,12 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
   }
 
   return (
-    <li className="px-4 py-3">
-      <div className="flex items-center gap-3">
-        {/* Enstrüman rozeti liste satırındakiyle aynı kimlikte (icons.tsx) - öğrenci
-            listesinde gördüğü ikonu detayda da görsün. */}
-        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${badge.className}`}>
-          <Icon name={badge.icon} className="h-4 w-4" />
-        </span>
+    <li className="px-3 py-2.5">
+      <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-bold">{instrumentName}</span>
           <span className="text-meta mt-0.5 block truncate">{teacherName}</span>
         </span>
-        <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">{status}</span>
         {(isAdmin || canManage) && (
           <RowMenu label={`${instrumentName} kursu için işlemler`}>
             {(close) => (
@@ -381,9 +321,9 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
       {/* Haftalık program satırı: kullanıcı isteği "öğrenci altında program görünebilir
           olmalı, buradan ders saatini güncelleyebilmeliyim". Program yoksa bunu da açıkça
           söylüyoruz - sessiz boşluk "ders yok mu, veri mi gelmedi" sorusunu doğuruyordu. */}
-      <div className="mt-2 flex flex-wrap items-center gap-2 pl-12">
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
         {series ? (
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--brand-strong)]">
+          <span className="inline-flex items-center gap-1.5 text-[.75rem] font-semibold text-[var(--brand-strong)]">
             <Icon name="calendar" className="h-3.5 w-3.5" />
             {formatWeeklySchedule(series)}
           </span>
@@ -484,13 +424,13 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
         </label>
       </div>
 
-      <div className="grid min-w-0 gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-[minmax(0,2fr)_minmax(10rem,1fr)]">
         <fieldset className="min-w-0">
           <legend className="form-label">Gün</legend>
-          <div className="mt-1 grid grid-cols-7 gap-1" role="radiogroup" aria-label="Ders günü">
+          <div className="mt-1 grid grid-cols-4 gap-1.5 sm:grid-cols-7" role="radiogroup" aria-label="Ders günü">
             {SCHEDULE_DAY_KEYS.map((day) => {
               const active = dayOfWeek === day;
-              return <button key={day} type="button" role="radio" aria-checked={active} onClick={() => setDayOfWeek(day)} className={`pressable grid min-h-11 place-items-center rounded-xl border px-1 text-xs font-bold ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm" : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)]"}`}>{SCHEDULE_DAY_SHORT[day]}</button>;
+              return <button key={day} type="button" role="radio" aria-checked={active} onClick={() => setDayOfWeek(day)} className={`pressable grid min-h-11 min-w-0 place-items-center rounded-xl border text-xs font-bold ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm" : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)]"}`}>{SCHEDULE_DAY_SHORT[day]}</button>;
             })}
           </div>
         </fieldset>
