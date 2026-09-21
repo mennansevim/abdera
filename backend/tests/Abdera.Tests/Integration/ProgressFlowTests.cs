@@ -76,7 +76,14 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(seeded.StudentId, progress.StudentId);
         Assert.Equal("Öğrenciprogress-happy Soyad", progress.StudentName);
         Assert.Equal(1, progress.EntryCount);
-        Assert.Equal(created.CreatedAt, progress.LastEntryAt);
+        // Create yanıtındaki DateTimeOffset 100ns hassasiyetinde olabilir; PostgreSQL
+        // timestamptz ise mikrosaniyeye yuvarlar. Aynı anı temsil eden değerleri
+        // veritabanının gerçek hassasiyetinde karşılaştır.
+        Assert.NotNull(progress.LastEntryAt);
+        Assert.InRange(
+            (created.CreatedAt - progress.LastEntryAt.Value).Duration(),
+            TimeSpan.Zero,
+            TimeSpan.FromMicroseconds(1));
 
         var entry = Assert.Single(progress.Entries);
         Assert.Equal(created.Id, entry.Id);
