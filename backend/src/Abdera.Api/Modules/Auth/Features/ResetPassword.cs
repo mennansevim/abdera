@@ -26,6 +26,20 @@ public static class ResetPassword
         IPasswordHasher<User> passwordHasher,
         IClock clock)
     {
+        var response = await ResetAsync(userId, principal, db, passwordHasher, clock);
+        return Results.Ok(response);
+    }
+
+    // Öğretmenler ekranı kullanıcı kimliğini bilmez; People modülü öğretmen kaydından
+    // kullanıcı kimliğini çözüp aynı güvenli reset akışını çağırır. Böylece iki uç nokta
+    // parola üretme, oturumları düşürme ve denetim kaydı kurallarında ayrışmaz.
+    public static async Task<Response> ResetAsync(
+        Guid userId,
+        ClaimsPrincipal principal,
+        AbderaDbContext db,
+        IPasswordHasher<User> passwordHasher,
+        IClock clock)
+    {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId)
             ?? throw new NotFoundException("Kullanıcı bulunamadı.");
 
@@ -37,6 +51,6 @@ public static class ResetPassword
         db.AuditLogs.Add(AuditLog.Record(actorId, "user.password_reset_by_admin", nameof(User), user.Id, clock.UtcNow));
 
         await db.SaveChangesAsync();
-        return Results.Ok(new Response(temporaryPassword));
+        return new Response(temporaryPassword);
     }
 }

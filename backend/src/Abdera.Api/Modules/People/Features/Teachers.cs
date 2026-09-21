@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Auth.Features;
 using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.People.Domain;
@@ -37,6 +38,7 @@ public static class Teachers
         // kontrol handler içinde PeopleAuthorization.EnsureActsAsSelfAsync ile yapılır.
         group.MapPost("/{teacherId:guid}/students", CreateStudentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         group.MapPatch("/{teacherId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        group.MapPost("/{teacherId:guid}/reset-password", ResetPasswordAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
     private static async Task<IResult> ListAsync(AbderaDbContext db)
@@ -206,6 +208,23 @@ public static class Teachers
             teacher.Id, teacher.FirstName, teacher.LastName, teacher.Status,
             instruments.Select(i => i.Id).ToArray(), teacher.UserId is not null);
 
+        return Results.Ok(response);
+    }
+
+    private static async Task<IResult> ResetPasswordAsync(
+        Guid teacherId,
+        ClaimsPrincipal principal,
+        AbderaDbContext db,
+        IPasswordHasher<User> passwordHasher,
+        IClock clock)
+    {
+        var teacher = await db.Teachers.SingleOrDefaultAsync(item => item.Id == teacherId)
+            ?? throw new NotFoundException("Öğretmen bulunamadı.");
+        if (teacher.UserId is null)
+            throw new ConflictException("Bu öğretmenin giriş hesabı yok.");
+
+        var response = await ResetPassword.ResetAsync(
+            teacher.UserId.Value, principal, db, passwordHasher, clock);
         return Results.Ok(response);
     }
 

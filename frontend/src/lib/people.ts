@@ -315,6 +315,12 @@ export function useUpdateTeacher(teacherId: string) {
   });
 }
 
+export function useResetTeacherPassword(teacherId: string) {
+  return useMutation({
+    mutationFn: () => api.post<{ temporaryPassword: string }>(`/api/teachers/${teacherId}/reset-password`),
+  });
+}
+
 export function useCreateStudentForTeacher(teacherId: string) {
   const queryClient = useQueryClient();
   return useMutation({

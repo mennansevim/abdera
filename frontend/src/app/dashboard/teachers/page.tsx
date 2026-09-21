@@ -15,6 +15,7 @@ import {
   useStudents,
   useTeacherOverviews,
   useTeachers,
+  useResetTeacherPassword,
   useUpdateTeacher,
   type Student,
   type Teacher,
@@ -226,11 +227,13 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin }
 // aynı PATCH isteğine gidiyor.
 function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; instruments: { id: string; name: string }[]; onClose: () => void }) {
   const updateTeacher = useUpdateTeacher(teacher.id);
+  const resetPassword = useResetTeacherPassword(teacher.id);
   const [firstName, setFirstName] = useState(teacher.firstName);
   const [lastName, setLastName] = useState(teacher.lastName);
   const [status, setStatus] = useState<TeacherStatus>(teacher.status);
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>(teacher.instrumentIds);
   const [error, setError] = useState<string | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   function toggleInstrument(id: string) {
     setSelectedInstruments((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -244,6 +247,17 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğretmen güncellenemedi.");
+    }
+  }
+
+  async function handlePasswordReset() {
+    setError(null);
+    setTemporaryPassword(null);
+    try {
+      const result = await resetPassword.mutateAsync();
+      setTemporaryPassword(result.temporaryPassword);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Şifre sıfırlanamadı.");
     }
   }
 
@@ -279,6 +293,34 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
           })}
         </div>
       </div>
+
+      {teacher.hasLoginAccount && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-3.5">
+          {temporaryPassword ? (
+            <div className="w-full rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)] p-3" role="status" aria-live="polite">
+              <p className="text-xs font-semibold text-[var(--warning-strong)]">
+                Yeni geçici şifre: <code className="font-mono font-bold">{temporaryPassword}</code>
+              </p>
+              <p className="mt-1 text-[.75rem] text-[var(--warning-strong)]">Öğretmene şimdi ilet; pencere kapandıktan sonra tekrar gösterilmez.</p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <p className="text-xs font-bold">Giriş şifresi</p>
+                <p className="text-meta mt-0.5">Mevcut şifre ve açık oturumlar geçersiz olur.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={resetPassword.isPending}
+                className="btn btn-quiet"
+              >
+                {resetPassword.isPending ? "Sıfırlanıyor…" : "Şifreyi sıfırla"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Kaydet" pending={updateTeacher.isPending} pendingLabel="Kaydediliyor…" disabled={selectedInstruments.length === 0} />
