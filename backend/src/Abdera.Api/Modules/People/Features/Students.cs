@@ -12,9 +12,15 @@ public static class Students
     public record CreateRequest(string FirstName, string LastName, DateOnly BirthDate);
     public record UpdateRequest(string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status);
     public record StudentResponse(Guid Id, string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status);
+    // Satır başına bir KURS KAYDI döner (öğrenci × enstrüman × öğretmen), öğrenci başına
+    // değil: aidat ve toplu ödeme hep kurs kaydı üzerinden işler. EnrollmentId ve CourseKind
+    // bu yüzden yanıtta - toplu ödeme ekranı seçimden sonra ikinci bir istek atmak zorunda
+    // kalmasın (fiyatın tek ekseni CourseKind, bkz. docs/10-decisions.md H1).
     public record StudentSearchResponse(
         Guid StudentId,
         string StudentName,
+        Guid EnrollmentId,
+        CourseKind CourseKind,
         Guid TeacherId,
         string TeacherName,
         Guid InstrumentId,
@@ -107,6 +113,8 @@ public static class Students
             {
                 student.Id,
                 StudentName = student.FirstName + " " + student.LastName,
+                EnrollmentId = enrollment.Id,
+                enrollment.CourseKind,
                 TeacherId = teacher.Id,
                 TeacherName = teacher.FirstName + " " + teacher.LastName,
                 InstrumentId = instrument.Id,
@@ -119,6 +127,8 @@ public static class Students
         return Results.Ok(rows.Select(row => new StudentSearchResponse(
             row.Id,
             row.StudentName,
+            row.EnrollmentId,
+            row.CourseKind,
             row.TeacherId,
             row.TeacherName,
             row.InstrumentId,

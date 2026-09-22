@@ -17,6 +17,7 @@ import {
   type MonthlyDueResult,
   type PaymentMethod,
 } from "@/lib/billing";
+import { formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { StudentBillingSection } from "./student-billing-section";
 
@@ -86,21 +87,6 @@ function isOpen(status: BillingDue["status"]) {
   return status === "Unpaid" || status === "Partial" || status === "Overdue";
 }
 
-function formatMoney(value: number, currency: string) {
-  return new Intl.NumberFormat("tr-TR", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
-}
-
-function formatPeriod(period: string | null | undefined) {
-  if (!isValidPeriod(period)) return "Dönem seçilmedi";
-  return new Date(`${period}-01T00:00:00`).toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
-}
-
-function isValidPeriod(period: string | null | undefined): period is string {
-  if (!period || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return false;
-  const [year] = period.split("-").map(Number);
-  return year >= 1900 && year <= 9999;
-}
-
 function normalizeMonthCount(value: string, max: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(1, Math.min(max, Math.trunc(parsed))) : 1;
@@ -108,10 +94,6 @@ function normalizeMonthCount(value: string, max: number) {
 
 function paymentMethodLabel(method: PaymentMethod) {
   return method === "Transfer" ? "Havale" : method === "Cash" ? "Nakit" : method === "Card" ? "Kart" : "Diğer";
-}
-
-function formatDay(isoDate: string) {
-  return new Date(`${isoDate}T00:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 }
 
 // "Vadesi geçti" yerine "14 gün gecikti": yöneticiye doğrudan aciliyet sırasını verir.
@@ -270,7 +252,7 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
             {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
             {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
           </p>
-          <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-quiet">Dönem aidatlarını oluştur</button>
+          <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-quiet">Aylık aidatları oluştur</button>
           <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
         </div>
       </div>
@@ -732,7 +714,7 @@ function MonthlyDueRunDialog({
   const discounted = plan?.ready.filter((row) => row.discountPercent > 0) ?? [];
 
   return (
-    <Modal open title="Dönem aidatlarını oluştur" description="Seçilen ayın borç kayıtlarını tüm aktif kurslar için oluştur. Bu işlem ödeme almaz." onClose={onClose}>
+    <Modal open title="Aylık aidatları oluştur" description="Seçilen ay için her aktif kursun BORÇ satırını açar - para tahsil etmez. Ödemeyi sonra listedeki satırdan alırsın; birkaç ayı birden tahsil edeceksen Toplu ödeme sekmesini kullan." onClose={onClose}>
       <div className="space-y-3.5">
         <label className="form-label sm:max-w-xs">Dönem
           <input type="month" value={period} onChange={(event) => { setPeriod(event.target.value); setResult(null); setError(null); }} className="field text-sm" />

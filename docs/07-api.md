@@ -12,6 +12,7 @@ POST   /api/users/{userId}/reset-password       ✅ Admin, öğretmen şifresini
 GET    /api/students                            ✅ Teacher yalnızca kendi öğrencilerini görür
 POST   /api/students                            ✅
 GET    /api/students/{studentId}                ✅
+GET    /api/students/search?query=            ✅ satır başına KURS KAYDI döner (enrollmentId + courseKind dahil) - toplu ödeme ekranının girişi
 PATCH  /api/students/{studentId}                ✅
 GET    /api/students/{studentId}/timeline       -- Progress modülü (Phase 6)
 GET    /api/students/{studentId}/guardians       ✅ eklendi - docs'ta yoktu, People'ın temel ilişkisi

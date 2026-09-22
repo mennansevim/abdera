@@ -23,9 +23,13 @@ export interface Student {
   status: StudentStatus;
 }
 
+// Satır başına bir KURS KAYDI (öğrenci × enstrüman × öğretmen) - öğrenci başına değil.
+// Aidat ve toplu ödeme hep kurs kaydı üzerinden işlediği için enrollmentId burada.
 export interface StudentSearchResult {
   studentId: string;
   studentName: string;
+  enrollmentId: string;
+  courseKind: CourseKind;
   teacherId: string;
   teacherName: string;
   instrumentId: string;

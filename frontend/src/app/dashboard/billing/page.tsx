@@ -4,10 +4,14 @@ import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { AdminGate, PageHeader } from "@/components/ui";
 import { useReceivables } from "@/lib/billing";
+import { BulkPaymentSection } from "./bulk-payment-section";
 import { TuitionPolicySection } from "./tuition-policy-section";
 import { DuesListSection, type BillingFilterSummary } from "./dues-list-section";
 
-type BillingView = "collections" | "pricing";
+// Üç ayrı iş, üç ayrı sekme. Karışıklığın kaynağı bunların tek ekranda iç içe olmasıydı:
+// "normal aidat" (aylık borç + tahsilat), "toplu ödeme" (birkaç ayın peşin tahsilatı) ve
+// "fiyat politikası" (tarife + indirim kuralları) birbirinin yerine geçmiyor.
+type BillingView = "collections" | "bulk" | "pricing";
 
 function money(value: number) {
   return new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 }).format(value);
@@ -38,16 +42,17 @@ function BillingPageContent() {
     <div className="space-y-4">
       <PageHeader
         title="Aidat yönetimi"
-        description="Tahsilat durumunu gör, öğrenci hesabına in ve ödemeyi aynı ekrandan kaydet."
+        description="Aylık aidatları takip et, birkaç ayı tek seferde tahsil et, fiyat ve indirim kurallarını yönet."
         actions={
           <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="group" aria-label="Aidat görünümü">
-            <ViewButton active={view === "collections"} onClick={() => setView("collections")} icon="wallet">Tahsilatlar</ViewButton>
+            <ViewButton active={view === "collections"} onClick={() => setView("collections")} icon="wallet">Aylık aidatlar</ViewButton>
+            <ViewButton active={view === "bulk"} onClick={() => setView("bulk")} icon="check">Toplu ödeme</ViewButton>
             <ViewButton active={view === "pricing"} onClick={() => setView("pricing")} icon="settings">Fiyat politikası</ViewButton>
           </div>
         }
       />
 
-      {view === "collections" ? (
+      {view === "collections" && (
         <>
           <section className="grid gap-3 sm:grid-cols-3" aria-label="Tahsilat özeti">
             <SummaryCard icon="wallet" label="Açık bakiye" value={money(summary.outstanding)} detail={`${summary.openCount} aidat bekliyor`} loading={isLoading} />
@@ -56,7 +61,9 @@ function BillingPageContent() {
           </section>
           <DuesListSection onSummaryChange={setFilteredSummary} />
         </>
-      ) : <TuitionPolicySection />}
+      )}
+      {view === "bulk" && <BulkPaymentSection />}
+      {view === "pricing" && <TuitionPolicySection />}
     </div>
   );
 }

@@ -255,6 +255,36 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
 
     // --- Yıl başı peşin ödeme kampanyası ------------------------------------------
 
+    // Toplu ödeme ekranı öğrenciyi /api/students/search ile bulur ve seçtiği satırın
+    // EnrollmentId'siyle doğrudan prepay-preview'a gider. Arama satır başına KURS KAYDI
+    // döndürmezse ekran ikinci bir isteğe muhtaç kalır; bu test o sözleşmeyi korur.
+    [Fact]
+    public async Task Student_search_returns_the_enrollment_a_bulk_payment_can_start_from()
+    {
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var art = await InstrumentIdAsync(admin, "ART");
+        var teacher = await CreateTeacherAsync(admin, "Arama", piano, art);
+        var student = await CreateStudentAsync(admin, "Aranan");
+        var pianoEnrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+        var artEnrollment = await EnrollAsync(admin, student.Id, teacher.Id, art, CourseKind.Group);
+
+        var rows = await ReadAsync<List<Students.StudentSearchResponse>>(
+            await admin.GetAsync("/api/students/search?query=Aranan"));
+
+        // Aynı öğrencinin iki kursu AYRI satırlar: fiyatın tek ekseni CourseKind olduğu
+        // için toplu ödemede hangi kursun ödendiği seçilebilmeli.
+        var mine = rows.Where(row => row.StudentId == student.Id).ToList();
+        Assert.Equal(2, mine.Count);
+        Assert.Equal(CourseKind.Individual, mine.Single(row => row.EnrollmentId == pianoEnrollment.Id).CourseKind);
+        Assert.Equal(CourseKind.Group, mine.Single(row => row.EnrollmentId == artEnrollment.Id).CourseKind);
+
+        var preview = await ReadAsync<PrepayPlans.PreviewResponse>(await admin.GetAsync(
+            $"/api/enrollments/{mine.Single(row => row.EnrollmentId == pianoEnrollment.Id).EnrollmentId}/prepay-preview?startPeriod=2027-03&months=3"));
+        Assert.Equal(pianoEnrollment.Id, preview.EnrollmentId);
+        Assert.Equal(3, preview.MonthRows.Count);
+    }
+
     [Fact]
     public async Task Prepay_plan_stacks_the_campaign_discount_on_top_and_settles_every_month()
     {

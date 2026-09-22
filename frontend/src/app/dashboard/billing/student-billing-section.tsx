@@ -4,13 +4,12 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { isValidPeriod } from "@/lib/billing-format";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import {
   COURSE_KIND_LABEL,
-  useCreatePrepayPlan,
   useCreateReceivable,
   useCorrectPayment,
-  usePrepayPreview,
   useRecordPayment,
   useStudentBilling,
   useUpdateEnrollmentBilling,
@@ -19,14 +18,6 @@ import {
   type PaymentRecord,
   type Receivable,
 } from "@/lib/billing";
-
-function isValidPeriod(period: string | null | undefined): period is string {
-  return !!period && /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
-}
-
-function isValidDateInput(value: string | null | undefined): value is string {
-  return !!value && /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value) && Number.isFinite(new Date(`${value}T00:00:00`).getTime());
-}
 
 // Bu panel bilinçli olarak TEK bir şey yapar: bir öğrencinin aidat geçmişini göstermek ve
 // yeni bir dönem aidatı eklemek. Önceki sürümde aynı bilginin İKİ farklı temsili vardı -
@@ -104,18 +95,10 @@ export function StudentBillingSection({ initialStudentId = "", showStudentPicker
             </details>
           )}
 
-          {activeEnrollments.length > 0 && (
-            <details className="group rounded-xl border border-[var(--line)] bg-white">
-              <summary className="pressable flex min-h-11 cursor-pointer list-none items-center justify-between px-4 text-xs font-bold text-[var(--muted)]">
-                Peşin ödeme al <Icon name="chevron" className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="space-y-3 border-t border-[var(--line)] p-4">
-                {activeEnrollments.map((enrollment) => (
-                  <PrepayBlock key={enrollment.id} studentId={studentId} enrollmentId={enrollment.id} label={enrollmentLabel(enrollment.id)} />
-                ))}
-              </div>
-            </details>
-          )}
+          {/* "Peşin ödeme al" formu buradan KALDIRILDI: aynı iş artık Aidat yönetimi >
+              Toplu ödeme sekmesinde tek bir ekranda yapılıyor. İki ayrı giriş noktası
+              (biri öğrenci künyesinde gizli, biri yok) kullanıcıda "normal aidat mı toplu
+              ödeme mi" karışıklığı yaratıyordu. */}
         </div>
       )}
     </section>
@@ -264,64 +247,6 @@ function EnrollmentDiscountBlock({
         <button type="submit" disabled={updateBilling.isPending} className="btn btn-primary">{updateBilling.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
         {saved && !error && <span className="text-[.75rem] font-bold text-[var(--success-strong)]">Kaydedildi</span>}
       </div>
-      {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
-    </form>
-  );
-}
-
-// Peşin ödeme: tutarı SUNUCU hesaplar (tarife × ay − öğrenci indirimi − kademe indirimi),
-// ekran yalnızca gösterip onaylar. Eski "toplam tutar" alanı salt-okunur bir çarpımdı ve
-// kampanya indirimini ifade edemiyordu.
-function PrepayBlock({ studentId, enrollmentId, label }: { studentId: string; enrollmentId: string; label: string }) {
-  const [startPeriod, setStartPeriod] = useState(() => new Date().toISOString().slice(0, 7));
-  const [months, setMonths] = useState(10);
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [method, setMethod] = useState<PaymentMethod>("Transfer");
-  const [error, setError] = useState<string | null>(null);
-
-  const createPrepayPlan = useCreatePrepayPlan(studentId, enrollmentId);
-  const { data: preview, isLoading } = usePrepayPreview(enrollmentId, startPeriod, months, {
-    enabled: isValidPeriod(startPeriod),
-  });
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    if (!isValidPeriod(startPeriod) || !isValidDateInput(paymentDate)) {
-      setError("Başlangıç dönemi ve ödeme tarihini seçin.");
-      return;
-    }
-    try {
-      await createPrepayPlan.mutateAsync({ startPeriod, months, paymentDate, method, expectedTotal: preview?.total });
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Peşin ödeme kaydedilemedi.");
-    }
-  }
-
-  const blocked = (preview?.blockers.length ?? 0) > 0;
-
-  return (
-    <form onSubmit={handleSubmit} className="rounded-xl border border-[var(--line)] p-4">
-      <p className="mb-2 text-xs font-bold">{label}</p>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="form-label">Başlangıç<input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required className="field min-h-10 text-xs" /></label>
-        <label className="form-label">Kaç ay?<input type="number" min={1} max={24} value={months} onChange={(event) => { setMonths(Math.max(1, Math.min(24, Number(event.target.value) || 1))); setError(null); }} className="field min-h-10 text-xs" /></label>
-        <label className="form-label">Ödeme tarihi<input type="date" value={paymentDate} onChange={(event) => { setPaymentDate(event.target.value); setError(null); }} required className="field min-h-10 text-xs" /></label>
-        <label className="form-label">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 text-xs"><option value="Transfer">Havale</option><option value="Cash">Nakit</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
-      </div>
-
-      {isLoading && <div className="skeleton mt-3 h-16 rounded-xl" />}
-
-      {preview && !isLoading && <dl className="mt-3 space-y-1 rounded-xl bg-[var(--surface-muted)]/60 p-3 text-[.75rem]">
-        <div className="flex justify-between gap-2"><dt className="text-[var(--muted)]">Tarife toplamı ({preview.months} ay)</dt><dd className="tabular-nums">{preview.baseTotal.toLocaleString("tr-TR")} {preview.currency}</dd></div>
-        {preview.studentDiscountPercent > 0 && <div className="flex justify-between gap-2"><dt className="text-[var(--muted)]">{preview.studentDiscountReason}</dt><dd className="tabular-nums text-[var(--success-strong)]">−%{preview.studentDiscountPercent}</dd></div>}
-        {preview.prepayPercent > 0 && <div className="flex justify-between gap-2"><dt className="text-[var(--muted)]">Peşin ödeme indirimi</dt><dd className="tabular-nums text-[var(--success-strong)]">−%{preview.prepayPercent}</dd></div>}
-        <div className="flex justify-between gap-2 border-t border-[var(--line)] pt-1.5"><dt className="font-bold">Ödenecek</dt><dd className="font-bold tabular-nums text-[var(--brand-strong)]">{preview.total.toLocaleString("tr-TR")} {preview.currency}</dd></div>
-      </dl>}
-
-      {blocked && <p role="alert" className="mt-2 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs font-semibold text-[var(--warning-strong)]">{preview!.blockers.join(" ")} Başlangıç dönemini değiştirin.</p>}
-
-      <button type="submit" disabled={createPrepayPlan.isPending || blocked || !preview?.total} className="btn btn-primary mt-3">{createPrepayPlan.isPending ? "Kaydediliyor…" : "Peşin ödemeyi kaydet"}</button>
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
