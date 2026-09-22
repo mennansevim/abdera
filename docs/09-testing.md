@@ -136,3 +136,29 @@ Bu kural test için gevşetilmez. CI'da her koşu temiz bir container ile başla
 olmaz; yalnızca `retries: 1` yeniden denemesine yer bırakmak üzere smoke ortamının `.env`'inde
 eşik yükseltilir (bkz. `.github/workflows/ci.yml`) — mekanizma yine çalışır, yalnızca eşik
 farklıdır. Kuralın kendisi backend testlerinde kendi düşük limitli factory'siyle doğrulanır.
+
+## Testleri yerelde çalıştırma
+
+`./tools/test.sh` — CI'daki katmanların yerel karşılığı. Hedefler bilerek ayrı, çünkü
+gereksinimleri farklı:
+
+| Komut | Ne koşar | Docker | Süre |
+|---|---|---|---|
+| `./tools/test.sh unit` | Birim testleri (hesaplama, zamanlama, RSVP kuralları) | gerekmez | ~5 sn |
+| `./tools/test.sh integration` | Testcontainers'lı entegrasyon testleri | **gerekir** | dakikalar |
+| `./tools/test.sh backend` | ikisi birden | gerekir | dakikalar |
+| `./tools/test.sh frontend` | lint + build (tip kontrolü build'de) | gerekmez | ~1 dk |
+| `./tools/test.sh e2e` | Compose + üç rol Playwright smoke | **gerekir** | en yavaş |
+| `./tools/test.sh` | unit + integration + frontend | gerekir | — |
+
+Geliştirirken `unit`, push öncesi `backend`, sürüm öncesi hepsi.
+
+Script iki sık takılma noktasını ÖNDEN, anlaşılır bir mesajla yakalar:
+
+- **SDK uyuşmazlığı.** `global.json` belirli bir sürüm sabitler; yüklü SDK daha düşük bir
+  feature band ise `dotnet` hiçbir şey çalıştırmadan "SDK not found" der ve sebebini
+  söylemez. Script hangi sürümün istendiğini ve nelerin yüklü olduğunu yazar.
+- **Test imajı indirilemiyor.** Testcontainers `postgres:16-alpine` çeker. Anonim Docker Hub
+  limiti (429) ya da kurumsal proxy (403) bunu engelleyebilir; hata test koşusunun ortasında
+  okunması zor bir biçimde çıkar. Script imajı önden çeker ve hangi durumda ne yapılacağını
+  söyler. İmaj yerelde varsa ağa hiç çıkılmaz.
