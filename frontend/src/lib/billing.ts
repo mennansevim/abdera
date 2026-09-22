@@ -224,76 +224,12 @@ export function useBillingDues(options?: { enabled?: boolean }) {
   });
 }
 
-// Ay başı üretimi (MonthlyDueRun.cs): bir dönemin aidatlarını tüm aktif kurs kayıtları
-// için tek çağrıda açar. Önizleme ayrı bir uçtan gelir; ekran "kim ne kadar ödeyecek,
-// hangi indirimle, hangileri zaten var, hangisinde tarife eksik" bilgisini işlemden
-// ÖNCE gösterebilsin diye.
-export type MonthlyDueTarget = {
-  enrollmentId: string;
-  studentId: string;
-  studentName: string;
-  instrumentName: string;
-  teacherName: string;
-  courseKind: CourseKind;
-  baseAmount: number;
-  discountPercent: number;
-  discountReason: string | null;
-  amount: number;
-  currency: string;
-};
-
-export type MonthlyDueMissing = {
-  enrollmentId: string;
-  studentId: string;
-  studentName: string;
-  instrumentName: string;
-  teacherName: string;
-  courseKind: CourseKind;
-  reason: string;
-};
-
-export type MonthlyDuePlan = {
-  period: string;
-  dueDate: string;
-  ready: MonthlyDueTarget[];
-  alreadyExists: MonthlyDueTarget[];
-  missing: MonthlyDueMissing[];
-  readyBaseTotal: number;
-  readyTotal: number;
-  readyDiscountTotal: number;
-  currency: string;
-};
-
-export type MonthlyDueResult = {
-  period: string;
-  createdCount: number;
-  createdTotal: number;
-  createdDiscountTotal: number;
-  currency: string;
-  alreadyExistsCount: number;
-  missing: MonthlyDueMissing[];
-};
-
-export function useMonthlyDuePlan(period: string, options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ["monthly-due-run", period],
-    queryFn: () => api.get<MonthlyDuePlan>(`/api/receivables/monthly-run?period=${encodeURIComponent(period)}`),
-    enabled: !!period && (options?.enabled ?? true),
-  });
-}
-
-export function useRunMonthlyDues() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (period: string) => api.post<MonthlyDueResult>("/api/receivables/monthly-run", { period }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["receivables"] });
-      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
-      queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
-      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
-    },
-  });
-}
+// Ay başı üretimi artık admin'in elle tetiklediği bir akış değil - her kayıt zaten en
+// az 1 yıllık sabit haftalık ders taahhüdü olduğu için hangi aidatın açılacağı önceden
+// belli. MonthlyReceivableGenerator (backend, BackgroundService) bunu periyodik olarak
+// kendisi yapar. `POST /api/receivables/monthly-run` yalnızca bir kaçış kapısı olarak
+// (gecikmiş/atlanmış bir dönemi elle telafi etmek için) API'de duruyor; rutin arayüz
+// yüzeyi kaldırıldığı için burada bir istemci sarmalayıcısı tutulmuyor.
 
 export function useCreateReceivable(studentId: string) {
   const queryClient = useQueryClient();

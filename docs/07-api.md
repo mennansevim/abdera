@@ -88,6 +88,8 @@ POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edileme
 POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
 GET    /api/receivables/monthly-run             ✅ ?period=yyyy-MM - açılacak/zaten var/tarifesiz dökümü + indirim toplamı
 POST   /api/receivables/monthly-run             ✅ dönemin aidatını tüm aktif kayıtlar için tek çağrıda açar; yeni kayıt yoksa 409
+                                                    (H14: rutin akış artık MonthlyReceivableGenerator'ın günlük otomatik çalışması -
+                                                    bu uç yalnızca AdminOnly elle telafi/kaçış kapısı olarak duruyor)
 POST   /api/payments/{paymentId}/corrections    ✅ değiştirilemez düzeltme satırı; fazla ödeme reddi + audit
 GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
 POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar

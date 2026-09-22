@@ -2,19 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { FormMessage, Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
+import { Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  COURSE_KIND_LABEL,
   useBillingDues,
   useCreatePrepayPlan,
-  useMonthlyDuePlan,
   usePrepayPreview,
   useRecordPayment,
-  useRunMonthlyDues,
   useStudentBilling,
   type BillingDue,
-  type MonthlyDueResult,
   type PaymentMethod,
 } from "@/lib/billing";
 import { formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
@@ -114,7 +110,6 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   // tahsilat panelinin (QuickCollectPanel) kendi öğrenci seçimi ayrıdır.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
-  const [showMonthlyRun, setShowMonthlyRun] = useState(false);
   const [teacherFilter, setTeacherFilter] = useSessionState("abdera:billing:teacher", "all");
   const [studentSearch, setStudentSearch] = useSessionState("abdera:billing:student-search", "");
 
@@ -215,15 +210,6 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   const hasActiveFilters = teacherFilter !== "all" || studentSearch.trim() !== "" || filter !== "all";
 
   return <div className="space-y-4">
-    {/* Yalnızca açıkken monte edilir: pencere her açılışta temiz durumla (o anki dönem,
-        önceki çalıştırmanın sonucu olmadan) başlasın diye - state'i effect'te sıfırlamak
-        yerine bileşeni yeniden kurmak hem daha basit hem fazladan render turu üretmiyor. */}
-    {showMonthlyRun && <MonthlyDueRunDialog
-      defaultPeriod={activePeriod === ALL_PERIODS ? new Date().toISOString().slice(0, 7) : activePeriod}
-      onClose={() => setShowMonthlyRun(false)}
-      onGoToStudent={(studentId) => { setShowMonthlyRun(false); setSelectedStudentId(studentId); }}
-    />}
-
     <Modal open={showCreatePanel} title="Tahsilat kaydet" description="Öğrenciyi, ilk dönemi ve kaç aylık ödeme yaptığını seç; aylar otomatik olarak ödendi işaretlensin." onClose={() => setShowCreatePanel(false)}>
       <QuickCollectPanel
         pickerRef={studentPickerRef}
@@ -253,7 +239,6 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
             {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
             {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
           </p>
-          <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-quiet">Aylık aidatları oluştur</button>
           <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
         </div>
       </div>
@@ -285,16 +270,12 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
         {!dues?.length
           ? <>
               <p className="mt-3 text-sm font-bold">Henüz aidat kaydı yok</p>
-              <p className="text-meta mt-1">Bu ayın aidatlarını tek düğmeyle aç - tutarlar okulun tarifesinden, indirimler otomatik hesaplanır. Aidat oluşturulduğunda tahsilat, kısmi ödeme ve gecikme takibi buradan yürür.</p>
-              <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-primary mt-3">Dönem aidatı oluştur</button>
+              <p className="text-meta mt-1">Aktif kurs kayıtları için aidatlar her ayın başında otomatik açılır - tutarlar okulun tarifesinden, indirimler otomatik hesaplanır. Bir kayıt eklendiğinde ilk aidatı da bir sonraki ay başında burada görünür.</p>
             </>
           : <>
               <p className="mt-3 text-sm font-bold">Bu dönemde aidat yok</p>
-              <p className="text-meta mt-1">{hasActiveFilters ? "Seçili filtrelerle eşleşen aidat bulunamadı." : "Bu dönem için henüz aidat oluşturulmamış."} Başka bir dönem seçebilir veya yeni bir dönem aidatı ekleyebilirsin.</p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button type="button" onClick={clearFilters} className="btn btn-quiet">Filtreleri temizle</button>
-                <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-primary">Dönem aidatı oluştur</button>
-              </div>
+              <p className="text-meta mt-1">{hasActiveFilters ? "Seçili filtrelerle eşleşen aidat bulunamadı." : "Bu dönem için aidat oluşmamış."} Başka bir dönem seçebilirsin.</p>
+              {hasActiveFilters && <button type="button" onClick={clearFilters} className="btn btn-quiet mt-3">Filtreleri temizle</button>}
             </>}
       </div></div>}
     </section>
@@ -679,132 +660,3 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   </div>;
 }
 
-// Ay başının tek düğmesi: seçilen ayın aidatlarını tüm aktif kurs kayıtları için açar.
-// İşlemden ÖNCE ne olacağını gösterir - kaç aidat açılacak, TOPLAM NE KADAR İNDİRİM
-// uygulanacak, hangileri zaten var ve en önemlisi hangileri açılamıyor.
-//
-// Eskiden "eksik" listesi ücret planı olmayan kayıtları gösteriyordu ve bu liste pratikte
-// hep doluydu (her kayıt için ayrı plan açmak gerekiyordu). Artık tek eksik sebebi kalmış
-// olabilir: o ders türü için yürürlükte bir tarifenin olmaması - yani ayda bir değil,
-// sezonda bir karşılaşılacak bir durum.
-function MonthlyDueRunDialog({
-  defaultPeriod,
-  onClose,
-  onGoToStudent,
-}: {
-  defaultPeriod: string;
-  onClose: () => void;
-  onGoToStudent: (studentId: string) => void;
-}) {
-  const [period, setPeriod] = useState(defaultPeriod);
-  const [result, setResult] = useState<MonthlyDueResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const { data: plan, isLoading } = useMonthlyDuePlan(period);
-  const runMonthlyDues = useRunMonthlyDues();
-
-  async function run() {
-    setError(null);
-    try {
-      setResult(await runMonthlyDues.mutateAsync(period));
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Dönem aidatları oluşturulamadı.");
-    }
-  }
-
-  const missing = result?.missing ?? plan?.missing ?? [];
-  const discounted = plan?.ready.filter((row) => row.discountPercent > 0) ?? [];
-
-  return (
-    <Modal open title="Aylık aidatları oluştur" description="Seçilen ay için her aktif kursun BORÇ satırını açar - para tahsil etmez. Ödemeyi sonra listedeki satırdan alırsın; birkaç ayı birden tahsil edeceksen Toplu ödeme sekmesini kullan." onClose={onClose}>
-      <div className="space-y-3.5">
-        <label className="form-label sm:max-w-xs">Dönem
-          <input type="month" value={period} onChange={(event) => { setPeriod(event.target.value); setResult(null); setError(null); }} className="field text-sm" />
-        </label>
-
-        {isLoading && <div className="skeleton h-20 rounded-xl" />}
-
-        {!isLoading && plan && !result && (
-          <>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <SummaryTile label="Açılacak aidat" value={`${plan.ready.length}`} detail={plan.ready.length ? formatMoney(plan.readyTotal, plan.currency) : "—"} tone="brand" />
-              <SummaryTile label="Uygulanan indirim" value={plan.readyDiscountTotal > 0 ? formatMoney(plan.readyDiscountTotal, plan.currency) : "—"} detail={discounted.length ? `${discounted.length} kursta` : "İndirim yok"} tone={plan.readyDiscountTotal > 0 ? "warning" : "muted"} />
-              <SummaryTile label="Zaten var" value={`${plan.alreadyExists.length}`} detail="Bu dönemde açılmış" tone="muted" />
-            </div>
-
-            {plan.ready.length > 0 && <section className="rounded-xl border border-[var(--line)]">
-              <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 px-3 py-2">
-                <p className="text-[.75rem] font-bold text-[var(--muted)]">Açılacak aidatlar</p>
-                <p className="text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">Vade {formatDay(plan.dueDate)}</p>
-              </div>
-              <ul className="max-h-56 divide-y divide-[var(--line)] overflow-y-auto">
-                {plan.ready.map((row) => (
-                  <li key={row.enrollmentId} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                    <span className="min-w-0">
-                      <strong className="block truncate">{row.studentName}</strong>
-                      <span className="text-meta block truncate">{row.instrumentName} · {COURSE_KIND_LABEL[row.courseKind]} · {row.teacherName}</span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <strong className="block tabular-nums">{formatMoney(row.amount, row.currency)}</strong>
-                      {row.discountPercent > 0 && <span className="text-meta block truncate">{row.discountReason}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>}
-          </>
-        )}
-
-        {result && (
-          <FormMessage tone="success">
-            {result.createdCount} aidat oluşturuldu · {formatMoney(result.createdTotal, result.currency)}
-            {result.createdDiscountTotal > 0 && ` · ${formatMoney(result.createdDiscountTotal, result.currency)} indirim uygulandı`}
-            {result.alreadyExistsCount > 0 && ` · ${result.alreadyExistsCount} kayıt zaten vardı`}
-          </FormMessage>
-        )}
-
-        {missing.length > 0 && (
-          <section className="rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)]/50 p-3">
-            <p className="text-xs font-bold text-[var(--warning-strong)]">Aidatı açılamayan {missing.length} kurs</p>
-            <p className="text-meta mt-0.5">Bu ders türü için o dönemde yürürlükte bir tarife yok. Fiyat politikası ekranından tarifeyi tanımla.</p>
-            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-              {missing.map((row) => (
-                <li key={row.enrollmentId}>
-                  <button type="button" onClick={() => onGoToStudent(row.studentId)} className="pressable flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left text-xs hover:bg-[var(--brand-soft)]">
-                    <span className="min-w-0"><strong>{row.studentName}</strong><span className="text-meta"> · {row.instrumentName} · {row.teacherName}</span></span>
-                    <span className="text-meta shrink-0">{row.reason}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {error && <FormMessage tone="error">{error}</FormMessage>}
-
-        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
-          <button type="button" onClick={onClose} className="btn btn-quiet">{result ? "Kapat" : "Vazgeç"}</button>
-          {!result && (
-            <button type="button" onClick={run} disabled={runMonthlyDues.isPending || !plan?.ready.length} className="btn btn-primary">
-              {runMonthlyDues.isPending ? "Oluşturuluyor…" : plan?.ready.length ? `${plan.ready.length} aidatı oluştur` : "Açılacak aidat yok"}
-            </button>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function SummaryTile({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "brand" | "muted" | "warning" }) {
-  const palette = {
-    brand: "text-[var(--brand-strong)]",
-    muted: "text-[var(--muted)]",
-    warning: "text-[var(--warning-strong)]",
-  }[tone];
-  return (
-    <div className="rounded-xl border border-[var(--line)] p-3">
-      <p className="text-meta font-bold">{label}</p>
-      <p className={`mt-1 text-lg font-bold tabular-nums ${palette}`}>{value}</p>
-      <p className="text-meta mt-0.5 truncate">{detail}</p>
-    </div>
-  );
-}

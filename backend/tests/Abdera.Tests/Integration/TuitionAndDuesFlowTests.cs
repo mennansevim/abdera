@@ -5,7 +5,9 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
+using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -194,6 +196,42 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
             await admin.GetAsync("/api/receivables/monthly-run?period=2026-10"));
         Assert.Contains(rerun.AlreadyExists, row => row.EnrollmentId == enrollment.Id);
         Assert.DoesNotContain(rerun.Ready, row => row.EnrollmentId == enrollment.Id);
+    }
+
+    [Fact]
+    public async Task Background_generator_creates_receivables_with_no_actor_and_is_a_silent_noop_on_rerun()
+    {
+        // MonthlyReceivableGenerator (BackgroundService, Billing/Infrastructure) admin onayı
+        // beklemeden bu yolu çağırır - kullanıcı kararı: her kayıt zaten en az 1 yıllık sabit
+        // haftalık taahhüt olduğu için hangi aidatın açılacağı elle onaylanacak bir şey değil.
+        await using var db = await _factory.CreateDbContextAsync();
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "Otomatik", piano);
+        var student = await CreateStudentAsync(admin, "Otomatik");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+
+        var result = await MonthlyDueRun.RunAsync(db, clock, "2026-12", actorId: null, throwIfEmpty: false);
+        Assert.True(result.CreatedCount > 0);
+
+        var written = await db.Receivables.AsNoTracking()
+            .SingleAsync(receivable => receivable.EnrollmentId == enrollment.Id && receivable.Period == "2026-12");
+        Assert.Equal(ReceivableStatus.Unpaid, written.Status);
+
+        // AuditLog.ActorUserId'nin sistem-kaynaklı olayları null işaretlemesi (CLAUDE.md) -
+        // otomatik matched banka ödemesi/backup hataları ile aynı kural.
+        var auditLog = await db.AuditLogs.AsNoTracking().SingleAsync(log =>
+            log.Action == "receivable.monthly_run_created" && log.EntityId == written.Id);
+        Assert.Null(auditLog.ActorUserId);
+
+        // Servis günde bir kez (ve açılışta) tekrar çalışır - aynı dönemi ikinci kez
+        // çağırmak HTTP uç noktasının aksine (Conflict) sessiz bir no-op'tur, ikinci bir
+        // kayıt açmaz (UNIQUE enrollment_id+period zaten var olanı "AlreadyExists"e düşürür).
+        var rerun = await MonthlyDueRun.RunAsync(db, clock, "2026-12", actorId: null, throwIfEmpty: false);
+        Assert.Equal(0, rerun.CreatedCount);
+        Assert.Equal(1, await db.Receivables.CountAsync(
+            r => r.EnrollmentId == enrollment.Id && r.Period == "2026-12"));
     }
 
     [Fact]
