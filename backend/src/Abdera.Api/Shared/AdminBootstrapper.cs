@@ -68,6 +68,12 @@ public static class AdminBootstrapper
         ILogger<Program> logger)
     {
         var admin = await db.Users.SingleOrDefaultAsync(item => item.Email == DemoAdminEmail);
+        // YENİ oluşturulan hesabın PasswordHash'i "placeholder" - geçerli bir hash değil.
+        // VerifyHashedPassword onu Base64 olarak çözmeye çalışıp FormatException fırlatıyor
+        // ve uygulama açılışta çöküyordu (boş veritabanı + Demo:Enabled=true). Mevcut bir
+        // veritabanında hesaplar zaten gerçek hash taşıdığı için hata yalnızca İLK kurulumda
+        // görünüyordu; bu yüzden gözden kaçmıştı.
+        var adminIsNew = admin is null;
         if (admin is null)
         {
             admin = User.Create(DemoAdminEmail, "placeholder", UserRole.Admin, clock.UtcNow);
@@ -78,19 +84,20 @@ public static class AdminBootstrapper
         // çağırmak açık admin çerezlerini geçersiz kılar ve kullanıcı takvimi görse bile
         // ders oluştururken 401 alır. Demo şifre gerçekten değişmişse (veya hesap yeni
         // oluşturulmuşsa) yalnızca o durumda yeniden hash'le.
-        if (passwordHasher.VerifyHashedPassword(admin, admin.PasswordHash, DemoPassword) == PasswordVerificationResult.Failed)
+        if (adminIsNew || passwordHasher.VerifyHashedPassword(admin, admin.PasswordHash, DemoPassword) == PasswordVerificationResult.Failed)
         {
             admin.SetPassword(passwordHasher.HashPassword(admin, DemoPassword), clock.UtcNow);
         }
 
         var teacherUser = await db.Users.SingleOrDefaultAsync(item => item.Email == DemoTeacherEmail);
+        var teacherIsNew = teacherUser is null;
         if (teacherUser is null)
         {
             teacherUser = User.Create(DemoTeacherEmail, "placeholder", UserRole.Teacher, clock.UtcNow);
             db.Users.Add(teacherUser);
             db.AuditLogs.Add(AuditLog.Record(null, "user.bootstrap_demo_teacher_created", nameof(User), teacherUser.Id, clock.UtcNow));
         }
-        if (passwordHasher.VerifyHashedPassword(teacherUser, teacherUser.PasswordHash, DemoPassword) == PasswordVerificationResult.Failed)
+        if (teacherIsNew || passwordHasher.VerifyHashedPassword(teacherUser, teacherUser.PasswordHash, DemoPassword) == PasswordVerificationResult.Failed)
         {
             teacherUser.SetPassword(passwordHasher.HashPassword(teacherUser, DemoPassword), clock.UtcNow);
         }

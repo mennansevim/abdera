@@ -326,6 +326,46 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Contains("→", teacherNotice.Body);
     }
 
+    // Kullanıcı kuralı: "admin takvimdeki dersleri iptal etme, telafi tanımlama, güncelleme
+    // yetkisine sahiptir." Saati geçmiş bir ders de buna dahil - yanlış girilmiş bir kaydı
+    // düzeltmenin başka yolu yok ve silmek audit izini bozar. Öğretmende kural sürüyor.
+    [Fact]
+    public async Task Admin_can_move_a_lesson_that_already_started_but_a_teacher_cannot()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "past-edit");
+
+        var pastStart = DateTimeOffset.UtcNow.AddDays(-3);
+        var correctedStart = pastStart.AddHours(1);
+
+        var adminResponse = await admin.PatchAsJsonAsync(
+            $"/api/lessons/{seeded.LessonId}",
+            new UpdateLesson.Request(seeded.StudentId, seeded.TeacherId, correctedStart, 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.OK, adminResponse.StatusCode);
+        var corrected = await ReadUpdatedLessonAsync(db, adminResponse);
+        Assert.Equal(correctedStart, corrected.StartAt);
+
+        // Aynı istek öğretmende reddedilmeli.
+        var teacherOwned = await SeedLessonAsync(admin, "past-edit-teacher");
+        using var teacher = _factory.CreateClient();
+        (await teacher.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(teacherOwned.TeacherEmail, teacherOwned.TeacherTempPassword))).EnsureSuccessStatusCode();
+
+        var teacherResponse = await teacher.PatchAsJsonAsync(
+            $"/api/lessons/{teacherOwned.LessonId}",
+            new UpdateLesson.Request(teacherOwned.StudentId, teacherOwned.TeacherId, correctedStart, 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.BadRequest, teacherResponse.StatusCode);
+    }
+
+    private static async Task<Abdera.Api.Modules.Scheduling.Domain.Lesson> ReadUpdatedLessonAsync(
+        Abdera.Api.Shared.AbderaDbContext db, HttpResponseMessage response)
+    {
+        var result = (await response.Content.ReadFromJsonAsync<UpdateLesson.Response>(TestJson.Options))!;
+        db.ChangeTracker.Clear();
+        return await db.Lessons.AsNoTracking().SingleAsync(item => item.Id == result.LessonId);
+    }
+
     [Fact]
     public async Task Teacher_edits_own_lesson_occurrence_but_cannot_edit_another_teachers_lesson()
     {

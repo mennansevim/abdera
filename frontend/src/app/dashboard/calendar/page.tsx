@@ -979,9 +979,15 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
   const eligibleEnrollments = enrollments?.filter((item) => item.status === "Active" && item.instrumentId === lesson.instrumentId) ?? [];
   const eligibleTeacherIds = new Set(eligibleEnrollments.map((item) => item.teacherId));
   const eligibleTeachers = teachers?.filter((teacher) => teacher.status === "Active" && eligibleTeacherIds.has(teacher.id)) ?? [];
-  const canEdit = canManage && lesson.status === "Normal" && start.getTime() >= now.getTime();
+  // Admin takvimdeki her PLANLI dersi iptal edebilir, telafi tanımlayabilir ve
+  // güncelleyebilir - dersin saati geçmiş olsa bile. Yanlış girilmiş bir dersi düzeltmenin
+  // tek yolu buydu ve düğmeler saat geçince kayboluyordu. Öğretmen için eski kural sürüyor:
+  // yalnızca kendi dersi ve yalnızca ders başlamadan önce.
+  // Tamamlanmış/iptal edilmiş ders hiç kimsede düzenlenmez - bu bir yetki değil, domain
+  // invariant'ı (Lesson.Cancel / UpdateLesson `Status != Normal` ile reddeder).
+  const canEdit = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() >= now.getTime());
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
-  const canCancelWithMakeup = canManage && lesson.status === "Normal" && start.getTime() > now.getTime();
+  const canCancelWithMakeup = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() > now.getTime());
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -992,7 +998,8 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
       setError("Geçerli bir tarih, saat ve 15–180 dakika arasında bir süre girin.");
       return;
     }
-    if (nextStart.getTime() < Date.now()) {
+    // Geçmişe taşıma yalnızca Admin'de - sunucu da aynı kuralı uygular (UpdateLesson.cs).
+    if (!isAdmin && nextStart.getTime() < Date.now()) {
       setError("Geçmiş bir tarih veya saate ders planlanamaz.");
       return;
     }

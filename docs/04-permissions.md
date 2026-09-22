@@ -85,3 +85,16 @@ serisini seçilen tarihten itibaren yeniden planlayabilir ve kendi dersini okul 
 ederek öğrenciye telafi hakkı tanımlayabilir (`POST /api/lessons/{id}/cancel`). Başka bir
 öğretmenin dersinde bu uçlar `403` döner. Telafi hakkını yeni bir derse yerleştirmek hâlâ
 yalnızca Admin'dedir.
+
+### Admin'in ders üzerindeki yetkisi zamanla sınırlı değildir (2026-09-22)
+
+Kullanıcı kuralı: "admin takvimdeki dersleri iptal etme, telafi tanımlama, güncelleme
+yetkisine sahiptir." Takvimdeki ders ayrıntısı penceresi bu üç eylemi (iptal + telafi,
+telafisiz iptal, düzenle) dersin saati **geçmiş olsa bile** Admin'e gösterir; `UpdateLesson`
+da Admin için "ders başlangıcı gelecekte olmalı" kuralını uygulamaz. Gerekçe: yanlış girilmiş
+bir dersi düzeltmenin başka yolu yok ve kaydı silmek finansal/audit izini bozar.
+
+Öğretmende kural aynen sürüyor — yalnızca kendi dersi ve yalnızca ders başlamadan önce;
+geçmişi geriye dönük değiştirmek ayrı bir yetkidir. Her iki rolde de **tamamlanmış veya
+iptal edilmiş** bir ders düzenlenemez: bu bir yetki sınırı değil, domain invariant'ıdır
+(`Lesson.Cancel` / `UpdateLesson` `Status != Normal` ile `409` döner).

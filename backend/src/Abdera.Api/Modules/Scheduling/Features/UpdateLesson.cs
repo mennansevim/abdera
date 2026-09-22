@@ -77,7 +77,12 @@ public static class UpdateLesson
             {
                 ["durationMinutes"] = [$"Ders süresi {Lesson.MinimumDurationMinutes}–{Lesson.MaximumDurationMinutes} dakika arasında olmalı."],
             });
-        if (request.StartAt <= clock.UtcNow)
+        // Admin geçmişe kalmış bir dersi de düzeltebilir: yanlış girilmiş bir ders saatini
+        // sonradan düzeltmenin başka yolu yok ve kaydı silmek finansal/audit izini bozar
+        // (kullanıcı kuralı: "admin takvimdeki dersleri iptal etme, telafi tanımlama,
+        // güncelleme yetkisine sahiptir"). Öğretmen için kural sürüyor - geçmişi geriye
+        // dönük değiştirmek ayrı bir yetkidir.
+        if (request.StartAt <= clock.UtcNow && !AuthContext.IsAdmin(principal))
             throw new ValidationFailedException(new Dictionary<string, string[]>
             {
                 ["startAt"] = ["Ders başlangıcı gelecekte olmalı."],
