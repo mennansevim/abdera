@@ -437,15 +437,18 @@ function QuickCollectPanel({
           </label>
         </div>
 
-        {previewLoading && !settleRemainingOnly && <div className="skeleton mt-3 h-20 rounded-xl" />}
+        {hasStartPeriod && previewLoading && !settleRemainingOnly && <div className="skeleton mt-3 h-20 rounded-xl" />}
 
-        {(preview || settleRemainingOnly) && <div className="mt-3 rounded-xl bg-white p-3">
+        {/* Dönem temizlendiğinde özet kutusu (ve içindeki açıklama) tamamen kayboluyordu:
+            tahsilat düğmeleri sessizce pasifleşiyor, kullanıcı SEBEBİNİ göremiyordu.
+            Boş dönem artık kendi uyarısını basıyor. */}
+        {!hasStartPeriod && <p role="alert" className="mt-3 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs font-semibold text-[var(--warning-strong)]">İlk dönemi seçin — bu alan boşken tahsilat kaydedilemez.</p>}
+
+        {hasStartPeriod && (preview || settleRemainingOnly) && <div className="mt-3 rounded-xl bg-white p-3">
           <p className="text-[.75rem] font-semibold capitalize text-[var(--muted)]">
-            {!hasStartPeriod
-              ? "İlk dönemi seçin"
-              : months === 1
-                ? formatPeriod(startPeriod)
-                : `${formatPeriod(preview?.monthRows[0]?.period ?? startPeriod)} – ${formatPeriod(preview?.monthRows.at(-1)?.period)}`}
+            {months === 1
+              ? formatPeriod(startPeriod)
+              : `${formatPeriod(preview?.monthRows[0]?.period ?? startPeriod)} – ${formatPeriod(preview?.monthRows.at(-1)?.period)}`}
             {" · "}{months} ay
           </p>
 

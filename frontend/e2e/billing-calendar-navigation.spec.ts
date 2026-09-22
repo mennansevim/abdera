@@ -5,7 +5,9 @@ const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@example.com";
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "DevAdmin123!";
 
 async function loginAdmin(page: Page) {
-  await page.goto("/login");
+  // chooseRole=1: açık bir oturum varken /login doğrudan /dashboard'a yönlenir ve rol
+  // kartları render edilmez (login/page.tsx). Bu parametre bilinçli rol seçimi yoludur.
+  await page.goto("/login?chooseRole=1");
   await page.getByRole("radio", { name: /Yöneticiyim/ }).click();
   await page.locator("#email").fill(adminEmail);
   await page.locator("#password").fill(adminPassword);
@@ -14,35 +16,22 @@ async function loginAdmin(page: Page) {
 }
 
 async function createBillingFixture(page: Page) {
-  const instruments = await (await page.request.get(`${apiUrl}/api/instruments`)).json();
   const students = await (await page.request.get(`${apiUrl}/api/students`)).json();
   const student = students[0];
   const enrollments = await (await page.request.get(`${apiUrl}/api/students/${student.id}/enrollments`)).json();
   const enrollment = enrollments[0];
-  const instrument = instruments.find((item: { id: string }) => item.id === enrollment.instrumentId);
 
-  const existingLists = await (await page.request.get(`${apiUrl}/api/price-lists`)).json();
-  let priceItem = existingLists.flatMap((list: { items: Array<{ instrumentId: string }> }) => list.items)
-    .find((item: { instrumentId: string }) => item.instrumentId === instrument.id);
-  if (!priceItem) {
-    const created = await page.request.post(`${apiUrl}/api/price-lists`, {
-      data: {
-        name: `E2E Fiyat ${Date.now()}`,
-        effectiveFrom: "2026-01-01",
-        effectiveUntil: null,
-        items: [{ instrumentId: instrument.id, durationMinutes: 50, billingType: "Monthly", amount: 100, currency: "TRY", packageLessonCount: null }],
-      },
-    });
-    expect(created.status()).toBe(201);
-    priceItem = (await created.json()).items[0];
-  }
-
-  expect((await page.request.post(`${apiUrl}/api/enrollments/${enrollment.id}/fee-plan`, {
-    data: { priceListItemId: priceItem.id, dueDay: 5, activeFrom: "2026-01-01" },
-  })).status()).toBe(201);
-  expect((await page.request.post(`${apiUrl}/api/receivables`, {
+  // Aidat modeli yeniden tasarlandığında (docs/10-decisions.md H1) fiyat listesi -> fiyat
+  // kalemi -> ücret planı zinciri ve `/api/price-lists*`, `/api/enrollments/{id}/fee-plan`
+  // uçları kaldırıldı. Tek ön koşul ders türü için yürürlükte bir tarifenin olması; o da
+  // migration ile seed ediliyor, yani aidat doğrudan açılabiliyor.
+  //
+  // 409 da kabul: bu bir FIXTURE, amacı "o dönem için bir aidat bulunsun". Aynı veritabanına
+  // karşı ikinci kez koşulduğunda aidat zaten vardır ve bu bir hata değildir.
+  const created = await page.request.post(`${apiUrl}/api/receivables`, {
     data: { enrollmentId: enrollment.id, period: "2026-09" },
-  })).status()).toBe(201);
+  });
+  expect([201, 409], `aidat oluşturulamadı: ${await created.text()}`).toContain(created.status());
 }
 
 test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
@@ -64,8 +53,11 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     expect(due).toBeTruthy();
 
     await page.goto("/dashboard/billing");
-    await page.getByRole("button", { name: "Aidat al", exact: true }).first().click();
-    const dialog = page.getByRole("dialog", { name: "Aidat ödemesi al" });
+    // Düğme ve pencere başlığı "Aidat al" / "Aidat ödemesi al" iken "Tahsilat kaydet"
+    // olarak yeniden adlandırıldı; modalın içi (Öğrenci / Hangi kurs? / İlk dönem /
+    // Elden alındı / Havale geldi) aynı kaldı, bu yüzden testin geri kalanı değişmiyor.
+    await page.getByRole("button", { name: "Tahsilat kaydet", exact: true }).first().click();
+    const dialog = page.getByRole("dialog", { name: "Tahsilat kaydet" });
     await dialog.getByLabel("Öğrenci").selectOption(due!.studentId);
 
     const coursePicker = dialog.getByLabel("Hangi kurs?");

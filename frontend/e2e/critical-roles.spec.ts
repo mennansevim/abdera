@@ -8,7 +8,11 @@ const teacherPassword = "DemoTeacher123!";
 const approvedComment = "E2E: Düzenli çalışması ritim ve ifade gelişimini belirgin biçimde destekliyor.";
 
 async function loginStaff(page: Page, role: "Admin" | "Teacher", email: string, password: string) {
-  await page.goto("/login");
+  // chooseRole=1 ŞART: aynı test içinde Admin'den Öğretmen'e geçerken çerez hâlâ duruyor
+  // ve /login açık oturumu görüp doğrudan /dashboard'a yönlendiriyor - rol kartları hiç
+  // render edilmiyordu. Bu parametre "bilinçli rol değiştirme" yolunun ta kendisi
+  // (login/page.tsx). Oturum yokken de davranış aynı, o yüzden her çağrıda kullanılıyor.
+  await page.goto("/login?chooseRole=1");
   await page.getByRole("radio", { name: role === "Admin" ? /Yöneticiyim/ : /Öğretmenim/ }).click();
   await expect(page.locator("#email")).toBeFocused();
   await page.locator("#email").fill(email);
@@ -109,9 +113,14 @@ test.describe.serial("Abdera critical role flows", () => {
     const quickAdd = page.getByRole("dialog", { name: "Yeni ders oluştur" });
     await expect(quickAdd).toContainText(createTargetLabel);
     await expect(quickAdd.getByLabel("Başlangıç tarihi")).toHaveValue(date);
-    await expect(quickAdd.getByLabel("Saat", { exact: true })).toHaveValue(createTargetLabel);
     await quickAdd.getByLabel("1 · Öğrenci").selectOption(student.id);
     await quickAdd.getByLabel("2 · Ders ve öğretmen").selectOption(enrollment.id);
+    // "Saat" alanı KURS KAYDI SEÇİLDİKTEN SONRA render ediliyor (create-series-form.tsx:
+    // `{enrollment && manualMode && ...}`) - önerilen saatler de o kayda bağlı olduğu için
+    // bu bilinçli. Doğrulama seçimden önce yapıldığında alan henüz DOM'da olmuyordu ve e2e
+    // smoke bu yüzden kırmızıydı. Kontrol edilen şey aynı: çift tıklanan saat forma önden
+    // dolduruluyor mu.
+    await expect(quickAdd.getByLabel("Saat", { exact: true })).toHaveValue(createTargetLabel);
     await quickAdd.getByRole("button", { name: "Seriyi takvime yerleştir" }).click();
     await expect(page.getByRole("button", { name: "Yeni ders", exact: true })).toBeVisible();
 
@@ -192,24 +201,12 @@ test.describe.serial("Abdera critical role flows", () => {
     }
 
     // Demo seed'i aidat üretmez. Bu test kendi finansal fixture'ını açıkça kurar.
-    const priceLists = await (await page.request.get(`${apiUrl}/api/price-lists`)).json();
-    let pianoPriceItem = priceLists.flatMap((list: { items: Array<{ instrumentId: string }> }) => list.items)
-      .find((item: { instrumentId: string }) => item.instrumentId === piano.id);
-    if (!pianoPriceItem) {
-      const priceListResponse = await page.request.post(`${apiUrl}/api/price-lists`, {
-        data: {
-          name: `E2E Fiyat ${suffix}`,
-          effectiveFrom: localDateString(new Date()),
-          effectiveUntil: null,
-          items: [{ instrumentId: piano.id, durationMinutes: 50, billingType: "Monthly", amount: 100, currency: "TRY", packageLessonCount: null }],
-        },
-      });
-      expect(priceListResponse.status()).toBe(201);
-      pianoPriceItem = (await priceListResponse.json()).items[0];
-    }
-    expect((await page.request.post(`${apiUrl}/api/enrollments/${enrollment.id}/fee-plan`, {
-      data: { priceListItemId: pianoPriceItem.id, dueDay: 5, activeFrom: localDateString(new Date()) },
-    })).status()).toBe(201);
+    //
+    // Aidat modeli yeniden tasarlandığında (docs/10-decisions.md H1) fiyat listesi ->
+    // fiyat kalemi -> ücret planı zinciri ve `/api/price-lists*`, `/api/enrollments/{id}/fee-plan`
+    // uçları KALDIRILDI; bu test onları çağırmaya devam ettiği için e2e smoke kırmızıydı.
+    // Artık tek ön koşul ders türü için yürürlükte bir tarifenin olması - o da migration ile
+    // seed ediliyor (Birebir 6.000, Grup 4.500), yani aidat doğrudan açılabiliyor.
     const currentPeriod = localDateString(new Date()).slice(0, 7);
     expect((await page.request.post(`${apiUrl}/api/receivables`, {
       data: { enrollmentId: enrollment.id, period: currentPeriod },
