@@ -9,9 +9,12 @@ namespace Abdera.Api.Modules.People.Features;
 // Teacher yalnızca kendi Enrollment'ı olan (kendisine atanmış) öğrencileri görür, düzenleyemez.
 public static class Students
 {
-    public record CreateRequest(string FirstName, string LastName, DateOnly BirthDate);
-    public record UpdateRequest(string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status);
-    public record StudentResponse(Guid Id, string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status);
+    // SiblingDiscount: kardeş indirimi açık bir karardır, çıkarım değil (H13). Yalnızca
+    // Admin değiştirebilir - öğretmen künye düzenlerken alanı hiç göndermez ve gönderse
+    // bile handler yok sayar; bu para etkileyen bir alan.
+    public record CreateRequest(string FirstName, string LastName, DateOnly BirthDate, bool SiblingDiscount = false);
+    public record UpdateRequest(string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status, bool? SiblingDiscount = null);
+    public record StudentResponse(Guid Id, string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status, bool SiblingDiscount);
     // Satır başına bir KURS KAYDI döner (öğrenci × enstrüman × öğretmen), öğrenci başına
     // değil: aidat ve toplu ödeme hep kurs kaydı üzerinden işler. EnrollmentId ve CourseKind
     // bu yüzden yanıtta - toplu ödeme ekranı seçimden sonra ikinci bir istek atmak zorunda
@@ -57,7 +60,7 @@ public static class Students
 
         var students = await studentsQuery
             .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
-            .Select(s => new StudentResponse(s.Id, s.FirstName, s.LastName, s.BirthDate, s.Status))
+            .Select(s => new StudentResponse(s.Id, s.FirstName, s.LastName, s.BirthDate, s.Status, s.SiblingDiscount))
             .ToListAsync();
 
         var studentIds = students.Select(s => s.Id).ToList();
@@ -156,7 +159,7 @@ public static class Students
 
         var students = await query
             .OrderBy(s => s.LastName).ThenBy(s => s.FirstName)
-            .Select(s => new StudentResponse(s.Id, s.FirstName, s.LastName, s.BirthDate, s.Status))
+            .Select(s => new StudentResponse(s.Id, s.FirstName, s.LastName, s.BirthDate, s.Status, s.SiblingDiscount))
             .ToListAsync();
 
         return Results.Ok(students);
@@ -169,17 +172,17 @@ public static class Students
 
         await EnsureTeacherCanAccessAsync(studentId, principal, db);
 
-        return Results.Ok(new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status));
+        return Results.Ok(new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status, student.SiblingDiscount));
     }
 
     private static async Task<IResult> CreateAsync(CreateRequest request, AbderaDbContext db, IClock clock)
     {
-        var student = Student.Create(request.FirstName, request.LastName, request.BirthDate, clock.UtcNow);
+        var student = Student.Create(request.FirstName, request.LastName, request.BirthDate, clock.UtcNow, request.SiblingDiscount);
         db.Students.Add(student);
         await db.SaveChangesAsync();
 
         return Results.Created($"/api/students/{student.Id}",
-            new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status));
+            new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status, student.SiblingDiscount));
     }
 
     private static async Task<IResult> UpdateAsync(
@@ -193,9 +196,13 @@ public static class Students
 
         student.Update(request.FirstName, request.LastName, request.BirthDate, clock.UtcNow);
         student.SetStatus(request.Status, clock.UtcNow);
+        // Alan yalnızca Admin tarafından ve yalnızca AÇIKÇA gönderildiğinde değişir:
+        // öğretmenin künye düzenlemesi kardeş indirimini sessizce kapatmamalı.
+        if (request.SiblingDiscount is { } siblingDiscount && AuthContext.IsAdmin(principal))
+            student.SetSiblingDiscount(siblingDiscount, clock.UtcNow);
         await db.SaveChangesAsync();
 
-        return Results.Ok(new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status));
+        return Results.Ok(new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status, student.SiblingDiscount));
     }
 
     private static async Task EnsureTeacherCanAccessAsync(Guid studentId, ClaimsPrincipal principal, AbderaDbContext db)

@@ -55,22 +55,20 @@ public sealed class TuitionPricer
             .Select(group => group.Key)
             .ToHashSet();
 
-        // Kardeşlik, ortak veli üzerinden tanımlanır (ayrı bir "aile" kavramı yok -
-        // StudentGuardian zaten çoktan-çoğa). Yalnızca DERS ALAN kardeşler sayılır:
-        // velinin ders almayan ikinci çocuğu indirim doğurmaz.
-        var enrolledStudentIds = activeEnrollments.Select(enrollment => enrollment.StudentId).Distinct().ToList();
-        var guardianLinks = await db.StudentGuardians
-            .Where(link => enrolledStudentIds.Contains(link.StudentId))
-            .Select(link => new { link.GuardianId, link.StudentId })
+        // Kardeş indirimi ARTIK ÇIKARIM DEĞİL (docs/10-decisions.md H13). Eskiden burada
+        // student_guardians üzerinden "aynı veliye bağlı 2+ aktif öğrenci" sorgusu vardı;
+        // aynı veli iki kez kaydedildiğinde gerçek kardeşlere indirim vermiyor, bir veli
+        // akraba/komşu çocuğuna da bağlandığında kardeş olmayana veriyordu. Yönetici artık
+        // öğrenci künyesindeki kutuyu işaretler ve karar tek bir yerde görünür olur.
+        //
+        // Çoklu kurs indirimi (aşağıdaki multiCourse) çıkarım olarak KALDI: aktif kurs
+        // kaydı sayısı sistemin kendi verisi, tahmin değil.
+        var siblings = await db.Students
+            .Where(student => student.SiblingDiscount)
+            .Select(student => student.Id)
             .ToListAsync();
 
-        var siblings = guardianLinks
-            .GroupBy(link => link.GuardianId)
-            .Where(group => group.Select(link => link.StudentId).Distinct().Count() >= 2)
-            .SelectMany(group => group.Select(link => link.StudentId))
-            .ToHashSet();
-
-        return new TuitionPricer(settings, rates, tiers, multiCourse, siblings);
+        return new TuitionPricer(settings, rates, tiers, multiCourse, siblings.ToHashSet());
     }
 
     // Verilen günde yürürlükte olan tarife. Yoksa null - çağıran bunu "eksik" olarak

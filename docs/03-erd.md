@@ -83,13 +83,15 @@ audit_log
 
 ```
 students
-  id            uuid pk
-  first_name    text
-  last_name     text
-  birth_date    date
-  status        text        -- ACTIVE | INACTIVE
-  created_at    timestamptz
-  updated_at    timestamptz
+  id                uuid pk
+  first_name        text
+  last_name         text
+  birth_date        date
+  status            text        -- ACTIVE | INACTIVE
+  sibling_discount  boolean     -- kardeş indirimi: AÇIK İŞARET, çıkarım değil (10-decisions H13).
+                                -- Yalnızca Admin değiştirir; ortak veliden türetilmez.
+  created_at        timestamptz
+  updated_at        timestamptz
 
 guardians
   id                       uuid pk

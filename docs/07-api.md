@@ -13,7 +13,7 @@ GET    /api/students                            ✅ Teacher yalnızca kendi öğ
 POST   /api/students                            ✅
 GET    /api/students/{studentId}                ✅
 GET    /api/students/search?query=            ✅ satır başına KURS KAYDI döner (enrollmentId + courseKind dahil) - toplu ödeme ekranının girişi
-PATCH  /api/students/{studentId}                ✅
+PATCH  /api/students/{studentId}                ✅ siblingDiscount (bool?) - yalnızca Admin, gönderilmezse alana dokunulmaz
 GET    /api/students/{studentId}/timeline       -- Progress modülü (Phase 6)
 GET    /api/students/{studentId}/guardians       ✅ eklendi - docs'ta yoktu, People'ın temel ilişkisi
 POST   /api/students/{studentId}/guardians       ✅ eklendi

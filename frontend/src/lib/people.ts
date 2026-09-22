@@ -21,6 +21,9 @@ export interface Student {
   lastName: string;
   birthDate: string;
   status: StudentStatus;
+  // Kardeş indirimi açık bir karardır, çıkarım değil (docs/10-decisions.md H13).
+  // Yalnızca Admin değiştirebilir; sunucu öğretmenden gelen değeri yok sayar.
+  siblingDiscount: boolean;
 }
 
 // Satır başına bir KURS KAYDI (öğrenci × enstrüman × öğretmen) - öğrenci başına değil.
@@ -166,7 +169,7 @@ export function useStudentAutocomplete(query: string) {
 export function useCreateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { firstName: string; lastName: string; birthDate: string }) =>
+    mutationFn: (body: { firstName: string; lastName: string; birthDate: string; siblingDiscount?: boolean }) =>
       api.post<Student>("/api/students", body),
     // Öğrenci listesi ekranı "students" değil "student-overviews" sorgusundan besleniyor
     // (satırdaki enstrüman rozetleri için) - yalnızca "students" tazelenince yeni öğrenci
@@ -184,7 +187,9 @@ export function useCreateStudent() {
 export function useUpdateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ studentId, ...body }: { studentId: string; firstName: string; lastName: string; birthDate: string; status: StudentStatus }) =>
+    // siblingDiscount gönderilmezse sunucu alana DOKUNMAZ - öğretmenin künye düzenlemesi
+    // kardeş indirimini sessizce kapatmasın diye bilinçli olarak opsiyonel.
+    mutationFn: ({ studentId, ...body }: { studentId: string; firstName: string; lastName: string; birthDate: string; status: StudentStatus; siblingDiscount?: boolean }) =>
       api.patch<Student>(`/api/students/${studentId}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["students"] });

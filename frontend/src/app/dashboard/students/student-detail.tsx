@@ -72,7 +72,7 @@ export function StudentDetail({
   return (
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span></p>
+        <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span>{isAdmin && student.siblingDiscount && <span className="ml-1.5 rounded-full bg-[var(--success-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">Kardeş indirimi</span>}</p>
         <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet h-9 min-h-9 text-xs"><Icon name="activity" className="h-3.5 w-3.5" /> Gelişim</Link>
         {canManage && <RowMenu label={`${fullName} için işlemler`}>{(close) => <>
           {activeEnrollments.length > 0 && <RowMenuItem icon="calendar" onClick={() => { close(); setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__"); }}>Ders programı</RowMenuItem>}
@@ -153,7 +153,7 @@ export function StudentDetail({
             <AddEnrollmentForm studentId={studentId} teachers={teachers ?? []} instruments={instruments ?? []} onClose={() => setShowEnrollmentForm(false)} />
           </Modal>
           <Modal open={editingStudent} title="Öğrenciyi düzenle" onClose={() => setEditingStudent(false)} size="sm">
-            <EditStudentForm student={student} onClose={() => setEditingStudent(false)} />
+            <EditStudentForm student={student} isAdmin={isAdmin} onClose={() => setEditingStudent(false)} />
           </Modal>
           {editingGuardian && (
             <Modal open title="Veliyi düzenle" onClose={() => setEditingGuardian(null)} size="sm">
@@ -207,18 +207,24 @@ function ageOf(birthDate: string) {
   return age >= 0 && age < 120 ? age : null;
 }
 
-function EditStudentForm({ student, onClose }: { student: Student; onClose: () => void }) {
+function EditStudentForm({ student, isAdmin, onClose }: { student: Student; isAdmin: boolean; onClose: () => void }) {
   const updateStudent = useUpdateStudent();
   const [firstName, setFirstName] = useState(student.firstName);
   const [lastName, setLastName] = useState(student.lastName);
   const [birthDate, setBirthDate] = useState(student.birthDate);
+  const [siblingDiscount, setSiblingDiscount] = useState(student.siblingDiscount);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      await updateStudent.mutateAsync({ studentId: student.id, firstName, lastName, birthDate, status: student.status });
+      // Alan yalnızca Admin oturumunda gönderilir; öğretmenin künye düzenlemesi
+      // kardeş indirimine dokunmamalı (sunucu da aynı kuralı ayrıca uygular).
+      await updateStudent.mutateAsync({
+        studentId: student.id, firstName, lastName, birthDate, status: student.status,
+        ...(isAdmin ? { siblingDiscount } : {}),
+      });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğrenci güncellenemedi.");
@@ -232,6 +238,30 @@ function EditStudentForm({ student, onClose }: { student: Student; onClose: () =
         <label className="form-label">Soyad<input value={lastName} onChange={(event) => setLastName(event.target.value)} required className="field text-sm" /></label>
       </div>
       <label className="form-label">Doğum tarihi<input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} required className="field text-sm" /></label>
+
+      {/* Kardeş indirimi artık çıkarım değil, açık bir karar (docs/10-decisions.md H13).
+          Ortak veli üzerinden tahmin etmek iki yönde de yanılıyordu: aynı veli iki kez
+          kaydedildiyse gerçek kardeşler indirim alamıyor, bir veli akraba çocuğuna da
+          bağlıysa kardeş olmayan alıyordu. */}
+      {isAdmin && (
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[var(--line)] bg-white p-3">
+          <input
+            type="checkbox"
+            checked={siblingDiscount}
+            onChange={(event) => setSiblingDiscount(event.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand)]"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-bold">Kardeş indirimi uygulansın</span>
+            <span className="text-meta mt-0.5 block leading-snug">
+              Bu öğrencinin okulda kardeşi var. İşaretliyken aidata kardeş indirimi uygulanır.
+              Oran Aidat yönetimi &gt; Fiyat politikası ekranından gelir; 2 kurs indirimiyle
+              birlikte geçerliyse yüksek olan uygulanır, ikisi toplanmaz.
+            </span>
+          </span>
+        </label>
+      )}
+
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Değişiklikleri kaydet" pending={updateStudent.isPending} />
     </form>

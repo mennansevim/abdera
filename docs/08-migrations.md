@@ -116,3 +116,19 @@ staff_notifications(id, user_id, type, title, body, reference_type, reference_id
 UNIQUE (user_id, type, reference_type, reference_id)   -- aynı olay iki kez düşmesin (A5'in ekran içi karşılığı)
 INDEX  (user_id, created_at)                           -- zil listesi: kendi bildirimleri, en yeniden eskiye
 ```
+
+## students.sibling_discount (kardeş indirimi artık açık işaret)
+
+**ExplicitSiblingDiscount** (People modülü, `Modules/People/Persistence/Migrations`): kardeş
+indirimi ortak veliden çıkarılmayı bırakıp öğrenci künyesindeki bir kutuya taşındı
+(`docs/10-decisions.md` H13).
+
+```
+students.sibling_discount  boolean NOT NULL DEFAULT false
+```
+
+Migration'ın asıl işi kolonu eklemek değil, **geriye dönük doldurmak**: kutu, eski çıkarımın
+(aynı veliye bağlı, aktif kursu olan 2+ öğrenci) o an kimi kardeş saydığıyla işaretlenir.
+Doldurmasaydık bugün indirim alan öğrenciler bir sonraki aidat üretiminde sessizce %5 zam
+görürdü. `Down()` yalnızca kolonu düşürür; çıkarım koduna geri dönmez, o yüzden geri alma
+sonrası eski davranışı isteyen bir revert `TuitionPricer.LoadAsync`'i de geri almalıdır.

@@ -14,12 +14,19 @@ public class Student
     public string LastName { get; private set; } = null!;
     public DateOnly BirthDate { get; private set; }
     public StudentStatus Status { get; private set; } = StudentStatus.Active;
+
+    // Kardeş indirimi ARTIK ÇIKARIM DEĞİL, açık bir işaret (docs/10-decisions.md H13).
+    // Eskiden aynı veliye bağlı iki aktif öğrenci otomatik kardeş sayılıyordu; bu, aynı
+    // veli iki kez kaydedildiğinde gerçek kardeşlere indirim vermiyor, bir veli akraba
+    // çocuğuna da bağlandığında kardeş olmayana veriyordu. Artık yöneticinin kutuyu
+    // işaretlemesi gerekir - "bu indirim neye göre verildi" sorusunun tek yanıtı bu alan.
+    public bool SiblingDiscount { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
     private Student() { }
 
-    public static Student Create(string firstName, string lastName, DateOnly birthDate, DateTimeOffset now)
+    public static Student Create(string firstName, string lastName, DateOnly birthDate, DateTimeOffset now, bool siblingDiscount = false)
     {
         ValidateNames(firstName, lastName);
         ValidateBirthDate(birthDate, now);
@@ -31,6 +38,7 @@ public class Student
             LastName = lastName.Trim(),
             BirthDate = birthDate,
             Status = StudentStatus.Active,
+            SiblingDiscount = siblingDiscount,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -44,6 +52,14 @@ public class Student
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
         BirthDate = birthDate;
+        UpdatedAt = now;
+    }
+
+    // Para etkileyen bir karar olduğu için ayrı bir metot: Update ile birlikte sessizce
+    // sıfırlanmasın (öğretmen künye düzenlerken bu alanı hiç göndermez).
+    public void SetSiblingDiscount(bool value, DateTimeOffset now)
+    {
+        SiblingDiscount = value;
         UpdatedAt = now;
     }
 

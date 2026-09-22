@@ -63,6 +63,15 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
             $"/api/students/{studentId}/enrollments",
             new Enrollments.CreateRequest(teacherId, instrumentId, new DateOnly(2026, 9, 1), kind)));
 
+    // Kardeş indirimi kutusu - PATCH /api/students/{id}. Yalnızca Admin değiştirebilir.
+    private async Task SetSiblingDiscountAsync(HttpClient client, Students.StudentResponse student, bool value)
+    {
+        var response = await client.PatchAsJsonAsync(
+            $"/api/students/{student.Id}",
+            new Students.UpdateRequest(student.FirstName, student.LastName, student.BirthDate, student.Status, value));
+        response.EnsureSuccessStatusCode();
+    }
+
     private async Task LinkSiblingsAsync(HttpClient admin, params Guid[] studentIds)
     {
         var phone = $"+90532{Interlocked.Increment(ref _phoneSeed):D7}";
@@ -97,12 +106,15 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         var firstCourse = await EnrollAsync(admin, twoCourses.Id, teacher.Id, piano);
         await EnrollAsync(admin, twoCourses.Id, teacher.Id, art, CourseKind.Group);
 
-        // Ortak velili iki kardeş -> %5.
+        // Kardeş indirimi AÇIK İŞARETLE gelir, ortak veliden çıkarılmaz (H13).
         var siblingA = await CreateStudentAsync(admin, "KardesA");
         var siblingB = await CreateStudentAsync(admin, "KardesB");
         var siblingEnrollment = await EnrollAsync(admin, siblingA.Id, teacher.Id, piano);
-        await EnrollAsync(admin, siblingB.Id, teacher.Id, piano);
+        // siblingB ORTAK VELİLİ ama kutusu işaretlenmiyor - eski çıkarımın geri sızmadığının
+        // kanıtı: aşağıda bu kaydın indirimi 0 olmalı.
+        var unmarkedSibling = await EnrollAsync(admin, siblingB.Id, teacher.Id, piano);
         await LinkSiblingsAsync(admin, siblingA.Id, siblingB.Id);
+        await SetSiblingDiscountAsync(admin, siblingA, true);
 
         var plan = await ReadAsync<MonthlyDueRun.PlanResponse>(
             await admin.GetAsync("/api/receivables/monthly-run?period=2026-09"));
@@ -126,6 +138,10 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         var siblingRow = plan.Ready.Single(row => row.EnrollmentId == siblingEnrollment.Id);
         Assert.Equal(5m, siblingRow.DiscountPercent);
         Assert.Equal("Kardeş indirimi (%5)", siblingRow.DiscountReason);
+
+        var unmarkedRow = plan.Ready.Single(row => row.EnrollmentId == unmarkedSibling.Id);
+        Assert.Equal(0m, unmarkedRow.DiscountPercent);
+        Assert.Null(unmarkedRow.DiscountReason);
 
         Assert.Equal(new DateOnly(2026, 9, 1), plan.DueDate);
         Assert.Equal(plan.ReadyBaseTotal - plan.ReadyTotal, plan.ReadyDiscountTotal);
