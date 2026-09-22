@@ -16,6 +16,9 @@ public static class SystemHealth
         // değil (Misconfigured), ama "her şey hazır" da değil - yönetici sanal IBAN'ın
         // çalışmadığını, ödemeleri elle gireceğini sağlık kartında görebilmeli.
         ManualOnly,
+        // Entegrasyon bilinçli biçimde kapatılmıştır. Fake değildir ve yapılandırma hatası
+        // sayılmaz; yönetici özelliğin çalışmayacağını açıkça görebilir.
+        Disabled,
         Misconfigured,
     }
 
@@ -69,6 +72,9 @@ public static class SystemHealth
         // bir entegrasyon, hata değil.
         if (string.Equals(configuredValue, "Manual", StringComparison.OrdinalIgnoreCase))
             return ProviderConfigurationState.ManualOnly;
+
+        if (string.Equals(configuredValue, "Disabled", StringComparison.OrdinalIgnoreCase))
+            return ProviderConfigurationState.Disabled;
 
         if (fakeIsConfigured && string.Equals(configuredValue, productionValue, StringComparison.OrdinalIgnoreCase))
             return ProviderConfigurationState.Configured;

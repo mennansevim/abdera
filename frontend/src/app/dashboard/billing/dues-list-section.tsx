@@ -2,46 +2,38 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { FormMessage, Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
+import { Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  COURSE_KIND_LABEL,
   useBillingDues,
   useCreatePrepayPlan,
-  useMonthlyDuePlan,
   usePrepayPreview,
   useRecordPayment,
-  useRunMonthlyDues,
   useStudentBilling,
   type BillingDue,
-  type MonthlyDueResult,
   type PaymentMethod,
+  type Receivable,
 } from "@/lib/billing";
-import { formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
-import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
+import { currentPeriod, formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
+import { useEnrollments, useInstruments, useStudentOverviews, useStudents, useTeachers, type StudentInstrumentSummary, type Student } from "@/lib/people";
+import { useSessionState } from "@/lib/use-session-state";
 import { StudentBillingSection } from "./student-billing-section";
 
-// Ekran bir "dönem defteri": aynı anda tek bir dönemi gösterir.
+// Ekran bir "öğrenci defteri": önce TÜM öğrenciler listelenir, her satırın altında o
+// öğrencinin aidat takvimi (geçmiş dahil) açılır.
 //
-// Önceki sürüm üç ayrı yerde karmaşıklaşmıştı ve üçü de ölçülebilir bir soruna karşılık
-// geliyordu:
-//   1. İki arama kutusu vardı; biri "Yeni aidat / Öğrenci hesabından ekle" başlıklı bir
-//      kartın içindeydi ama yanındaki iki açılır liste aslında ALTTAKİ listeyi filtreliyordu.
-//      Kayıt ekleme formu gibi duran kartın üçte ikisi filtreydi.
-//   2. Beş durum sekmesi çakışıyordu: gecikmiş bir aidat hem "Açık aidatlar"da hem
-//      "Vadesi geçen"de sayılıyordu, sayılar toplama vurmuyordu (17+6+6+12 = 41 ≠ 29).
-//   3. "Dönem" ve "Vade" sütunları aynı değeri onlarca satır boyunca tekrarlıyordu.
+// Önceki sürüm "dönem defteri" idi (önce ay seçilir, o ayın borç satırları listelenir).
+// Kullanıcı geri bildirimi bunu tersine çevirdi: "tüm öğrencileri listele, bir öğrenciye
+// tıkladığımda altında ayların olduğu takvim açılsın, aya tıklayarak da tahsil edilsin."
+// Dönem-önce yaklaşımın sorunu: o ay hiç borcu olmayan veya seçili durum sekmesine
+// girmeyen bir öğrenci listede HİÇ görünmüyordu - "tüm öğrenciler" sorusuna cevap
+// vermiyordu. Öğrenci-önce yaklaşımda herkes her zaman listede; geçmiş dahil tüm
+// dönemlere tek bir "Detay" ile bakılır (aynı takvim, yalnızca ay artık salt-okunur değil,
+// tahsilat da alınabiliyor - bkz. ReceivablePeriodCard).
 //
-// Çözüm sırasıyla: tek arama kutusu + oluşturma akışını istek üzerine açılan panele almak;
-// birbirini dışlayan üç sekme (Bekleyen + Ödenen = Tümü); dönem ve vadeyi sütundan çıkarıp
-// başlıkta bir kez yazmak.
-//
-// Aidat modeli yeniden tasarlandıktan sonra (docs/10-decisions.md H1) bu ekrandan bir şey
-// daha kalktı: "ücret planı". Artık bir öğrenciden tahsilat almak için önce fiyat listesi
-// kurup her kurs kaydına ayrı plan açmak gerekmiyor - tutar okulun tarifesinden ve
-// öğrencinin indirimlerinden sunucuda hesaplanıyor, ekran yalnızca sonucu teyit ediyor.
-
-type DueFilter = "open" | "paid" | "all";
+// "Kim borçlu" triyajını kaybetmemek için üst özet kartları (page.tsx) hâlâ tüm okulun
+// açık/gecikmiş/tahsil edilen toplamını gösteriyor - bu ekran yalnızca listeleme biçimini
+// değiştirdi, toplamların kaynağını değil.
 
 export interface BillingFilterSummary {
   outstanding: number;
@@ -51,24 +43,7 @@ export interface BillingFilterSummary {
   overdueCount: number;
 }
 
-const ALL_PERIODS = "all";
 const MONTHS_TR = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-
-// Birbirini dışlayan üç sekme: Bekleyen + Ödenen = Tümü. Gecikme artık ayrı bir sekme
-// değil, satırdaki kırmızı rozet - zaten liste gecikmişten başlıyor.
-const FILTERS: Array<{ value: DueFilter; label: string }> = [
-  { value: "open", label: "Bekleyen" },
-  { value: "paid", label: "Ödenen" },
-  { value: "all", label: "Tümü" },
-];
-
-const STATUS_LABELS: Record<BillingDue["status"], string> = {
-  Unpaid: "Ödenmedi",
-  Partial: "Kısmi ödendi",
-  Paid: "Ödendi",
-  Overdue: "Vadesi geçti",
-  Cancelled: "İptal",
-};
 
 const STATUS_TONES: Record<BillingDue["status"], string> = {
   Unpaid: "bg-[var(--surface-muted)] text-[var(--muted)]",
@@ -76,11 +51,6 @@ const STATUS_TONES: Record<BillingDue["status"], string> = {
   Paid: "bg-[var(--success-soft)] text-[var(--success-strong)]",
   Overdue: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
   Cancelled: "bg-[var(--surface-muted)] text-[var(--muted)]",
-};
-
-// Yöneticinin ilk sorusu "kimi önce arayayım" - en çok geciken en üstte.
-const STATUS_ORDER: Record<BillingDue["status"], number> = {
-  Overdue: 0, Partial: 1, Unpaid: 2, Paid: 3, Cancelled: 4,
 };
 
 function isOpen(status: BillingDue["status"]) {
@@ -105,38 +75,15 @@ function daysOverdue(dueDate: string) {
 }
 
 export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summary: BillingFilterSummary) => void }) {
-  const { data: dues, isLoading, isError, isFetching, refetch } = useBillingDues();
+  const { data: overviews, isLoading, isError, isFetching, refetch } = useStudentOverviews();
+  const { data: dues } = useBillingDues();
   const { data: teachers } = useTeachers();
-  const [filter, setFilter] = useState<DueFilter>("open");
-  const [period, setPeriod] = useState<string | null>(null);
-  // selectedStudentId artık yalnızca "tam hesabı aç" kaçış kapısı için tutuluyor - hızlı
+  const [teacherFilter, setTeacherFilter] = useSessionState("abdera:billing:teacher", "all");
+  const [studentSearch, setStudentSearch] = useSessionState("abdera:billing:student-search", "");
+  // selectedStudentId yalnızca "tam hesabı aç" kaçış kapısı için tutuluyor - hızlı
   // tahsilat panelinin (QuickCollectPanel) kendi öğrenci seçimi ayrıdır.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
-  const [showMonthlyRun, setShowMonthlyRun] = useState(false);
-  const [teacherFilter, setTeacherFilter] = useState("all");
-  const [studentSearch, setStudentSearch] = useState("");
-
-  // Dönem listesi veriden türetilir - okul ölçeğinde tüm aidatlar zaten tek istekte
-  // geliyor, ayrı bir uç nokta açmaya gerek yok (CLAUDE.md: gereksiz bağımlılık ekleme).
-  const periods = useMemo(
-    () => [...new Set((dues ?? []).map((due) => due.period))].sort().reverse(),
-    [dues],
-  );
-
-  // Varsayılan dönem "içinde bulunduğumuz ay" - kullanıcının zihnindeki dönem bu. En son
-  // dönemi seçmek yanlış olurdu: veride ileri tarihli tek satırlık dönemler olabiliyor ve
-  // ekran ilk açılışta boş görünürdü.
-  //
-  // Varsayılan bir effect'te state'e YAZILMAZ, türetilir: veri geç geldiğinde effect'le
-  // yazmak fazladan bir render turu ve "önce boş, sonra dolu" titremesi üretirdi.
-  // `period` yalnızca kullanıcı seçim yaptığında dolar.
-  const defaultPeriod = useMemo(() => {
-    if (!periods.length) return ALL_PERIODS;
-    const currentPeriod = new Date().toISOString().slice(0, 7);
-    return periods.find((item) => item <= currentPeriod) ?? periods[0];
-  }, [periods]);
-  const activePeriod = period ?? defaultPeriod;
 
   const studentPickerRef = useRef<HTMLSelectElement>(null);
   const startAddingDue = useCallback(() => {
@@ -146,83 +93,65 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   }, []);
 
   const clearFilters = useCallback(() => {
-    setFilter("all");
     setTeacherFilter("all");
     setStudentSearch("");
-    setPeriod(ALL_PERIODS);
-  }, []);
+  }, [setStudentSearch, setTeacherFilter]);
 
-  // Dönem DIŞINDAKİ daraltmalar ayrı tutulur: aşağıdaki "başka dönemde gecikmiş var"
-  // uyarısı bu kümeye bakar, çünkü tam da dönem filtresinin gizlediği şeyi göstermesi gerekir.
-  const duesMatchingFilters = useMemo(() => (dues ?? []).filter((due) => {
-    const matchesTeacher = teacherFilter === "all" || due.teacherId === teacherFilter;
+  // Öğretmen filtresi öğrenci kaydında tutulmuyor (bir kurs kaydına bağlı) - aidat
+  // verisinden (dues) türetiliyor, ayrı bir uç nokta açmaya gerek yok.
+  const studentTeacherIds = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const due of dues ?? []) {
+      const set = map.get(due.studentId) ?? new Set<string>();
+      set.add(due.teacherId);
+      map.set(due.studentId, set);
+    }
+    return map;
+  }, [dues]);
+
+  const thisPeriod = useMemo(() => currentPeriod(), []);
+  const duesByStudentThisPeriod = useMemo(() => {
+    const map = new Map<string, BillingDue[]>();
+    for (const due of dues ?? []) {
+      if (due.period !== thisPeriod || due.status === "Cancelled") continue;
+      const rows = map.get(due.studentId) ?? [];
+      rows.push(due);
+      map.set(due.studentId, rows);
+    }
+    return map;
+  }, [dues, thisPeriod]);
+
+  const visibleStudents = useMemo(() => {
     const query = studentSearch.trim().toLocaleLowerCase("tr-TR");
-    const matchesStudent = !query || due.studentName.toLocaleLowerCase("tr-TR").includes(query);
-    return matchesTeacher && matchesStudent;
-  }), [dues, studentSearch, teacherFilter]);
+    return (overviews ?? [])
+      .filter(({ student, instruments }) => {
+        if (teacherFilter !== "all" && !studentTeacherIds.get(student.id)?.has(teacherFilter)) return false;
+        if (!query) return true;
+        const haystack = [`${student.firstName} ${student.lastName}`, ...instruments.map((item) => item.instrumentName)]
+          .join(" ").toLocaleLowerCase("tr-TR");
+        return haystack.includes(query);
+      })
+      .sort((a, b) => `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`, "tr-TR"));
+  }, [overviews, studentSearch, teacherFilter, studentTeacherIds]);
 
-  // Liste, sayaçlar ve toplamlar TEK bir filtrelenmiş diziden türetilir - ekranda bir
-  // rakam, listede başka bir veri kümesi olmasın.
-  const baseDues = useMemo(
-    () => duesMatchingFilters.filter((due) => activePeriod === ALL_PERIODS || due.period === activePeriod),
-    [activePeriod, duesMatchingFilters]);
-
-  // Dönem defterinin tek gerçek riski: geçmiş bir dönemde kalan gecikmiş aidat, "bu ay"
-  // görünümünde tamamen gözden kaybolur - üstelik en acil iş odur. Ekran bu parayı asla
-  // sessizce saklamamalı, o yüzden kapsam dışında kalan gecikmişler burada duyurulur.
-  const overdueOutsideScope = useMemo(() => {
-    if (activePeriod === ALL_PERIODS) return null;
-    const rows = duesMatchingFilters.filter((due) => due.status === "Overdue" && due.period !== activePeriod);
-    if (!rows.length) return null;
-    return {
-      count: rows.length,
-      amount: rows.reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0),
-    };
-  }, [activePeriod, duesMatchingFilters]);
-
-  const counts = useMemo(() => ({
-    open: baseDues.filter((due) => isOpen(due.status)).length,
-    paid: baseDues.filter((due) => due.status === "Paid").length,
-    all: baseDues.filter((due) => due.status !== "Cancelled").length,
-  }), [baseDues]);
-
+  // Üstteki özet kartları arama/öğretmen daraltmasını takip etsin - dönem artık bir
+  // daraltma boyutu olmadığı için tüm geçmiş bu kapsamda toplanır (aynı page.tsx'teki
+  // tüm-okul toplamının daraltılmış hâli).
+  const visibleStudentIds = useMemo(() => new Set(visibleStudents.map(({ student }) => student.id)), [visibleStudents]);
+  const scopedDues = useMemo(() => (dues ?? []).filter((due) => visibleStudentIds.has(due.studentId)), [dues, visibleStudentIds]);
   const filterSummary = useMemo<BillingFilterSummary>(() => ({
-    outstanding: baseDues.filter((item) => isOpen(item.status)).reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0),
-    collected: baseDues.reduce((total, item) => total + item.totalPaid, 0),
-    overdue: baseDues.filter((item) => item.status === "Overdue").reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0),
-    openCount: baseDues.filter((item) => isOpen(item.status)).length,
-    overdueCount: baseDues.filter((item) => item.status === "Overdue").length,
-  }), [baseDues]);
+    outstanding: scopedDues.filter((item) => isOpen(item.status)).reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0),
+    collected: scopedDues.reduce((total, item) => total + item.totalPaid, 0),
+    overdue: scopedDues.filter((item) => item.status === "Overdue").reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0),
+    openCount: scopedDues.filter((item) => isOpen(item.status)).length,
+    overdueCount: scopedDues.filter((item) => item.status === "Overdue").length,
+  }), [scopedDues]);
 
   useEffect(() => onSummaryChange?.(filterSummary), [filterSummary, onSummaryChange]);
 
-  // Dönem başlığındaki vade: seçili dönemdeki tüm aidatlar aynı vadeyi paylaşıyorsa bir
-  // kez yazılır. Bu, satırlardan kaldırılan "Vade" sütununun karşılığı.
-  const sharedDueDate = useMemo(() => {
-    const dates = [...new Set(baseDues.map((due) => due.dueDate))];
-    return dates.length === 1 ? dates[0] : null;
-  }, [baseDues]);
-
-  const visibleDues = useMemo(() => baseDues
-    .filter((due) => filter === "all" ? due.status !== "Cancelled" : filter === "open" ? isOpen(due.status) : due.status === "Paid")
-    .sort((a, b) =>
-      STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
-      a.dueDate.localeCompare(b.dueDate) ||
-      a.studentName.localeCompare(b.studentName, "tr-TR")),
-    [baseDues, filter]);
-
-  const hasActiveFilters = teacherFilter !== "all" || studentSearch.trim() !== "" || filter !== "all";
+  const hasActiveFilters = teacherFilter !== "all" || studentSearch.trim() !== "";
 
   return <div className="space-y-4">
-    {/* Yalnızca açıkken monte edilir: pencere her açılışta temiz durumla (o anki dönem,
-        önceki çalıştırmanın sonucu olmadan) başlasın diye - state'i effect'te sıfırlamak
-        yerine bileşeni yeniden kurmak hem daha basit hem fazladan render turu üretmiyor. */}
-    {showMonthlyRun && <MonthlyDueRunDialog
-      defaultPeriod={activePeriod === ALL_PERIODS ? new Date().toISOString().slice(0, 7) : activePeriod}
-      onClose={() => setShowMonthlyRun(false)}
-      onGoToStudent={(studentId) => { setShowMonthlyRun(false); setSelectedStudentId(studentId); }}
-    />}
-
     <Modal open={showCreatePanel} title="Tahsilat kaydet" description="Öğrenciyi, ilk dönemi ve kaç aylık ödeme yaptığını seç; aylar otomatik olarak ödendi işaretlensin." onClose={() => setShowCreatePanel(false)}>
       <QuickCollectPanel
         pickerRef={studentPickerRef}
@@ -234,71 +163,59 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
     {selectedStudentId && <StudentBillingSection key={selectedStudentId} initialStudentId={selectedStudentId} showStudentPicker={false} onClose={() => setSelectedStudentId(null)} />}
 
     <section className="app-card overflow-hidden">
-      {/* Dönem başlığı: sütunlardan kaldırılan Dönem ve Vade bilgisini bir kez taşır.
-          "+ Aidat al" da buraya taşındı - önceki başlık/açıklama/arama bloğu tamamen
-          kaldırıldı (kullanıcı isteği: gereksiz tekrar, tek bir eylem yeterli). */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
-        <label className="flex items-center gap-2">
-          <span className="sr-only">Döneme göre filtrele</span>
-          <select value={activePeriod} onChange={(event) => setPeriod(event.target.value)} className="min-h-9 rounded-lg border border-[var(--line)] bg-white px-2.5 font-serif text-sm font-semibold capitalize">
-            <option value={ALL_PERIODS}>Tüm dönemler</option>
-            {periods.map((item) => <option key={item} value={item} className="capitalize">{formatPeriod(item)}</option>)}
-          </select>
-        </label>
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">
-            {sharedDueDate && <>Vade {formatDay(sharedDueDate)} · </>}
-            {counts.all} aidat
-            {filterSummary.overdue > 0 && <> · <span className="font-bold text-[var(--danger-strong)]">{formatMoney(filterSummary.overdue, "TRY")} gecikmiş</span></>}
-            {filterSummary.outstanding > 0 && <> · {formatMoney(filterSummary.outstanding, "TRY")} açık</>}
-          </p>
-          <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-quiet">Aylık aidatları oluştur</button>
-          <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
-        </div>
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/30 px-4 py-3">
+        <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{visibleStudents.length}</strong> öğrenci gösteriliyor</p>
+        <label className="min-w-[9rem]"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+        <label className="relative min-w-[12rem]"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 pl-9 text-xs font-semibold" /></label>
+        <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
       </div>
 
-      {overdueOutsideScope && <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--danger)]/25 bg-[var(--danger-soft)] px-4 py-2.5">
-        <Icon name="bell" className="h-4 w-4 shrink-0 text-[var(--danger-strong)]" />
-        <p className="text-xs font-bold tabular-nums text-[var(--danger-strong)]">
-          Başka dönemlerde {overdueOutsideScope.count} gecikmiş aidat var · {formatMoney(overdueOutsideScope.amount, "TRY")}
-        </p>
-        <button type="button" onClick={() => { setPeriod(ALL_PERIODS); setFilter("open"); }} className="pressable ml-auto min-h-9 rounded-lg bg-[var(--danger-strong)] px-3 text-[.75rem] font-bold text-white">Hepsini göster</button>
-      </div>}
-
-      {/* Durum sekmeleri solda, Öğretmen/Öğrenci filtreleri sağda - kullanıcı isteği. */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
-        <div className="inline-flex gap-1 rounded-xl bg-[var(--surface-muted)] p-1" aria-label="Aidat durum filtresi">{FILTERS.map((item) => <button key={item.value} type="button" onClick={() => setFilter(item.value)} aria-pressed={filter === item.value} className={`pressable flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-bold ${filter === item.value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}>{item.label}<span className="rounded-full bg-[var(--surface-muted)] px-1.5 py-0.5 text-[.75rem] tabular-nums">{counts[item.value]}</span></button>)}</div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="min-w-[9rem]"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
-          <label className="relative min-w-[12rem]"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 pl-9 text-xs font-semibold" /></label>
-        </div>
-      </div>
-
-      {/* Beş sütun: Dönem ve Vade artık yukarıdaki dönem başlığında. */}
-      <div className="mt-3 hidden grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.9fr)_minmax(9rem,.9fr)_minmax(8rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci / enstrüman</span><span>Öğretmen</span><span>Tutar / kalan</span><span>Durum</span><span className="text-right">İşlem</span></div>
+      <div className="hidden grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Kurslar</span><span>Bu ay</span><span className="text-right">İşlem</span></div>
       {isLoading && <div className="space-y-2 p-4">{[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-16 rounded-xl" />)}</div>}
-      {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Aidat listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="pressable mt-3 min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--foreground)] disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
-      {!isLoading && !isError && visibleDues.length > 0 && <div className="divide-y divide-[var(--line)]">{visibleDues.map((due) => <DueRow key={due.id} due={due} />)}</div>}
-      {!isLoading && !isError && !visibleDues.length && <div className="grid min-h-52 place-items-center p-8 text-center"><div>
+      {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Öğrenci listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="pressable mt-3 min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--foreground)] disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+      {!isLoading && !isError && visibleStudents.length > 0 && <ul className="divide-y divide-[var(--line)]">{visibleStudents.map(({ student, instruments }) => <StudentRow key={student.id} student={student} instruments={instruments} thisMonthDues={duesByStudentThisPeriod.get(student.id) ?? []} />)}</ul>}
+      {!isLoading && !isError && !visibleStudents.length && <div className="grid min-h-52 place-items-center p-8 text-center"><div>
         <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="wallet" className="h-5 w-5" /></span>
-        {!dues?.length
-          ? <>
-              <p className="mt-3 text-sm font-bold">Henüz aidat kaydı yok</p>
-              <p className="text-meta mt-1">Bu ayın aidatlarını tek düğmeyle aç - tutarlar okulun tarifesinden, indirimler otomatik hesaplanır. Aidat oluşturulduğunda tahsilat, kısmi ödeme ve gecikme takibi buradan yürür.</p>
-              <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-primary mt-3">Dönem aidatı oluştur</button>
-            </>
+        {!overviews?.length
+          ? <p className="mt-3 text-sm font-bold">Henüz öğrenci yok</p>
           : <>
-              <p className="mt-3 text-sm font-bold">Bu dönemde aidat yok</p>
-              <p className="text-meta mt-1">{hasActiveFilters ? "Seçili filtrelerle eşleşen aidat bulunamadı." : "Bu dönem için henüz aidat oluşturulmamış."} Başka bir dönem seçebilir veya yeni bir dönem aidatı ekleyebilirsin.</p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                <button type="button" onClick={clearFilters} className="btn btn-quiet">Filtreleri temizle</button>
-                <button type="button" onClick={() => setShowMonthlyRun(true)} className="btn btn-primary">Dönem aidatı oluştur</button>
-              </div>
+              <p className="mt-3 text-sm font-bold">Eşleşen öğrenci yok</p>
+              <p className="text-meta mt-1">{hasActiveFilters ? "Seçili filtrelerle eşleşen öğrenci bulunamadı." : "Öğrenci listesi boş."}</p>
+              {hasActiveFilters && <button type="button" onClick={clearFilters} className="btn btn-quiet mt-3">Filtreleri temizle</button>}
             </>}
       </div></div>}
     </section>
 
   </div>;
+}
+
+// Bir öğrenci satırı: ad, aktif kursları, bu ayki aidat durumu (triyaj için - hangi
+// öğrenciyi araması gerektiğini görmek için tek tek "Detay" açmasına gerek kalmasın) ve
+// geçmiş dahil tüm dönemleri açan "Detay" butonu.
+function StudentRow({ student, instruments, thisMonthDues }: { student: Student; instruments: StudentInstrumentSummary[]; thisMonthDues: BillingDue[] }) {
+  const [showDetail, setShowDetail] = useState(false);
+  const totalDue = thisMonthDues.reduce((total, due) => total + due.amount, 0);
+  const totalPaid = thisMonthDues.reduce((total, due) => total + due.totalPaid, 0);
+  const hasRecord = thisMonthDues.length > 0;
+  const isPaid = totalDue > 0 && totalPaid >= totalDue;
+  const isPartial = totalPaid > 0 && !isPaid;
+  const overdueDues = thisMonthDues.filter((due) => due.status === "Overdue");
+  const isOverdue = overdueDues.length > 0;
+  const worstDueDate = overdueDues.map((due) => due.dueDate).sort().at(0);
+  const lateDays = worstDueDate ? daysOverdue(worstDueDate) : 0;
+
+  const stateStatus: BillingDue["status"] = !hasRecord ? "Unpaid" : isPaid ? "Paid" : isPartial ? "Partial" : isOverdue ? "Overdue" : "Unpaid";
+  const stateLabel = !hasRecord ? "Bu ay kayıt yok" : isPaid ? "Bu ay ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? `${lateDays} gün gecikti` : "Ödenmedi";
+
+  return <li>
+    <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto]">
+      <strong className="min-w-0 truncate text-sm">{student.firstName} {student.lastName}</strong>
+      <span className="text-meta truncate">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
+      <span className={`inline-flex w-fit rounded-full px-2 py-1 text-[.75rem] font-bold ${hasRecord ? STATUS_TONES[stateStatus] : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{stateLabel}</span>
+      <div className="flex justify-end"><button type="button" onClick={() => setShowDetail((visible) => !visible)} aria-expanded={showDetail} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-white px-3 text-[.75rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
+    </div>
+    {showDetail && <div className="px-4 pb-4"><PaymentHistoryCollapse studentId={student.id} /></div>}
+  </li>;
 }
 
 // "Öğrenci aidat verecek" akışının tamamı tek ekranda: öğrenciyi seç, kursu seç, ilk dönemi
@@ -327,7 +244,7 @@ function QuickCollectPanel({
   const recordPayment = useRecordPayment(studentId);
   const [pendingMethod, setPendingMethod] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [startPeriod, setStartPeriod] = useState(() => new Date().toISOString().slice(0, 7));
+  const [startPeriod, setStartPeriod] = useState(() => currentPeriod());
   const [months, setMonths] = useState(1);
 
   const activeEnrollments = useMemo(
@@ -483,59 +400,10 @@ function QuickCollectPanel({
   </div>;
 }
 
-function DueRow({ due }: { due: BillingDue }) {
-  const recordPayment = useRecordPayment(due.studentId);
-  const [showPayment, setShowPayment] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [amount, setAmount] = useState(Math.max(0, due.amount - due.totalPaid));
-  const [method, setMethod] = useState<PaymentMethod>("Cash");
-  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [error, setError] = useState<string | null>(null);
-  const remaining = Math.max(0, due.amount - due.totalPaid);
-  const canCollect = due.status !== "Paid" && due.status !== "Cancelled";
-  const lateDays = due.status === "Overdue" ? daysOverdue(due.dueDate) : 0;
-
-  async function collect(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await recordPayment.mutateAsync({ receivableId: due.id, amount, paymentDate, method });
-      setShowPayment(false);
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ödeme kaydedilemedi.");
-    }
-  }
-
-  return <article className="px-4 py-3">
-    <div className="grid items-center gap-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(9rem,.9fr)_minmax(9rem,.9fr)_minmax(8rem,.8fr)_auto]">
-      <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand-strong)]">{due.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span><span className="min-w-0"><strong className="block truncate text-sm">{due.studentName}</strong><span className="text-meta mt-0.5 block truncate">{due.instrumentName}</span></span></div>
-      <div className="text-xs"><span className="text-[.75rem] font-bold text-[var(--muted)] md:hidden">Öğretmen · </span>{due.teacherName}</div>
-      <div>
-        <strong className="block text-xs tabular-nums">{formatMoney(due.amount, due.currency)}</strong>
-        <span className={`mt-0.5 block text-[.75rem] tabular-nums ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, due.currency)} kaldı` : "Tamamı ödendi"}</span>
-        {/* "Bu 5.700 TL nereden geldi" sorusunun cevabı satırın kendisinde - başka
-            ekrana gitmeye gerek yok (yeni modelde hesap aidat satırına donuyor). */}
-        {due.discountPercent > 0 && <span className="text-meta mt-0.5 block truncate" title={`${formatMoney(due.baseAmount, due.currency)} üzerinden ${due.discountReason ?? ""}`}>
-          <s className="opacity-60">{formatMoney(due.baseAmount, due.currency)}</s> · {due.discountReason ?? `%${due.discountPercent} indirim`}
-        </span>}
-      </div>
-      <div><span className={`inline-flex rounded-full px-2 py-1 text-[.75rem] font-bold ${STATUS_TONES[due.status]}`}>{lateDays > 0 ? `${lateDays} gün gecikti` : STATUS_LABELS[due.status]}</span></div>
-      <div className="flex justify-end gap-1.5">
-        {canCollect && <button type="button" onClick={() => setShowPayment((visible) => !visible)} className="btn btn-primary">Tahsilat</button>}
-        {/* "Hesap" yerine "Geçmiş": ayrı bir üst panel açmak yerine satırın hemen altında
-            katlanır (collapse) bir bölüm olarak, yalnızca bu öğrencinin eski dönem
-            ödemelerini gösterir - kullanıcı isteği üzerine sadeleştirildi. */}
-        <button type="button" onClick={() => setShowHistory((visible) => !visible)} aria-expanded={showHistory} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-white px-3 text-[.75rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Geçmiş<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showHistory ? "rotate-90" : ""}`} /></button>
-      </div>
-    </div>
-    {showPayment && <form onSubmit={collect} className="mt-3 grid gap-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"><label className="form-label">Tutar<input type="number" min={0.01} max={remaining} step={0.01} value={amount} onChange={resetValidity((event) => setAmount(Number(event.target.value)))} onInvalid={onInvalidTurkish} required className="field min-h-10 bg-white text-xs" /></label><label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-10 bg-white text-xs" /></label><label className="form-label">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label><button type="submit" disabled={recordPayment.isPending} className="btn btn-primary">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>{error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] sm:col-span-4">{error}</p>}</form>}
-    {showHistory && <PaymentHistoryCollapse studentId={due.studentId} />}
-  </article>;
-}
-
-// Ana listedeki bir satırın altında açılır; soldaki 12 aylık takvim dönemlerin
-// ödeme durumunu, sağdaki panel ise seçili ayın tahsilat ayrıntısını gösterir. Veri
-// yalnızca collapse açıldığında çekilir; sayfadaki her satır için gizli istek atılmaz.
+// Bir öğrenci satırının "Detay"ı: soldaki 12 aylık takvim dönemlerin ödeme durumunu,
+// sağdaki panel ise seçili ayın tahsilat ayrıntısını ve (ödenmemişse) tahsilat formunu
+// gösterir. Veri yalnızca detay açıldığında çekilir; sayfadaki her satır için gizli istek
+// atılmaz.
 function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   const { data: billing, isLoading, isError } = useStudentBilling(studentId);
   const { data: instruments } = useInstruments();
@@ -588,9 +456,9 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
     setSelectedPeriod(latestPaidPeriod ?? yearPeriods.at(-1) ?? `${year}-01`);
   }
 
-  return <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-3">
+  return <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <div><p className="text-micro text-[var(--brand-strong)]">Geçmiş ödemeler</p><p className="text-meta mt-0.5">Bir aya dokunarak ödeme ayrıntısını gör.</p></div>
+      <div><p className="text-micro text-[var(--brand-strong)]">Aidat takvimi</p><p className="text-meta mt-0.5">Bir aya dokunarak ödeme ayrıntısını gör, ödenmemişse tahsilat al.</p></div>
       {!!years.length && <div className="flex items-center gap-1" aria-label="Ödeme takvimi yılı">
         <button type="button" onClick={() => selectYear(activeYearIndex - 1)} disabled={activeYearIndex <= 0} className="pressable grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] bg-white text-[var(--muted)] disabled:opacity-35" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-3.5 w-3.5" /></button>
         <strong className="min-w-14 text-center text-xs tabular-nums">{activeYear}</strong>
@@ -652,161 +520,81 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
         <h4 className="mt-1 font-serif text-base font-bold capitalize">{formatPeriod(activePeriod)}</h4>
         {!selectedRows.length && <div className="mt-4 grid min-h-36 place-items-center rounded-xl bg-[var(--surface-muted)] p-4 text-center"><div><Icon name="calendar" className="mx-auto h-5 w-5 text-[var(--muted)]" /><p className="text-meta mt-2">Bu ay için aidat kaydı bulunmuyor.</p></div></div>}
         {!!selectedRows.length && <div className="mt-3 space-y-2.5">
-          {selectedRows.map(({ receivable, instrumentName }) => {
-            const remaining = Math.max(0, receivable.amount - receivable.totalPaid);
-            return <article key={receivable.id} className="rounded-xl border border-[var(--line)] p-3">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <span><strong className="block text-xs">{instrumentName}</strong><span className="text-meta mt-0.5 block">Vade {formatDay(receivable.dueDate)}</span></span>
-                <span className="text-right"><strong className="block text-sm tabular-nums">{formatMoney(receivable.amount, receivable.currency)}</strong><span className={`text-[.75rem] font-bold ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, receivable.currency)} kaldı` : "Tamamı ödendi"}</span></span>
-              </div>
-              {!receivable.payments.length && <p className="mt-3 rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem] font-semibold text-[var(--muted)]">Henüz ödeme alınmadı.</p>}
-              {!!receivable.payments.length && <div className="mt-3 space-y-1.5 border-t border-[var(--line)] pt-2.5">
-                {receivable.payments.map((payment) => {
-                  const coveredPeriods = payment.prepayPlanId ? prepayCoverage.get(payment.prepayPlanId) ?? [] : [];
-                  return <div key={payment.id} className="rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem]">
-                    <div className="flex flex-wrap items-center justify-between gap-1.5"><span className="font-semibold">{payment.paymentDate} · {paymentMethodLabel(payment.method)}</span><strong className="tabular-nums">{payment.kind === "Correction" && payment.previousAmount != null ? `${payment.previousAmount.toLocaleString("tr-TR")} → ` : ""}{payment.amount.toLocaleString("tr-TR")} {receivable.currency}</strong></div>
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      {payment.kind === "Correction" && <span className="rounded-full bg-[var(--warning-soft)] px-1.5 py-0.5 font-bold text-[var(--warning-strong)]">Düzeltme</span>}
-                      {payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}
-                      {coveredPeriods.length > 1 && <span className="text-[var(--muted)]">{formatPeriod(coveredPeriods[0])} – {formatPeriod(coveredPeriods.at(-1))}</span>}
-                    </div>
-                  </div>;
-                })}
-              </div>}
-            </article>;
-          })}
+          {selectedRows.map(({ receivable, instrumentName }) => (
+            <ReceivablePeriodCard key={receivable.id} studentId={studentId} receivable={receivable} instrumentName={instrumentName} prepayCoverage={prepayCoverage} />
+          ))}
         </div>}
       </section>
     </div>}
   </div>;
 }
 
-// Ay başının tek düğmesi: seçilen ayın aidatlarını tüm aktif kurs kayıtları için açar.
-// İşlemden ÖNCE ne olacağını gösterir - kaç aidat açılacak, TOPLAM NE KADAR İNDİRİM
-// uygulanacak, hangileri zaten var ve en önemlisi hangileri açılamıyor.
-//
-// Eskiden "eksik" listesi ücret planı olmayan kayıtları gösteriyordu ve bu liste pratikte
-// hep doluydu (her kayıt için ayrı plan açmak gerekiyordu). Artık tek eksik sebebi kalmış
-// olabilir: o ders türü için yürürlükte bir tarifenin olmaması - yani ayda bir değil,
-// sezonda bir karşılaşılacak bir durum.
-function MonthlyDueRunDialog({
-  defaultPeriod,
-  onClose,
-  onGoToStudent,
+// Seçili dönemin bir kursa ait tek satırı: ayrıntı + (ödenmemişse) doğrudan burada
+// tahsilat alma formu. Önceden bu panel salt-okunurdu, tahsilat almak için takvimi kapatıp
+// ana listedeki satıra dönmek gerekiyordu - kullanıcı isteği üzerine aya tıklamak artık
+// tahsilata da yetiyor.
+function ReceivablePeriodCard({
+  studentId,
+  receivable,
+  instrumentName,
+  prepayCoverage,
 }: {
-  defaultPeriod: string;
-  onClose: () => void;
-  onGoToStudent: (studentId: string) => void;
+  studentId: string;
+  receivable: Receivable;
+  instrumentName: string;
+  prepayCoverage: Map<string, string[]>;
 }) {
-  const [period, setPeriod] = useState(defaultPeriod);
-  const [result, setResult] = useState<MonthlyDueResult | null>(null);
+  const recordPayment = useRecordPayment(studentId);
+  const [showForm, setShowForm] = useState(false);
+  const [amount, setAmount] = useState(Math.max(0, receivable.amount - receivable.totalPaid));
+  const [method, setMethod] = useState<PaymentMethod>("Cash");
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState<string | null>(null);
-  const { data: plan, isLoading } = useMonthlyDuePlan(period);
-  const runMonthlyDues = useRunMonthlyDues();
+  const remaining = Math.max(0, receivable.amount - receivable.totalPaid);
+  const canCollect = receivable.status !== "Paid" && receivable.status !== "Cancelled";
 
-  async function run() {
+  async function collect(event: FormEvent) {
+    event.preventDefault();
     setError(null);
     try {
-      setResult(await runMonthlyDues.mutateAsync(period));
+      await recordPayment.mutateAsync({ receivableId: receivable.id, amount, paymentDate, method });
+      setShowForm(false);
     } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Dönem aidatları oluşturulamadı.");
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ödeme kaydedilemedi.");
     }
   }
 
-  const missing = result?.missing ?? plan?.missing ?? [];
-  const discounted = plan?.ready.filter((row) => row.discountPercent > 0) ?? [];
-
-  return (
-    <Modal open title="Aylık aidatları oluştur" description="Seçilen ay için her aktif kursun BORÇ satırını açar - para tahsil etmez. Ödemeyi sonra listedeki satırdan alırsın; birkaç ayı birden tahsil edeceksen Toplu ödeme sekmesini kullan." onClose={onClose}>
-      <div className="space-y-3.5">
-        <label className="form-label sm:max-w-xs">Dönem
-          <input type="month" value={period} onChange={(event) => { setPeriod(event.target.value); setResult(null); setError(null); }} className="field text-sm" />
-        </label>
-
-        {isLoading && <div className="skeleton h-20 rounded-xl" />}
-
-        {!isLoading && plan && !result && (
-          <>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <SummaryTile label="Açılacak aidat" value={`${plan.ready.length}`} detail={plan.ready.length ? formatMoney(plan.readyTotal, plan.currency) : "—"} tone="brand" />
-              <SummaryTile label="Uygulanan indirim" value={plan.readyDiscountTotal > 0 ? formatMoney(plan.readyDiscountTotal, plan.currency) : "—"} detail={discounted.length ? `${discounted.length} kursta` : "İndirim yok"} tone={plan.readyDiscountTotal > 0 ? "warning" : "muted"} />
-              <SummaryTile label="Zaten var" value={`${plan.alreadyExists.length}`} detail="Bu dönemde açılmış" tone="muted" />
-            </div>
-
-            {plan.ready.length > 0 && <section className="rounded-xl border border-[var(--line)]">
-              <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 px-3 py-2">
-                <p className="text-[.75rem] font-bold text-[var(--muted)]">Açılacak aidatlar</p>
-                <p className="text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">Vade {formatDay(plan.dueDate)}</p>
-              </div>
-              <ul className="max-h-56 divide-y divide-[var(--line)] overflow-y-auto">
-                {plan.ready.map((row) => (
-                  <li key={row.enrollmentId} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                    <span className="min-w-0">
-                      <strong className="block truncate">{row.studentName}</strong>
-                      <span className="text-meta block truncate">{row.instrumentName} · {COURSE_KIND_LABEL[row.courseKind]} · {row.teacherName}</span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <strong className="block tabular-nums">{formatMoney(row.amount, row.currency)}</strong>
-                      {row.discountPercent > 0 && <span className="text-meta block truncate">{row.discountReason}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>}
-          </>
-        )}
-
-        {result && (
-          <FormMessage tone="success">
-            {result.createdCount} aidat oluşturuldu · {formatMoney(result.createdTotal, result.currency)}
-            {result.createdDiscountTotal > 0 && ` · ${formatMoney(result.createdDiscountTotal, result.currency)} indirim uygulandı`}
-            {result.alreadyExistsCount > 0 && ` · ${result.alreadyExistsCount} kayıt zaten vardı`}
-          </FormMessage>
-        )}
-
-        {missing.length > 0 && (
-          <section className="rounded-xl border border-[var(--warning)]/40 bg-[var(--warning-soft)]/50 p-3">
-            <p className="text-xs font-bold text-[var(--warning-strong)]">Aidatı açılamayan {missing.length} kurs</p>
-            <p className="text-meta mt-0.5">Bu ders türü için o dönemde yürürlükte bir tarife yok. Fiyat politikası ekranından tarifeyi tanımla.</p>
-            <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
-              {missing.map((row) => (
-                <li key={row.enrollmentId}>
-                  <button type="button" onClick={() => onGoToStudent(row.studentId)} className="pressable flex w-full items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-left text-xs hover:bg-[var(--brand-soft)]">
-                    <span className="min-w-0"><strong>{row.studentName}</strong><span className="text-meta"> · {row.instrumentName} · {row.teacherName}</span></span>
-                    <span className="text-meta shrink-0">{row.reason}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {error && <FormMessage tone="error">{error}</FormMessage>}
-
-        <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
-          <button type="button" onClick={onClose} className="btn btn-quiet">{result ? "Kapat" : "Vazgeç"}</button>
-          {!result && (
-            <button type="button" onClick={run} disabled={runMonthlyDues.isPending || !plan?.ready.length} className="btn btn-primary">
-              {runMonthlyDues.isPending ? "Oluşturuluyor…" : plan?.ready.length ? `${plan.ready.length} aidatı oluştur` : "Açılacak aidat yok"}
-            </button>
-          )}
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function SummaryTile({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "brand" | "muted" | "warning" }) {
-  const palette = {
-    brand: "text-[var(--brand-strong)]",
-    muted: "text-[var(--muted)]",
-    warning: "text-[var(--warning-strong)]",
-  }[tone];
-  return (
-    <div className="rounded-xl border border-[var(--line)] p-3">
-      <p className="text-meta font-bold">{label}</p>
-      <p className={`mt-1 text-lg font-bold tabular-nums ${palette}`}>{value}</p>
-      <p className="text-meta mt-0.5 truncate">{detail}</p>
+  return <article className="rounded-xl border border-[var(--line)] p-3">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <span><strong className="block text-xs">{instrumentName}</strong><span className="text-meta mt-0.5 block">Vade {formatDay(receivable.dueDate)}</span></span>
+      <span className="text-right"><strong className="block text-sm tabular-nums">{formatMoney(receivable.amount, receivable.currency)}</strong><span className={`text-[.75rem] font-bold ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, receivable.currency)} kaldı` : "Tamamı ödendi"}</span></span>
+      {canCollect && <button type="button" onClick={() => setShowForm((visible) => !visible)} className="btn btn-primary">Tahsilat</button>}
     </div>
-  );
+
+    {/* İki sabit sütun (viewport genişliğine göre DEĞİL): bu form artık takvimin dar
+        "Seçili dönem" panelinin içinde render ediliyor - eski geniş satırdaki `sm:` kırılma
+        noktası burada panel ~18rem'e kadar daralabildiği için taşma yapıyordu. */}
+    {showForm && <form onSubmit={collect} className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
+      <label className="form-label">Tutar<input type="number" min={0.01} max={remaining} step={0.01} value={amount} onChange={resetValidity((event) => setAmount(Number(event.target.value)))} onInvalid={onInvalidTurkish} required className="field min-h-10 w-full bg-white text-xs" /></label>
+      <label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-10 w-full bg-white text-xs" /></label>
+      <label className="form-label col-span-2">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 w-full bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
+      <button type="submit" disabled={recordPayment.isPending} className="btn btn-primary col-span-2">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>
+      {error && <p role="alert" className="col-span-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+    </form>}
+
+    {!receivable.payments.length && <p className="mt-3 rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem] font-semibold text-[var(--muted)]">Henüz ödeme alınmadı.</p>}
+    {!!receivable.payments.length && <div className="mt-3 space-y-1.5 border-t border-[var(--line)] pt-2.5">
+      {receivable.payments.map((payment) => {
+        const coveredPeriods = payment.prepayPlanId ? prepayCoverage.get(payment.prepayPlanId) ?? [] : [];
+        return <div key={payment.id} className="rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem]">
+          <div className="flex flex-wrap items-center justify-between gap-1.5"><span className="font-semibold">{payment.paymentDate} · {paymentMethodLabel(payment.method)}</span><strong className="tabular-nums">{payment.kind === "Correction" && payment.previousAmount != null ? `${payment.previousAmount.toLocaleString("tr-TR")} → ` : ""}{payment.amount.toLocaleString("tr-TR")} {receivable.currency}</strong></div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {payment.kind === "Correction" && <span className="rounded-full bg-[var(--warning-soft)] px-1.5 py-0.5 font-bold text-[var(--warning-strong)]">Düzeltme</span>}
+            {payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}
+            {coveredPeriods.length > 1 && <span className="text-[var(--muted)]">{formatPeriod(coveredPeriods[0])} – {formatPeriod(coveredPeriods.at(-1))}</span>}
+          </div>
+        </div>;
+      })}
+    </div>}
+  </article>;
 }

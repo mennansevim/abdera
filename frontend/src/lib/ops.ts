@@ -16,11 +16,13 @@ export interface SystemHealthSummary {
   lastSuccessfulBackupAt: string | null;
   lastBackupStatus: string | null;
   providers: {
-    whatsApp: "Configured" | "DevelopmentOnly" | "Misconfigured";
-    banking: "Configured" | "DevelopmentOnly" | "Misconfigured";
-    backup: "Configured" | "DevelopmentOnly" | "Misconfigured";
+    whatsApp: ProviderConfigurationState;
+    banking: ProviderConfigurationState;
+    backup: ProviderConfigurationState;
   };
 }
+
+export type ProviderConfigurationState = "Configured" | "DevelopmentOnly" | "ManualOnly" | "Disabled" | "Misconfigured";
 
 export function useSystemHealth() {
   return useQuery({

@@ -842,3 +842,70 @@ etmek yerine takvimden boş slot hesaplıyor - art arda koşulduğunda önceki k
 ders 409 üretiyordu; (2) veli testindeki `getByText("Lara Arslan")` artık `exact` - taşıma
 sonrası veliye giden "Ders Saati Değişikliği" mesajı da öğrencinin adını içerdiği için iki
 öğeye denk geliyordu. Üç ardışık tam koşu geçti.
+
+## Üretim sertleştirme ve dayanıklılık turu (2026-09-22)
+
+Önceki oturumdan kalan, henüz commit'lenmemiş geniş bir çalışma tek tek doğrulanıp
+main'e alındı. Kapsam bir tek özellik değil, dağınık bir "sertleştirme" turu:
+
+- **Ödeme idempotency'si.** `POST /api/receivables/{id}/payments` artık zorunlu bir
+  `Idempotency-Key` başlığı istiyor; `payments.idempotency_key` üzerinde kısmi unique
+  index var. Eşzamanlı iki istek unique kısıtına aynı anda çarparsa kaybeden isteği
+  geri almak yerine kazanan kaydı okuyup aynı sonucu dönüyoruz (gerçek retry-safe
+  davranış). İstemci tarafında `useRecordPayment` alan bazlı bir "fingerprint"e göre
+  anahtar üretip başarıdan sonra siliyor - ağ kesintisinde aynı istek tekrar gönderilse
+  bile mükerrer tahsilat oluşmuyor.
+- **Öğretmen kendi telafi kredisini kendi yerleştirebiliyor.** `POST
+  /api/makeup-credits/{id}/use` artık `TeacherOrAdmin`; satır `FOR UPDATE` ile
+  kilitleniyor (eşzamanlı iki istek aynı krediyi iki derse dönüştüremesin), öğretmen
+  kapsamı ve aktif kayıt kontrolü eklendi. Takvimde iptal edilen bir dersin detayından
+  doğrudan "Telafi dersi ekle" ile açılıyor; `MakeupScheduler` artık bir `context` prop'u
+  alıp tek derslik/bağlamsal moda geçebiliyor (eskiden yalnızca admin'in serbest formu
+  vardı).
+- **WhatsApp/Backup için gerçek bir `Disabled` sağlayıcı modu.** `Fake` gibi başarı
+  taklidi yapmıyor, açık hata dönüyor. `ProductionSecretsGuard` bu iki sağlayıcıyı,
+  `Demo:Enabled`'ı, DataProtection anahtar kalıcılığını, `Frontend:Origin`'in HTTPS
+  olmasını ve yedekleme şifreleme anahtarının gerçekten 32 byte base64 olduğunu da
+  kontrol ediyor.
+- **Üç gerçek prod bug'ı düzeltildi:** (1) [api.ts](../frontend/src/lib/api.ts) - Docker
+  geliştirme varsayılanı `localhost:8080`, aynı imaj production Caddy profiliyle
+  ayağa kalktığında ziyaretçinin kendi tarayıcısına istek attırıyordu; production'da
+  loopback adres artık otomatik aynı-origin `/api`'ye düşüyor. (2)
+  [Guardians.cs](../backend/src/Abdera.Api/Modules/People/Features/Guardians.cs) - veli
+  şifre sıfırlama ucunda hiç yetki kontrolü yoktu, artık `AdminOnly`. (3)
+  [Login.cs](../backend/src/Abdera.Api/Modules/Auth/Features/Login.cs) - başarısız giriş
+  logu artık e-posta yerine kullanıcı id'si tutuyor.
+- **Öğretmen müsaitlik/izin listeleri sahiplik kontrolünden geçmiyordu** - bir öğretmen
+  başka bir öğretmenin `teacherId`'siyle GET atarsa onun programını görebiliyordu.
+  `TeacherAvailabilities`/`TeacherTimeOffs` artık `SchedulingAuthorization.EnsureActsAsSelfAsync`
+  kullanıyor (People modülündeki aynı desenin scheduling karşılığı).
+  Ders/aidat/gelişim listelerine ağ hatasında "tekrar dene" arayüzü, kenar çubuğuna
+  çevrimdışı şeridi, takvim/aidat/gelişim filtrelerine sessionStorage kalıcılığı
+  (`useSessionState`), veli yorumu taslağının kaybolmaması ve Modal/popover'ların
+  `createPortal` ile mobil güvenli alan/klavye taşmasına karşı sabitlenmesi eklendi.
+
+### Rebase - origin/main 7 commit ilerlemişti
+
+Commit'lemeden önce `git fetch` local'in origin/main'in 7 commit gerisinde olduğunu
+gösterdi (kardeş indirimini açık kutuya bağlayan, admin'in geçmiş dersi düzenlemesini
+açan ve toplu ödemeyi tek ekrana taşıyan oturum). `frontend/src/app/dashboard/calendar/page.tsx`
+dosyasında gerçek bir çakışma çıktı - iki taraf da `LessonDetailsDialog`'daki iptal
+akışını değiştirmişti (biri "telafisiz iptal" seçeneğini, öbürü iptalden hemen sonra
+telafi planlayıcısını açmayı ekliyordu). Elle birleştirildi: `grantMakeupCredit`
+üzerinden açık telafi kararı korunup, kredi doğduğunda `onPlanMakeup` hâlâ tetikleniyor;
+`canCancelWithMakeup`'ın admin-geçmiş-ders istisnası ve `canPlanMakeup` yan yana duruyor.
+Diğer altı örtüşen dosya (`Login.cs`, model snapshot, iki entegrasyon testi,
+`dues-list-section.tsx`) çakışmadan otomatik birleşti.
+
+### Doğrulama
+
+- Backend: rebase sonrası `450 passed` (444 + rebase'in getirdiği 6 yeni test).
+- Frontend: `npm run lint` ve `npm run build` temiz (23 sayfa).
+- Yeni Playwright senaryoları (`calendar-dialog-position.spec.ts`) hem rebase'den önce
+  hem elle çakışma çözümünden sonra ayrı ayrı gerçek bir dev sunucusuna karşı koşuldu -
+  **2/2 geçti**, dialog ortalama ve bağlamsal telafi akışı birleşme sonrası da sağlam.
+- Tam Docker-stack E2E'leri (`critical-roles`, `billing-calendar-navigation`) bu
+  oturumda koşulmadı - yalnızca metin/seçici güncellemesi taşıyorlardı, ayrı bir Postgres
+  gerektiriyor.
+
+Kalan iş: push kullanıcı onayıyla yapıldı (repo public).

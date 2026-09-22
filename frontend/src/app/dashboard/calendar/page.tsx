@@ -1,18 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/attendance";
-import { useBillingDues } from "@/lib/billing";
+import { useBillingDues, useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
+import { useSessionState } from "@/lib/use-session-state";
 import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
 import { Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
-import { MakeupScheduler } from "./makeup-scheduler";
+import { MakeupScheduler, type MakeupSchedulerContext } from "./makeup-scheduler";
 
 // Saat penceresi ve çakışma yerleşimi dashboard önizlemesiyle (dashboard/page.tsx) aynı
 // paylaşılan modülden (lib/week-grid-layout.ts) gelir. Çekirdek 12:00-18:00 aralığı boşken de
@@ -22,8 +24,17 @@ const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ALL_INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
 type InstrumentFilter = (typeof ALL_INSTRUMENT_FILTERS)[number];
-type QuickAddSlot = { date: string; day: string; time: string; x: number; y: number };
+type QuickAddSlot = { date: string; day: string; time: string };
 type PendingMove = { lesson: CalendarLesson; newStart: Date; newEnd: Date };
+
+const DATE_SESSION_OPTIONS = {
+  encode: (value: Date) => value.toISOString(),
+  decode: (value: string) => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) throw new Error("Invalid stored calendar date");
+    return startOfWeek(parsed);
+  },
+};
 
 // Haftanın Pazartesi'sini bulur - takvim her zaman Pazartesi'den başlar.
 function startOfWeek(date: Date): Date {
@@ -108,9 +119,10 @@ export default function CalendarPage() {
   const isAdmin = me?.role === "Admin";
   // Öğretmen kendi ders programını girer (docs/10-decisions.md K2): seri açma ve boş slota
   // çift tıklama ona da açık. Kendi dersini tek seferlik ya da seri olarak taşıyabilir ve
-  // telafi hakkıyla iptal edebilir; telafi dersini takvime yerleştirmek hâlâ yalnızca Admin'de.
+  // telafi hakkıyla iptal edebilir; kendi öğrencisinin tek derslik telafisini de uygun bir
+  // ortak boşluğa yerleştirebilir. Sunucu öğretmeni kendi teacherId/student kaydıyla sınırlar.
   const canSchedule = isAdmin || me?.role === "Teacher";
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [weekStart, setWeekStart] = useSessionState("abdera:calendar:week", () => startOfWeek(new Date()), DATE_SESSION_OPTIONS);
   const [now, setNow] = useState(() => new Date());
   const [timelineRange] = useState(() => {
     const from = new Date();
@@ -120,6 +132,7 @@ export default function CalendarPage() {
   const [showSeriesForm, setShowSeriesForm] = useState(false);
   const [quickAddSlot, setQuickAddSlot] = useState<QuickAddSlot | null>(null);
   const [showMakeupScheduler, setShowMakeupScheduler] = useState(false);
+  const [makeupContext, setMakeupContext] = useState<MakeupSchedulerContext | null>(null);
   // Ders serisi ve telafi yerleştirme sonuçları pencere kapandığı anda kaybolmasın diye
   // sayfa seviyesinde tutulur; ızgaranın kendi toast'ı (WeeklyGrid) yalnızca sürükle-bırak
   // ve ders düzenleme için, oraya buradan erişilemiyor.
@@ -129,9 +142,9 @@ export default function CalendarPage() {
     setNotice(text);
     window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 5000);
   }
-  const [instrumentFilter, setInstrumentFilter] = useState<InstrumentFilter>("Hepsi");
-  const [teacherFilter, setTeacherFilter] = useState("all");
-  const [studentFilter, setStudentFilter] = useState("all");
+  const [instrumentFilter, setInstrumentFilter] = useSessionState<InstrumentFilter>("abdera:calendar:instrument", "Hepsi");
+  const [teacherFilter, setTeacherFilter] = useSessionState("abdera:calendar:teacher", "all");
+  const [studentFilter, setStudentFilter] = useSessionState("abdera:calendar:student", "all");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
@@ -159,7 +172,7 @@ export default function CalendarPage() {
     () => new Set((dues ?? []).filter((due) => due.status === "Overdue").map((due) => due.studentId)),
     [dues],
   );
-  const { data: rawLessons, isLoading } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
+  const { data: rawLessons, isLoading, isError, isFetching, refetch } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
   const { data: rawTimelineLessons, isLoading: timelineLoading } = useCalendar(timelineRange.from.toISOString(), timelineRange.to.toISOString());
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Eski kaydı ızgarada göstermek aynı dersin
@@ -228,9 +241,18 @@ export default function CalendarPage() {
         />
       )}
 
-      {isAdmin && (
-        <Modal open={showMakeupScheduler} title="Telafi planla" description="Öğretmen ve öğrenci programındaki ortak boşlukları tek tıkla kullan." onClose={() => setShowMakeupScheduler(false)}>
-          <MakeupScheduler onPlaced={(summary) => { setShowMakeupScheduler(false); announce(summary); }} onCancel={() => setShowMakeupScheduler(false)} />
+      {canSchedule && (
+        <Modal
+          open={showMakeupScheduler}
+          title={makeupContext ? `${makeupContext.studentName} için telafi dersi` : "Telafi planla"}
+          description={makeupContext ? "Bu işlem yalnızca tek bir telafi dersi oluşturur; haftalık seri açılmaz." : "Öğretmen ve öğrenci programındaki ortak boşlukları tek tıkla kullan."}
+          onClose={() => { setShowMakeupScheduler(false); setMakeupContext(null); }}
+        >
+          <MakeupScheduler
+            context={makeupContext ?? undefined}
+            onPlaced={(summary) => { setShowMakeupScheduler(false); setMakeupContext(null); announce(summary); }}
+            onCancel={() => { setShowMakeupScheduler(false); setMakeupContext(null); }}
+          />
         </Modal>
       )}
 
@@ -294,17 +316,48 @@ export default function CalendarPage() {
           {canSchedule && (
             <>
               <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden="true" />
-              {isAdmin && <button type="button" onClick={() => { setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-2.5 text-[.75rem] font-bold text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)] 2xl:px-4 2xl:text-xs">Telafi planla</button>}
-              <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand)] px-2.5 text-[.75rem] font-bold text-white 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
+              {isAdmin && <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-2.5 text-[.75rem] font-bold text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)] 2xl:px-4 2xl:text-xs">Telafi planla</button>}
+              <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setMakeupContext(null); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand)] px-2.5 text-[.75rem] font-bold text-white 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
             </>
           )}
         </div>
       </div>
 
-      <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
-        <WeeklyGrid weekDays={weekDays} lessons={visibleLessons} loading={isLoading} colors={colors} isAdmin={isAdmin} canSchedule={!!canSchedule} hourWindow={hourWindow} now={now} overdueStudentIds={overdueStudentIds} onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setShowSeriesForm(false); }} />
-        <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
-      </div>
+      {isError ? (
+        <div className="app-card grid min-h-64 place-items-center p-8 text-center"><div><p className="text-sm font-bold">Ders programı yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>
+      ) : (
+        <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
+          <WeeklyGrid
+            weekDays={weekDays}
+            lessons={visibleLessons}
+            loading={isLoading}
+            colors={colors}
+            isAdmin={isAdmin}
+            canSchedule={!!canSchedule}
+            hourWindow={hourWindow}
+            now={now}
+            overdueStudentIds={overdueStudentIds}
+            onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setMakeupContext(null); setShowSeriesForm(false); }}
+            onPlanMakeup={(lesson) => {
+              setMakeupContext({
+                studentId: lesson.studentId,
+                studentName: lesson.studentName,
+                teacherId: lesson.teacherId,
+                teacherName: lesson.teacherName,
+                instrumentId: lesson.instrumentId,
+                instrumentName: lesson.instrumentName,
+                sourceLessonId: lesson.id,
+                sourceLessonStartAt: lesson.startAt,
+                durationMinutes: lessonDurationMinutes(lesson),
+              });
+              setShowMakeupScheduler(true);
+              setShowSeriesForm(false);
+              setQuickAddSlot(null);
+            }}
+          />
+          <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
+        </div>
+      )}
     </div>
   );
 }
@@ -320,6 +373,7 @@ function WeeklyGrid({
   now,
   overdueStudentIds,
   onDoubleClickSlot,
+  onPlanMakeup,
 }: {
   weekDays: Date[];
   lessons: CalendarLesson[];
@@ -331,6 +385,7 @@ function WeeklyGrid({
   now: Date;
   overdueStudentIds: Set<string>;
   onDoubleClickSlot: (slot: QuickAddSlot) => void;
+  onPlanMakeup: (lesson: CalendarLesson) => void;
 }) {
   const windowMinutes = (hourWindow.endHour - hourWindow.startHour) * 60;
   const reschedule = useRescheduleLesson();
@@ -407,8 +462,6 @@ function WeeklyGrid({
       date: dateInputValue(start),
       day: DAY_KEYS[start.getDay()]!,
       time: formatMinutesOfDay(start.getHours() * 60 + start.getMinutes()),
-      x: event.clientX,
-      y: event.clientY,
     });
   }
 
@@ -576,7 +629,7 @@ function WeeklyGrid({
           );
         })}
       </div>
-      {openLesson && <LessonDetailsDialog lesson={openLesson} isAdmin={isAdmin} canManage={canSchedule} now={now} onUpdated={(message) => showToast("success", message ?? "Ders ayrıntıları güncellendi.")} onClose={() => setOpenLesson(null)} />}
+      {openLesson && <LessonDetailsDialog lesson={openLesson} isAdmin={isAdmin} canManage={canSchedule} now={now} onUpdated={(message) => showToast("success", message ?? "Ders ayrıntıları güncellendi.")} onPlanMakeup={(lesson) => { setOpenLesson(null); onPlanMakeup(lesson); }} onClose={() => setOpenLesson(null)} />}
     </section>
   );
 }
@@ -611,21 +664,11 @@ function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: Pendin
 }
 
 function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlot; onCreated: (summary: string) => void; onClose: () => void }) {
-  // Popup, çift tıklanan hücrenin yakınında açılır; ekran kenarına taşarsa içeri doğru kayar.
-  // Bu bileşen yalnızca kullanıcı etkileşiminden sonra oluşturulduğu için viewport ölçüsü
-  // burada güvenle okunabilir (ilk SSR çıktısında popup yoktur).
-  const viewportWidth = typeof window === "undefined" ? 1200 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight;
-  const panelWidth = Math.min(520, viewportWidth - 24);
-  const panelHeight = Math.min(700, viewportHeight - 24);
-  const position = {
-    left: Math.min(Math.max(12, slot.x - panelWidth / 2), viewportWidth - panelWidth - 12),
-    top: Math.min(Math.max(12, slot.y + 14), viewportHeight - panelHeight - 12),
-  };
   const slotDate = new Date(`${slot.date}T12:00:00`);
   const slotLabel = `${slotDate.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })} · ${WEEK_DAYS_TR[(slotDate.getDay() + 6) % 7]} · ${slot.time}`;
+  if (typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60]" role="presentation" onMouseDown={onClose}>
       <button type="button" onClick={onClose} className="absolute inset-0 bg-[#2a1c14]/20 backdrop-blur-[1px]" aria-label="Yeni ders penceresini kapat" />
       <section
@@ -633,8 +676,7 @@ function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlo
         aria-modal="true"
         aria-label="Yeni ders oluştur"
         onMouseDown={(event) => event.stopPropagation()}
-        className="absolute w-[min(32.5rem,calc(100vw-1.5rem))] max-h-[calc(100vh-1.5rem)] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[0_24px_70px_rgba(52,35,24,.28)]"
-        style={{ left: position.left, top: position.top }}
+        className="fixed left-1/2 top-1/2 z-10 w-[calc(100vw-1.5rem)] max-w-[32.5rem] max-h-[calc(100dvh-1.5rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[0_24px_70px_rgba(52,35,24,.28)]"
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
           <div>
@@ -643,7 +685,7 @@ function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlo
           </div>
           <button type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat" title="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
-        <div className="max-h-[calc(100vh-7rem)] overflow-x-hidden overflow-y-auto p-4">
+        <div className="max-h-[calc(100dvh-7rem)] overflow-x-hidden overflow-y-auto p-4">
           <CreateSeriesForm
             initialDate={slot.date}
             initialDay={slot.day}
@@ -653,7 +695,8 @@ function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlo
           />
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -957,13 +1000,14 @@ function LessonStatusChip({ lesson }: { lesson: CalendarLesson }) {
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${className}`}>{label}</span>;
 }
 
-function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClose }: { lesson: CalendarLesson; isAdmin: boolean; canManage: boolean; now: Date; onUpdated: (message?: string) => void; onClose: () => void }) {
+function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPlanMakeup, onClose }: { lesson: CalendarLesson; isAdmin: boolean; canManage: boolean; now: Date; onUpdated: (message?: string) => void; onPlanMakeup: (lesson: CalendarLesson) => void; onClose: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   const duration = Math.round((end.getTime() - start.getTime()) / 60000);
   const updateLesson = useUpdateLesson();
   const markAttendance = useMarkAttendance(lesson.id);
   const cancelLesson = useCancelLesson();
+  const { data: makeupCredits } = useMakeupCredits(lesson.status === "Cancelled" ? lesson.studentId : "");
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
   const [editing, setEditing] = useState(false);
@@ -988,6 +1032,8 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
   const canEdit = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() >= now.getTime());
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
   const canCancelWithMakeup = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() > now.getTime());
+  const canPlanMakeup = canManage && lesson.status === "Cancelled" && Boolean(makeupCredits?.some((credit) =>
+    credit.sourceLessonId === lesson.id && credit.status === "Available" && new Date(credit.expiresAt).getTime() >= now.getTime()));
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1037,6 +1083,10 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
           grantMakeupCredit: withMakeup,
         });
         onUpdated(result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders telafi hakkı verilmeden iptal edildi.");
+        if (result.makeupCreditEarned) {
+          onPlanMakeup(lesson);
+          return;
+        }
       }
       onClose();
     } catch (err) {
@@ -1047,7 +1097,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
       <button type="button" onClick={onClose} aria-label="Ders detay penceresini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
-      <section className="app-card relative z-10 w-full max-w-md overflow-hidden">
+      <section className="app-card relative z-10 flex max-h-[calc(100dvh-.75rem)] w-full max-w-md flex-col overflow-y-auto overscroll-contain rounded-b-none sm:max-h-[calc(100dvh-2rem)] sm:rounded-b-[1.35rem]">
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] p-5">
           <div>
             <p className="text-micro text-[var(--brand-strong)]">Ders ayrıntısı</p>
@@ -1076,7 +1126,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
             </div>
             <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface-muted)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
               <button type="button" onClick={() => { setEditing(false); setError(null); }} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold">İptal</button>
               <button type="submit" disabled={updateLesson.isPending || !teacherId || !studentId} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">{updateLesson.isPending ? "Kaydediliyor…" : "Değişiklikleri kaydet"}</button>
             </div>
@@ -1094,12 +1144,13 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
                 </div>
               </div>
             )}
-            <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] p-4">
+            <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {canMarkAbsent && <button type="button" onClick={() => setConfirmAction("absent")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--warning-strong)]">Öğrenci gelmedi</button>}
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-with-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--danger)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">İptal et + telafi</button>}
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-without-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">Telafisiz iptal</button>}
+              {canPlanMakeup && <button type="button" onClick={() => onPlanMakeup(lesson)} className="pressable inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white"><Icon name="plus" className="h-4 w-4" />Telafi dersi ekle</button>}
               {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-5 text-sm font-bold text-[var(--brand-strong)]">Düzenle</button>}
-              <button type="button" onClick={onClose} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-sm font-bold text-white">Kapat</button>
+              <button type="button" onClick={onClose} className={`pressable min-h-11 rounded-xl px-5 text-sm font-bold ${canPlanMakeup ? "border border-[var(--line)] bg-white text-[var(--foreground)]" : "bg-[var(--brand)] text-white"}`}>Kapat</button>
             </div>
           </>
         )}

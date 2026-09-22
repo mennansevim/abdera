@@ -74,12 +74,29 @@ public static class MonthlyDueRun
     private static async Task<IResult> CreateAsync(
         CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
-        var plan = await BuildPlanAsync(request.Period, db);
+        var actorId = AuthContext.GetUserId(principal);
+        var response = await RunAsync(db, clock, request.Period, actorId, throwIfEmpty: true);
+        return Results.Ok(response);
+    }
+
+    // MonthlyReceivableGenerator (Billing/Infrastructure) her kayıt zaten en az 1 yıllık
+    // sabit haftalık taahhüt olduğu için bu akışı elle onay beklemeden periyodik çağırır -
+    // actorId=null (CLAUDE.md: sistem-kaynaklı olaylarda AuditLog.ActorUserId null).
+    // throwIfEmpty admin'in HTTP isteğinde "yeni aidat yok" demek istiyor; arka plan
+    // servisinde bu normal bir gündür, hataya çevrilmez.
+    public static async Task<CreateResponse> RunAsync(
+        AbderaDbContext db, IClock clock, string period, Guid? actorId, bool throwIfEmpty)
+    {
+        var plan = await BuildPlanAsync(period, db);
         if (plan.Ready.Count == 0)
-            throw new ConflictException($"'{request.Period}' dönemi için oluşturulacak yeni aidat yok.");
+        {
+            if (throwIfEmpty)
+                throw new ConflictException($"'{period}' dönemi için oluşturulacak yeni aidat yok.");
+
+            return new CreateResponse(period, 0, 0m, 0m, plan.Currency, plan.AlreadyExists.Count, plan.Missing);
+        }
 
         var now = clock.UtcNow;
-        var actorId = AuthContext.GetUserId(principal);
         var pricer = await TuitionPricer.LoadAsync(db);
         var enrollmentIds = plan.Ready.Select(row => row.EnrollmentId).ToList();
         var enrollments = await db.Enrollments
@@ -95,12 +112,12 @@ public static class MonthlyDueRun
             // Önizlemedeki satırı tekrar fiyatlamak yerine aynı hesabı yeniden çalıştırmak
             // bilinçli: araya giren bir tarife/politika değişikliği burada yakalanır ve
             // yazılan tutar her zaman o anki kuralın sonucudur.
-            var priced = pricer.Price(enrollment, request.Period);
+            var priced = pricer.Price(enrollment, period);
             if (priced is null) continue;
 
             var receivable = Receivable.Create(
-                enrollment.Id, priced.Value.Rate.Id, request.Period, priced.Value.Breakdown,
-                priced.Value.Rate.Currency, pricer.DueDateFor(request.Period), now);
+                enrollment.Id, priced.Value.Rate.Id, period, priced.Value.Breakdown,
+                priced.Value.Rate.Currency, pricer.DueDateFor(period), now);
 
             db.Receivables.Add(receivable);
             createdTotal += receivable.Amount;
@@ -110,7 +127,7 @@ public static class MonthlyDueRun
                 actorId, "receivable.monthly_run_created", nameof(Receivable), receivable.Id, now,
                 afterJson: JsonSerializer.Serialize(new
                 {
-                    period = request.Period,
+                    period,
                     baseAmount = receivable.BaseAmount,
                     discountPercent = receivable.DiscountPercent,
                     discountReason = receivable.DiscountReason,
@@ -122,9 +139,9 @@ public static class MonthlyDueRun
 
         await db.SaveChangesAsync();
 
-        return Results.Ok(new CreateResponse(
-            request.Period, plan.Ready.Count, createdTotal, discountTotal,
-            plan.Currency, plan.AlreadyExists.Count, plan.Missing));
+        return new CreateResponse(
+            period, plan.Ready.Count, createdTotal, discountTotal,
+            plan.Currency, plan.AlreadyExists.Count, plan.Missing);
     }
 
     // Modüller arası okuma navigation property üzerinden join değil, açık id sorguları

@@ -5,7 +5,9 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
+using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -41,6 +43,17 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
             response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created,
             $"Beklenmeyen durum: {(int)response.StatusCode} {response.StatusCode}, gövde: {body}");
         return System.Text.Json.JsonSerializer.Deserialize<T>(body, TestJson.Options)!;
+    }
+
+    private static Task<HttpResponseMessage> PostPaymentAsync(
+        HttpClient client, Guid receivableId, Payments.CreateRequest request, string? idempotencyKey = null)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Post, $"/api/receivables/{receivableId}/payments")
+        {
+            Content = JsonContent.Create(request),
+        };
+        message.Headers.Add("Idempotency-Key", idempotencyKey ?? Guid.NewGuid().ToString("N"));
+        return client.SendAsync(message);
     }
 
     private async Task<Guid> InstrumentIdAsync(HttpClient admin, string code)
@@ -186,6 +199,42 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
     }
 
     [Fact]
+    public async Task Background_generator_creates_receivables_with_no_actor_and_is_a_silent_noop_on_rerun()
+    {
+        // MonthlyReceivableGenerator (BackgroundService, Billing/Infrastructure) admin onayı
+        // beklemeden bu yolu çağırır - kullanıcı kararı: her kayıt zaten en az 1 yıllık sabit
+        // haftalık taahhüt olduğu için hangi aidatın açılacağı elle onaylanacak bir şey değil.
+        await using var db = await _factory.CreateDbContextAsync();
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "Otomatik", piano);
+        var student = await CreateStudentAsync(admin, "Otomatik");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+
+        var result = await MonthlyDueRun.RunAsync(db, clock, "2026-12", actorId: null, throwIfEmpty: false);
+        Assert.True(result.CreatedCount > 0);
+
+        var written = await db.Receivables.AsNoTracking()
+            .SingleAsync(receivable => receivable.EnrollmentId == enrollment.Id && receivable.Period == "2026-12");
+        Assert.Equal(ReceivableStatus.Unpaid, written.Status);
+
+        // AuditLog.ActorUserId'nin sistem-kaynaklı olayları null işaretlemesi (CLAUDE.md) -
+        // otomatik matched banka ödemesi/backup hataları ile aynı kural.
+        var auditLog = await db.AuditLogs.AsNoTracking().SingleAsync(log =>
+            log.Action == "receivable.monthly_run_created" && log.EntityId == written.Id);
+        Assert.Null(auditLog.ActorUserId);
+
+        // Servis günde bir kez (ve açılışta) tekrar çalışır - aynı dönemi ikinci kez
+        // çağırmak HTTP uç noktasının aksine (Conflict) sessiz bir no-op'tur, ikinci bir
+        // kayıt açmaz (UNIQUE enrollment_id+period zaten var olanı "AlreadyExists"e düşürür).
+        var rerun = await MonthlyDueRun.RunAsync(db, clock, "2026-12", actorId: null, throwIfEmpty: false);
+        Assert.Equal(0, rerun.CreatedCount);
+        Assert.Equal(1, await db.Receivables.CountAsync(
+            r => r.EnrollmentId == enrollment.Id && r.Period == "2026-12"));
+    }
+
+    [Fact]
     public async Task Monthly_run_reports_courses_without_a_valid_tariff_instead_of_billing_zero()
     {
         var admin = await CreateAdminClientAsync();
@@ -235,14 +284,23 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
             "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2026-11"));
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
 
-        var partial = await ReadAsync<Payments.PaymentResponse>(await admin.PostAsJsonAsync(
-            $"/api/receivables/{receivable.Id}/payments",
-            new Payments.CreateRequest(2000m, new DateOnly(2026, 11, 3), PaymentMethod.Cash, null, "peşinat")));
+        var partialRequest = new Payments.CreateRequest(
+            2000m, new DateOnly(2026, 11, 3), PaymentMethod.Cash, null, "peşinat");
+        const string partialKey = "test-partial-payment-2026-11";
+        var partial = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
+            admin, receivable.Id, partialRequest, partialKey));
         Assert.Equal(ReceivableStatus.Partial,
             (await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == receivable.Id)).Status);
 
-        var rest = await ReadAsync<Payments.PaymentResponse>(await admin.PostAsJsonAsync(
-            $"/api/receivables/{receivable.Id}/payments",
+        // Yanıt istemciye ulaşmadan bağlantı kopmuş gibi aynı istek aynı anahtarla yeniden
+        // geldiğinde aynı kayıt dönmeli; tutar ikinci kez aidata yazılmamalı.
+        var replay = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
+            admin, receivable.Id, partialRequest, partialKey));
+        Assert.Equal(partial.Id, replay.Id);
+        Assert.Equal(1, await db.Payments.CountAsync(payment => payment.IdempotencyKey == partialKey));
+
+        var rest = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
+            admin, receivable.Id,
             new Payments.CreateRequest(4000m, new DateOnly(2026, 11, 10), PaymentMethod.Transfer, "TR123", null)));
         db.ChangeTracker.Clear();
         Assert.Equal(ReceivableStatus.Paid,
@@ -393,7 +451,7 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
 
         var paid = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
             "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2027-06")));
-        (await admin.PostAsJsonAsync($"/api/receivables/{paid.Id}/payments",
+        (await PostPaymentAsync(admin, paid.Id,
             new Payments.CreateRequest(paid.Amount, new DateOnly(2027, 6, 1), PaymentMethod.Cash, null, null)))
             .EnsureSuccessStatusCode();
 

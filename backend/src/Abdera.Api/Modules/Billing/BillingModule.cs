@@ -10,6 +10,7 @@ public static class BillingModule
         if (enableHostedServices)
         {
             services.AddHostedService<OverdueReceivableSweeper>();
+            services.AddHostedService<MonthlyReceivableGenerator>();
         }
     }
 

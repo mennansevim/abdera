@@ -26,3 +26,6 @@
 frontend/.playwright-artifacts
 frontend/playwright-report
 frontend/test-results
+
+# Yerel analiz girdisi; public/ altında dursa da deploy ile internete açılmamalı.
+frontend/public/bg/rotori_japan_rag_phase1.csv

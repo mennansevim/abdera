@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { AddButton, FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
@@ -10,6 +10,7 @@ import { buildProgressAnalysis, type PieceInsight } from "@/lib/progress-analysi
 import { useCreateProgressNote, useRevokeParentComment, useSetParentComment, useSuggestParentComment, useStudentProgress, type ProgressEntry } from "@/lib/progress";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
+import { useSessionState } from "@/lib/use-session-state";
 
 type TimelineFilter = "all" | "pieces" | "homework";
 
@@ -56,21 +57,21 @@ export default function ProgressPage() {
 function ProgressPageContent() {
   const { data: me } = useMe();
   const canWrite = me?.role === "Teacher";
-  const { data: students, isLoading: studentsLoading } = useStudents();
+  const { data: students, isLoading: studentsLoading, isError: studentsError, isFetching: studentsFetching, refetch: refetchStudents } = useStudents();
   const searchParams = useSearchParams();
   // Yalnızca ilk yüklemede okunur (deep-link) - sonrasında seçim tamamen kullanıcı
   // etkileşimiyle yönetilir, URL'i her seçimde güncellemeye gerek yok.
   const [selectedStudentId, setSelectedStudentId] = useState(() => searchParams.get("studentId") ?? "");
   const [showComposer, setShowComposer] = useState(false);
-  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all");
-  const [teacherFilter, setTeacherFilter] = useState("all");
-  const [instrumentFilter, setInstrumentFilter] = useState("all");
-  const [difficultyFilter, setDifficultyFilter] = useState("all");
-  const [lastWorkedFrom, setLastWorkedFrom] = useState("");
+  const [timelineFilter, setTimelineFilter] = useSessionState<TimelineFilter>("abdera:progress:timeline", "all");
+  const [teacherFilter, setTeacherFilter] = useSessionState("abdera:progress:teacher", "all");
+  const [instrumentFilter, setInstrumentFilter] = useSessionState("abdera:progress:instrument", "all");
+  const [difficultyFilter, setDifficultyFilter] = useSessionState("abdera:progress:difficulty", "all");
+  const [lastWorkedFrom, setLastWorkedFrom] = useSessionState("abdera:progress:worked-from", "");
 
   const activeStudentId = selectedStudentId || students?.[0]?.id || "";
   const activeStudent = students?.find((student) => student.id === activeStudentId);
-  const { data: progress, isLoading: progressLoading } = useStudentProgress(activeStudentId);
+  const { data: progress, isLoading: progressLoading, isError: progressError, isFetching: progressFetching, refetch: refetchProgress } = useStudentProgress(activeStudentId);
 
   const calendarRange = useMemo(() => {
     const now = new Date();
@@ -109,6 +110,9 @@ function ProgressPageContent() {
           students={students ?? []}
           selectedStudentId={activeStudentId}
           isLoading={studentsLoading}
+          isError={studentsError}
+          isFetching={studentsFetching}
+          onRetry={() => void refetchStudents()}
           onSelect={(studentId) => { setSelectedStudentId(studentId); setShowComposer(false); setTimelineFilter("all"); }}
         />
 
@@ -131,6 +135,9 @@ function ProgressPageContent() {
               <Timeline
                 entries={filteredEntries}
                 isLoading={progressLoading}
+                isError={progressError}
+                isFetching={progressFetching}
+                onRetry={() => void refetchProgress()}
                 filter={timelineFilter}
                 onFilter={setTimelineFilter}
                 studentId={activeStudent.id}
@@ -158,11 +165,17 @@ function StudentPicker({
   students,
   selectedStudentId,
   isLoading,
+  isError,
+  isFetching,
+  onRetry,
   onSelect,
 }: {
   students: Student[];
   selectedStudentId: string;
   isLoading: boolean;
+  isError: boolean;
+  isFetching: boolean;
+  onRetry: () => void;
   onSelect: (studentId: string) => void;
 }) {
   return (
@@ -170,6 +183,8 @@ function StudentPicker({
       <div className="flex items-center justify-between gap-2"><p className="text-micro">Öğrenciler</p><span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.75rem] font-bold text-[var(--muted)]">{students.length}</span></div>
       {isLoading ? (
         <div className="mt-3 skeleton h-11 rounded-xl" />
+      ) : isError ? (
+        <div className="mt-3 rounded-xl bg-[var(--danger-soft)] p-3"><p className="text-xs font-bold text-[var(--danger-strong)]">Öğrenciler yüklenemedi</p><button type="button" onClick={onRetry} disabled={isFetching} className="mt-2 min-h-9 text-xs font-bold underline disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div>
       ) : !students.length ? (
         <p className="mt-3 text-xs text-[var(--muted)]">Henüz öğrenci yok.</p>
       ) : (
@@ -247,7 +262,7 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
       <label className="form-label sm:max-w-md">Ders<select value={activeLessonId} onChange={(event) => setLessonId(event.target.value)} className="field text-sm">{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{formatDate(lesson.startAt, true)} · {formatTime(lesson.startAt)} · {lesson.instrumentName}</option>)}</select></label>
       <div className="grid gap-3 sm:grid-cols-2"><label className="form-label"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label><label className="form-label"><span>Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-sm" placeholder="Örn. Bach · Minuet in G" /></label></div>
       {pieceTitle && <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="form-label">Besteci<input value={pieceComposer} onChange={(event) => setPieceComposer(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Eser durumu<select value={pieceStatus} onChange={(event) => setPieceStatus(event.target.value as typeof pieceStatus)} className="field bg-white text-sm"><option value="Learning">Çalışılıyor</option><option value="Polishing">Pekiştiriliyor</option><option value="PerformanceReady">Sahneye hazır</option><option value="Archived">Arşivlendi</option></select></label><label className="form-label">Hedef tarih<input type="date" value={pieceTargetDate} onChange={(event) => setPieceTargetDate(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Nota / bağlantı<input type="url" value={pieceResourceUrl} onChange={(event) => setPieceResourceUrl(event.target.value)} placeholder="https://…" className="field bg-white text-sm" /></label><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)] sm:col-span-2 lg:col-span-4"><input type="checkbox" checked={pieceResourceVisibleToGuardian} onChange={(event) => setPieceResourceVisibleToGuardian(event.target.checked)} disabled={!pieceResourceUrl} /> Bağlantıyı veli portalında göster</label></div>}
-      <label className="form-label"><span>Ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /></label>
+      <label className="form-label rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-3"><span>Öğretmen notu <span className="font-medium">· yalnızca okul ekibi görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y bg-white text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /><span className="text-meta mt-1.5 block">Bu alan veli portalına gönderilmez. Veliye paylaşılacak metin, kayıt sonrasında ayrı olarak hazırlanır ve onaylanır.</span></label>
       <div className="grid gap-3 sm:grid-cols-3"><label className="form-label"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="form-label"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label><label className="form-label"><span>Eser zorluğu <span className="font-medium">· isteğe bağlı</span></span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-sm"><option value="">Otomatik öner</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select><span className="block text-[.75rem] font-medium leading-relaxed">Boş bırakırsan ders notuna göre kural tabanlı önerilir.</span></label></div>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Gelişim notunu kaydet" pending={createNote.isPending} disabled={!lessons.length} />
@@ -255,13 +270,14 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
   </form>;
 }
 
-function Timeline({ entries, isLoading, filter, onFilter, studentId, canWrite }: { entries: ProgressEntry[]; isLoading: boolean; filter: TimelineFilter; onFilter: (filter: TimelineFilter) => void; studentId: string; canWrite: boolean }) {
+function Timeline({ entries, isLoading, isError, isFetching, onRetry, filter, onFilter, studentId, canWrite }: { entries: ProgressEntry[]; isLoading: boolean; isError: boolean; isFetching: boolean; onRetry: () => void; filter: TimelineFilter; onFilter: (filter: TimelineFilter) => void; studentId: string; canWrite: boolean }) {
   const filters: Array<[TimelineFilter, string]> = [["all", "Tümü"], ["pieces", "Eserler"], ["homework", "Ödev ve hedefler"]];
   return <section className="app-card overflow-hidden">
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] p-4 sm:p-5"><div><p className="text-micro">GELİŞİM ZAMAN AKIŞI</p><h2 className="mt-1 text-title">Derslerden kalan izler</h2></div><div className="flex flex-wrap gap-1 rounded-xl bg-[var(--surface-muted)] p-1">{filters.map(([value, label]) => <button key={value} onClick={() => onFilter(value)} className={`pressable rounded-lg px-2.5 py-1.5 text-[.75rem] font-bold ${filter === value ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)]"}`}>{label}</button>)}</div></div>
     {isLoading && <div className="space-y-4 p-5">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-28 rounded-xl" />)}</div>}
-    {!isLoading && !entries.length && <div className="grid min-h-64 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface-muted)] text-[var(--brand)]"><Icon name="note" className="h-5 w-5" /></span><p className="mt-4 text-sm font-bold">Henüz bu filtrede kayıt yok</p><p className="mt-1 max-w-sm text-xs text-[var(--muted)]">İlk ders notunu eklediğinde gelişim akışı ve açıklanabilir özet birlikte oluşur.</p></div></div>}
-    {!isLoading && entries.length > 0 && <div className="divide-y divide-[var(--line)]">{entries.map((entry) => <TimelineEntry key={entry.id} entry={entry} studentId={studentId} canWrite={canWrite} />)}</div>}
+    {!isLoading && isError && <div className="grid min-h-64 place-items-center p-8 text-center"><div><p className="text-sm font-bold">Gelişim kayıtları yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={onRetry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+    {!isLoading && !isError && !entries.length && <div className="grid min-h-64 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-[var(--surface-muted)] text-[var(--brand)]"><Icon name="note" className="h-5 w-5" /></span><p className="mt-4 text-sm font-bold">Henüz bu filtrede kayıt yok</p><p className="mt-1 max-w-sm text-xs text-[var(--muted)]">İlk ders notunu eklediğinde gelişim akışı ve açıklanabilir özet birlikte oluşur.</p></div></div>}
+    {!isLoading && !isError && entries.length > 0 && <div className="divide-y divide-[var(--line)]">{entries.map((entry) => <TimelineEntry key={entry.id} entry={entry} studentId={studentId} canWrite={canWrite} />)}</div>}
   </section>;
 }
 
@@ -281,7 +297,12 @@ function ParentCommentEditor({ entry, studentId }: { entry: ProgressEntry; stude
   const suggest = useSuggestParentComment();
   const { data: me } = useMe();
   const [open, setOpen] = useState(false);
-  const [comment, setCommentValue] = useState(entry.parentComment ?? entry.note ?? "");
+  const draftKey = `abdera:parent-comment-draft:${entry.id}`;
+  const initialComment = entry.parentComment ?? "";
+  const [comment, setCommentValue] = useState(() => {
+    if (typeof window === "undefined") return initialComment;
+    return window.sessionStorage.getItem(draftKey) ?? initialComment;
+  });
   const [error, setError] = useState<string | null>(null);
   // AI önerisi uygulanmadan ÖNCEKI metin. Öğretmen öneriyi beğenmezse tek tıkla dönebilsin
   // (feature_targets.md Faz 10: "AI dönüşümü geri alınabilir").
@@ -289,11 +310,21 @@ function ParentCommentEditor({ entry, studentId }: { entry: ProgressEntry; stude
 
   const aiAvailable = me?.aiRewriteAvailable ?? false;
   const canRewrite = aiAvailable && Boolean(entry.note?.trim());
+  const dirty = comment !== initialComment;
+
+  useEffect(() => {
+    if (!dirty) return;
+    window.sessionStorage.setItem(draftKey, comment);
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [comment, dirty, draftKey]);
 
   async function save(approve: boolean) {
     setError(null);
     try {
       await setComment.mutateAsync({ noteId: entry.id, parentComment: comment, approve });
+      window.sessionStorage.removeItem(draftKey);
       setOpen(false);
       setTextBeforeSuggestion(null);
     } catch (err) {
@@ -327,12 +358,12 @@ function ParentCommentEditor({ entry, studentId }: { entry: ProgressEntry; stude
       ? "Dönüştürülecek bir ders notu yok"
       : "Ham notu veliye uygun yapıcı bir metne çevirir";
 
-  return <div className="mt-3 rounded-xl border border-[var(--line)] bg-white p-3">
-    <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[.75rem] font-bold text-[var(--brand-strong)]">Veliye sunulacak yorum</p><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{entry.parentCommentApprovedAt ? "Onaylandı ve veliye görünür" : entry.parentComment ? "Taslak — veliye görünmez" : "Henüz hazırlanmadı"}</p></div><button type="button" onClick={() => setOpen((value) => !value)} className="pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold">{open ? "Kapat" : entry.parentComment ? "Düzenle" : "Yorum hazırla"}</button></div>
+  return <div className="mt-3 rounded-xl border border-[var(--brand)]/25 bg-white p-3">
+    <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[.75rem] font-bold text-[var(--brand-strong)]">Veli yorumu · veliye gönderilir</p><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{entry.parentCommentApprovedAt ? "Onaylandı ve veliye görünür" : entry.parentComment ? "Taslak — veliye görünmez" : dirty ? "Kaydedilmemiş taslak bu cihazda korunuyor" : "Henüz hazırlanmadı"}</p></div><button type="button" onClick={() => setOpen((value) => !value)} className="pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold">{open ? "Kapat" : entry.parentComment || dirty ? "Düzenle" : "Yorum hazırla"}</button></div>
     {open && <div className="mt-3 space-y-2">
       <textarea value={comment} onChange={(event) => { setCommentValue(event.target.value); setTextBeforeSuggestion(null); }} rows={3} className="field resize-y text-sm" placeholder="Ham notu veliye uygun, yapıcı bir yorum olarak düzenleyin." />
       {textBeforeSuggestion !== null && <p className="text-[.75rem] font-semibold text-[var(--muted)]">Bu bir AI önerisi — veliye açılmadan önce düzenleyebilir veya geri alabilirsin.</p>}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="sticky bottom-0 z-10 -mx-3 flex flex-wrap items-center gap-2 border-t border-[var(--line)] bg-white px-3 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2">
         <button type="button" onClick={() => void applySuggestion()} disabled={!canRewrite || suggest.isPending} title={rewriteTitle} className={canRewrite ? "pressable min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold disabled:opacity-50" : "min-h-9 rounded-lg border border-[var(--line)] px-3 text-xs font-bold text-[var(--muted)] opacity-60"}>
           {suggest.isPending ? "Dönüştürülüyor…" : aiAvailable ? "Yapıcı metne dönüştür" : "Yapıcı metne dönüştür · kullanılamıyor"}
         </button>

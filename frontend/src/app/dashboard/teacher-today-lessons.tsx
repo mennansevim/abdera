@@ -19,7 +19,7 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
     range.setDate(range.getDate() + 22);
     return { todayStart: start, todayEnd: end, rangeEnd: range };
   }, [dateTime]);
-  const { data: rawLessons, isLoading } = useCalendar(todayStart.toISOString(), rangeEnd.toISOString());
+  const { data: rawLessons, isLoading, isError, isFetching, refetch } = useCalendar(todayStart.toISOString(), rangeEnd.toISOString());
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bugünden başka bir güne taşınan bir ders,
   // bu filtre olmadan hâlâ "bugün" listesinde normal bir ders gibi görünüp yoklama/not almaya
@@ -38,6 +38,8 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
   const colors = useMemo(() => buildInstrumentColorMap((lessons ?? []).map((lesson) => lesson.instrumentName)), [lessons]);
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-36 rounded-2xl" />)}</div>;
+
+  if (isError) return <div className="app-card grid min-h-52 place-items-center p-6 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="alert-triangle" className="h-5 w-5" /></span><p className="mt-4 text-sm font-bold">Bugünkü dersler yüklenemedi</p><p className="mt-1 text-xs text-[var(--muted)]">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-primary mt-4">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>;
 
   if (!lessons.length) {
     const nextStart = nextLesson ? new Date(nextLesson.startAt) : null;
@@ -144,7 +146,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Kısa ders notu</span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
+            <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Öğretmen notu <span className="font-medium">· yalnızca ekip görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Ödev</span><input value={homework} onChange={(event) => setHomework(event.target.value)} className="field text-xs" placeholder="Bir sonraki derse kadar" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-xs" placeholder="Örn. Bach · Minuet in G" /></label>

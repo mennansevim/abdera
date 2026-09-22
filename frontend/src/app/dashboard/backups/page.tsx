@@ -38,6 +38,7 @@ function BackupsPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [triggered, setTriggered] = useState(false);
   const totalPages = runs ? Math.max(1, Math.ceil(runs.totalCount / runs.pageSize)) : 1;
+  const backupDisabled = health?.providers.backup === "Disabled";
 
   async function triggerNow() {
     setError(null);
@@ -71,10 +72,10 @@ function BackupsPageContent() {
       <section className="app-card flex flex-wrap items-center justify-between gap-3 p-5">
         <div>
           <h2 className="text-title">Manuel yedekleme</h2>
-          <p className="text-meta mt-1">Otomatik günlük yedeklemeyi beklemeden şimdi bir yedek al.</p>
+          <p className="text-meta mt-1">{backupDisabled ? "Harici yedekleme sağlayıcısı henüz yapılandırılmadı." : "Otomatik günlük yedeklemeyi beklemeden şimdi bir yedek al."}</p>
         </div>
-        <button type="button" onClick={triggerNow} disabled={trigger.isPending} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">
-          {trigger.isPending ? "Başlatılıyor…" : "Şimdi yedek al"}
+        <button type="button" onClick={triggerNow} disabled={trigger.isPending || backupDisabled} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">
+          {backupDisabled ? "Yedekleme kapalı" : trigger.isPending ? "Başlatılıyor…" : "Şimdi yedek al"}
         </button>
       </section>
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-sm font-medium text-[var(--danger-strong)]">{error}</p>}

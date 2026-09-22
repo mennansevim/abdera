@@ -57,7 +57,8 @@ public static class Login
         var verifyResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
         if (verifyResult == PasswordVerificationResult.Failed)
         {
-            logger.LogWarning("Başarısız giriş denemesi: {Email}", email);
+            // Güvenlik olayını izlenebilir tut, ancak kişisel e-posta adresini loga yazma.
+            logger.LogWarning("Başarısız giriş denemesi: kullanıcı={UserId}", user.Id);
             return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: "E-posta veya şifre hatalı.");
         }
 

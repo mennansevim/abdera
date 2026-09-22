@@ -30,8 +30,11 @@ public static class TeacherAvailabilities
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
-    private static async Task<IResult> ListAsync(Guid teacherId, AbderaDbContext db)
+    private static async Task<IResult> ListAsync(
+        Guid teacherId, ClaimsPrincipal principal, AbderaDbContext db)
     {
+        await SchedulingAuthorization.EnsureActsAsSelfAsync(teacherId, principal, db);
+
         var items = await db.TeacherAvailabilities
             .Where(a => a.TeacherId == teacherId)
             .OrderBy(a => a.DayOfWeek).ThenBy(a => a.StartTime)

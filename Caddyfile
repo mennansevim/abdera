@@ -10,7 +10,6 @@
 #
 # Kullanım: docker compose --profile prod up -d
 # (profil olmadan geliştirme akışı bugünkü gibi 3000/8080 üzerinden çalışmaya devam eder)
-
 {
 	email {$ACME_EMAIL}
 }
@@ -32,12 +31,15 @@
 		reverse_proxy web:3000
 	}
 
-	# Tarayıcı tarafı sertleştirme. HSTS'i Caddy zaten HTTPS'te ekliyor;
-	# buradakiler uygulamaya özel olanlar.
+	# Tarayıcı tarafı sertleştirme. Caddy otomatik HTTPS ve HTTP->HTTPS yönlendirmesi
+	# sağlar, ancak HSTS başlığını kendiliğinden eklemez; bunu açıkça gönderiyoruz.
 	header {
+		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
 		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; upgrade-insecure-requests"
 		-Server
 	}
 }

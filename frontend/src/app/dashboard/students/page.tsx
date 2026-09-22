@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
+import { useSessionState } from "@/lib/use-session-state";
 import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, type Student, type StudentStatus } from "@/lib/people";
 import { DeleteStudentDialog, RequestStudentDeletionDialog } from "@/components/delete-person-dialog";
 import { StudentDetail } from "./student-detail";
@@ -22,13 +23,13 @@ export default function StudentsPage() {
   const canManage = isAdmin || isTeacher;
   // "İçine girmeden anlayabilelim" - liste her satırda kurs adlarını da taşıyan tek bir
   // toplu istekten (overview) besleniyor, N+1 sorgu açmadan.
-  const { data: overviews, isLoading } = useStudentOverviews();
+  const { data: overviews, isLoading, isError, isFetching, refetch } = useStudentOverviews();
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useSessionState<string | null>("abdera:students:expanded", null);
   const [showCreate, setShowCreate] = useState(false);
-  const [search, setSearch] = useState("");
-  const [instrumentId, setInstrumentId] = useState("");
-  const [status, setStatus] = useState<"all" | StudentStatus>("Active");
+  const [search, setSearch] = useSessionState("abdera:students:search", "");
+  const [instrumentId, setInstrumentId] = useSessionState("abdera:students:instrument", "");
+  const [status, setStatus] = useSessionState<"all" | StudentStatus>("abdera:students:status", "Active");
   const [notice, setNotice] = useState<string | null>(null);
 
   function announce(text: string) {
@@ -106,15 +107,16 @@ export default function StudentsPage() {
           </label>
           {isAdmin && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet min-h-10 h-10 text-xs">Hızlı ekle</button>}
         </div>
-        {!isLoading && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span className="text-center">Durum</span></div>}
+        {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span className="text-center">Durum</span></div>}
         {isLoading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
-        {!isLoading && visibleRows.length === 0 && (
+        {!isLoading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğrenciler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+        {!isLoading && !isError && visibleRows.length === 0 && (
           <div className="p-6 text-center text-sm text-[var(--muted)]">
             <p>{hasFilters ? "Seçili filtrelerle eşleşen öğrenci yok." : "Henüz öğrenci yok."}</p>
             {hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}
           </div>
         )}
-        {!isLoading && <ul className="divide-y divide-[var(--line)]">
+        {!isLoading && !isError && <ul className="divide-y divide-[var(--line)]">
           {visibleRows.map(({ student, instruments }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
               <div className="min-h-14 px-2">

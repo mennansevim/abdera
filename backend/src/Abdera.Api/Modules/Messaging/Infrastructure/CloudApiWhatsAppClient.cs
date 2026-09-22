@@ -95,8 +95,10 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
             var response = await httpClient.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                var body = await response.Content.ReadAsStringAsync(cancellationToken);
-                logger.LogError("WhatsApp Cloud API hata döndü: {Status} {Body}", response.StatusCode, body);
+                // Sağlayıcı hata gövdesi telefon numarası, mesaj içeriği veya hesap ayrıntısı
+                // taşıyabilir. Production loguna ham gövdeyi yazma; durum kodu operasyonel
+                // teşhis ve retry kararı için yeterli, ayrıntı Meta panelinden izlenebilir.
+                logger.LogError("WhatsApp Cloud API hata döndü: {Status}", response.StatusCode);
                 return new WhatsAppSendResult(false, null, $"HTTP {(int)response.StatusCode}");
             }
 
@@ -123,7 +125,7 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
         catch (Exception ex)
         {
             logger.LogError(ex, "WhatsApp Cloud API çağrısı başarısız oldu.");
-            return new WhatsAppSendResult(false, null, ex.Message);
+            return new WhatsAppSendResult(false, null, "WhatsApp sağlayıcısına ulaşılamadı.");
         }
     }
 

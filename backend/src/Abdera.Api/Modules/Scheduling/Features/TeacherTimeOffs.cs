@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -20,8 +21,11 @@ public static class TeacherTimeOffs
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
-    private static async Task<IResult> ListAsync(Guid teacherId, AbderaDbContext db)
+    private static async Task<IResult> ListAsync(
+        Guid teacherId, ClaimsPrincipal principal, AbderaDbContext db)
     {
+        await SchedulingAuthorization.EnsureActsAsSelfAsync(teacherId, principal, db);
+
         var items = await db.TeacherTimeOffs
             .Where(t => t.TeacherId == teacherId)
             .OrderByDescending(t => t.StartsOn)

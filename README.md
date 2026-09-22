@@ -184,6 +184,11 @@ openssl rand -base64 32
 
 Üretilen değer `Backup__EncryptionKey` olarak secret yöneticisinde tutulmalıdır; repoya commit edilmemelidir. Anahtar kaybolursa şifreli yedek çözülemez.
 
+Harici yedekleme henüz kurulmadıysa production geçici olarak `Backup__Provider=Disabled`
+ile açılabilir. Bu mod otomatik ve manuel uygulama yedeklerini açıkça kapatır; başarı taklidi
+yapmaz. Gerçek öğrenci ve ödeme verileri girilmeden önce SFTP veya doğrulanmış başka bir
+harici yedekleme çözümü devreye alınmalıdır.
+
 Yedekleme ekranı `/dashboard/backups` adresindedir. API karşılıkları `GET /api/backup-runs`, `POST /api/backup-runs/trigger`, `GET /api/system/health` ve `GET /health` uç noktalarıdır. Uygulamada yanlışlıkla canlı verinin üzerine yazılmaması için restore düğmesi yoktur; manuel kurtarma adımları [`docs/16-backup-restore.md`](docs/16-backup-restore.md) dosyasındadır.
 
 ## İşletim ve sorun giderme
@@ -209,7 +214,9 @@ Oturumların tümü düşmüşse önce `abdera_dpkeys` volume'unun korunup korun
 - [ ] Şifreli yedek ayrı boş bir veritabanına geri yüklenerek prova edilmiş.
 - [ ] HTTPS, CORS ve frontend origin'i production adresine göre ayarlı
       (`PUBLIC_DOMAIN`, `ACME_EMAIL`, `FRONTEND_ORIGIN` dolu; `--profile prod` ile Caddy ayakta).
-- [ ] WhatsApp ve SMTP için `Fake` yerine gerçek sağlayıcılar seçilmiş.
+- [ ] Production frontend'i aynı Caddy domain'inde `/api` kullanıyor; localhost API adresi
+      production build'de otomatik olarak aynı-origin'e çevriliyor.
+- [ ] WhatsApp için `Cloud` veya bilinçli olarak `Disabled`; SMTP için `Fake` yerine gerçek sağlayıcı seçilmiş.
 - [ ] `Banking__Provider` gerçek bir sağlayıcı ya da `Manual` (aşağıya bak) — `Fake` değil.
 - [ ] Development simülatörleri production'da kapalı.
 - [ ] `/health` ve `/api/system/health` sağlıklı.
@@ -218,6 +225,10 @@ Production başlangıcı artık bu listenin kritik maddelerini fail-fast doğrul
 Fake banka, Fake yedek sağlayıcısı, varsayılan admin şifresi, boş/placeholder webhook ve
 şifreleme sırlarıyla uygulama başlamaz. Bu kontrol yalnızca `Production` ortamında etkindir;
 yerel Development seed/simülatör akışını değiştirmez.
+
+WhatsApp henüz kullanılmayacaksa `WhatsApp__Provider=Disabled`, harici uygulama yedeklemesi
+henüz kurulmayacaksa `Backup__Provider=Disabled` production için geçerli seçimlerdir. Bu
+modlarda ilgili özellikler açık bir hata döndürür; `Fake` sağlayıcılar gibi başarı taklidi yapmaz.
 
 ### Banka sağlayıcısı seçilmeden canlıya çıkmak — `Banking__Provider=Manual`
 

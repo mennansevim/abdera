@@ -22,6 +22,12 @@ public class BackupService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (string.Equals(config["Backup:Provider"], BackupProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("Harici yedekleme entegrasyonu devre dışı; otomatik yedekleme çalıştırılmayacak.");
+            return;
+        }
+
         var checkIntervalMinutes = config.GetValue("Backup:CheckIntervalMinutes", 15);
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(checkIntervalMinutes));
         do
@@ -49,8 +55,15 @@ public class BackupService(
 
     // POST /api/backup-runs/trigger tarafından çağrılır - manuel tetikleme günün otomatik
     // koşusunu da "bugün yapıldı" sayar (aynı gün içinde iki kez pg_dump almaya gerek yok).
-    public async Task TriggerManualRunAsync(CancellationToken cancellationToken = default) =>
+    public async Task TriggerManualRunAsync(CancellationToken cancellationToken = default)
+    {
+        if (string.Equals(config["Backup:Provider"], BackupProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Harici yedekleme entegrasyonu şu anda devre dışı.");
+        }
+
         await RunOnceAsync(triggeredManually: true, cancellationToken);
+    }
 
     private async Task RunOnceAsync(bool triggeredManually, CancellationToken cancellationToken)
     {

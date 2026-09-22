@@ -153,10 +153,18 @@ else
 // yetişemez (bkz. yukarıdaki ResolveConnectionString notu) - testlerde varsayılan
 // zaten Fake olduğu için bu bir sorun yaratmıyor.
 builder.Services.Configure<WhatsAppOptions>(builder.Configuration.GetSection("WhatsApp"));
-var whatsAppProvider = builder.Configuration["WhatsApp:Provider"] ?? "Fake";
-if (string.Equals(whatsAppProvider, "Cloud", StringComparison.OrdinalIgnoreCase))
+var whatsAppProvider = builder.Configuration["WhatsApp:Provider"] ?? WhatsAppProviderModes.Fake;
+if (!WhatsAppProviderModes.IsSupported(whatsAppProvider))
+{
+    throw new InvalidOperationException($"Bilinmeyen WhatsApp:Provider değeri: '{whatsAppProvider}'. Desteklenen değerler: Cloud, Disabled ve yalnızca geliştirme/test için Fake.");
+}
+if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Cloud, StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddHttpClient<IWhatsAppClient, CloudApiWhatsAppClient>();
+}
+else if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IWhatsAppClient, DisabledWhatsAppClient>();
 }
 else
 {
@@ -188,10 +196,18 @@ else
 
 // --- Yedekleme hedefi: docs/10-decisions.md G - kullanıcının kendi sunucusuna SFTP/SSH. ---
 builder.Services.Configure<SftpBackupStorageOptions>(builder.Configuration.GetSection("Backup:Sftp"));
-var backupProvider = builder.Configuration["Backup:Provider"] ?? "Fake";
-if (string.Equals(backupProvider, "Sftp", StringComparison.OrdinalIgnoreCase))
+var backupProvider = builder.Configuration["Backup:Provider"] ?? BackupProviderModes.Fake;
+if (!BackupProviderModes.IsSupported(backupProvider))
+{
+    throw new InvalidOperationException($"Bilinmeyen Backup:Provider değeri: '{backupProvider}'. Desteklenen değerler: Sftp, Disabled ve yalnızca geliştirme/test için Fake.");
+}
+if (string.Equals(backupProvider, BackupProviderModes.Sftp, StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IBackupStorage, SftpBackupStorage>();
+}
+else if (string.Equals(backupProvider, BackupProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IBackupStorage, DisabledBackupStorage>();
 }
 else
 {

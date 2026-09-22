@@ -5,9 +5,7 @@ const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@example.com";
 const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "DevAdmin123!";
 
 async function loginAdmin(page: Page) {
-  // chooseRole=1: açık bir oturum varken /login doğrudan /dashboard'a yönlenir ve rol
-  // kartları render edilmez (login/page.tsx). Bu parametre bilinçli rol seçimi yoludur.
-  await page.goto("/login?chooseRole=1");
+  await page.goto("/login");
   await page.getByRole("radio", { name: /Yöneticiyim/ }).click();
   await page.locator("#email").fill(adminEmail);
   await page.locator("#password").fill(adminPassword);
@@ -20,18 +18,12 @@ async function createBillingFixture(page: Page) {
   const student = students[0];
   const enrollments = await (await page.request.get(`${apiUrl}/api/students/${student.id}/enrollments`)).json();
   const enrollment = enrollments[0];
-
-  // Aidat modeli yeniden tasarlandığında (docs/10-decisions.md H1) fiyat listesi -> fiyat
-  // kalemi -> ücret planı zinciri ve `/api/price-lists*`, `/api/enrollments/{id}/fee-plan`
-  // uçları kaldırıldı. Tek ön koşul ders türü için yürürlükte bir tarifenin olması; o da
-  // migration ile seed ediliyor, yani aidat doğrudan açılabiliyor.
-  //
-  // 409 da kabul: bu bir FIXTURE, amacı "o dönem için bir aidat bulunsun". Aynı veritabanına
-  // karşı ikinci kez koşulduğunda aidat zaten vardır ve bu bir hata değildir.
+  // Güncel modelde fiyat PriceList/FeePlan'dan değil merkezi TuitionRate politikasından
+  // hesaplanır. Seed tarifeyi kurar; test yalnızca öğrenci aidatını açar.
   const created = await page.request.post(`${apiUrl}/api/receivables`, {
     data: { enrollmentId: enrollment.id, period: "2026-09" },
   });
-  expect([201, 409], `aidat oluşturulamadı: ${await created.text()}`).toContain(created.status());
+  expect([201, 409]).toContain(created.status());
 }
 
 test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
@@ -53,10 +45,7 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     expect(due).toBeTruthy();
 
     await page.goto("/dashboard/billing");
-    // Düğme ve pencere başlığı "Aidat al" / "Aidat ödemesi al" iken "Tahsilat kaydet"
-    // olarak yeniden adlandırıldı; modalın içi (Öğrenci / Hangi kurs? / İlk dönem /
-    // Elden alındı / Havale geldi) aynı kaldı, bu yüzden testin geri kalanı değişmiyor.
-    await page.getByRole("button", { name: "Tahsilat kaydet", exact: true }).first().click();
+    await page.getByRole("button", { name: "Tahsilat kaydet", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Tahsilat kaydet" });
     await dialog.getByLabel("Öğrenci").selectOption(due!.studentId);
 
@@ -67,7 +56,7 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     await expect(monthPicker).toBeVisible();
     await monthPicker.fill("");
 
-    await expect(dialog.getByText("İlk dönemi seçin", { exact: false })).toBeVisible();
+    await expect(monthPicker).toHaveAttribute("aria-invalid", "true");
     await expect(dialog.getByRole("button", { name: /Elden alındı|ayı nakit ödendi/ })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: /Havale geldi|aylık havale geldi/ })).toBeDisabled();
     expect(browserErrors).toEqual([]);

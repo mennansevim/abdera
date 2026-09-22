@@ -53,7 +53,8 @@ public static class GuardianAuth
         // gerçek WhatsApp/OTP gerektirmeden örnek veli portalı açılabilir.
         var environment = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var configuration = app.ServiceProvider.GetRequiredService<IConfiguration>();
-        if (environment.IsDevelopment() || configuration.GetValue<bool>("Demo:Enabled"))
+        if (environment.IsDevelopment() ||
+            (environment.IsStaging() && configuration.GetValue<bool>("Demo:Enabled")))
         {
             app.MapPost("/api/guardian/debug-login", DebugLoginAsync).AllowAnonymous();
         }
