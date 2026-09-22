@@ -336,8 +336,12 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "past-edit");
 
-        var pastStart = DateTimeOffset.UtcNow.AddDays(-3);
-        var correctedStart = pastStart.AddHours(1);
+        // PostgreSQL timestamptz MİKROSANİYE hassasiyetinde saklar, DateTimeOffset ise 100ns
+        // (tick). Ham UtcNow'u gönderip geri okunanla birebir karşılaştırmak, kalan 8 tick
+        // yüzünden CI'da kırılıyordu (bkz. db78091 - aynı sınıf hata ProgressFlowTests'te de
+        // yaşanmıştı). Değeri veritabanının hassasiyetine indirerek gönderiyoruz; böylece
+        // round-trip'i toleransla değil, TAM eşitlikle doğrulayabiliyoruz.
+        var correctedStart = ToDatabasePrecision(DateTimeOffset.UtcNow.AddDays(-3).AddHours(1));
 
         var adminResponse = await admin.PatchAsJsonAsync(
             $"/api/lessons/{seeded.LessonId}",
@@ -357,6 +361,11 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
             new UpdateLesson.Request(teacherOwned.StudentId, teacherOwned.TeacherId, correctedStart, 45, LessonStatus.Normal));
         Assert.Equal(HttpStatusCode.BadRequest, teacherResponse.StatusCode);
     }
+
+    // TimeSpan.TicksPerMicrosecond = 10 - kalan tick'leri atarak PostgreSQL'in sakladığı
+    // değerin aynısını üretiriz.
+    private static DateTimeOffset ToDatabasePrecision(DateTimeOffset value) =>
+        new(value.Ticks - (value.Ticks % TimeSpan.TicksPerMicrosecond), value.Offset);
 
     private static async Task<Abdera.Api.Modules.Scheduling.Domain.Lesson> ReadUpdatedLessonAsync(
         Abdera.Api.Shared.AbderaDbContext db, HttpResponseMessage response)
