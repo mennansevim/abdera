@@ -112,8 +112,11 @@ export function useRescheduleLesson() {
 export function useCancelLesson() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ lessonId, cancelledBy, reason }: { lessonId: string; cancelledBy: "Guardian" | "School"; reason?: string }) =>
-      api.post<{ lessonId: string; makeupCreditEarned: boolean }>(`/api/lessons/${lessonId}/cancel`, { cancelledBy, reason }),
+    // grantMakeupCredit: açık telafi kararı. Belirtilmezse sunucudaki politika (okul
+    // kaynaklı iptal -> kredi, veli kaynaklı -> 24 saat kuralı) çalışır; false gönderildiğinde
+    // ders telafi hakkı doğurmadan iptal edilir.
+    mutationFn: ({ lessonId, cancelledBy, reason, grantMakeupCredit }: { lessonId: string; cancelledBy: "Guardian" | "School"; reason?: string; grantMakeupCredit?: boolean }) =>
+      api.post<{ lessonId: string; makeupCreditEarned: boolean }>(`/api/lessons/${lessonId}/cancel`, { cancelledBy, reason, grantMakeupCredit }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });

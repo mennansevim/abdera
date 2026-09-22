@@ -974,7 +974,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
   const [timeValue, setTimeValue] = useState(() => timeInputValue(start));
   const [durationValue, setDurationValue] = useState(() => String(duration));
   const [error, setError] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<"absent" | "cancel-with-makeup" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"absent" | "cancel-with-makeup" | "cancel-without-makeup" | null>(null);
   const { data: enrollments } = useEnrollments(studentId);
   const eligibleEnrollments = enrollments?.filter((item) => item.status === "Active" && item.instrumentId === lesson.instrumentId) ?? [];
   const eligibleTeacherIds = new Set(eligibleEnrollments.map((item) => item.teacherId));
@@ -1020,8 +1020,16 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
         await markAttendance.mutateAsync({ status: "Absent", note: "Takvimden öğrenci gelmedi olarak işaretlendi." });
         onUpdated("Ders, öğrenci gelmedi olarak tamamlandı.");
       } else {
-        const result = await cancelLesson.mutateAsync({ lessonId: lesson.id, cancelledBy: "School", reason: "Öğretmen tarafından telafi hakkıyla iptal edildi." });
-        onUpdated(result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders iptal edildi.");
+        // Telafi kararı burada AÇIKÇA gönderilir; sunucudaki otomatik türetmeye bırakılmaz.
+        // "Telafisiz iptal" okul kaynaklı bir iptalde de kredi doğurmamalı.
+        const withMakeup = confirmAction === "cancel-with-makeup";
+        const result = await cancelLesson.mutateAsync({
+          lessonId: lesson.id,
+          cancelledBy: "School",
+          reason: withMakeup ? "Takvimden telafi hakkıyla iptal edildi." : "Takvimden telafi hakkı verilmeden iptal edildi.",
+          grantMakeupCredit: withMakeup,
+        });
+        onUpdated(result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders telafi hakkı verilmeden iptal edildi.");
       }
       onClose();
     } catch (err) {
@@ -1070,8 +1078,8 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
           <>
             {confirmAction && (
               <div className={`border-t border-[var(--line)] p-4 ${confirmAction === "absent" ? "bg-[var(--warning-soft)]" : "bg-[var(--danger-soft)]"}`}>
-                <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : "Ders iptal edilip telafi hakkı tanımlansın mı?"}</p>
-                <p className="text-meta mt-1">{confirmAction === "absent" ? "Ders tamamlandı sayılır ve yoklama Gelmedi olarak kaydedilir." : "Bu ders iptal edilir; öğrenci için kullanılabilir bir telafi hakkı oluşturulur."}</p>
+                <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : confirmAction === "cancel-with-makeup" ? "Ders iptal edilip telafi hakkı tanımlansın mı?" : "Ders telafi hakkı verilmeden iptal edilsin mi?"}</p>
+                <p className="text-meta mt-1">{confirmAction === "absent" ? "Ders tamamlandı sayılır ve yoklama Gelmedi olarak kaydedilir." : confirmAction === "cancel-with-makeup" ? "Bu ders iptal edilir; öğrenci için kullanılabilir bir telafi hakkı oluşturulur." : "Bu ders iptal edilir ve öğrenciye telafi hakkı TANIMLANMAZ. Tatil, yanlış açılmış ders ya da velinin telafi istemediği durumlar için."}</p>
                 {error && <p role="alert" className="mt-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
                 <div className="mt-3 flex justify-end gap-2">
                   <button type="button" onClick={() => { setConfirmAction(null); setError(null); }} disabled={markAttendance.isPending || cancelLesson.isPending} className="btn btn-quiet">Vazgeç</button>
@@ -1082,6 +1090,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onClo
             <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--line)] p-4">
               {canMarkAbsent && <button type="button" onClick={() => setConfirmAction("absent")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--warning-strong)]">Öğrenci gelmedi</button>}
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-with-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--danger)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">İptal et + telafi</button>}
+              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-without-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">Telafisiz iptal</button>}
               {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-5 text-sm font-bold text-[var(--brand-strong)]">Düzenle</button>}
               <button type="button" onClick={onClose} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-5 text-sm font-bold text-white">Kapat</button>
             </div>

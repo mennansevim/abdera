@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Attendance.Features;
 using Abdera.Api.Modules.Auth.Features;
@@ -482,6 +483,57 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         var result = (await cancelResponse.Content.ReadFromJsonAsync<CancelLesson.Response>(TestJson.Options))!;
 
         Assert.True(result.MakeupCreditEarned);
+    }
+
+    // Takvimdeki "Telafisiz iptal": okul kaynaklı iptal normalde her zaman kredi doğurur,
+    // ama tatil / yanlış açılmış ders gibi durumlarda kullanıcı açıkça telafisiz iptal
+    // edebilmeli. Açık seçim politikanın önüne geçer.
+    [Fact]
+    public async Task Cancelling_without_a_makeup_credit_creates_no_credit_even_when_the_school_cancels()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "cxl4");
+
+        var cancelResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/cancel",
+            new CancelLesson.Request(CancelLesson.CancelledBy.School, "tatil", GrantMakeupCredit: false));
+        var result = (await cancelResponse.Content.ReadFromJsonAsync<CancelLesson.Response>(TestJson.Options))!;
+
+        Assert.False(result.MakeupCreditEarned);
+        Assert.Empty(await db.MakeupCredits.Where(c => c.SourceLessonId == seeded.LessonId).ToListAsync());
+
+        var cancelled = await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId);
+        Assert.Equal(LessonStatus.Cancelled, cancelled.Status);
+
+        // Karar audit'e düşmeli: "bu öğrenciye telafi neden verilmedi" sorusunun tek kaynağı bu.
+        var audit = await db.AuditLogs.AsNoTracking()
+            .Where(log => log.EntityId == seeded.LessonId && log.Action == "lesson.cancelled")
+            .SingleAsync();
+        using var after = JsonDocument.Parse(audit.AfterJson!);
+        Assert.False(after.RootElement.GetProperty("MakeupCreditEarned").GetBoolean());
+        Assert.True(after.RootElement.GetProperty("PolicyMakeupCredit").GetBoolean());
+        Assert.True(after.RootElement.GetProperty("MakeupCreditOverridden").GetBoolean());
+    }
+
+    // Açık seçim ters yönde de çalışmalı: politikanın (24 saatten az kala veli iptali)
+    // kendiliğinden vermeyeceği bir kredi, kullanıcı isterse yine de tanınır.
+    [Fact]
+    public async Task Explicitly_granting_a_makeup_credit_overrides_the_24_hour_rule()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "cxl5");
+
+        var nearStart = DateTimeOffset.UtcNow.AddHours(2);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE lessons SET start_at = {nearStart}, end_at = {nearStart.AddMinutes(45)} WHERE id = {seeded.LessonId}");
+
+        var cancelResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/cancel",
+            new CancelLesson.Request(CancelLesson.CancelledBy.Guardian, "öğrenci hastalandı", GrantMakeupCredit: true));
+        var result = (await cancelResponse.Content.ReadFromJsonAsync<CancelLesson.Response>(TestJson.Options))!;
+
+        Assert.True(result.MakeupCreditEarned);
+        Assert.Single(await db.MakeupCredits.Where(c => c.SourceLessonId == seeded.LessonId).ToListAsync());
     }
 
     [Fact]

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Auth.Features;
+using Abdera.Api.Modules.People.Features;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -226,5 +228,58 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Contains("tekrar dene", problem.Detail);
         Assert.True(response.Headers.TryGetValues("Retry-After", out var retryAfter));
         Assert.True(int.Parse(retryAfter!.Single()) > 0);
+    }
+
+    // Giriş ekranındaki rol seçimi (Yöneticiyim/Öğretmenim) yalnızca görsel bir tercihti:
+    // "Yöneticiyim" seçip öğretmen bilgilerini girmek sessizce öğretmen oturumu açıyordu.
+    // Artık seçim sunucuya gidiyor ve uyuşmazlıkta oturum HİÇ açılmıyor - bu testin asıl
+    // kontrolü 403 değil, ardından /me'nin hâlâ 401 dönmesi.
+    [Fact]
+    public async Task Choosing_admin_but_using_teacher_credentials_is_rejected_without_opening_a_session()
+    {
+        using var admin = _factory.CreateClient();
+        (await admin.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "Test1234!"))).EnsureSuccessStatusCode();
+
+        var instruments = await (await admin.GetAsync("/api/instruments")).Content
+            .ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var email = $"rolecheck.{Guid.NewGuid():N}@test.local";
+        var createResponse = await admin.PostAsJsonAsync("/api/teachers",
+            new Teachers.CreateRequest("Rol", "Kontrol", [instruments!.First().Id], email));
+        createResponse.EnsureSuccessStatusCode();
+        var created = await createResponse.Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options);
+        var password = created!.TemporaryPassword!;
+
+        using var client = _factory.CreateClient();
+        var mismatched = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(email, password, UserRole.Admin));
+
+        Assert.Equal(HttpStatusCode.Forbidden, mismatched.StatusCode);
+        Assert.False(mismatched.Headers.Contains("Set-Cookie"));
+        var problem = await mismatched.Content.ReadFromJsonAsync<ProblemDetails>(TestJson.Options);
+        Assert.Contains("Öğretmenim", problem!.Detail);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+
+        // Doğru rol seçildiğinde aynı bilgilerle giriş çalışmalı - kontrol fazla kısıtlayıcı olmamalı.
+        var matched = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(email, password, UserRole.Teacher));
+        Assert.Equal(HttpStatusCode.OK, matched.StatusCode);
+        var me = await (await client.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+        Assert.Equal(UserRole.Teacher, me!.Role);
+    }
+
+    // Yanlış şifre + yanlış rol: rol denetimi şifre doğrulamasının ARDINDAN çalışmalı,
+    // yoksa yanlış şifreyle gelen biri hesabın rolünü (dolayısıyla varlığını) öğrenirdi.
+    [Fact]
+    public async Task Role_mismatch_is_not_revealed_when_the_password_is_wrong()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/auth/login",
+            new Login.Request("admin@test.local", "wrong-password", UserRole.Teacher));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(TestJson.Options);
+        Assert.Equal("Giriş başarısız", problem!.Title);
     }
 }

@@ -3,7 +3,7 @@
 Master prompt'un önerdiği yüzeye ek olarak ücret tarifesi/indirim politikası, MakeupCredit, TeacherTimeOff ve Banking uç noktaları var (A1→H1, A2, A3, E1 — Banking master prompt'ta hiç yoktu, sonradan onaylanan bir kapsam genişlemesi). `✅` işaretli satırlar gerçekten uygulandı (Phase 1–6, Dashboard denetim sonrası E2).
 
 ```
-POST   /api/auth/login                          ✅
+POST   /api/auth/login                          ✅ gövde: { email, password, expectedRole? } - rol uyuşmazsa 403, oturum açılmaz
 POST   /api/auth/logout                         ✅
 GET    /api/auth/me                             ✅
 POST   /api/auth/change-password                ✅ B4: ilk girişte geçici şifre değişimi
@@ -47,7 +47,7 @@ POST   /api/lessons/{lessonId}/change-requests  ✅ Teacher(kendi dersi)/Admin a
 GET    /api/change-requests                     ✅ eklendi - Admin onay kuyruğu (?status=)
 POST   /api/change-requests/{requestId}/approve ✅ reschedule: eski ders RESCHEDULED, yeni NORMAL
 POST   /api/change-requests/{requestId}/reject  ✅
-POST   /api/lessons/{lessonId}/cancel           ✅ eklendi - doğrudan iptal, A2 kredi mantığı burada
+POST   /api/lessons/{lessonId}/cancel           ✅ eklendi - doğrudan iptal, A2 kredi mantığı burada; grantMakeupCredit? ile telafi kararı açıkça verilir
 PATCH  /api/lessons/{lessonId}                  ✅ Admin; öğrenci/öğretmen/tarih/süre/durum, sürümleme + audit
 
 GET    /api/school-calendar-days                ✅ A3: tatiller ve okul etkinlikleri

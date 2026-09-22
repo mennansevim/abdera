@@ -10,7 +10,13 @@ namespace Abdera.Api.Modules.Auth.Features;
 
 public static class Login
 {
-    public record Request(string Email, string Password);
+    // ExpectedRole: giriş ekranındaki rol seçimi (Yöneticiyim/Öğretmenim). İstemci hangi
+    // çalışma alanına girmek istediğini bildirir; kimlik doğrulandıktan SONRA hesabın
+    // gerçek rolüyle karşılaştırılır. Uyuşmazsa oturum hiç açılmaz - aksi halde "Yönetici"
+    // seçip öğretmen bilgileriyle giriş yapmak sessizce öğretmen oturumu açıyordu.
+    // Opsiyonel: rol seçimi olmayan istemciler (testler, e2e'nin doğrudan API çağrısı)
+    // null gönderir ve davranış eskisi gibi kalır.
+    public record Request(string Email, string Password, UserRole? ExpectedRole = null);
 
     public record Response(Guid Id, string Email, UserRole Role, bool MustChangePassword);
 
@@ -55,6 +61,18 @@ public static class Login
             return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: "E-posta veya şifre hatalı.");
         }
 
+        // Rol seçimi yalnızca şifre doğrulandıktan sonra denetlenir: yanlış şifreyle gelen
+        // bir istek hiçbir zaman hesabın rolünü öğrenemez (kullanıcı numaralandırma kanalı
+        // açılmaz). Doğru şifreyi bilen kişiye ise kendi rolünü söylemek bilgi sızdırmaz.
+        if (request.ExpectedRole is { } expectedRole && expectedRole != user.Role)
+        {
+            logger.LogWarning("Rol uyuşmazlığı: {Email} {ExpectedRole} seçti, hesap {ActualRole}.", email, expectedRole, user.Role);
+            return Results.Problem(
+                statusCode: 403,
+                title: "Rol uyuşmuyor",
+                detail: $"Bu hesap {RoleLabel(user.Role)} hesabı. Lütfen \"{RoleChoiceLabel(user.Role)}\" seçeneğiyle giriş yap.");
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -78,4 +96,21 @@ public static class Login
 
         return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword));
     }
+
+    // Kullanıcıya görünen metin Türkçe (CLAUDE.md "Dil"). Rol adları hata mesajında
+    // geçtiği için burada tutuluyor; giriş ekranındaki kart başlıklarıyla birebir aynı
+    // olmalı ki kullanıcı hangi seçeneğe basacağını arayıp bulmasın.
+    private static string RoleLabel(UserRole role) => role switch
+    {
+        UserRole.Admin => "bir yönetici",
+        UserRole.Teacher => "bir öğretmen",
+        _ => "bir veli",
+    };
+
+    private static string RoleChoiceLabel(UserRole role) => role switch
+    {
+        UserRole.Admin => "Yöneticiyim",
+        UserRole.Teacher => "Öğretmenim",
+        _ => "Veliyim",
+    };
 }

@@ -15,7 +15,13 @@ public static class CancelLesson
 {
     public enum CancelledBy { Guardian, School }
 
-    public record Request(CancelledBy CancelledBy, string? Reason);
+    // GrantMakeupCredit: telafi hakkı kararını AÇIKÇA belirler. null (varsayılan) ise
+    // docs/10-decisions.md A2'deki otomatik türetme çalışır - eski istemciler ve testler
+    // bu yüzden değişmeden çalışır. false, dersi telafi hakkı doğurmadan iptal eder
+    // (tatil, yanlış açılmış ders, velinin telafi istemediği geç iptal); true, politikanın
+    // kendiliğinden vermeyeceği bir durumda hakkı yine de tanır. Her iki açık seçim de
+    // audit kaydına "override" olarak düşer.
+    public record Request(CancelledBy CancelledBy, string? Reason, bool? GrantMakeupCredit = null);
     public record Response(Guid LessonId, bool MakeupCreditEarned);
 
     public static void MapCancelLesson(this IEndpointRouteBuilder app)
@@ -46,12 +52,16 @@ public static class CancelLesson
         var noticeHours = config.GetValue("Policy:MakeupNoticeHours", 24);
         var hoursNotice = (lesson.StartAt - now).TotalHours;
 
-        var earnsCredit = request.CancelledBy switch
+        var policyCredit = request.CancelledBy switch
         {
             CancelledBy.School => true,
             CancelledBy.Guardian => hoursNotice >= noticeHours,
             _ => false,
         };
+
+        // Açık seçim politikanın önüne geçer: kullanıcı iptal ekranında "telafisiz iptal"
+        // dediğinde okul kaynaklı iptal de kredi doğurmaz.
+        var earnsCredit = request.GrantMakeupCredit ?? policyCredit;
 
         if (earnsCredit)
         {
@@ -75,6 +85,11 @@ public static class CancelLesson
                 Status = lesson.Status.ToString(),
                 CancelledBy = request.CancelledBy.ToString(),
                 MakeupCreditEarned = earnsCredit,
+                // Politika ne derdi / kullanıcı ne dedi - "bu öğrenciye telafi neden
+                // verilmedi" sorusu başka tabloya gitmeden yanıtlanabilmeli.
+                PolicyMakeupCredit = policyCredit,
+                MakeupCreditOverridden = request.GrantMakeupCredit is { } chosen && chosen != policyCredit,
+                Reason = request.Reason,
             })));
 
         await db.SaveChangesAsync();

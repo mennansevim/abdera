@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
-import type { LoginResponse, Me } from "./api";
+import type { LoginResponse, Me, UserRole } from "./api";
 
 const ME_QUERY_KEY = ["auth", "me"] as const;
 
@@ -22,7 +22,9 @@ export function useMe() {
 
 export function useLogin() {
   const queryClient = useQueryClient();
-  return useMutation<LoginResponse, ApiError, { email: string; password: string }>({
+  // expectedRole: giriş ekranında seçilen rol. Sunucu, şifre doğru olsa bile hesabın
+  // rolü seçimle uyuşmuyorsa 403 döner ve oturum açılmaz - seçim kozmetik değil.
+  return useMutation<LoginResponse, ApiError, { email: string; password: string; expectedRole: UserRole }>({
     mutationFn: (credentials) => api.post<LoginResponse>("/api/auth/login", credentials),
     // invalidate yerine BEKLENEN bir refetch: giriş ekranı açılırken /api/auth/me bir kez 401
     // alır ve React Query bu hatayı önbellekte tutar. Sadece invalidate edip hemen

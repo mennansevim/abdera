@@ -8,6 +8,7 @@ import { useSessionDestination } from "@/lib/session-destination";
 import { useLogin } from "@/lib/use-auth";
 
 type LoginRole = "Admin" | "Teacher" | "Guardian";
+type StaffRole = Exclude<LoginRole, "Guardian">;
 
 const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon: IconName; color: string }[] = [
   { role: "Admin", title: "Yöneticiyim", description: "Okulu, aidatı ve programı düzenlerim", icon: "bank", color: "#a84e1f" },
@@ -17,7 +18,7 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
 
 const DEMO_PASSWORD = "AbderaDemo2026!";
 const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
-const DEMO_EMAILS: Record<Exclude<LoginRole, "Guardian">, string> = {
+const DEMO_EMAILS: Record<StaffRole, string> = {
   Admin: "demo.yonetici@abdera.com",
   Teacher: "demo.ogretmen@abdera.com",
 };
@@ -50,13 +51,13 @@ function LoginPageContent() {
     }
   }, [shouldChooseRole, destination, router]);
 
-  async function submitLogin(loginEmail: string, loginPassword: string, role: LoginRole) {
+  // Seçilen rol sunucuya gönderilir: hesabın rolü seçimle uyuşmuyorsa sunucu 403 döner ve
+  // oturum hiç açılmaz. Eskiden yanıt sessizce kabul edilip seçim hesabın gerçek rolüne
+  // çekiliyordu - "Yöneticiyim" seçip öğretmen bilgileriyle öğretmen ekranına düşmenin sebebi buydu.
+  async function submitLogin(loginEmail: string, loginPassword: string, role: StaffRole) {
     setError(null);
     try {
-      const result = await login.mutateAsync({ email: loginEmail, password: loginPassword });
-      if (result.role !== role) {
-        setSelectedRole(result.role);
-      }
+      const result = await login.mutateAsync({ email: loginEmail, password: loginPassword, expectedRole: role });
       router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");
@@ -79,6 +80,7 @@ function LoginPageContent() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (selectedRole === "Guardian") return; // form zaten gizli; tip daraltması için.
     await submitLogin(email, password, selectedRole);
   }
 
