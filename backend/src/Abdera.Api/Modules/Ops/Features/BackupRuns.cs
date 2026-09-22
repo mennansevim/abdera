@@ -40,8 +40,16 @@ public static class BackupRuns
     // pg_dump/şifreleme/yükleme adımlarını kendi try/catch'iyle BackupRun.Failed'a
     // düşürüyor; burada yalnızca o noktaya hiç ulaşamayan (ör. scope oluşturma) beklenmedik
     // bir hatanın sessizce yutulmaması için ayrı bir log güvencesi var.
-    private static IResult TriggerAsync(BackupService backupService, ILogger<BackupService> logger)
+    private static IResult TriggerAsync(BackupService backupService, ILogger<BackupService> logger, IConfiguration configuration)
     {
+        if (string.Equals(configuration["Backup:Provider"], BackupProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.Problem(
+                title: "Yedekleme devre dışı",
+                detail: "Harici yedekleme sağlayıcısı henüz yapılandırılmadı.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
         _ = Task.Run(async () =>
         {
             try

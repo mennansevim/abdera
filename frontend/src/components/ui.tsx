@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useMe } from "@/lib/use-auth";
 import { Icon, type IconName } from "./icons";
 
@@ -194,11 +195,11 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   const width = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl" }[size];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4">
       <button type="button" onClick={onClose} aria-label={`${title} penceresini kapat`} className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
       <div
@@ -220,14 +221,15 @@ export function Modal({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
 // Modal içindeki formların alt şeridi - solda vazgeç, sağda asıl eylem.
 export function FormActions({ onCancel, submitLabel, pending, pendingLabel, disabled = false }: { onCancel: () => void; submitLabel: string; pending?: boolean; pendingLabel?: string; disabled?: boolean }) {
   return (
-    <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
+    <div className="sticky bottom-[-1rem] z-10 -mx-4 flex justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:-mx-5 sm:px-5">
       <button type="button" onClick={onCancel} className="btn btn-quiet">Vazgeç</button>
       <button type="submit" disabled={pending || disabled} className="btn btn-primary">
         {pending ? (pendingLabel ?? "Kaydediliyor…") : submitLabel}

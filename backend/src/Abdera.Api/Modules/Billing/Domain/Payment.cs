@@ -27,6 +27,10 @@ public class Payment
     // ödemelerde bir admin yok (AuditLog.ActorUserId'nin sistem-olayları null işaretlemesiyle
     // aynı kural, bkz. guardian.opted_out).
     public Guid? CreatedBy { get; private set; }
+    // İstemcinin aynı tahsilat isteğini ağ kesintisi veya çift dokunma nedeniyle tekrar
+    // göndermesi yeni bir mali kayıt oluşturmamalı. Anahtar yalnızca HTTP tahsilat
+    // akışında zorunludur; banka webhook'larının kendi provider transaction anahtarı var.
+    public string? IdempotencyKey { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
     private Payment() { }
@@ -34,7 +38,7 @@ public class Payment
     public static Payment Create(
         Guid receivableId, decimal amount, DateOnly paymentDate, PaymentMethod method,
         string? reference, string? note, Guid? createdBy, DateTimeOffset now,
-        Guid? prepayPlanId = null, int? prepayPlanMonths = null)
+        Guid? prepayPlanId = null, int? prepayPlanMonths = null, string? idempotencyKey = null)
     {
         if (amount <= 0) throw new ArgumentException("Ödeme tutarı pozitif olmalı.", nameof(amount));
         if (prepayPlanId.HasValue && prepayPlanMonths is < 2 or > 24)
@@ -54,6 +58,7 @@ public class Payment
             PrepayPlanId = prepayPlanId,
             PrepayPlanMonths = prepayPlanMonths,
             CreatedBy = createdBy,
+            IdempotencyKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim(),
             CreatedAt = now,
         };
     }

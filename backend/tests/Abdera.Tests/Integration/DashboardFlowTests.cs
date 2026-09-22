@@ -51,9 +51,12 @@ public class DashboardFlowTests : IClassFixture<AbderaWebApplicationFactory>
                 new Teachers.CreateRequest("DashboardB", "Teacher", [piano.Id], null)))
             .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
 
-        // Teacher A'nın öğrencisinin doğum günü 5 gün sonra - 30 günlük pencere içinde net,
-        // UTC/yerel saat sınırındaki bir kayma yüzünden testin kırılgan olmasını önler.
-        var upcomingBirthday = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5));
+        // Teacher A'nın öğrencisinin doğum günü okulun yerel takviminde 5 gün sonra.
+        // UTC tarihini kullanmak İstanbul'da gece yarısından sonraki ilk üç saatte bunu
+        // 4 güne düşürüyordu; production hesabıyla aynı IClock kaynağını kullan.
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var upcomingBirthday = todayLocal.AddDays(5);
         var studentA = (await (await admin.PostAsJsonAsync("/api/students",
                 new Students.CreateRequest("StudentA", "Dash", new DateOnly(upcomingBirthday.Year - 10, upcomingBirthday.Month, upcomingBirthday.Day))))
             .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
@@ -87,8 +90,6 @@ public class DashboardFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // düşüp testi kırılgan (flaky) yapıyordu - gerçek bir prod bug'ı bulundu ve CI'da
         // gözlemlendi.
         var now = DateTimeOffset.UtcNow;
-        var clock = _factory.Services.GetRequiredService<IClock>();
-        var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
         var lessonAStart = LessonGenerator.ToUtcInstant(todayLocal, new TimeOnly(10, 0), clock.SchoolTimeZone);
         var lessonAEnd = lessonAStart.AddMinutes(45);
         var lessonBStart = LessonGenerator.ToUtcInstant(todayLocal, new TimeOnly(12, 0), clock.SchoolTimeZone);

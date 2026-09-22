@@ -3,6 +3,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Abdera.Api.Modules.Billing.Features;
 
@@ -21,16 +22,36 @@ public static class Payments
     }
 
     private static async Task<IResult> CreateAsync(
-        Guid receivableId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid receivableId, CreateRequest request, HttpRequest httpRequest,
+        ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
+        var idempotencyKey = httpRequest.Headers["Idempotency-Key"].ToString().Trim();
+        if (idempotencyKey.Length is < 8 or > 100)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["Idempotency-Key"] = ["Tahsilat isteği 8-100 karakterlik bir Idempotency-Key başlığı taşımalı."],
+            });
+        }
+
+        var actorId = AuthContext.GetUserId(principal);
+        var existing = await db.Payments.SingleOrDefaultAsync(payment => payment.IdempotencyKey == idempotencyKey);
+        if (existing is not null)
+        {
+            EnsureSameRequest(existing, receivableId, request, actorId);
+            return Created(existing);
+        }
+
         var receivable = await db.Receivables.SingleOrDefaultAsync(r => r.Id == receivableId)
             ?? throw new NotFoundException("Aidat bulunamadı.");
 
         if (receivable.Status is ReceivableStatus.Cancelled or ReceivableStatus.Paid)
             throw new ConflictException($"'{receivable.Status}' durumundaki bir aidata ödeme kaydedilemez.");
 
-        var actorId = AuthContext.GetUserId(principal);
-        var payment = Payment.Create(receivableId, request.Amount, request.PaymentDate, request.Method, request.Reference, request.Note, actorId, clock.UtcNow);
+        var payment = Payment.Create(
+            receivableId, request.Amount, request.PaymentDate, request.Method,
+            request.Reference, request.Note, actorId, clock.UtcNow,
+            idempotencyKey: idempotencyKey);
         db.Payments.Add(payment);
 
         var existingPaymentIds = await db.Payments
@@ -54,9 +75,49 @@ public static class Payments
                 newStatus = receivable.Status.ToString(),
             })));
 
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "ux_payments_idempotency_key",
+            })
+        {
+            // İki aynı istek tam aynı anda geldiyse unique kısıt yalnızca birini geçirir.
+            // Kaybeden isteğin tüm transaction'ı geri alınmıştır; kazanan kaydı okuyup aynı
+            // sonucu döndürmek gerçek retry-safe davranıştır.
+            db.ChangeTracker.Clear();
+            var concurrent = await db.Payments.SingleAsync(item => item.IdempotencyKey == idempotencyKey);
+            EnsureSameRequest(concurrent, receivableId, request, actorId);
+            return Created(concurrent);
+        }
 
-        return Results.Created($"/api/receivables/{receivableId}/payments/{payment.Id}",
-            new PaymentResponse(payment.Id, payment.ReceivableId, payment.Amount, payment.PaymentDate, payment.Method, payment.Reference, payment.Note));
+        return Created(payment);
+    }
+
+    private static IResult Created(Payment payment) => Results.Created(
+        $"/api/receivables/{payment.ReceivableId}/payments/{payment.Id}",
+        new PaymentResponse(
+            payment.Id, payment.ReceivableId, payment.Amount, payment.PaymentDate,
+            payment.Method, payment.Reference, payment.Note));
+
+    private static void EnsureSameRequest(
+        Payment payment, Guid receivableId, CreateRequest request, Guid actorId)
+    {
+        static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        if (payment.ReceivableId != receivableId ||
+            payment.Amount != request.Amount ||
+            payment.PaymentDate != request.PaymentDate ||
+            payment.Method != request.Method ||
+            payment.Reference != Normalize(request.Reference) ||
+            payment.Note != Normalize(request.Note) ||
+            payment.CreatedBy != actorId)
+        {
+            throw new ConflictException("Bu Idempotency-Key farklı bir tahsilat isteğinde zaten kullanılmış.");
+        }
     }
 }

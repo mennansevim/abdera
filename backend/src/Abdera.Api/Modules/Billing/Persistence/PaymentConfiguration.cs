@@ -20,10 +20,15 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(p => p.PrepayPlanId).HasColumnName("prepay_plan_id");
         builder.Property(p => p.PrepayPlanMonths).HasColumnName("prepay_plan_months");
         builder.Property(p => p.CreatedBy).HasColumnName("created_by");
+        builder.Property(p => p.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(100);
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(p => p.ReceivableId);
         builder.HasIndex(p => p.PrepayPlanId);
+        builder.HasIndex(p => p.IdempotencyKey)
+            .IsUnique()
+            .HasFilter("idempotency_key IS NOT NULL")
+            .HasDatabaseName("ux_payments_idempotency_key");
         builder.ToTable(t => t.HasCheckConstraint("CK_payments_amount", "amount > 0"));
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_payments_prepay_plan_months",

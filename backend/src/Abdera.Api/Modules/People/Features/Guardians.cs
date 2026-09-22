@@ -31,7 +31,11 @@ public static class Guardians
         group.MapGet("", ListAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         group.MapPatch("/{guardianId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
-        group.MapPost("/{guardianId:guid}/reset-password", ResetPasswordAsync);
+        // Veli şifresi sıfırlama hesap devralmaya yol açabilecek bir yönetim işlemidir.
+        // Öğretmen kendi öğrencisinin iletişim bilgisini güncelleyebilir ama oturum
+        // bilgisini değiştiremez; bu sınır yalnızca arayüzde değil API'de zorlanır.
+        group.MapPost("/{guardianId:guid}/reset-password", ResetPasswordAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
     private static async Task<IResult> ListAsync(AbderaDbContext db)

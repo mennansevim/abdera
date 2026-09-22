@@ -72,6 +72,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const router = useRouter();
   const logout = useLogout();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
   const isAdmin = me.role === "Admin";
   const alerts = useAdminAlerts(isAdmin);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
@@ -100,6 +101,17 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isMenuOpen]);
+
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
 
   function handleLogout() {
     logout.mutate(undefined, { onSuccess: () => router.replace("/login") });
@@ -147,6 +159,11 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
       </aside>
 
       <div className="min-w-0">
+        {!isOnline && (
+          <div role="status" className="sticky top-0 z-40 flex min-h-11 items-center justify-center gap-2 bg-[var(--warning-soft)] px-4 text-center text-xs font-bold text-[var(--warning-strong)]">
+            <Icon name="alert-triangle" className="h-4 w-4 shrink-0" /> İnternet bağlantısı yok. Yazdıkların ekranda korunur; bağlantı gelince yeniden deneyebilirsin.
+          </div>
+        )}
         <header className={`${me.role === "Teacher" ? "hidden" : "flex"} sticky top-0 z-30 h-16 items-center justify-between border-b border-black/5 bg-[rgba(248,246,241,.82)] px-4 backdrop-blur-xl lg:hidden`}>
           <Link href="/dashboard" className="text-[var(--brand-strong)]"><BrandMark /></Link>
           <button onClick={() => setIsMenuOpen(true)} className="pressable grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--brand-strong)]" aria-label="Tüm menüyü aç" aria-expanded={isMenuOpen}>

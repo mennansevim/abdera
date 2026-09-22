@@ -46,6 +46,17 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         return System.Text.Json.JsonSerializer.Deserialize<T>(body, TestJson.Options)!;
     }
 
+    private static Task<HttpResponseMessage> PostPaymentAsync(
+        HttpClient client, Guid receivableId, Payments.CreateRequest request)
+    {
+        var message = new HttpRequestMessage(HttpMethod.Post, $"/api/receivables/{receivableId}/payments")
+        {
+            Content = JsonContent.Create(request),
+        };
+        message.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
+        return client.SendAsync(message);
+    }
+
     private record Seeded(Guid StudentId, Guid TeacherId, Guid EnrollmentId, Guid GuardianId, Guid ReceivableId, Guid ShowId);
 
     // Bir öğrenciyi mümkün olduğunca "dolu" kurar: veli, ders serisi ve üretilmiş dersler,
@@ -77,7 +88,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
 
         var receivable = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
             "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2026-09")));
-        (await admin.PostAsJsonAsync($"/api/receivables/{receivable.Id}/payments",
+        (await PostPaymentAsync(admin, receivable.Id,
             new Payments.CreateRequest(1000m, new DateOnly(2026, 9, 3), PaymentMethod.Cash, null, null)))
             .EnsureSuccessStatusCode();
 

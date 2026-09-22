@@ -2,6 +2,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { api } from "./api";
 
 export type CourseKind = "Individual" | "Group";
@@ -165,11 +166,13 @@ export type MakeupCreditStatus = "Available" | "Used" | "Expired";
 export interface MakeupCredit {
   id: string;
   studentId: string;
+  sourceLessonId: string;
   earnedReason: "GuardianCancelled24H" | "SchoolCancelled";
   earnedAt: string;
   expiresAt: string;
   status: MakeupCreditStatus;
   usedLessonId: string | null;
+  sourceLessonStartAt: string;
 }
 
 export function useMakeupCredits(studentId: string) {
@@ -306,9 +309,22 @@ export function useCreateReceivable(studentId: string) {
 
 export function useRecordPayment(studentId: string) {
   const queryClient = useQueryClient();
+  // Aynı kullanıcı niyeti ağ yanıtı kaybolduğu için yeniden denenirse aynı anahtar gider.
+  // Başarılı yanıttan sonra anahtar temizlenir; alanlardan biri değişirse fingerprint de
+  // değiştiği için yeni ve bağımsız bir tahsilat isteği oluşur.
+  const attempts = useRef(new Map<string, string>());
   return useMutation({
-    mutationFn: ({ receivableId, ...body }: { receivableId: string; amount: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string }) =>
-      api.post(`/api/receivables/${receivableId}/payments`, body),
+    mutationFn: ({ receivableId, ...body }: { receivableId: string; amount: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string }) => {
+      const fingerprint = JSON.stringify({ receivableId, ...body });
+      const idempotencyKey = attempts.current.get(fingerprint) ?? crypto.randomUUID();
+      attempts.current.set(fingerprint, idempotencyKey);
+      return api.post(`/api/receivables/${receivableId}/payments`, body, {
+        headers: { "Idempotency-Key": idempotencyKey },
+      }).then((result) => {
+        attempts.current.delete(fingerprint);
+        return result;
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });

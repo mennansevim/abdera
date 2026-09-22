@@ -156,6 +156,11 @@ public class TeacherPortalFlowTests : IClassFixture<AbderaWebApplicationFactory>
             $"/api/guardians/{guardian.Id}", new Guardians.UpdateRequest("Ele", "Gecirdim", "05339000001"));
         Assert.Equal(HttpStatusCode.Forbidden, foreignEdit.StatusCode);
 
+        // Şifre sıfırlama, veli kendi öğrencisine bağlı olsa bile öğretmene kapalıdır.
+        // Aksi halde öğretmen veli hesabını devralabilecek kalıcı bir şifre üretebilirdi.
+        var resetPassword = await mine.Client.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null);
+        Assert.Equal(HttpStatusCode.Forbidden, resetPassword.StatusCode);
+
         // Okul geneli veli rehberi hâlâ yalnızca yöneticide
         Assert.Equal(HttpStatusCode.Forbidden, (await mine.Client.GetAsync("/api/guardians")).StatusCode);
     }
@@ -305,6 +310,13 @@ public class TeacherPortalFlowTests : IClassFixture<AbderaWebApplicationFactory>
             $"/api/teachers/{other.TeacherId}/availability",
             new TeacherAvailabilities.CreateRequest(DayOfWeek.Friday, new TimeOnly(9, 0), new TimeOnly(19, 0)));
         Assert.Equal(HttpStatusCode.Forbidden, onBehalf.StatusCode);
+
+        // Okuma uçları da aynı sahiplik sınırını uygular. Uygunluk ve izin gerekçeleri
+        // başka bir öğretmenin kişisel program bilgisini sızdırmamalı.
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await mine.Client.GetAsync($"/api/teachers/{other.TeacherId}/availability")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await mine.Client.GetAsync($"/api/teachers/{other.TeacherId}/time-off")).StatusCode);
 
         // Başkasının uygunluğunu kapatmak
         var foreignDelete = await other.Client.DeleteAsync(

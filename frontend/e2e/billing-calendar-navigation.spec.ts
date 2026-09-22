@@ -14,35 +14,16 @@ async function loginAdmin(page: Page) {
 }
 
 async function createBillingFixture(page: Page) {
-  const instruments = await (await page.request.get(`${apiUrl}/api/instruments`)).json();
   const students = await (await page.request.get(`${apiUrl}/api/students`)).json();
   const student = students[0];
   const enrollments = await (await page.request.get(`${apiUrl}/api/students/${student.id}/enrollments`)).json();
   const enrollment = enrollments[0];
-  const instrument = instruments.find((item: { id: string }) => item.id === enrollment.instrumentId);
-
-  const existingLists = await (await page.request.get(`${apiUrl}/api/price-lists`)).json();
-  let priceItem = existingLists.flatMap((list: { items: Array<{ instrumentId: string }> }) => list.items)
-    .find((item: { instrumentId: string }) => item.instrumentId === instrument.id);
-  if (!priceItem) {
-    const created = await page.request.post(`${apiUrl}/api/price-lists`, {
-      data: {
-        name: `E2E Fiyat ${Date.now()}`,
-        effectiveFrom: "2026-01-01",
-        effectiveUntil: null,
-        items: [{ instrumentId: instrument.id, durationMinutes: 50, billingType: "Monthly", amount: 100, currency: "TRY", packageLessonCount: null }],
-      },
-    });
-    expect(created.status()).toBe(201);
-    priceItem = (await created.json()).items[0];
-  }
-
-  expect((await page.request.post(`${apiUrl}/api/enrollments/${enrollment.id}/fee-plan`, {
-    data: { priceListItemId: priceItem.id, dueDay: 5, activeFrom: "2026-01-01" },
-  })).status()).toBe(201);
-  expect((await page.request.post(`${apiUrl}/api/receivables`, {
+  // Güncel modelde fiyat PriceList/FeePlan'dan değil merkezi TuitionRate politikasından
+  // hesaplanır. Seed tarifeyi kurar; test yalnızca öğrenci aidatını açar.
+  const created = await page.request.post(`${apiUrl}/api/receivables`, {
     data: { enrollmentId: enrollment.id, period: "2026-09" },
-  })).status()).toBe(201);
+  });
+  expect([201, 409]).toContain(created.status());
 }
 
 test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
@@ -64,8 +45,8 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     expect(due).toBeTruthy();
 
     await page.goto("/dashboard/billing");
-    await page.getByRole("button", { name: "Aidat al", exact: true }).first().click();
-    const dialog = page.getByRole("dialog", { name: "Aidat ödemesi al" });
+    await page.getByRole("button", { name: "Tahsilat kaydet", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Tahsilat kaydet" });
     await dialog.getByLabel("Öğrenci").selectOption(due!.studentId);
 
     const coursePicker = dialog.getByLabel("Hangi kurs?");
@@ -75,7 +56,7 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     await expect(monthPicker).toBeVisible();
     await monthPicker.fill("");
 
-    await expect(dialog.getByText("İlk dönemi seçin", { exact: false })).toBeVisible();
+    await expect(monthPicker).toHaveAttribute("aria-invalid", "true");
     await expect(dialog.getByRole("button", { name: /Elden alındı|ayı nakit ödendi/ })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: /Havale geldi|aylık havale geldi/ })).toBeDisabled();
     expect(browserErrors).toEqual([]);

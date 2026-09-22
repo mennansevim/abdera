@@ -11,7 +11,9 @@ using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Modules.Scheduling.Features;
+using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -421,6 +423,25 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.True(result.MakeupCreditEarned);
         Assert.True(await db.MakeupCredits.AnyAsync(item => item.SourceLessonId == own.LessonId));
 
+        var ownCredits = await (await teacher.GetAsync($"/api/students/{own.StudentId}/makeup-credits"))
+            .Content.ReadFromJsonAsync<List<MakeupCredits.CreditResponse>>(TestJson.Options);
+        var ownCredit = ownCredits!.Single(item => item.SourceLessonId == own.LessonId);
+        var pianoId = await GetPianoIdAsync(admin);
+        var makeupStart = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(30).AddHours(11), TimeSpan.Zero);
+
+        var useAsAnotherTeacher = await teacher.PostAsJsonAsync(
+            $"/api/makeup-credits/{ownCredit.Id}/use",
+            new MakeupCredits.UseRequest(foreign.TeacherId, pianoId, makeupStart, 45));
+        Assert.Equal(HttpStatusCode.Forbidden, useAsAnotherTeacher.StatusCode);
+
+        var useOwnCredit = await teacher.PostAsJsonAsync(
+            $"/api/makeup-credits/{ownCredit.Id}/use",
+            new MakeupCredits.UseRequest(own.TeacherId, pianoId, makeupStart, 45));
+        Assert.Equal(HttpStatusCode.OK, useOwnCredit.StatusCode);
+        var usedCredit = await db.MakeupCredits.AsNoTracking().SingleAsync(item => item.Id == ownCredit.Id);
+        Assert.Equal(MakeupCreditStatus.Used, usedCredit.Status);
+        Assert.NotNull(usedCredit.UsedLessonId);
+
         var foreignResponse = await teacher.PostAsJsonAsync(
             $"/api/lessons/{foreign.LessonId}/cancel",
             new CancelLesson.Request(CancelLesson.CancelledBy.School, "Yetkisiz deneme"));
@@ -482,9 +503,21 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(MakeupCreditStatus.Available, credit.Status);
         Assert.Equal(MakeupCreditEarnedReason.GuardianCancelled24H, credit.EarnedReason);
 
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var sourceLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(lesson.StartAt).Date);
+        var sameDayStart = LessonGenerator.ToUtcInstant(sourceLessonDate, new TimeOnly(20, 0), clock.SchoolTimeZone);
+        var invalidUseResponse = await admin.PostAsJsonAsync($"/api/makeup-credits/{credit.Id}/use",
+            new MakeupCredits.UseRequest(seeded.TeacherId, (await GetPianoIdAsync(admin)), sameDayStart, 45));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidUseResponse.StatusCode);
+
+        var makeupStart = LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(1), new TimeOnly(11, 0), clock.SchoolTimeZone);
         var useResponse = await admin.PostAsJsonAsync($"/api/makeup-credits/{credit.Id}/use",
-            new MakeupCredits.UseRequest(seeded.TeacherId, (await GetPianoIdAsync(admin)), DateTimeOffset.UtcNow.AddDays(3), 45));
+            new MakeupCredits.UseRequest(seeded.TeacherId, (await GetPianoIdAsync(admin)), makeupStart, 45));
         Assert.Equal(HttpStatusCode.OK, useResponse.StatusCode);
+
+        var repeatedUseResponse = await admin.PostAsJsonAsync($"/api/makeup-credits/{credit.Id}/use",
+            new MakeupCredits.UseRequest(seeded.TeacherId, (await GetPianoIdAsync(admin)), makeupStart.AddDays(1), 45));
+        Assert.Equal(HttpStatusCode.Conflict, repeatedUseResponse.StatusCode);
 
         var usedCredit = await db.MakeupCredits.AsNoTracking().SingleAsync(c => c.Id == credit.Id);
         Assert.Equal(MakeupCreditStatus.Used, usedCredit.Status);
@@ -493,6 +526,7 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         var makeupLesson = await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == usedCredit.UsedLessonId);
         Assert.Equal(LessonStatus.Makeup, makeupLesson.Status);
         Assert.Null(makeupLesson.LessonSeriesId);
+        Assert.Equal(sourceLessonDate.AddDays(1), DateOnly.FromDateTime(clock.ToSchoolLocal(makeupLesson.StartAt).Date));
     }
 
     [Fact]

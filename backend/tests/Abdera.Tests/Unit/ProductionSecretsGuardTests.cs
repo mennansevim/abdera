@@ -18,8 +18,9 @@ public class ProductionSecretsGuardTests
         ["WhatsApp:AccessToken"] = "access-token-value",
         ["WhatsApp:WebhookVerifyToken"] = "verify-token",
         ["Backup:Provider"] = "Sftp",
-        ["Backup:EncryptionKey"] = "base64-encryption-key-value",
+        ["Backup:EncryptionKey"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         ["Backup:Sftp:Host"] = "backup.internal",
+        ["Backup:Sftp:Username"] = "backup-user",
         ["Backup:Sftp:PrivateKeyPath"] = "/run/secrets/backup_key",
         // Program.cs'in gerçekten DI'a kaydedebildiği bir değer olmalı - aksi halde bu test
         // "geçerli" saydığı bir konfigürasyonla uygulamanın Production'da hiç ayağa
@@ -27,6 +28,8 @@ public class ProductionSecretsGuardTests
         // entegrasyonu kapalı; webhook kullanılmadığı için paylaşılan sır da beklenmez.
         ["Banking:Provider"] = BankingProviderModes.Manual,
         ["Bootstrap:AdminPassword"] = "strong-admin-secret",
+        ["Frontend:Origin"] = "https://abdera.example",
+        ["Auth:PersistKeysToDatabase"] = "true",
     };
 
     private static WebApplication BuildApp(string environmentName, Dictionary<string, string?> config)
@@ -39,7 +42,10 @@ public class ProductionSecretsGuardTests
     [Fact]
     public void Throws_in_production_when_both_secrets_are_missing()
     {
-        var app = BuildApp("Production", new Dictionary<string, string?>());
+        var configuration = CompleteProductionConfiguration();
+        configuration.Remove("WhatsApp:AppSecret");
+        configuration.Remove("WhatsApp:PayloadSigningKey");
+        var app = BuildApp("Production", configuration);
 
         var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
         Assert.Contains("WhatsApp__AppSecret", ex.Message);
@@ -49,10 +55,9 @@ public class ProductionSecretsGuardTests
     [Fact]
     public void Throws_in_production_when_only_one_secret_is_missing()
     {
-        var app = BuildApp("Production", new Dictionary<string, string?>
-        {
-            ["WhatsApp:AppSecret"] = "real-secret",
-        });
+        var configuration = CompleteProductionConfiguration();
+        configuration.Remove("WhatsApp:PayloadSigningKey");
+        var app = BuildApp("Production", configuration);
 
         var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
         Assert.DoesNotContain("WhatsApp__AppSecret", ex.Message);
@@ -100,9 +105,28 @@ public class ProductionSecretsGuardTests
         ProductionSecretsGuard.EnsureConfigured(app);
     }
 
+    [Fact]
+    public void Does_not_require_integration_secrets_when_optional_providers_are_disabled()
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["WhatsApp:Provider"] = "Disabled";
+        configuration["Backup:Provider"] = "Disabled";
+        foreach (var key in configuration.Keys
+                     .Where(key => key.StartsWith("WhatsApp:", StringComparison.Ordinal) ||
+                                   key.StartsWith("Backup:", StringComparison.Ordinal))
+                     .Where(key => !key.EndsWith(":Provider", StringComparison.Ordinal))
+                     .ToList())
+        {
+            configuration.Remove(key);
+        }
+        var app = BuildApp("Production", configuration);
+
+        ProductionSecretsGuard.EnsureConfigured(app);
+    }
+
     [Theory]
-    [InlineData("WhatsApp:Provider", "Fake", "WhatsApp__Provider=Cloud")]
-    [InlineData("Backup:Provider", "Fake", "Backup__Provider=Sftp")]
+    [InlineData("WhatsApp:Provider", "Fake", "WhatsApp__Provider")]
+    [InlineData("Backup:Provider", "Fake", "Backup__Provider")]
     [InlineData("Banking:Provider", "Fake", "Banking__Provider")]
     public void Throws_in_production_when_a_fake_provider_is_active(string key, string value, string expected)
     {
@@ -125,5 +149,60 @@ public class ProductionSecretsGuardTests
         var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
 
         Assert.Contains("Bootstrap__AdminPassword (placeholder olamaz)", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("http://abdera.example")]
+    [InlineData("https://localhost")]
+    public void Throws_in_production_when_frontend_origin_is_not_a_public_https_origin(string? origin)
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["Frontend:Origin"] = origin;
+        var app = BuildApp("Production", configuration);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
+
+        Assert.Contains("Frontend__Origin", ex.Message);
+    }
+
+    [Fact]
+    public void Throws_in_production_when_demo_mode_is_enabled()
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["Demo:Enabled"] = "true";
+        var app = BuildApp("Production", configuration);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
+
+        Assert.Contains("Demo__Enabled=false", ex.Message);
+    }
+
+    [Fact]
+    public void Throws_in_production_when_data_protection_keys_are_ephemeral()
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["Auth:PersistKeysToDatabase"] = "false";
+        configuration["Auth:KeysDirectory"] = null;
+        var app = BuildApp("Production", configuration);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
+
+        Assert.Contains("Auth__PersistKeysToDatabase", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-base64")]
+    [InlineData("c2hvcnQ=")]
+    public void Throws_in_production_when_backup_encryption_key_is_not_a_32_byte_base64_value(string key)
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["Backup:EncryptionKey"] = key;
+        var app = BuildApp("Production", configuration);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
+
+        Assert.Contains("Backup__EncryptionKey", ex.Message);
     }
 }

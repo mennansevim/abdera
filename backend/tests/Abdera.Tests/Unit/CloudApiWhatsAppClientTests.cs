@@ -165,7 +165,7 @@ public class CloudApiWhatsAppClientTests
 
         Assert.False(result.Success);
         Assert.Null(result.ProviderMessageId);
-        Assert.Contains("network unavailable", result.Error);
+        Assert.Equal("WhatsApp sağlayıcısına ulaşılamadı.", result.Error);
     }
 
     [Fact]

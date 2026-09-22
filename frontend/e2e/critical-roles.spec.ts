@@ -8,6 +8,9 @@ const teacherPassword = "DemoTeacher123!";
 const approvedComment = "E2E: Düzenli çalışması ritim ve ifade gelişimini belirgin biçimde destekliyor.";
 
 async function loginStaff(page: Page, role: "Admin" | "Teacher", email: string, password: string) {
+  // Aynı senaryoda Admin'den Teacher'a geçerken /login aktif oturumu dashboard'a geri
+  // yönlendirir. Yeni rol girişinden önce yalnızca test bağlamındaki oturum çerezini temizle.
+  await page.context().clearCookies();
   await page.goto("/login");
   await page.getByRole("radio", { name: role === "Admin" ? /Yöneticiyim/ : /Öğretmenim/ }).click();
   await expect(page.locator("#email")).toBeFocused();
@@ -109,9 +112,11 @@ test.describe.serial("Abdera critical role flows", () => {
     const quickAdd = page.getByRole("dialog", { name: "Yeni ders oluştur" });
     await expect(quickAdd).toContainText(createTargetLabel);
     await expect(quickAdd.getByLabel("Başlangıç tarihi")).toHaveValue(date);
-    await expect(quickAdd.getByLabel("Saat", { exact: true })).toHaveValue(createTargetLabel);
     await quickAdd.getByLabel("1 · Öğrenci").selectOption(student.id);
     await quickAdd.getByLabel("2 · Ders ve öğretmen").selectOption(enrollment.id);
+    // Özel saat alanı kayıt seçildikten sonra açılır; uygunluk/çakışma hesabı seçilen
+    // öğretmen ve öğrenci üzerinden yapılır.
+    await expect(quickAdd.getByLabel("Saat", { exact: true })).toHaveValue(createTargetLabel);
     await quickAdd.getByRole("button", { name: "Seriyi takvime yerleştir" }).click();
     await expect(page.getByRole("button", { name: "Yeni ders", exact: true })).toBeVisible();
 
@@ -126,7 +131,7 @@ test.describe.serial("Abdera critical role flows", () => {
     await editDialog.getByRole("button", { name: "Değişiklikleri kaydet" }).click();
     await expect(page.getByRole("dialog", { name: "Ders detayları" })).toBeHidden();
     await page.reload();
-    await page.getByRole("button", { name: "Sonraki hafta" }).click();
+    // Takvim seçili haftayı sessionStorage'da korur; reload sonrası aynı haftadayız.
     await page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}`) }).first().click();
     await expect(page.getByText("60 dakika", { exact: true })).toBeVisible();
 
@@ -151,7 +156,6 @@ test.describe.serial("Abdera critical role flows", () => {
     expect((await approved).ok()).toBeTruthy();
     await expect(page.getByText(new RegExp(`dersi .* ${targetLabel} olarak güncellendi`))).toBeVisible();
     await page.reload();
-    await page.getByRole("button", { name: "Sonraki hafta" }).click();
     await expect(page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}.*${targetLabel}`) }).first()).toBeVisible();
 
     const movedLesson = page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}.*${targetLabel}`) }).first();
@@ -164,7 +168,6 @@ test.describe.serial("Abdera critical role flows", () => {
     await statusDialog.locator("label").filter({ hasText: "Durum" }).locator("select").selectOption("Cancelled");
     await statusDialog.getByRole("button", { name: "Değişiklikleri kaydet" }).click();
     await page.reload();
-    await page.getByRole("button", { name: "Sonraki hafta" }).click();
     await page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}.*${targetLabel}`) }).first().click({ force: true });
     await expect(page.getByText("İptal edildi", { exact: true })).toBeVisible();
     await page.getByRole("dialog", { name: "Ders detayları" }).getByRole("button", { name: "Kapat", exact: true }).first().click();
@@ -191,25 +194,7 @@ test.describe.serial("Abdera critical role flows", () => {
       expect(branchSeries.status()).toBe(index === otherBranches.length - 1 ? 400 : 201);
     }
 
-    // Demo seed'i aidat üretmez. Bu test kendi finansal fixture'ını açıkça kurar.
-    const priceLists = await (await page.request.get(`${apiUrl}/api/price-lists`)).json();
-    let pianoPriceItem = priceLists.flatMap((list: { items: Array<{ instrumentId: string }> }) => list.items)
-      .find((item: { instrumentId: string }) => item.instrumentId === piano.id);
-    if (!pianoPriceItem) {
-      const priceListResponse = await page.request.post(`${apiUrl}/api/price-lists`, {
-        data: {
-          name: `E2E Fiyat ${suffix}`,
-          effectiveFrom: localDateString(new Date()),
-          effectiveUntil: null,
-          items: [{ instrumentId: piano.id, durationMinutes: 50, billingType: "Monthly", amount: 100, currency: "TRY", packageLessonCount: null }],
-        },
-      });
-      expect(priceListResponse.status()).toBe(201);
-      pianoPriceItem = (await priceListResponse.json()).items[0];
-    }
-    expect((await page.request.post(`${apiUrl}/api/enrollments/${enrollment.id}/fee-plan`, {
-      data: { priceListItemId: pianoPriceItem.id, dueDay: 5, activeFrom: localDateString(new Date()) },
-    })).status()).toBe(201);
+    // Demo seed merkezi ücret tarifesini kurar; kayıt bazlı FeePlan artık yoktur.
     const currentPeriod = localDateString(new Date()).slice(0, 7);
     expect((await page.request.post(`${apiUrl}/api/receivables`, {
       data: { enrollmentId: enrollment.id, period: currentPeriod },
@@ -294,7 +279,7 @@ test.describe.serial("Abdera critical role flows", () => {
     // Okundu işaretlemek zili sıfırlar: bildirime tıklayınca takvime gidilir.
     await dialog.getByRole("button", { name: /Ders saati değişti/ }).first().click();
     await page.waitForURL(/\/dashboard\/calendar/);
-    await expect(page.getByRole("button", { name: "Bildirimler", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Bildirimler/ })).toBeVisible();
   });
 
   test("teacher writes repertoire note and explicitly approves the parent comment", async ({ page }) => {
@@ -305,7 +290,7 @@ test.describe.serial("Abdera critical role flows", () => {
     await page.getByRole("button", { name: "Yeni gelişim notu" }).click();
     const note = `E2E öğretmen ham notu ${Date.now()}`;
     await page.getByLabel("Çalınan eser").fill("E2E Minuet");
-    await page.getByRole("textbox", { name: "Ders notu", exact: true }).fill(note);
+    await page.getByRole("textbox", { name: /Öğretmen notu/ }).fill(note);
     await page.getByRole("button", { name: "Gelişim notunu kaydet" }).click();
     const entry = page.locator("article").filter({ hasText: note }).first();
     await expect(entry).toBeVisible();

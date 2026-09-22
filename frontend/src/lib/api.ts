@@ -3,8 +3,18 @@
 
 // Yayında frontend ve API aynı Vercel domain'inde /api üzerinden sunulur; boş taban URL
 // tarayıcının mevcut origin'ini kullanır. Yerel geliştirmede ayrı API portu korunur.
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
-  ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8080");
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+const configuredApiIsLoopback = configuredApiBaseUrl
+  ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(configuredApiBaseUrl)
+  : false;
+
+// Docker geliştirme varsayılanı localhost:8080'dir. Aynı imaj production Caddy profiliyle
+// oluşturulduğunda bu adres ziyaretçinin KENDİ cihazını gösterir ve bütün API çağrıları
+// sessizce bozulur. Production'da loopback değerini güvenli aynı-origin `/api` davranışına
+// çevir; açıkça verilen gerçek bir uzak API origin'ini ise koru.
+export const API_BASE_URL = process.env.NODE_ENV === "production" && configuredApiIsLoopback
+  ? ""
+  : configuredApiBaseUrl ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8080");
 
 export class ApiError extends Error {
   constructor(
@@ -73,8 +83,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  post: <T>(path: string, body?: unknown, options?: { headers?: HeadersInit }) =>
+    request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined, headers: options?.headers }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(path: string, body?: unknown) =>

@@ -19,6 +19,7 @@ import {
 } from "@/lib/billing";
 import { formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
+import { useSessionState } from "@/lib/use-session-state";
 import { StudentBillingSection } from "./student-billing-section";
 
 // Ekran bir "dönem defteri": aynı anda tek bir dönemi gösterir.
@@ -107,15 +108,15 @@ function daysOverdue(dueDate: string) {
 export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summary: BillingFilterSummary) => void }) {
   const { data: dues, isLoading, isError, isFetching, refetch } = useBillingDues();
   const { data: teachers } = useTeachers();
-  const [filter, setFilter] = useState<DueFilter>("open");
-  const [period, setPeriod] = useState<string | null>(null);
+  const [filter, setFilter] = useSessionState<DueFilter>("abdera:billing:status", "open");
+  const [period, setPeriod] = useSessionState<string | null>("abdera:billing:period", null);
   // selectedStudentId artık yalnızca "tam hesabı aç" kaçış kapısı için tutuluyor - hızlı
   // tahsilat panelinin (QuickCollectPanel) kendi öğrenci seçimi ayrıdır.
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [showMonthlyRun, setShowMonthlyRun] = useState(false);
-  const [teacherFilter, setTeacherFilter] = useState("all");
-  const [studentSearch, setStudentSearch] = useState("");
+  const [teacherFilter, setTeacherFilter] = useSessionState("abdera:billing:teacher", "all");
+  const [studentSearch, setStudentSearch] = useSessionState("abdera:billing:student-search", "");
 
   // Dönem listesi veriden türetilir - okul ölçeğinde tüm aidatlar zaten tek istekte
   // geliyor, ayrı bir uç nokta açmaya gerek yok (CLAUDE.md: gereksiz bağımlılık ekleme).
@@ -150,7 +151,7 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
     setTeacherFilter("all");
     setStudentSearch("");
     setPeriod(ALL_PERIODS);
-  }, []);
+  }, [setFilter, setPeriod, setStudentSearch, setTeacherFilter]);
 
   // Dönem DIŞINDAKİ daraltmalar ayrı tutulur: aşağıdaki "başka dönemde gecikmiş var"
   // uyarısı bu kümeye bakar, çünkü tam da dönem filtresinin gizlediği şeyi göstermesi gerekir.
