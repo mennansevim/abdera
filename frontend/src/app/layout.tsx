@@ -1,29 +1,45 @@
 import type { Metadata } from "next";
-import { Figtree, Geist_Mono, Lora } from "next/font/google";
+import localFont from "next/font/local";
 import { Providers } from "./providers";
 import "./globals.css";
 import { FontSizeController } from "@/components/font-size-controller";
 
 // "Sıcak Atölye" yön değişimi (redesign/sicak-atolye): gövde fontu nötr Geist Sans'tan
 // daha sıcak/insancıl Figtree'ye, başlık/marka fontu ise Lora italik serife geçti - bkz.
-// docs/14-ui-design-prompt.md. Geist Mono aynen kalıyor (tabular-nums zaten Figtree üzerinde çalışıyor,
-// mono hiçbir yerde kullanılmıyor - bu redesign'ın kapsamı değil).
-const figtree = Figtree({
+// docs/14-ui-design-prompt.md. Geist Mono geçici şifre/telefon gösteriminde kullanılıyor
+// (`font-mono`), kalıyor.
+//
+// FONTLAR REPODA, next/font/google İLE İNDİRİLMİYOR. Gerekçe (gerçek bir CI hatası):
+// next/font/google fontları DERLEME ANINDA fonts.googleapis.com'dan çeker. Docker imajı
+// derlenirken bu çekim başarısız olunca `npm run build` "module not found:
+// [next]/internal/font/google/lora_*.module.css" ile düşüyor ve compose ayağa kalkmıyordu -
+// aynı commit runner üzerinde sorunsuz derlenirken. Üretim imajının derlenmesi üçüncü
+// parti bir servise bağlı olmamalı; dosyalar `./fonts` altında duruyor.
+//
+// Hepsi DEĞİŞKEN (variable) font: aile başına tek dosya tüm ağırlıkları taşır, bu yüzden
+// ağırlıklar tek tek listelenmez - aralık verilir. Yalnızca temel `latin` alt kümesi
+// indirildi (latin-ext/vietnamese gereksiz ağırlık getirirdi).
+const figtree = localFont({
+  src: "./fonts/Figtree-latin.woff2",
   variable: "--font-figtree",
-  subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
+  weight: "300 900",
+  display: "swap",
 });
 
-const lora = Lora({
+const lora = localFont({
+  src: [
+    { path: "./fonts/Lora-latin.woff2", style: "normal", weight: "400 700" },
+    { path: "./fonts/Lora-Italic-latin.woff2", style: "italic", weight: "400 700" },
+  ],
   variable: "--font-lora",
-  subsets: ["latin"],
-  style: ["italic", "normal"],
-  weight: ["600", "700"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/GeistMono-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {

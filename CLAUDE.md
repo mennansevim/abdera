@@ -89,6 +89,19 @@ WhatsApp mesajı/tarih-para gösterimi gibi **veliye görünecek** metinlerde (y
 
 Gerçek bir prod bug'ı olarak Faz 5'te bulundu: `NotificationDispatcher`, WhatsApp mesaj metnini tr-TR formatında biçimlendirmeye çalışırken bu istisnayı fırlatıp job'ları sessizce `FAILED`'a düşürüyordu — yerel test koşusu (macOS/Linux, Alpine değil) bunu hiç yakalamadı, yalnızca `docker compose up` ile canlı denemede ortaya çıktı. Kural: Dockerfile'da `icu-data-full` kurulumundan hemen sonra `ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false` satırının durduğunu doğrula — biri diğeri olmadan işe yaramaz. Yeni bir named-culture çağrısı eklerken mutlaka `docker compose up` ile canlı doğrula, birim testi bu sınıf bug'ı yakalamaz (bkz. `docs/11-progress-log.md` Faz 5 notu).
 
+## Fontlar repoda tutulur — `next/font/google` kullanma
+
+`frontend/src/app/fonts/` altındaki woff2 dosyaları `next/font/local` ile yüklenir. `next/font/google`'a
+geri dönme: o API fontları **derleme anında** fonts.googleapis.com'dan çeker ve çekim başarısız olunca
+`npm run build` `module not found: [next]/internal/font/google/<aile>_*.module.css` ile düşer. Gerçek bir
+CI hatası olarak bulundu — aynı commit runner üzerinde sorunsuz derlenirken Docker imajı derlenirken
+düştü ve `docker compose up` hiç ayağa kalkmadı, e2e smoke da onun arkasında kaldı. Üretim imajının
+(ve Vercel derlemesinin) üçüncü parti bir servise bağlı olmaması gerekir.
+
+Yeni bir ağırlık/stil gerekirse dosyayı indirip `fonts/`'a ekle. Hepsi **değişken (variable)** font:
+aile başına tek dosya tüm ağırlıkları taşır, bu yüzden `weight` tek değer değil aralık verilir
+(`"300 900"`). Yalnızca temel `latin` alt kümesi tutulur.
+
 ## WhatsApp entegrasyonu
 
 `IWhatsAppClient` arayüzünün iki implementasyonu vardır:
