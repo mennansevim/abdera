@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import type { LoginResponse, Me, UserRole } from "./api";
+import { clearSessionData } from "./session-reset";
 
 const ME_QUERY_KEY = ["auth", "me"] as const;
 
@@ -32,7 +33,14 @@ export function useLogin() {
     // görür ve kullanıcıyı giriş ekranına geri atar - "ilk girişte hata verdi, tekrar
     // denedim girdi" şikâyetinin sebebi buydu. onSuccess bir promise döndürdüğü için
     // mutateAsync oturum bilgisi tazelenmeden çözülmez.
-    onSuccess: () => queryClient.refetchQueries({ queryKey: ME_QUERY_KEY }),
+    //
+    // Önce önceki oturumun bütün verisi silinir (bkz. session-reset.ts): arada çıkış yapılmadan
+    // (ör. süresi dolan oturumdan sonra) başka bir hesapla girilse bile eski liste çizilmez.
+    // Silme, önbellekteki eski 401'i de götürdüğü için yeni `me` burada bekleyerek çekilir.
+    onSuccess: () => {
+      clearSessionData(queryClient);
+      return queryClient.prefetchQuery({ queryKey: ME_QUERY_KEY, queryFn: () => api.get<Me>("/api/auth/me") });
+    },
   });
 }
 
@@ -40,10 +48,8 @@ export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.post("/api/auth/logout"),
-    onSuccess: () => {
-      queryClient.setQueryData(ME_QUERY_KEY, null);
-      queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
-    },
+    // Yalnızca `me` değil, önceki kullanıcının bütün verisi silinir (bkz. session-reset.ts).
+    onSuccess: () => clearSessionData(queryClient),
   });
 }
 

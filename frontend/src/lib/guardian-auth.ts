@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
+import { clearSessionData } from "./session-reset";
 
 const GUARDIAN_ME_QUERY_KEY = ["guardian", "me"] as const;
 
@@ -53,7 +54,11 @@ export function useGuardianLogin() {
   const queryClient = useQueryClient();
   return useMutation<GuardianLoginResult, ApiError, { phoneNumber: string; password: string }>({
     mutationFn: (body) => api.post<GuardianLoginResult>("/api/guardian/login", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+    // Önceki oturumun verisi silinir (bkz. session-reset.ts), sonra yeni veli bilgisi çekilir.
+    onSuccess: () => {
+      clearSessionData(queryClient);
+      return queryClient.prefetchQuery({ queryKey: GUARDIAN_ME_QUERY_KEY, queryFn: () => api.get<GuardianMe>("/api/guardian/me") });
+    },
   });
 }
 
@@ -78,7 +83,11 @@ export function useVerifyGuardianOtp() {
   const queryClient = useQueryClient();
   return useMutation<VerifyOtpResult, ApiError, { phoneNumber: string; code: string }>({
     mutationFn: (body) => api.post<VerifyOtpResult>("/api/guardian/otp/verify", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+    // Önceki oturumun verisi silinir (bkz. session-reset.ts), sonra yeni veli bilgisi çekilir.
+    onSuccess: () => {
+      clearSessionData(queryClient);
+      return queryClient.prefetchQuery({ queryKey: GUARDIAN_ME_QUERY_KEY, queryFn: () => api.get<GuardianMe>("/api/guardian/me") });
+    },
   });
 }
 
@@ -87,7 +96,11 @@ export function useDebugGuardianLogin() {
   const queryClient = useQueryClient();
   return useMutation<VerifyOtpResult, ApiError, void>({
     mutationFn: () => api.post<VerifyOtpResult>("/api/guardian/debug-login", {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+    // Önceki oturumun verisi silinir (bkz. session-reset.ts), sonra yeni veli bilgisi çekilir.
+    onSuccess: () => {
+      clearSessionData(queryClient);
+      return queryClient.prefetchQuery({ queryKey: GUARDIAN_ME_QUERY_KEY, queryFn: () => api.get<GuardianMe>("/api/guardian/me") });
+    },
   });
 }
 
@@ -97,6 +110,6 @@ export function useGuardianLogout() {
     // Ortak çıkış ucu güvenlik damgasını da yeniler; 30 günlük hatırlanan veli cookie'sinin
     // kopyası dahi çıkıştan sonra yeniden kullanılamaz.
     mutationFn: () => api.post<void>("/api/auth/logout"),
-    onSuccess: () => queryClient.removeQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
+    onSuccess: () => clearSessionData(queryClient),
   });
 }
