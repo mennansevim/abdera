@@ -331,7 +331,7 @@ test.describe.serial("Abdera critical role flows", () => {
     // bir kirilma bu testi de dusurmez ve tek basina calistirilabilir.
     await ensureApprovedCommentExists(page);
     await expect(page.getByText(approvedComment).first()).toBeVisible();
-    await page.getByPlaceholder("Bugünkü hedef").fill("E2E: 20 dakika gam");
+    await page.getByLabel("Bugünkü hedef").fill("E2E: 20 dakika gam");
     await page.getByRole("button", { name: "Çalışmayı kaydet ve onayla" }).click();
     await expect(page.getByText("E2E: 20 dakika gam").first()).toBeVisible();
     await expect(page.getByText("Veli onaylı").first()).toBeVisible();

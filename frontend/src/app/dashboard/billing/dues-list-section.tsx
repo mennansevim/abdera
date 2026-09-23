@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api";
 import {
   COURSE_KIND_LABEL,
   useBillingDues,
+  useCorrectPayment,
   useCreatePrepayPlan,
   useCreateReceivable,
   usePrepayPreview,
@@ -14,6 +15,7 @@ import {
   useStudentBilling,
   type BillingDue,
   type PaymentMethod,
+  type PaymentRecord,
   type Receivable,
 } from "@/lib/billing";
 import { currentPeriod, formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
@@ -621,6 +623,7 @@ function ReceivablePeriodCard({
 }) {
   const recordPayment = useRecordPayment(studentId);
   const [showForm, setShowForm] = useState(false);
+  const [revertTarget, setRevertTarget] = useState<PaymentRecord | null>(null);
   const [amount, setAmount] = useState(Math.max(0, receivable.amount - receivable.totalPaid));
   const [method, setMethod] = useState<PaymentMethod>("Cash");
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -661,15 +664,91 @@ function ReceivablePeriodCard({
     {!!receivable.payments.length && <div className="mt-3 space-y-1.5 border-t border-[var(--line)] pt-2.5">
       {receivable.payments.map((payment) => {
         const coveredPeriods = payment.prepayPlanId ? prepayCoverage.get(payment.prepayPlanId) ?? [] : [];
+        const effective = payment.kind === "Payment" ? effectivePaymentAmount(receivable.payments, payment) : null;
         return <div key={payment.id} className="rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem]">
           <div className="flex flex-wrap items-center justify-between gap-1.5"><span className="font-semibold">{payment.paymentDate} · {paymentMethodLabel(payment.method)}</span><strong className="tabular-nums">{payment.kind === "Correction" && payment.previousAmount != null ? `${payment.previousAmount.toLocaleString("tr-TR")} → ` : ""}{payment.amount.toLocaleString("tr-TR")} {receivable.currency}</strong></div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {payment.kind === "Correction" && <span className="rounded-full bg-[var(--warning-soft)] px-1.5 py-0.5 font-bold text-[var(--warning-strong)]">Düzeltme</span>}
+            {payment.kind === "Correction" && <span className="rounded-full bg-[var(--warning-soft)] px-1.5 py-0.5 font-bold text-[var(--warning-strong)]">{payment.amount === 0 ? "Geri alındı" : "Düzeltme"}</span>}
+            {effective === 0 && <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 font-bold text-[var(--muted)]">Geri alındı</span>}
             {payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}
             {coveredPeriods.length > 1 && <span className="text-[var(--muted)]">{formatPeriod(coveredPeriods[0])} – {formatPeriod(coveredPeriods.at(-1))}</span>}
           </div>
+          {effective !== null && effective > 0 && receivable.status !== "Cancelled" && <div className="mt-2 flex justify-end">
+            <button type="button" onClick={() => setRevertTarget(payment)} className="btn btn-quiet text-xs">
+              <Icon name="swap" className="h-4 w-4" />Ödemeyi geri al
+            </button>
+          </div>}
         </div>;
       })}
     </div>}
+    <RevertPaymentDialog
+      studentId={studentId}
+      payment={revertTarget}
+      currency={receivable.currency}
+      period={receivable.period}
+      onClose={() => setRevertTarget(null)}
+    />
   </article>;
+}
+
+// Bir ödemenin bugünkü geçerli tutarı: en son düzeltme satırı (varsa) özgün tutarın yerine geçer.
+function effectivePaymentAmount(rows: PaymentRecord[], payment: PaymentRecord) {
+  const corrections = rows
+    .filter((row) => row.kind === "Correction" && row.correctsPaymentId === payment.id)
+    .sort((a, b) => (a.recordedAt ?? "").localeCompare(b.recordedAt ?? ""));
+  return corrections.at(-1)?.amount ?? payment.amount;
+}
+
+// Yanlışlıkla kaydedilen tahsilatın geri alınması (yalnızca Admin - aidat ekranının tamamı
+// Admin'e açık, sunucu da POST /api/payments/{id}/corrections'ı AdminOnly ile korur).
+// Finansal kayıt SİLİNMEZ (CLAUDE.md): ödeme satırı yerinde kalır, tutarı gerekçeli bir
+// düzeltmeyle 0'a çekilir, audit_log'a yazılır ve aidat bakiyesi geri açılır.
+function RevertPaymentDialog({ studentId, payment, currency, period, onClose }: {
+  studentId: string;
+  payment: PaymentRecord | null;
+  currency: string;
+  period: string;
+  onClose: () => void;
+}) {
+  const correctPayment = useCorrectPayment(studentId);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function close() {
+    setReason("");
+    setError(null);
+    onClose();
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!payment) return;
+    setError(null);
+    try {
+      await correctPayment.mutateAsync({ paymentId: payment.id, correctedAmount: 0, reason: reason.trim() });
+      close();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ödeme geri alınamadı.");
+    }
+  }
+
+  return <Modal open={payment !== null} title="Ödemeyi geri al" description={`${formatPeriod(period)} aidatı`} onClose={close} size="sm">
+    {payment && <form onSubmit={submit} className="space-y-3">
+      <p className="rounded-xl bg-[var(--surface-muted)] px-3 py-2.5 text-sm">
+        <strong className="tabular-nums">{formatMoney(payment.amount, currency)}</strong> · {payment.paymentDate} · {paymentMethodLabel(payment.method)}
+      </p>
+      <p className="text-meta">Ödeme kaydı silinmez; tutarı sıfıra düzeltilir ve işlem kayıt altına alınır. Aidat yeniden ödenmedi durumuna döner, gerekirse doğru tahsilatı sonra alabilirsin.</p>
+      {payment.prepayPlanId && <FormMessage tone="error">Bu ödeme {payment.prepayPlanMonths} aylık peşin ödemenin bir parçası. Yalnızca bu ayın payı geri alınır; diğer aylar etkilenmez.</FormMessage>}
+      <label className="form-label">Geri alma nedeni
+        <textarea value={reason} onChange={(event) => setReason(event.target.value)} required maxLength={500} rows={2} autoFocus className="field resize-y" placeholder="Ör. yanlış öğrenciye / yanlışlıkla ödendi olarak kaydedildi" />
+      </label>
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-3">
+        <button type="button" onClick={close} className="btn btn-quiet">Vazgeç</button>
+        <button type="submit" disabled={correctPayment.isPending || !reason.trim()} className="btn bg-[var(--danger)] text-white hover:bg-[var(--danger-strong)]">
+          {correctPayment.isPending ? "Geri alınıyor…" : "Ödemeyi geri al"}
+        </button>
+      </div>
+    </form>}
+  </Modal>;
 }

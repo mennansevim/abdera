@@ -76,6 +76,11 @@ public static class PaymentCorrections
             clock.UtcNow);
         db.PaymentCorrections.Add(correction);
         receivable.RecordPaymentEffect(newTotal, clock.UtcNow);
+        // Tahsilat geri alınınca (tutar 0'a / aşağı düzeltilince) RecordPaymentEffect aidatı
+        // Unpaid/Partial'a indirir; vadesi geçmişse gece taramasını (OverdueReceivableSweeper)
+        // beklemeden hemen Overdue görünmeli - yoksa geri alınan bir ay bir gün boyunca
+        // "ödenmedi ama gecikmedi" diye yanlış görünürdü.
+        receivable.MarkOverdueIfPastDue(DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date), clock.UtcNow);
         db.AuditLogs.Add(AuditLog.Record(
             actorId,
             "payment.corrected",

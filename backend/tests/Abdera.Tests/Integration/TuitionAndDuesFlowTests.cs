@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
@@ -328,6 +329,62 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(6000m, listed.BaseAmount);
         Assert.Equal(CourseKind.Individual, listed.CourseKind);
         Assert.Contains(listed.Payments, item => item.Kind == "Correction");
+    }
+
+    // Yanlışlıkla "ödendi" diye kaydedilen bir tahsilatın geri alınması: ödeme satırı SİLİNMEZ
+    // (finansal kayıt), tutarı 0'a düzeltilir, aidat bakiyesi geri açılır ve vadesi geçmişse gece
+    // taramasını beklemeden Overdue olur. Aynı geri alma ikinci kez yapılamaz.
+    [Fact]
+    public async Task Reverting_a_mistaken_payment_reopens_the_due_without_deleting_the_payment()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "GeriAl", piano);
+        var student = await CreateStudentAsync(admin, "GeriAl");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+
+        // Bu ayın aidatının vadesi ayın 1'i: ayın ilk günü dışında her gün geçmiş sayılır.
+        var period = TestPeriods.Current(_factory.Services);
+        var receivable = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, period)));
+        var payment = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
+            admin, receivable.Id,
+            new Payments.CreateRequest(receivable.Amount, receivable.DueDate, PaymentMethod.Cash, null, null)));
+        db.ChangeTracker.Clear();
+        Assert.Equal(ReceivableStatus.Paid,
+            (await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == receivable.Id)).Status);
+
+        var revert = await admin.PostAsJsonAsync(
+            $"/api/payments/{payment.Id}/corrections",
+            new PaymentCorrections.CreateRequest(0m, "Yanlışlıkla ödendi olarak kaydedildi"));
+        Assert.Equal(HttpStatusCode.Created, revert.StatusCode);
+
+        db.ChangeTracker.Clear();
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var expected = receivable.DueDate < today ? ReceivableStatus.Overdue : ReceivableStatus.Unpaid;
+        Assert.Equal(expected, (await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == receivable.Id)).Status);
+        // Özgün ödeme satırı yerinde duruyor; geri alma ayrı, denetlenebilir bir düzeltme satırı.
+        Assert.Equal(receivable.Amount, (await db.Payments.AsNoTracking().SingleAsync(p => p.Id == payment.Id)).Amount);
+        Assert.Equal(0m, (await db.PaymentCorrections.AsNoTracking().SingleAsync(c => c.PaymentId == payment.Id)).CorrectedAmount);
+        Assert.True(await db.AuditLogs.AsNoTracking().AnyAsync(log => log.Action == "payment.corrected" && log.EntityId == payment.Id));
+
+        var again = await admin.PostAsJsonAsync(
+            $"/api/payments/{payment.Id}/corrections",
+            new PaymentCorrections.CreateRequest(0m, "tekrar"));
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+        // Geri alma yalnızca yöneticinin yetkisinde: öğretmen oturumu (kendi öğrencisi olsa bile) 403 alır.
+        var teacherEmail = $"geri.al.{Guid.NewGuid():N}@test.local";
+        var teacherAccount = await ReadAsync<Teachers.CreateResponse>(await admin.PostAsJsonAsync(
+            "/api/teachers", new Teachers.CreateRequest("GeriAl", "Ogretmen", [piano], teacherEmail)));
+        var teacherClient = _factory.CreateClient();
+        (await teacherClient.PostAsJsonAsync("/api/auth/login",
+            new Login.Request(teacherEmail, teacherAccount.TemporaryPassword!))).EnsureSuccessStatusCode();
+        var byTeacher = await teacherClient.PostAsJsonAsync(
+            $"/api/payments/{payment.Id}/corrections",
+            new PaymentCorrections.CreateRequest(receivable.Amount, "öğretmen denemesi"));
+        Assert.Equal(HttpStatusCode.Forbidden, byTeacher.StatusCode);
     }
 
     // --- Yıl başı peşin ödeme kampanyası ------------------------------------------
