@@ -33,23 +33,10 @@ public class OverdueReceivableSweeper(IServiceScopeFactory scopeFactory, ILogger
             var db = scope.ServiceProvider.GetRequiredService<AbderaDbContext>();
             var clock = scope.ServiceProvider.GetRequiredService<IClock>();
 
-            var now = clock.UtcNow;
-            var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
-
-            var candidates = await db.Receivables
-                .Where(r => (r.Status == ReceivableStatus.Unpaid || r.Status == ReceivableStatus.Partial) && r.DueDate < today)
-                .ToListAsync(cancellationToken);
-
-            foreach (var receivable in candidates)
-            {
-                receivable.MarkOverdueIfPastDue(today, now);
-            }
-
-            if (candidates.Count > 0)
-            {
-                await db.SaveChangesAsync(cancellationToken);
-                logger.LogInformation("{Count} aidat OVERDUE olarak işaretlendi.", candidates.Count);
-            }
+            // Serverless ortamdaki cron ucu ile aynı kod yolu (BillingDailyJob).
+            var count = await BillingDailyJob.MarkOverdueAsync(db, clock, cancellationToken);
+            if (count > 0)
+                logger.LogInformation("{Count} aidat OVERDUE olarak işaretlendi.", count);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

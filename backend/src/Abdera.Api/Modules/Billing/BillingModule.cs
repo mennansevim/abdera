@@ -27,5 +27,6 @@ public static class BillingModule
         app.MapExpenses();
         app.MapStudentBilling();
         app.MapSendPaymentReminder();
+        app.MapDailyBillingCron();
     }
 }

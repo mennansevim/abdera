@@ -211,7 +211,7 @@ function StudentRow({ student, instruments, thisMonthDues }: { student: Student;
   const stateStatus: BillingDue["status"] = !hasRecord ? "Unpaid" : isPaid ? "Paid" : isPartial ? "Partial" : isOverdue ? "Overdue" : "Unpaid";
   // "Bu ay kayıt yok" yazıyordu: aktif kaydı olan öğrenci için "kayıtlı değil" gibi okunuyordu.
   // Sorun öğrencinin kaydı değil, bu ayın aidat satırının açılmamış olması - Detay'dan açılır.
-  const stateLabel = !hasRecord ? (instruments.length ? "Aidat açılmadı" : "Aktif kurs yok") : isPaid ? "Bu ay ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? `${lateDays} gün gecikti` : "Ödenmedi";
+  const stateLabel = !hasRecord ? (instruments.length ? "Aidat açılmadı" : "Aktif kurs yok") : isPaid ? "Bu ay ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? `${lateDays} gün gecikti` : "Ödeme bekliyor";
 
   return <li>
     <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto]">
@@ -511,7 +511,7 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
             const isOverdue = activeReceivables.some(({ receivable }) => receivable.status === "Overdue");
             const hasRecord = rows.length > 0;
             const prepayMonths = Math.max(0, ...rows.flatMap(({ receivable }) => receivable.payments.map((payment) => payment.prepayPlanMonths ?? 0)));
-            const stateLabel = !hasRecord ? "Açılmadı" : isPaid ? "Ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? "Vadesi geçti" : "Ödenmedi";
+            const stateLabel = !hasRecord ? "Açılmadı" : isPaid ? "Ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? "Vadesi geçti" : "Ödeme bekliyor";
             const stateClass = isPaid
               ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]"
               : isPartial

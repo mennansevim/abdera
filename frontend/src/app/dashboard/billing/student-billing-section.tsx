@@ -280,7 +280,7 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
   const canCollect = receivable.status !== "Paid" && receivable.status !== "Cancelled";
 
   const statusLabel: Record<Receivable["status"], string> = {
-    Unpaid: "Ödenmedi", Partial: "Kısmi ödendi", Paid: "Ödendi", Overdue: "Vadesi geçti", Cancelled: "İptal",
+    Unpaid: "Ödeme bekliyor", Partial: "Kısmi ödendi", Paid: "Ödendi", Overdue: "Vadesi geçti", Cancelled: "İptal",
   };
   const statusTone: Record<Receivable["status"], string> = {
     Unpaid: "bg-[var(--surface-muted)] text-[var(--muted)]",

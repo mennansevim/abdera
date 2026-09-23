@@ -11,6 +11,12 @@
       "runtime": "container"
     }
   },
+  "crons": [
+    {
+      "path": "/api/internal/cron/billing-daily",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
