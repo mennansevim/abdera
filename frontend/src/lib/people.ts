@@ -339,6 +339,10 @@ export function useCreateStudentForTeacher(teacherId: string) {
       queryClient.invalidateQueries({ queryKey: ["students"] });
       queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+      // Kurs kaydı açılırken o ayın aidatı da sunucuda açılır (EnrollmentReceivableOpener) -
+      // aidat ekranı eski "Aidat açılmadı" durumunu göstermesin.
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
     },
   });
 }
@@ -429,6 +433,9 @@ export function useRegisterStudent() {
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["guardians"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      // Kurs kaydı açılırken o ayın aidatı da sunucuda açılır (EnrollmentReceivableOpener).
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
     },
   });
 }
@@ -450,6 +457,10 @@ export function useCreateEnrollment(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
       queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+      // Kurs kaydı açılırken o ayın aidatı da sunucuda açılır (EnrollmentReceivableOpener) -
+      // aidat ekranı eski "Aidat açılmadı" durumunu göstermesin.
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
     },
   });
 }
@@ -463,6 +474,10 @@ export function useEndEnrollment(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
       queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+      // Kurs kaydı açılırken o ayın aidatı da sunucuda açılır (EnrollmentReceivableOpener) -
+      // aidat ekranı eski "Aidat açılmadı" durumunu göstermesin.
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
     },

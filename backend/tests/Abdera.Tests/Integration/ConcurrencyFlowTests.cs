@@ -35,7 +35,7 @@ public class ConcurrencyFlowTests : IClassFixture<AbderaWebApplicationFactory>
     // TuitionAndDuesFlowTests) aidat açmak yalnızca kurs kaydı gerektiriyor - eski
     // "fiyat listesi + ücret planı" zinciri ve onun çakışma kontrolünü aşmak için
     // uydurulan tekil durationMinutes hilesi artık gereksiz.
-    private static async Task<Guid> SeedReceivableAsync(HttpClient admin, string suffix)
+    private async Task<Guid> SeedReceivableAsync(HttpClient admin, string suffix)
     {
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
@@ -51,11 +51,14 @@ public class ConcurrencyFlowTests : IClassFixture<AbderaWebApplicationFactory>
                 new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 9, 1), CourseKind.Individual)))
             .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
 
-        var receivableResponse = await admin.PostAsJsonAsync("/api/receivables",
-            new Receivables.CreateRequest(enrollment.Id, "2026-09"));
-        receivableResponse.EnsureSuccessStatusCode();
-        var receivable = (await receivableResponse.Content.ReadFromJsonAsync<Receivables.ReceivableResponse>(TestJson.Options))!;
-        return receivable.Id;
+        // Kayıt açılışı bu ayın aidatını zaten açtı (EnrollmentReceivableOpener) - ayrıca
+        // POST /api/receivables ile açmaya çalışmak 409 verirdi. O satırı kullan.
+        var period = TestPeriods.Current(_factory.Services);
+        await using var db = await _factory.CreateDbContextAsync();
+        return await db.Receivables.AsNoTracking()
+            .Where(r => r.EnrollmentId == enrollment.Id && r.Period == period)
+            .Select(r => r.Id)
+            .SingleAsync();
     }
 
     [Fact]

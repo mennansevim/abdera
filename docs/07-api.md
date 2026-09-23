@@ -18,7 +18,7 @@ GET    /api/students/{studentId}/timeline       -- Progress modülü (Phase 6)
 GET    /api/students/{studentId}/guardians       ✅ eklendi - docs'ta yoktu, People'ın temel ilişkisi
 POST   /api/students/{studentId}/guardians       ✅ eklendi
 GET    /api/students/{studentId}/enrollments     ✅ eklendi - Enrollment her zaman bir öğrenciye bağlı
-POST   /api/students/{studentId}/enrollments     ✅ eklendi
+POST   /api/students/{studentId}/enrollments     ✅ eklendi - H16: aktif kayıt açılınca o ayın aidatı da hemen açılır (tarife yoksa kayıt yine 201, aidat açılmaz)
 DELETE /api/students/{studentId}/enrollments/{enrollmentId} ✅ kursu silmeden enrollment'ı sonlandırır
 GET    /api/students/attention-needed            ✅ Admin/Teacher scope; açıklanabilir son-devamsızlık sinyali
 
@@ -83,7 +83,7 @@ PUT    /api/billing-policy                      ✅ kademeler tam değişimle ya
 PATCH  /api/students/{studentId}/enrollments/{enrollmentId}  ✅ H1/H5 - ders türü + kursa özel elle indirim
 
 GET    /api/receivables                         ✅ ?status= filtresiyle
-POST   /api/receivables                         ✅ tarife + indirimlerden hesaplanır, satıra donar
+POST   /api/receivables                         ✅ tarife + indirimlerden hesaplanır, satıra donar; dönemin ilk gününde geçerli tarife yoksa 409 (mesaj ders türü + dönemi söyler) - Aylık aidatlar → Detay → "Bu ayın aidatını aç"
 POST   /api/receivables/{receivableId}/cancel   ✅ eklendi - PAID iptal edilemez
 POST   /api/receivables/{receivableId}/payments ✅ CASH/TRANSFER/CARD/OTHER, durumu yeniden hesaplar
 GET    /api/receivables/monthly-run             ✅ ?period=yyyy-MM - açılacak/zaten var/tarifesiz dökümü + indirim toplamı

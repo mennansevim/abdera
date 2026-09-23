@@ -86,8 +86,12 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
             enrollment.Id, DayOfWeek.Tuesday, new TimeOnly(18, 0), 45, new DateOnly(2026, 9, 1), null)))
             .EnsureSuccessStatusCode();
 
-        var receivable = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
-            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2026-09")));
+        // Kayıt açılışı bu ayın aidatını zaten açtı (EnrollmentReceivableOpener); silme akışı
+        // tam olarak bu otomatik satırı (ve üstündeki ödemeyi) temizleyebilmeli.
+        var period = TestPeriods.Current(_factory.Services);
+        var billing = await ReadAsync<List<StudentBilling.StudentBillingResponse>>(
+            await admin.GetAsync($"/api/students/{student.Id}/billing"));
+        var receivable = billing.Single(row => row.EnrollmentId == enrollment.Id).Receivables.Single(r => r.Period == period);
         (await PostPaymentAsync(admin, receivable.Id,
             new Payments.CreateRequest(1000m, new DateOnly(2026, 9, 3), PaymentMethod.Cash, null, null)))
             .EnsureSuccessStatusCode();

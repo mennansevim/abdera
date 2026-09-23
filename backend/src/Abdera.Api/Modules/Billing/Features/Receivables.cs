@@ -3,6 +3,7 @@ using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Infrastructure;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -63,9 +64,14 @@ public static class Receivables
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
 
         var pricer = await TuitionPricer.LoadAsync(db);
+        // Mesaj ders türünü ve dönemi açıkça söyler: Aylık aidatlar ekranındaki "Bu ayın
+        // aidatını aç" düğmesi bunu olduğu gibi gösterir, admin neyi düzelteceğini bilir.
+        // Tarife dönemin İLK gününe göre seçilir (TuitionPricer.Price) - ay ortasında
+        // yürürlüğe giren bir tarife o ayı kapsamaz.
         var priced = pricer.Price(enrollment, request.Period)
             ?? throw new ConflictException(
-                "Bu ders türü için geçerli bir ücret tarifesi yok. Önce Fiyat politikası ekranından tarifeyi tanımlayın.");
+                $"{(enrollment.CourseKind == CourseKind.Group ? "Grup" : "Birebir")} dersi için {request.Period} döneminde " +
+                "geçerli ücret tarifesi yok. Fiyat politikası ekranından bu ayı kapsayan bir tarife tanımlayın.");
 
         var now = clock.UtcNow;
         var receivable = Receivable.Create(

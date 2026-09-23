@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
+import { FormMessage, Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
+  COURSE_KIND_LABEL,
   useBillingDues,
   useCreatePrepayPlan,
+  useCreateReceivable,
   usePrepayPreview,
   useRecordPayment,
   useStudentBilling,
@@ -205,7 +207,9 @@ function StudentRow({ student, instruments, thisMonthDues }: { student: Student;
   const lateDays = worstDueDate ? daysOverdue(worstDueDate) : 0;
 
   const stateStatus: BillingDue["status"] = !hasRecord ? "Unpaid" : isPaid ? "Paid" : isPartial ? "Partial" : isOverdue ? "Overdue" : "Unpaid";
-  const stateLabel = !hasRecord ? "Bu ay kayıt yok" : isPaid ? "Bu ay ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? `${lateDays} gün gecikti` : "Ödenmedi";
+  // "Bu ay kayıt yok" yazıyordu: aktif kaydı olan öğrenci için "kayıtlı değil" gibi okunuyordu.
+  // Sorun öğrencinin kaydı değil, bu ayın aidat satırının açılmamış olması - Detay'dan açılır.
+  const stateLabel = !hasRecord ? (instruments.length ? "Aidat açılmadı" : "Aktif kurs yok") : isPaid ? "Bu ay ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? `${lateDays} gün gecikti` : "Ödenmedi";
 
   return <li>
     <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto]">
@@ -406,8 +410,22 @@ function QuickCollectPanel({
 // atılmaz.
 function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   const { data: billing, isLoading, isError } = useStudentBilling(studentId);
+  const { data: enrollments } = useEnrollments(studentId);
   const { data: instruments } = useInstruments();
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+  const thisPeriod = useMemo(() => currentPeriod(), []);
+
+  // "Kayıtlı öğrenci her ay ödeme yapabilmeli": bu ayın satırı olmayan AKTİF kurs kayıtları.
+  // Sunucu kaydı açarken bu ayı zaten açıyor; burada kalan satır ya kayıt öncesinden kalma
+  // ya da o ayı kapsayan tarife olmadığı için açılamamış bir aydır. İleri bir ayda başlayan
+  // kayıt bu ayın borcunu doğurmaz (sunucudaki EnrollmentReceivableOpener ile aynı kural).
+  const unopenedThisMonth = useMemo(() => {
+    const monthEnd = `${thisPeriod}-31`;
+    return (enrollments ?? [])
+      .filter((enrollment) => enrollment.status === "Active" && enrollment.startedAt <= monthEnd)
+      .map((enrollment) => billing?.find((row) => row.enrollmentId === enrollment.id))
+      .filter((row): row is NonNullable<typeof row> => !!row && !row.receivables.some((receivable) => receivable.period === thisPeriod));
+  }, [billing, enrollments, thisPeriod]);
 
   const rowsByPeriod = useMemo(() => {
     const grouped = new Map<string, Array<{ receivable: NonNullable<typeof billing>[number]["receivables"][number]; instrumentName: string }>>();
@@ -467,7 +485,16 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
     </div>
     {isLoading && <div className="mt-2 space-y-1.5">{[1, 2].map((item) => <div key={item} className="skeleton h-9 rounded-lg" />)}</div>}
     {!isLoading && isError && <p className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">Ödeme geçmişi yüklenemedi.</p>}
-    {!isLoading && !isError && !periods.length && <p className="text-meta mt-2">Bu öğrenci için kayıtlı bir aidat dönemi yok.</p>}
+    {!isLoading && !isError && unopenedThisMonth.length > 0 && <OpenCurrentPeriodBlock
+      studentId={studentId}
+      period={thisPeriod}
+      rows={unopenedThisMonth.map((row) => ({
+        enrollmentId: row.enrollmentId,
+        label: `${instruments?.find((instrument) => instrument.id === row.instrumentId)?.name ?? "Kurs"} · ${COURSE_KIND_LABEL[row.courseKind]}`,
+      }))}
+      onOpened={() => setSelectedPeriod(thisPeriod)}
+    />}
+    {!isLoading && !isError && !periods.length && !unopenedThisMonth.length && <p className="text-meta mt-2">Bu öğrenci için kayıtlı bir aidat dönemi yok.</p>}
     {!isLoading && !isError && periods.length > 0 && <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
       <section className="rounded-xl border border-[var(--line)] bg-white p-3" aria-label={`${activeYear} ödeme takvimi`}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -526,6 +553,54 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
         </div>}
       </section>
     </div>}
+  </div>;
+}
+
+// Bu ayın aidat satırı olmayan aktif kurs kayıtları için tek iş: satırı aç. Tutarı sunucu
+// tarifeden hesaplar (POST /api/receivables); açıldıktan sonra takvimde görünür ve tahsilat
+// her zamanki gibi ReceivablePeriodCard'dan alınır. Borç AÇMAK ile para ALMAK ayrı işler
+// (CLAUDE.md H12) - bu blok tahsilat yapmaz. Tarife yoksa sunucunun sebebi (ders türü + dönem)
+// olduğu gibi gösterilir.
+function OpenCurrentPeriodBlock({
+  studentId,
+  period,
+  rows,
+  onOpened,
+}: {
+  studentId: string;
+  period: string;
+  rows: Array<{ enrollmentId: string; label: string }>;
+  onOpened: () => void;
+}) {
+  const createReceivable = useCreateReceivable(studentId);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function open(enrollmentId: string) {
+    setError(null);
+    setPendingId(enrollmentId);
+    try {
+      await createReceivable.mutateAsync({ enrollmentId, period });
+      onOpened();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Aidat açılamadı.");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  return <div className="mt-3 rounded-xl border border-[var(--warning)]/45 bg-[var(--warning-soft)]/60 p-3">
+    <p className="text-sm font-bold capitalize">{formatPeriod(period)}</p>
+    <p className="text-meta mt-0.5">Bu ay için henüz aidat satırı açılmamış. Satırı açınca tutar tarifeden hesaplanır ve tahsilat alabilirsin.</p>
+    <ul className="mt-3 space-y-2">
+      {rows.map((row) => <li key={row.enrollmentId} className="flex flex-wrap items-center justify-between gap-2">
+        {rows.length > 1 && <span className="text-xs font-semibold">{row.label}</span>}
+        <button type="button" onClick={() => void open(row.enrollmentId)} disabled={pendingId !== null} className="btn btn-primary disabled:opacity-50">
+          <Icon name="plus" className="h-4 w-4" />{pendingId === row.enrollmentId ? "Açılıyor…" : "Bu ayın aidatını aç"}
+        </button>
+      </li>)}
+    </ul>
+    {error && <div className="mt-3"><FormMessage tone="error">{error}</FormMessage></div>}
   </div>;
 }
 

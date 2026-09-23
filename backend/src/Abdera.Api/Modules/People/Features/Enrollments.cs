@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
@@ -99,6 +100,11 @@ public static class Enrollments
                 Status = enrollment.Status.ToString(),
             })));
         await db.SaveChangesAsync();
+
+        // "Kayıtlı öğrenci her ay ödeme yapabilmeli": bu ayın aidatını 24 saatlik arka plan
+        // döngüsünü beklemeden hemen aç. Kurs kaydı önce kaydedilir (çoklu kurs indirimi
+        // yeni kaydı da saysın); tarife yoksa aidat açılmaz ama kayıt yine başarılıdır.
+        await EnrollmentReceivableOpener.OpenCurrentPeriodAsync(db, clock, enrollment.Id, AuthContext.GetUserId(principal));
 
         return Results.Created($"/api/students/{studentId}/enrollments/{enrollment.Id}", ToResponse(enrollment));
     }

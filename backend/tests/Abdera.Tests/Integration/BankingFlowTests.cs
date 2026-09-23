@@ -42,6 +42,10 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     // testin birbirine yakın ama farklı tutarlar üretebilmesi gerekiyor. Okulun gerçek
     // tarifesi tek bir tutar verir (Birebir 6.000) ve bu testin doğruladığı şey aidatın
     // nasıl fiyatlandığı değil, gelen havalenin hangi aidata sayıldığı.
+    //
+    // Kurs kaydı ileri bir ayda başlar (TestPeriods.StartsInLaterPeriod): kayıt açılışı bu ayın
+    // aidatını otomatik açmasın - hem aynı dönemde UNIQUE (enrollment_id, period) çakışması
+    // olur, hem de velinin fazladan açık bir 6.000'lik aidatı eşleştirme senaryosunu değiştirir.
     private async Task<SeededReceivable> SeedReceivableAsync(
         HttpClient admin, string suffix, decimal amount = 1000m, string period = "2026-09")
     {
@@ -64,7 +68,7 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             new LinkGuardianToStudent.Request(guardian.Id, "anne", true));
 
         var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
-                new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 9, 1), CourseKind.Individual)))
+                new Enrollments.CreateRequest(teacher.Id, piano.Id, TestPeriods.StartsInLaterPeriod, CourseKind.Individual)))
             .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
 
         await using var db = await _factory.CreateDbContextAsync();
@@ -152,7 +156,7 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
                 new Teachers.CreateRequest("AmbigTeacher", "Soyad", [guitar.Id], null)))
             .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
         var enrollment2 = (await (await admin.PostAsJsonAsync($"/api/students/{secondStudent.Id}/enrollments",
-                new Enrollments.CreateRequest(teacher2.Id, guitar.Id, new DateOnly(2026, 9, 1), CourseKind.Individual)))
+                new Enrollments.CreateRequest(teacher2.Id, guitar.Id, TestPeriods.StartsInLaterPeriod, CourseKind.Individual)))
             .Content.ReadFromJsonAsync<Enrollments.EnrollmentResponse>(TestJson.Options))!;
 
         Receivable secondReceivable;

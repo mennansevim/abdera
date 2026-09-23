@@ -231,6 +231,10 @@ export function useBillingDues(options?: { enabled?: boolean }) {
 // (gecikmiş/atlanmış bir dönemi elle telafi etmek için) API'de duruyor; rutin arayüz
 // yüzeyi kaldırıldığı için burada bir istemci sarmalayıcısı tutulmuyor.
 
+// Tek bir ayın aidatını elle açar (Admin). Kurs kaydı açılırken o ayın aidatı zaten sunucuda
+// otomatik açılıyor; bu yalnızca bir sebeple açılamamış ayı (örn. o ayı kapsayan tarife yoktu)
+// Aylık aidatlar ekranından açmak için. Tutarı sunucu tarifeden hesaplar; tarife yoksa 409
+// ders türü + dönemi söyleyen bir mesajla döner.
 export function useCreateReceivable(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -239,6 +243,7 @@ export function useCreateReceivable(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
     },
   });
 }

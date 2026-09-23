@@ -70,11 +70,14 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         await ReadAsync<Students.StudentResponse>(await admin.PostAsJsonAsync(
             "/api/students", new Students.CreateRequest(name, "Ogrenci", new DateOnly(2014, 1, 1))));
 
+    // Bu dosyadaki testler aidat dönemlerini sabit etiketlerle kendileri açıyor; kayıt ileri
+    // bir ayda başlar ki kayıt açılışındaki otomatik "bu ayın aidatı" (EnrollmentReceivableOpener)
+    // testin koştuğu aya göre araya girmesin. O davranışın kendisi EnrollmentReceivableFlowTests'te.
     private async Task<Enrollments.EnrollmentResponse> EnrollAsync(
         HttpClient admin, Guid studentId, Guid teacherId, Guid instrumentId, CourseKind kind = CourseKind.Individual) =>
         await ReadAsync<Enrollments.EnrollmentResponse>(await admin.PostAsJsonAsync(
             $"/api/students/{studentId}/enrollments",
-            new Enrollments.CreateRequest(teacherId, instrumentId, new DateOnly(2026, 9, 1), kind)));
+            new Enrollments.CreateRequest(teacherId, instrumentId, TestPeriods.StartsInLaterPeriod, kind)));
 
     // Kardeş indirimi kutusu - PATCH /api/students/{id}. Yalnızca Admin değiştirebilir.
     private async Task SetSiblingDiscountAsync(HttpClient client, Students.StudentResponse student, bool value)
