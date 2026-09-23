@@ -10,11 +10,25 @@ const configuredApiIsLoopback = configuredApiBaseUrl
 
 // Docker geliştirme varsayılanı localhost:8080'dir. Aynı imaj production Caddy profiliyle
 // oluşturulduğunda bu adres ziyaretçinin KENDİ cihazını gösterir ve bütün API çağrıları
-// sessizce bozulur. Production'da loopback değerini güvenli aynı-origin `/api` davranışına
-// çevir; açıkça verilen gerçek bir uzak API origin'ini ise koru.
-export const API_BASE_URL = process.env.NODE_ENV === "production" && configuredApiIsLoopback
-  ? ""
-  : configuredApiBaseUrl ?? (process.env.NODE_ENV === "production" ? "" : "http://localhost:8080");
+// sessizce bozulur. Bu yüzden production'da loopback değeri aynı-origin `/api`'ye çevrilir -
+// ama YALNIZCA sayfa gerçek bir alan adından açılmışsa. Sayfanın kendisi de localhost'tan
+// açılıyorsa (profilsiz `docker compose up`, CI e2e smoke) web ve API aynı makinededir,
+// localhost:8080 doğru adrestir ve 3000 portunda `/api` diye bir şey yoktur. Karar önceden
+// derleme anında veriliyordu: CI'da ve yerel compose'da bütün istekler Next.js'e gidip 404
+// dönüyor, giriş hiç tamamlanmıyordu (gerçek bir CI hatası olarak bulundu). Açıkça verilen
+// gerçek bir uzak API origin'i her durumda korunur.
+const LOOPBACK_HOSTNAME = /^(localhost|127\.0\.0\.1|\[::1\])$/i;
+
+export function apiBaseUrl(): string {
+  if (configuredApiBaseUrl === undefined) {
+    return process.env.NODE_ENV === "production" ? "" : "http://localhost:8080";
+  }
+  if (process.env.NODE_ENV === "production" && configuredApiIsLoopback) {
+    const pageIsLoopback = typeof window !== "undefined" && LOOPBACK_HOSTNAME.test(window.location.hostname);
+    return pageIsLoopback ? configuredApiBaseUrl.replace(/\/$/, "") : "";
+  }
+  return configuredApiBaseUrl;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -45,7 +59,7 @@ const FALLBACK_MESSAGES: Record<number, { title: string; detail: string }> = {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${apiBaseUrl()}${path}`, {
       ...init,
       credentials: "include",
       headers: {

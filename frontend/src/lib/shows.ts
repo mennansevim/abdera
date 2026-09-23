@@ -3,7 +3,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, API_BASE_URL } from "./api";
+import { api, apiBaseUrl } from "./api";
 
 export type ShowStatus = "Draft" | "Live" | "Completed";
 export type ShowItemKind = "Performance" | "Intermission" | "Announcement";
@@ -100,7 +100,7 @@ export interface ShowItemInput {
 // taşınır ki fotoğraf değişmediği sürece tarayıcı önbelleği geçerli kalsın (sunucu
 // tarafında ETag ile eşleşir - StudentPhotos.cs).
 export function studentPhotoUrl(studentId: string, version: string | null) {
-  return `${API_BASE_URL}/api/students/${studentId}/photo${version ? `?v=${version}` : ""}`;
+  return `${apiBaseUrl()}/api/students/${studentId}/photo${version ? `?v=${version}` : ""}`;
 }
 
 export function useShows() {
@@ -215,7 +215,7 @@ export function useUploadStudentPhoto(studentId: string) {
     mutationFn: async (file: File) => {
       const body = new FormData();
       body.append("file", file);
-      const response = await fetch(`${API_BASE_URL}/api/students/${studentId}/photo`, {
+      const response = await fetch(`${apiBaseUrl()}/api/students/${studentId}/photo`, {
         method: "PUT",
         credentials: "include",
         body,
