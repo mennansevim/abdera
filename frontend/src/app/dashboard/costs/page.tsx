@@ -41,7 +41,7 @@ function CostsPageContent() {
         <h1 className="text-display mt-4 font-serif italic">Maliyet takibi</h1>
         <p className="text-meta mt-1">Bu ekran yöneticiye özeldir; açmak için şifreni bir kez daha doğrula.</p>
         <form onSubmit={unlock} className="mt-4 space-y-3.5">
-          <label className="form-label">Hesap şifren<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required className="field text-sm" autoFocus /></label>
+          <label className="form-label">Hesap şifren<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" className="field text-sm" autoFocus /></label>
           {error && <FormMessage tone="error">{error}</FormMessage>}
           <button type="submit" disabled={verifyPassword.isPending} className="btn btn-primary w-full">{verifyPassword.isPending ? "Kontrol ediliyor…" : "Maliyet takibini aç"}</button>
         </form>
@@ -127,7 +127,12 @@ function CreateExpenseForm({ onClose }: { onClose: () => void }) {
   const [category, setCategory] = useState<ExpenseCategory>("Other");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState(0);
-  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // toISOString UTC verir; gece yarısından sonra İstanbul'da tarih bir gün geride kalırdı.
+  const [expenseDate, setExpenseDate] = useState(() => {
+    const date = new Date();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  });
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
@@ -155,7 +160,7 @@ function CreateExpenseForm({ onClose }: { onClose: () => void }) {
         <label className="form-label">Tarih<input type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} required className="field text-sm" /></label>
       </div>
       <label className="form-label">Açıklama<input value={description} onChange={(event) => setDescription(event.target.value)} required className="field text-sm" placeholder="Örn. Ekim ayı elektrik faturası" /></label>
-      <label className="form-label">Tutar (₺)<input type="number" min={0.01} step={0.01} value={amount || ""} onChange={(event) => setAmount(Number(event.target.value))} required className="field text-sm" /></label>
+      <label className="form-label">Tutar (₺)<input type="number" inputMode="decimal" min={0.01} step={0.01} value={amount || ""} onChange={(event) => setAmount(Number(event.target.value))} required className="field text-sm" /></label>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Gideri kaydet" pending={createExpense.isPending} />
     </form>

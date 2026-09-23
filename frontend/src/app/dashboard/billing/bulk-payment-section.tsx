@@ -90,10 +90,12 @@ export function BulkPaymentSection() {
 
   return (
     <section className="app-card">
-      <SectionHeader
-        title="Toplu ödeme al"
-        description="Birkaç ayın aidatını tek seferde tahsil et. İndirimi ve her ayın tutarını sunucu hesaplar."
-      />
+      <div className="p-4">
+        <SectionHeader
+          title="Toplu ödeme al"
+          description="Birkaç ayın aidatını tek seferde tahsil et. İndirimi ve her ayın tutarını sunucu hesaplar."
+        />
+      </div>
 
       <div className="space-y-4 border-t border-[var(--line)] p-4">
         <RulesStrip tiers={tiers} multiCoursePercent={policy?.multiCourseDiscountPercent ?? 0} siblingPercent={policy?.siblingDiscountPercent ?? 0} />
@@ -109,7 +111,7 @@ export function BulkPaymentSection() {
                 <strong className="block truncate text-sm">{selected.studentName}</strong>
                 <span className="text-meta block truncate">{selected.instrumentName} · {selected.courseKind === "Group" ? "Grup" : "Birebir"} · {selected.teacherName}</span>
               </span>
-              <button type="button" onClick={reset} className="pressable shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-[var(--brand-strong)]">Değiştir</button>
+              <button type="button" onClick={reset} className="btn btn-quiet shrink-0 text-xs">Değiştir</button>
             </div>
           ) : (
             <>
@@ -168,6 +170,7 @@ export function BulkPaymentSection() {
                   Diğer
                   <input
                     type="number"
+                    inputMode="numeric"
                     min={1}
                     max={24}
                     value={months}

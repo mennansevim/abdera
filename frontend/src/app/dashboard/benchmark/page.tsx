@@ -91,10 +91,11 @@ function TeachersTab() {
     <div className="space-y-3">
       <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Öğretmen ara…" />
       <div className="app-card divide-y divide-[var(--line)]">
-        {rows.map((r: TeacherBenchmarkRow, i) => (
+        {rows.map((r: TeacherBenchmarkRow) => (
           <div key={r.teacherId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
-              <RankBadge rank={search ? i + 1 : (data ?? []).indexOf(r) + 1} />
+              {/* Sıra her zaman filtrelenmemiş listedeki konumdur; arama yalnızca görünürlüğü daraltır. */}
+              <RankBadge rank={(data ?? []).indexOf(r) + 1} />
               <span className="truncate text-sm font-bold">{r.teacherName}</span>
             </div>
             <div className="min-w-0 flex-1"><ScoreBar score={r.score} /></div>

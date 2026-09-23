@@ -90,7 +90,7 @@ export default function StudentsPage() {
           <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{visibleRows.length}</strong> öğrenci gösteriliyor</p>
           <label className="relative min-w-44 flex-1 sm:flex-none">
             <span className="sr-only">Enstrümana göre filtrele</span>
-            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-10 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
+            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
               <option value="">Tüm enstrümanlar</option>
               {instrumentOptions.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
@@ -98,14 +98,14 @@ export default function StudentsPage() {
           </label>
           <label className="relative min-w-28 flex-1 sm:flex-none">
             <span className="sr-only">Duruma göre filtrele</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | StudentStatus)} className="field min-h-10 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
+            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | StudentStatus)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
               <option value="Active">Aktif</option>
               <option value="Inactive">Pasif</option>
               <option value="all">Tümü</option>
             </select>
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
           </label>
-          {isAdmin && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet min-h-10 h-10 text-xs">Hızlı ekle</button>}
+          {isAdmin && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet text-xs">Hızlı ekle</button>}
         </div>
         {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span className="text-center">Durum</span></div>}
         {isLoading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}

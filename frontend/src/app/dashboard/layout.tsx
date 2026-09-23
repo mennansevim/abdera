@@ -24,7 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning-strong)]" aria-hidden="true">↻</span>
           <h1 className="mt-4 text-lg font-bold">Bağlantı geçici olarak kesildi</h1>
           <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Oturumun korunuyor. Servis yeniden bağlandığında sayfayı yenileyerek devam edebilirsin.</p>
-          <button type="button" onClick={() => window.location.reload()} className="pressable mt-4 min-h-10 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white">Yeniden dene</button>
+          <button type="button" onClick={() => window.location.reload()} className="pressable mt-4 min-h-11 rounded-xl bg-[var(--brand-strong)] px-4 text-sm font-bold text-white">Yeniden dene</button>
         </div>
       </main>
     );

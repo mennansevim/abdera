@@ -44,7 +44,7 @@ function BillingPageContent() {
         title="Aidat yönetimi"
         description="Aylık aidatları takip et, birkaç ayı tek seferde tahsil et, fiyat ve indirim kurallarını yönet."
         actions={
-          <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="group" aria-label="Aidat görünümü">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-xl border border-[var(--line)] bg-white p-1 sm:inline-flex sm:w-auto" role="group" aria-label="Aidat görünümü">
             <ViewButton active={view === "collections"} onClick={() => setView("collections")} icon="wallet">Aylık aidatlar</ViewButton>
             <ViewButton active={view === "bulk"} onClick={() => setView("bulk")} icon="check">Toplu ödeme</ViewButton>
             <ViewButton active={view === "pricing"} onClick={() => setView("pricing")} icon="settings">Fiyat politikası</ViewButton>
@@ -68,8 +68,10 @@ function BillingPageContent() {
   );
 }
 
+// Üç sekme telefonda tek satıra sığmıyordu (360px'te sayfa 421px'e genişliyordu): mobilde
+// eşit üç sütun, ikon üstte ve metin satır kırabilir; sm'den itibaren eski yatay şerit.
 function ViewButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: IconName; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} aria-pressed={active} className={`btn ${active ? "btn-primary" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}><Icon name={icon} className="h-4 w-4" />{children}</button>;
+  return <button type="button" onClick={onClick} aria-pressed={active} className={`btn min-w-0 flex-col gap-1 whitespace-normal px-1.5 py-1.5 text-center leading-tight sm:flex-row sm:gap-[.4rem] sm:whitespace-nowrap sm:px-[.9rem] sm:py-0 ${active ? "btn-primary" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}><Icon name={icon} className="h-4 w-4 shrink-0" />{children}</button>;
 }
 
 function SummaryCard({ icon, label, value, detail, loading, tone = "brand" }: { icon: IconName; label: string; value: string; detail: string; loading: boolean; tone?: "brand" | "success" | "danger" | "warning" }) {

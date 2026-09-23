@@ -102,7 +102,7 @@ export default function GuardianLoginPage() {
           <button
             type="button"
             onClick={() => router.push("/login")}
-            className="pressable mb-5 flex items-center gap-1.5 text-[.75rem] font-semibold text-[var(--muted)]"
+            className="pressable -ml-2 mb-5 flex min-h-11 items-center gap-1.5 px-2 text-[.75rem] font-semibold text-[var(--muted)]"
           >
             <Icon name="arrow-left" className="h-3.5 w-3.5" /> Ana sayfaya dön
           </button>
@@ -119,9 +119,10 @@ export default function GuardianLoginPage() {
               <input
                 id="phoneNumber"
                 type="tel"
+                inputMode="tel"
                 required
                 autoFocus
-                autoComplete="tel"
+                autoComplete="username"
                 value={phoneNumber}
                 onChange={(event) => setPhoneNumber(event.target.value)}
                 placeholder="0555 123 45 67"
@@ -163,6 +164,7 @@ export default function GuardianLoginPage() {
               <input
                 id="otpPhone"
                 type="tel"
+                inputMode="tel"
                 required
                 autoFocus
                 autoComplete="tel"

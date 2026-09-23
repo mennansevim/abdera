@@ -38,7 +38,7 @@ export function NotificationBell({ variant = "sidebar" }: { variant?: "sidebar" 
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="pressable relative grid h-10 w-10 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white"
+          className="pressable relative grid h-11 w-11 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white"
           aria-label={unread ? `Bildirimler · ${unread} okunmamış` : "Bildirimler"}
           title="Bildirimler"
         >

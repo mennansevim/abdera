@@ -151,7 +151,7 @@ function ActivityPanel() {
     <section className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {(["all", "Pending", "Sent", "Failed", "Cancelled"] as const).map((status) => (
-          <button key={status} type="button" onClick={() => { setFilter(status); setPage(1); }} className={`pressable min-h-10 rounded-full px-4 text-xs font-bold ${filter === status ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}>
+          <button key={status} type="button" onClick={() => { setFilter(status); setPage(1); }} className={`pressable min-h-11 rounded-full px-4 text-xs font-bold ${filter === status ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}>
             {status === "all" ? "Tümü" : STATUS_LABELS[status]}
           </button>
         ))}
@@ -171,7 +171,7 @@ function ActivityPanel() {
               <th className="px-3 py-3">Planlanan zaman</th>
               <th className="px-3 py-3">Durum</th>
               <th className="px-3 py-3">Hata</th>
-              <th className="px-3 py-3" />
+              <th className="sticky right-0 bg-[var(--surface)] px-3 py-3 shadow-[-1px_0_0_var(--line)]"><span className="sr-only">İşlem</span></th>
             </tr>
           </thead>
           <tbody>
@@ -183,8 +183,12 @@ function ActivityPanel() {
                 <td className="px-3 py-3">{job.studentName ?? "—"}</td>
                 <td className="text-meta px-3 py-3">{new Date(job.scheduledAt).toLocaleString("tr-TR")}</td>
                 <td className={`px-3 py-3 font-bold ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</td>
-                <td className="text-meta max-w-xs truncate px-3 py-3" title={job.lastError ?? undefined}>{job.lastError ?? "—"}</td>
-                <td className="px-3 py-3">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="pressable min-h-11 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-bold text-[var(--brand)] disabled:opacity-50">Yeniden dene</button>}</td>
+                <td className="text-meta max-w-xs px-3 py-3">
+                  {job.lastError
+                    ? <details className="group"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>
+                    : "—"}
+                </td>
+                <td className="sticky right-0 bg-[var(--surface)] px-3 py-3 shadow-[-1px_0_0_var(--line)]">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="pressable min-h-11 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-bold text-[var(--brand)] disabled:opacity-50">Yeniden dene</button>}</td>
               </tr>
             ))}
             {jobs?.length === 0 && !isLoading && <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-[var(--muted)]">Bu filtrede gönderim yok.</td></tr>}
@@ -196,8 +200,8 @@ function ActivityPanel() {
         <div className="flex items-center justify-between text-sm">
           <span className="text-meta">Toplam {data.totalCount} kayıt · sayfa {data.page} / {totalPages}</span>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Önceki</button>
-            <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Sonraki</button>
+            <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Önceki</button>
+            <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Sonraki</button>
           </div>
         </div>
       )}
@@ -216,7 +220,7 @@ function TemplatesPanel() {
         <div className="app-card h-fit p-2">
           <p className="text-micro px-3 py-2 text-[var(--muted)]">Hazır şablonlar</p>
           {isLoading && <div className="space-y-2 p-2">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
-          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{templateLabel(template.name)}</span><span className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /></button>)}
+          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{templateLabel(template.name)}</span><span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /><span className="sr-only">{template.isActive ? "açık" : "kapalı"}</span></button>)}
         </div>
 
         {selected && <TemplateEditor key={selected.id} template={selected} />}
@@ -288,8 +292,8 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
       <div className="app-card space-y-5 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-title">{templateLabel(name)}</h2><p className="text-meta mt-1">Metni düzenle; öğrenci bilgilerini aşağıdaki kartlarla yerleştir.</p></div>
-          <label className="pressable inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--muted)]">
-            <input type="checkbox" checked={isActive} onChange={(event) => { setIsActive(event.target.checked); setSaved(false); }} />
+          <label className="pressable inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--muted)]">
+            <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--brand)]" checked={isActive} onChange={(event) => { setIsActive(event.target.checked); setSaved(false); }} />
             {isActive ? "Gönderime açık" : "Gönderim kapalı"}
           </label>
         </div>
@@ -408,14 +412,14 @@ function AutomationSettings() {
 
   return (
     <section className="app-card space-y-4 p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} disabled={isLoading} /> Otomatik gönder</label></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex min-h-11 items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--brand)]" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} disabled={isLoading} /> Otomatik gönder</label></div>
       <div className="grid gap-4 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
         <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Dersten ne kadar önce?<select value={minutes} onChange={(event) => setMinutes(event.target.value)} disabled={isLoading} className="field text-sm"><option value="15">15 dakika önce</option><option value="30">30 dakika önce</option><option value="45">45 dakika önce</option><option value="60">60 dakika önce</option></select></label>
         <div className="space-y-2">
           <p className="text-xs font-semibold text-[var(--muted)]">Çoktan seçmeli cevaplar</p>
           <div className="flex flex-wrap gap-2">
             <span className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">Geliyorum</span>
-            <label className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs"><input type="checkbox" checked={allowLate} onChange={(event) => setAllowLate(event.target.checked)} disabled={isLoading} /> Geç kalacağım</label>
+            <label className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2 text-xs"><input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--brand)]" checked={allowLate} onChange={(event) => setAllowLate(event.target.checked)} disabled={isLoading} /> Geç kalacağım</label>
             <span className="inline-flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]">Gelemiyorum</span>
           </div>
         </div>

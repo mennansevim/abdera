@@ -36,9 +36,9 @@ import {
 export function StudentBillingSection({ initialStudentId = "", showStudentPicker = true, onClose }: { initialStudentId?: string; showStudentPicker?: boolean; onClose?: () => void }) {
   const { data: students } = useStudents();
   const [studentId, setStudentId] = useState(initialStudentId);
-  const { data: enrollments } = useEnrollments(studentId);
+  const { data: enrollments, isLoading: enrollmentsLoading } = useEnrollments(studentId);
   const { data: teachers } = useTeachers();
-  const { data: billing } = useStudentBilling(studentId);
+  const { data: billing, isLoading: billingLoading, isError: billingError, refetch: refetchBilling, isFetching: billingFetching } = useStudentBilling(studentId);
   const { data: instruments } = useInstruments();
   const activeEnrollments = useMemo(() => enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [], [enrollments]);
 
@@ -69,9 +69,13 @@ export function StudentBillingSection({ initialStudentId = "", showStudentPicker
             billing={billing}
             enrollmentLabel={enrollmentLabel}
             enrollments={activeEnrollments}
+            isLoading={billingLoading || enrollmentsLoading}
+            isError={billingError}
+            isFetching={billingFetching}
+            onRetry={() => void refetchBilling()}
           />
 
-          {activeEnrollments.length === 0 && <p className="rounded-xl bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">Bu öğrencinin aktif kaydı bulunmuyor.</p>}
+          {!enrollmentsLoading && enrollments && activeEnrollments.length === 0 && <p className="rounded-xl bg-[var(--surface-muted)] p-4 text-sm text-[var(--muted)]">Bu öğrencinin aktif kaydı bulunmuyor.</p>}
 
           {activeEnrollments.length > 0 && (
             <details className="group rounded-xl border border-[var(--line)] bg-white">
@@ -110,11 +114,19 @@ function UnifiedPeriodsList({
   billing,
   enrollmentLabel,
   enrollments,
+  isLoading,
+  isError,
+  isFetching,
+  onRetry,
 }: {
   studentId: string;
   billing: { enrollmentId: string; instrumentId: string; receivables: Receivable[] }[] | undefined;
   enrollmentLabel: (enrollmentId: string) => string;
   enrollments: { id: string }[];
+  isLoading: boolean;
+  isError: boolean;
+  isFetching: boolean;
+  onRetry: () => void;
 }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const periods = (billing ?? []).flatMap((row) => row.receivables.map((receivable) => ({
@@ -126,8 +138,8 @@ function UnifiedPeriodsList({
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--brand-soft)]/35 p-4">
       <div><p className="text-micro text-[var(--brand-strong)]">Dönem takibi</p><h3 className="mt-1 text-title">Dönem aidatları</h3></div>
       <div className="flex items-center gap-2">
-        <span className="rounded-full bg-white px-2.5 py-1 text-[.75rem] font-bold text-[var(--brand-strong)]">{periods.length} dönem</span>
-        {enrollments.length > 0 && <button type="button" onClick={() => setShowAddForm((value) => !value)} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg bg-[var(--brand)] px-3 text-[.75rem] font-bold text-white"><Icon name={showAddForm ? "close" : "plus"} className="h-3.5 w-3.5" />{showAddForm ? "Kapat" : "Yeni aidat ekle"}</button>}
+        {!isLoading && !isError && <span className="rounded-full bg-white px-2.5 py-1 text-[.75rem] font-bold text-[var(--brand-strong)]">{periods.length} dönem</span>}
+        {enrollments.length > 0 && <button type="button" onClick={() => setShowAddForm((value) => !value)} className="btn btn-primary text-xs"><Icon name={showAddForm ? "close" : "plus"} className="h-3.5 w-3.5" />{showAddForm ? "Kapat" : "Yeni aidat ekle"}</button>}
       </div>
     </div>
 
@@ -135,7 +147,9 @@ function UnifiedPeriodsList({
 
     <div className="divide-y divide-[var(--line)]">
       {periods.map((receivable) => <PeriodRow key={receivable.id} studentId={studentId} receivable={receivable} instrumentLabel={receivable.label} />)}
-      {!periods.length && <div className="grid min-h-40 place-items-center p-6 text-center"><div><span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="wallet" className="h-4 w-4" /></span><p className="mt-3 text-xs font-bold">Tanımlı dönem bulunmuyor</p><p className="text-meta mt-1">{enrollments.length ? "Yukarıdaki \"Yeni aidat ekle\" ile ilk dönemi oluştur." : "Bu öğrencinin aktif kursu yok."}</p></div></div>}
+      {isLoading && <div className="space-y-2 p-4">{[1, 2, 3].map((item) => <div key={item} className="skeleton h-14 rounded-xl" />)}</div>}
+      {!isLoading && isError && <div className="grid min-h-40 place-items-center p-6 text-center"><div><p className="text-xs font-bold">Aidat geçmişi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={onRetry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+      {!isLoading && !isError && !periods.length && <div className="grid min-h-40 place-items-center p-6 text-center"><div><span className="mx-auto grid h-10 w-10 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="wallet" className="h-4 w-4" /></span><p className="mt-3 text-xs font-bold">Tanımlı dönem bulunmuyor</p><p className="text-meta mt-1">{enrollments.length ? "Yukarıdaki \"Yeni aidat ekle\" ile ilk dönemi oluştur." : "Bu öğrencinin aktif kursu yok."}</p></div></div>}
     </div>
   </article>;
 }
@@ -236,7 +250,7 @@ function EnrollmentDiscountBlock({
           </select>
         </label>
         <label className="form-label">Özel indirim (%)
-          <input type="number" min={0} max={100} step={0.5} value={percent} onChange={(event) => { setPercent(event.target.value === "" ? "" : Number(event.target.value)); setSaved(false); }} placeholder="Yok" className="field min-h-10 text-xs" />
+          <input type="number" inputMode="decimal" min={0} max={100} step={0.5} value={percent} onChange={(event) => { setPercent(event.target.value === "" ? "" : Number(event.target.value)); setSaved(false); }} placeholder="Yok" className="field min-h-10 text-xs" />
         </label>
         <label className="form-label lg:col-span-2">Gerekçe
           <input value={reason} onChange={(event) => { setReason(event.target.value); setSaved(false); }} disabled={percent === ""} maxLength={200} placeholder="Örn. Burslu öğrenci" className="field min-h-10 text-xs disabled:opacity-60" />
@@ -298,13 +312,13 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
       <span className={`rounded-full px-2 py-1 text-[.75rem] font-bold ${statusTone[receivable.status]}`}>{statusLabel[receivable.status]}</span>
       <span className="flex items-center gap-1.5">
         {canCollect && <button type="button" onClick={() => setShowForm((v) => !v)} className="btn btn-primary">Tahsilat</button>}
-        {receivable.payments.length > 0 && <button type="button" onClick={() => setShowHistory((v) => !v)} className="pressable min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-[.75rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Geçmiş · {receivable.payments.length}</button>}
+        {receivable.payments.length > 0 && <button type="button" onClick={() => setShowHistory((v) => !v)} className="btn btn-quiet text-xs">Geçmiş · {receivable.payments.length}</button>}
       </span>
     </div>
 
     {showForm && <form onSubmit={handleSubmit} className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
-      <input type="number" step={0.01} min={0.01} max={remaining} value={amount} onChange={resetValidity((e) => setAmount(Number(e.target.value)))} onInvalid={onInvalidTurkish} className="field min-h-9 w-24 text-xs" />
-      <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} className="field min-h-9 w-auto text-xs">
+      <input type="number" inputMode="decimal" step={0.01} min={0.01} max={remaining} value={amount} onChange={resetValidity((e) => setAmount(Number(e.target.value)))} onInvalid={onInvalidTurkish} aria-label="Tahsil edilen tutar" className="field min-h-11 w-24 text-xs" />
+      <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} aria-label="Ödeme yöntemi" className="field min-h-11 w-auto text-xs">
         <option value="Cash">Nakit</option>
         <option value="Transfer">Havale</option>
         <option value="Card">Kart</option>
@@ -346,7 +360,7 @@ function PaymentHistoryRow({ studentId, payment, currency }: { studentId: string
   }
 
   return <div className="rounded-lg bg-white px-2.5 py-2 text-xs">
-    <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex flex-wrap items-center gap-1.5">{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}{payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} className="font-bold text-[var(--brand)]">Düzelt</button></span></div>
-    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-9 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" className="field min-h-9 text-xs" /><button disabled={correctPayment.isPending} className="btn btn-primary">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
+    <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex flex-wrap items-center gap-1.5">{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}{payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} aria-expanded={editing} className="pressable inline-flex min-h-11 items-center rounded-lg px-3 font-bold text-[var(--brand)] hover:bg-[var(--brand-soft)]">Düzelt</button></span></div>
+    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" inputMode="decimal" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-11 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" aria-label="Düzeltme nedeni" className="field min-h-11 text-xs" /><button disabled={correctPayment.isPending} className="btn btn-primary">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
   </div>;
 }

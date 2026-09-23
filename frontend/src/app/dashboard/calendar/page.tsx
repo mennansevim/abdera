@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
@@ -20,6 +20,10 @@ import { MakeupScheduler, type MakeupSchedulerContext } from "./makeup-scheduler
 // paylaşılan modülden (lib/week-grid-layout.ts) gelir. Çekirdek 12:00-18:00 aralığı boşken de
 // görünür; daha erken/geç ders varsa pencere o dersi kırpmamak için genişler.
 const GRID_HEIGHT_REM_PER_HOUR = 3.8;
+// Ders kartının CSS minimum yüksekliği ve bunun dakika karşılığı: kısa ders kartı bu kadar yer
+// kapladığı için çakışma yerleşimi de onu bu süre kadar uzun sayar (lib/week-grid-layout.ts).
+const LESSON_CARD_MIN_HEIGHT_REM = 1.85;
+const LESSON_CARD_MIN_MINUTES = Math.ceil((LESSON_CARD_MIN_HEIGHT_REM / GRID_HEIGHT_REM_PER_HOUR) * 60);
 const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ALL_INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
@@ -114,6 +118,32 @@ function formatMinutesOfDay(totalMinutes: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
+// Ui Modal'ını kullanmayan özel diyaloglar (ders detayı, taşıma kararı) için aynı temel
+// davranış: arka plan kaydırması kilitlenir, Escape kapatır, açılışta odak diyaloğa taşınır ve
+// kapanınca önceki öğeye döner. onClose her render'da yeni fonksiyon olabildiği için ref'te
+// tutulur; effect yalnızca açılış/kapanışta çalışır.
+function useDialogBehavior(onClose: () => void, initialFocusRef: RefObject<HTMLElement | null>) {
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    initialFocusRef.current?.focus();
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onCloseRef.current();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = overflow;
+      previouslyFocused?.focus();
+    };
+  }, [initialFocusRef]);
+}
+
 export default function CalendarPage() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
@@ -173,7 +203,7 @@ export default function CalendarPage() {
     [dues],
   );
   const { data: rawLessons, isLoading, isError, isFetching, refetch } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
-  const { data: rawTimelineLessons, isLoading: timelineLoading } = useCalendar(timelineRange.from.toISOString(), timelineRange.to.toISOString());
+  const { data: rawTimelineLessons, isLoading: timelineLoading, isError: timelineError, isFetching: timelineFetching, refetch: refetchTimeline } = useCalendar(timelineRange.from.toISOString(), timelineRange.to.toISOString());
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Eski kaydı ızgarada göstermek aynı dersin
   // iki yerde birden görünmesine yol açıyordu - değişiklik geçmişi `/dashboard/change-requests`'te
@@ -285,8 +315,8 @@ export default function CalendarPage() {
               arasından seçim yapabilecekmiş gibi bir kontrol sunmak yanıltıcı ve kullanıcı
               isteği üzerine kaldırıldı ("öğretmen diğer öğretmenlerin derslerini görmemeli"). */}
           {isAdmin && <>
-            <label className="relative w-full shrink-0 md:w-48 xl:w-[8.25rem] 2xl:w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-7 text-xs font-bold"><option value="all">Öğrenci</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
-            <label className="relative w-full shrink-0 md:w-48 xl:w-36 2xl:w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 bg-white py-1 pl-9 pr-7 text-xs font-bold"><option value="all">Öğretmen</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+            <label className="relative w-full shrink-0 md:w-48 xl:w-[8.25rem] 2xl:w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-11 bg-white pl-9 pr-7 text-xs font-bold xl:min-h-9 xl:py-1"><option value="all">Öğrenci</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
+            <label className="relative w-full shrink-0 md:w-48 xl:w-36 2xl:w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-11 bg-white pl-9 pr-7 text-xs font-bold xl:min-h-9 xl:py-1"><option value="all">Öğretmen</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
             <div className="h-6 w-px bg-[var(--line)] max-sm:hidden" aria-hidden="true" />
           </>}
           {/* Enstrüman filtresi de aynı kuralı izler: Teacher oturumunda yalnızca kendi
@@ -297,27 +327,27 @@ export default function CalendarPage() {
                 type="button"
                 onClick={() => setInstrumentFilter(filter)}
                 aria-pressed={instrumentFilter === filter}
-                className={`pressable min-h-9 shrink-0 rounded-xl border px-3 text-xs font-bold xl:px-1.5 2xl:px-4 ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
+                className={`pressable min-h-11 shrink-0 rounded-xl border px-3 xl:min-h-9 text-xs font-bold xl:px-1.5 2xl:px-4 ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
               >
                 {filter}
               </button>
             ))}</div>
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-1.5 border-t border-[var(--line)] pt-3 md:border-t-0 md:pt-0 xl:ml-auto xl:w-auto xl:shrink-0 xl:flex-nowrap" aria-label="Takvim kontrolleri">
-          <div className="flex shrink-0 items-center gap-1 rounded-[.9rem] bg-[var(--surface-muted)] p-1" aria-label="Hafta değiştir">
-            <button onClick={() => setWeekStart((d) => addDays(d, -7))} className="pressable grid h-9 w-9 place-items-center rounded-[.7rem] border border-[var(--line)] bg-white hover:border-[var(--brand)] hover:text-[var(--brand)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
-            <button onClick={() => setWeekStart((d) => addDays(d, 7))} className="pressable grid h-9 w-9 place-items-center rounded-[.7rem] border border-[var(--line)] bg-white hover:border-[var(--brand)] hover:text-[var(--brand)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
+          <div className="flex shrink-0 items-center gap-1.5 rounded-[.9rem] bg-[var(--surface-muted)] p-1" aria-label="Hafta değiştir">
+            <button type="button" onClick={() => setWeekStart((d) => addDays(d, -7))} className="icon-btn icon-btn-quiet" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
+            <button type="button" onClick={() => setWeekStart((d) => addDays(d, 7))} className="icon-btn icon-btn-quiet" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
           </div>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.75rem] font-semibold hover:border-[var(--brand)] hover:text-[var(--brand)] disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
-          <span aria-live="polite" className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2 text-[.75rem] font-bold tabular-nums text-[#5c4d3f] 2xl:px-3 2xl:text-xs">
+          <button type="button" onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="btn btn-quiet px-3 text-[.75rem] font-semibold disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
+          <span aria-live="polite" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2 text-[.75rem] font-bold tabular-nums text-[#5c4d3f] 2xl:px-3 2xl:text-xs">
             <Icon name="calendar" className="hidden h-4 w-4 text-[var(--brand)] 2xl:block" />
             {formatWeekRange(weekStart, addDays(weekEnd, -1))}
           </span>
           {canSchedule && (
             <>
               <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden="true" />
-              {isAdmin && <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-[var(--line)] bg-white px-2.5 text-[.75rem] font-bold text-[var(--foreground)] hover:border-[var(--brand)] hover:text-[var(--brand)] 2xl:px-4 2xl:text-xs">Telafi planla</button>}
-              <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setMakeupContext(null); setQuickAddSlot(null); }} className="pressable inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--brand)] px-2.5 text-[.75rem] font-bold text-white 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
+              {isAdmin && <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet shrink-0 px-2.5 text-[.75rem] font-bold text-[var(--foreground)] 2xl:px-4 2xl:text-xs">Telafi planla</button>}
+              <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setMakeupContext(null); setQuickAddSlot(null); }} className="btn btn-primary shrink-0 px-2.5 text-[.75rem] font-bold 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
             </>
           )}
         </div>
@@ -355,7 +385,7 @@ export default function CalendarPage() {
               setQuickAddSlot(null);
             }}
           />
-          <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
+          <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} error={timelineError} retrying={timelineFetching} onRetry={() => void refetchTimeline()} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
         </div>
       )}
     </div>
@@ -557,7 +587,7 @@ function WeeklyGrid({
   return (
     <section className="app-card min-w-0 overflow-hidden">
       {toast && (
-        <div role="status" className={`flex items-center gap-2 border-b px-4 py-2.5 text-[.75rem] font-semibold ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
+        <div role="status" className={`fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-[.75rem] font-semibold shadow-lg xl:static xl:inset-auto xl:rounded-none xl:border-x-0 xl:border-t-0 xl:border-b xl:shadow-none ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
           <Icon name={toast.tone === "success" ? "check" : "x"} className="h-3.5 w-3.5 shrink-0" />
           {toast.text}
         </div>
@@ -641,6 +671,9 @@ function FloatingDragPreview({ preview, tone }: { preview: { x: number; y: numbe
 function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: PendingMove; pending: boolean; onChoose: (scope: "single" | "series") => void; onClose: () => void }) {
   const source = new Date(move.lesson.startAt);
   const hasSeries = Boolean(move.lesson.lessonSeriesId);
+  const firstActionRef = useRef<HTMLButtonElement>(null);
+  // İşlem sürerken Escape pencereyi kapatmasın - arka plan butonu da aynı nedenle disabled.
+  useDialogBehavior(pending ? () => {} : onClose, firstActionRef);
   return (
     <div className="fixed inset-0 z-[80] grid place-items-end p-3 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Dersi taşıma kapsamı">
       <button type="button" onClick={onClose} disabled={pending} aria-label="Taşıma seçimini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
@@ -652,7 +685,7 @@ function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: Pendin
           {source.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(source)} → {move.newStart.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(move.newStart)}
         </p>
         <div className="mt-4 grid gap-2">
-          <button type="button" onClick={() => onChoose("single")} disabled={pending} className="pressable min-h-12 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
+          <button ref={firstActionRef} type="button" onClick={() => onChoose("single")} disabled={pending} className="pressable min-h-12 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
             {pending ? "Güncelleniyor…" : "Yalnız bu dersi taşı"}
           </button>
           {hasSeries && <button type="button" onClick={() => onChoose("series")} disabled={pending} className="pressable min-h-12 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60">Bu ders ve tüm programı güncelle</button>}
@@ -685,7 +718,7 @@ function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlo
           </div>
           <button type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat" title="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
-        <div className="max-h-[calc(100dvh-7rem)] overflow-x-hidden overflow-y-auto p-4">
+        <div className="max-h-[calc(100dvh-7rem)] overflow-x-hidden overflow-y-auto px-4 py-4 sm:px-5">
           <CreateSeriesForm
             initialDate={slot.date}
             initialDay={slot.day}
@@ -771,7 +804,7 @@ function GridDayColumn({
   now: Date;
 }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
-  const layout = useMemo(() => layoutDayLessons(entries, hourWindow), [entries, hourWindow]);
+  const layout = useMemo(() => layoutDayLessons(entries, hourWindow, { minDurationMinutes: LESSON_CARD_MIN_MINUTES }), [entries, hourWindow]);
   const isToday = day.toDateString() === new Date().toDateString();
   const totalHours = hourWindow.endHour - hourWindow.startHour;
   const totalMinutes = totalHours * 60;
@@ -830,7 +863,7 @@ function GridDayColumn({
             title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${isPast ? " · Geçmiş ders" : ""}${overdue ? " · Aidat gecikmiş" : ""}`}
             aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${isPast ? ", geçmiş ders" : ""}${overdue ? ", aidat gecikmiş" : ""}. Detayları aç`}
             className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : isPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
-            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
+            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem`, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
             {/* Yalnızca Admin oturumunda dolu gelir (overdueStudentIds) - Teacher'a mali veri
                 sızmaz, çünkü hook Teacher için hiç istek atmıyor (docs/04-permissions.md). */}
@@ -858,7 +891,7 @@ function AgendaLessonCard({ lesson, tone, showTeacher, active = false, overdue =
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="block truncate text-xs font-bold">{lesson.studentName}</span>
-          {overdue && <Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-[var(--danger-strong)]" />}
+          {overdue && <><Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-[var(--danger-strong)]" aria-hidden="true" /><span className="sr-only">Aidat gecikmiş</span></>}
           {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] font-extrabold uppercase text-white">Şimdi</span>}
         </span>
         <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
@@ -873,12 +906,18 @@ function UpcomingLessonsRail({
   colors,
   now,
   loading,
+  error,
+  retrying,
+  onRetry,
   onOpenWeek,
 }: {
   lessons: CalendarLesson[];
   colors: Map<string, InstrumentTone>;
   now: Date;
   loading: boolean;
+  error: boolean;
+  retrying: boolean;
+  onRetry: () => void;
   onOpenWeek: () => void;
 }) {
   const activeLesson = lessons.find((lesson) => isLessonActive(lesson, now));
@@ -905,6 +944,13 @@ function UpcomingLessonsRail({
           <div className="space-y-3">
             <div className="skeleton h-32 rounded-xl" />
             {Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-16 rounded-xl" />)}
+          </div>
+        ) : error ? (
+          // Hata boş liste gibi görünmesin ("planlanmış ders yok" yanıltıcı olur).
+          <div className="rounded-xl bg-[var(--surface-muted)] px-3 py-6 text-center">
+            <p className="text-sm font-bold">Yaklaşan dersler yüklenemedi</p>
+            <p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p>
+            <button type="button" onClick={onRetry} disabled={retrying} className="btn btn-quiet mt-3 disabled:opacity-50">{retrying ? "Yükleniyor…" : "Tekrar dene"}</button>
           </div>
         ) : (
           <>
@@ -1034,6 +1080,8 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const canCancelWithMakeup = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() > now.getTime());
   const canPlanMakeup = canManage && lesson.status === "Cancelled" && Boolean(makeupCredits?.some((credit) =>
     credit.sourceLessonId === lesson.id && credit.status === "Available" && new Date(credit.expiresAt).getTime() >= now.getTime()));
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useDialogBehavior(onClose, closeButtonRef);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1095,7 +1143,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
+    <div className="fixed inset-0 z-50 grid place-items-end p-0 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
       <button type="button" onClick={onClose} aria-label="Ders detay penceresini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
       <section className="app-card relative z-10 flex max-h-[calc(100dvh-.75rem)] w-full max-w-md flex-col overflow-y-auto overscroll-contain rounded-b-none sm:max-h-[calc(100dvh-2rem)] sm:rounded-b-[1.35rem]">
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] p-5">
@@ -1104,7 +1152,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
             <h2 className="mt-1 font-serif text-xl font-bold italic">{lesson.studentName}</h2>
             <p className="text-meta mt-1">{lesson.instrumentName} · {lesson.status === "Makeup" ? "Telafi dersi" : "Düzenli ders"}</p>
           </div>
-          <button type="button" onClick={onClose} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--muted)]" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
+          <button ref={closeButtonRef} type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
         <dl className="grid gap-3 p-5 sm:grid-cols-2">
           <DetailItem label="Tarih" value={start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} />
@@ -1117,18 +1165,18 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         {editing ? (
           <form onSubmit={handleSave} className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-5">
             <div className="grid gap-3 sm:grid-cols-2">
-              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>}
-              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required><option value="">Öğretmen seç</option>{eligibleTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>}
-              <label className="text-micro text-[var(--muted)]">Yeni tarih<input type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
-              <label className="text-micro text-[var(--muted)]">Yeni saat<input type="time" value={timeValue} onChange={(event) => setTimeValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
-              <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-10 bg-white text-sm font-semibold" required /></label>
-              {isAdmin && <label className="text-micro text-[var(--muted)]">Durum<select value={statusValue} onChange={(event) => setStatusValue(event.target.value as "Normal" | "Cancelled")} className="field mt-1 min-h-10 bg-white text-sm font-semibold"><option value="Normal">Planlandı</option><option value="Cancelled">İptal edildi</option></select></label>}
+              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>}
+              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğretmen seç</option>{eligibleTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>}
+              <label className="text-micro text-[var(--muted)]">Yeni tarih<input type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
+              <label className="text-micro text-[var(--muted)]">Yeni saat<input type="time" value={timeValue} onChange={(event) => setTimeValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
+              <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" inputMode="numeric" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
+              {isAdmin && <label className="text-micro text-[var(--muted)]">Durum<select value={statusValue} onChange={(event) => setStatusValue(event.target.value as "Normal" | "Cancelled")} className="field mt-1 min-h-11 bg-white text-sm font-semibold"><option value="Normal">Planlandı</option><option value="Cancelled">İptal edildi</option></select></label>}
             </div>
             <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
             <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface-muted)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-              <button type="button" onClick={() => { setEditing(false); setError(null); }} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold">İptal</button>
-              <button type="submit" disabled={updateLesson.isPending || !teacherId || !studentId} className="pressable min-h-10 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">{updateLesson.isPending ? "Kaydediliyor…" : "Değişiklikleri kaydet"}</button>
+              <button type="button" onClick={() => { setEditing(false); setError(null); }} className="btn btn-quiet px-4 text-sm font-bold text-[var(--foreground)]">İptal</button>
+              <button type="submit" disabled={updateLesson.isPending || !teacherId || !studentId} className="btn btn-primary px-4 text-sm font-bold disabled:cursor-wait disabled:opacity-60">{updateLesson.isPending ? "Kaydediliyor…" : "Değişiklikleri kaydet"}</button>
             </div>
           </form>
         ) : (
@@ -1144,13 +1192,15 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
                 </div>
               </div>
             )}
-            <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              {canMarkAbsent && <button type="button" onClick={() => setConfirmAction("absent")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--warning-strong)]">Öğrenci gelmedi</button>}
-              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-with-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--danger)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">İptal et + telafi</button>}
-              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-without-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">Telafisiz iptal</button>}
-              {canPlanMakeup && <button type="button" onClick={() => onPlanMakeup(lesson)} className="pressable inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white"><Icon name="plus" className="h-4 w-4" />Telafi dersi ekle</button>}
-              {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-5 text-sm font-bold text-[var(--brand-strong)]">Düzenle</button>}
-              <button type="button" onClick={onClose} className={`pressable min-h-11 rounded-xl px-5 text-sm font-bold ${canPlanMakeup ? "border border-[var(--line)] bg-white text-[var(--foreground)]" : "bg-[var(--brand)] text-white"}`}>Kapat</button>
+            {/* Mobilde 5-6 buton flex-wrap ile üç satıra taşıp içeriği örtüyordu: dar ekranda iki
+                sütunlu ızgara, sm ve üstünde eski sağa yaslı sıra. */}
+            <div className="sticky bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex sm:flex-wrap sm:justify-end">
+              {canMarkAbsent && <button type="button" onClick={() => setConfirmAction("absent")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--warning-strong)] sm:w-auto sm:px-4">Öğrenci gelmedi</button>}
+              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-with-makeup")} className="pressable min-h-11 w-full rounded-xl border border-[var(--danger)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">İptal et + telafi</button>}
+              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-without-makeup")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">Telafisiz iptal</button>}
+              {canPlanMakeup && <button type="button" onClick={() => onPlanMakeup(lesson)} className="pressable inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-3 text-sm font-bold text-white sm:w-auto sm:px-4"><Icon name="plus" className="h-4 w-4" />Telafi dersi ekle</button>}
+              {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--brand-strong)] sm:w-auto sm:px-5">Düzenle</button>}
+              <button type="button" onClick={onClose} className={`pressable min-h-11 w-full rounded-xl px-3 text-sm font-bold sm:w-auto sm:px-5 ${canPlanMakeup ? "border border-[var(--line)] bg-white text-[var(--foreground)]" : "bg-[var(--brand)] text-white"}`}>Kapat</button>
             </div>
           </>
         )}

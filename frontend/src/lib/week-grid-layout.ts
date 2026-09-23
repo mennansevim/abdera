@@ -54,11 +54,18 @@ export interface LessonLayout {
  * dersleri yan yana sütunlara ayırır (klasik takvim çakışma algoritması: kümeleme + greedy
  * sütun atama). Önceki sürüm çakışan dersleri tam üst üste bindiriyordu - biri diğerini
  * tamamen gizliyordu.
+ *
+ * `minDurationMinutes`: kart CSS'te bir minimum yüksekliğe sahipse (örn. `minHeight: 1.85rem`)
+ * kısa bir ders ekranda gerçek süresinden uzun görünür ve hemen ardından başlayan dersin
+ * üstüne biner. Çakışma kümelemesi ve sütun ataması bu durumda dersin bitişini
+ * max(bitiş, başlangıç + minDurationMinutes) kabul eder; konum/yükseklik hesabı değişmez.
  */
 export function layoutDayLessons<T extends GridLessonInput>(
   dayLessons: T[],
   window: HourWindow,
+  options: { minDurationMinutes?: number } = {},
 ): Map<string, LessonLayout> {
+  const minDurationMinutes = options.minDurationMinutes ?? 0;
   const windowMinutes = (window.endHour - window.startHour) * 60;
   const result = new Map<string, LessonLayout>();
   if (!dayLessons.length || windowMinutes <= 0) return result;
@@ -90,6 +97,8 @@ export function layoutDayLessons<T extends GridLessonInput>(
     const end = new Date(lesson.endAt);
     const startMin = start.getHours() * 60 + start.getMinutes();
     const endMin = end.getHours() * 60 + end.getMinutes();
+    // Yalnızca çakışma tespiti için: ekranda kaplanan alanın bittiği dakika.
+    const occupiedEndMin = Math.max(endMin, startMin + minDurationMinutes);
 
     if (cluster.length && startMin >= clusterEnd) {
       flushCluster();
@@ -98,13 +107,13 @@ export function layoutDayLessons<T extends GridLessonInput>(
     let column = columnEnds.findIndex((end) => end <= startMin);
     if (column === -1) {
       column = columnEnds.length;
-      columnEnds.push(endMin);
+      columnEnds.push(occupiedEndMin);
     } else {
-      columnEnds[column] = endMin;
+      columnEnds[column] = occupiedEndMin;
     }
 
     cluster.push({ lesson, startMin, endMin, column });
-    clusterEnd = Math.max(clusterEnd, endMin);
+    clusterEnd = Math.max(clusterEnd, occupiedEndMin);
   }
   flushCluster();
 

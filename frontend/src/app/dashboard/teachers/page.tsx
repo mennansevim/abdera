@@ -33,8 +33,8 @@ export default function TeachersPage() {
 function TeachersPageContent() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
-  const { data: teachers, isLoading } = useTeachers();
-  const { data: overviews, isLoading: overviewsLoading } = useTeacherOverviews(isAdmin);
+  const { data: teachers, isLoading, isError: teachersError, refetch: refetchTeachers, isFetching: teachersFetching } = useTeachers();
+  const { data: overviews, isLoading: overviewsLoading, isError: overviewsError, refetch: refetchOverviews, isFetching: overviewsFetching } = useTeacherOverviews(isAdmin);
   const { data: instruments } = useInstruments();
   const { data: students } = useStudents();
   const [showCreate, setShowCreate] = useState(false);
@@ -80,6 +80,13 @@ function TeachersPageContent() {
   const activeTeacherCount = allTeacherRows.filter(({ teacher }) => teacher.status === "Active").length;
   const studentCount = new Set(allTeacherRows.flatMap(({ teacherStudents }) => teacherStudents.map((student) => student.studentId))).size;
   const loading = isLoading || (isAdmin && overviewsLoading);
+  const isError = isAdmin ? overviewsError : teachersError;
+  const isFetching = teachersFetching || (isAdmin && overviewsFetching);
+
+  function retry() {
+    void refetchTeachers();
+    if (isAdmin) void refetchOverviews();
+  }
   const hasFilters = Boolean(search || instrumentId || status !== "Active");
 
   function clearFilters() {
@@ -115,7 +122,7 @@ function TeachersPageContent() {
           <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{teacherRows.length}</strong> öğretmen gösteriliyor</p>
           <label className="relative min-w-44 flex-1 sm:flex-none">
             <span className="sr-only">Enstrümana göre filtrele</span>
-            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-10 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
+            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
               <option value="">Tüm enstrümanlar</option>
               {(instruments ?? []).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
@@ -123,7 +130,7 @@ function TeachersPageContent() {
           </label>
           <label className="relative min-w-28 flex-1 sm:flex-none">
             <span className="sr-only">Duruma göre filtrele</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | TeacherStatus)} className="field min-h-10 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
+            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | TeacherStatus)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
               <option value="Active">Aktif</option>
               <option value="Inactive">Pasif</option>
               <option value="all">Tümü</option>
@@ -131,10 +138,11 @@ function TeachersPageContent() {
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
           </label>
         </div>
-        {!loading && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_7rem_6rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-center">Durum</span><span /></div>}
+        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_7rem_6rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-center">Durum</span><span /></div>}
         {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
-        {!loading && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
-        {!loading && <ul className="divide-y divide-[var(--line)]">
+        {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+        {!loading && !isError && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
+        {!loading && !isError && <ul className="divide-y divide-[var(--line)]">
           {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
         </ul>}
       </div>
@@ -209,11 +217,11 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin, 
 
     {expanded && isAdmin && <div className="border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="tablist" aria-label="Öğretmen ayrıntıları">
-          <button type="button" role="tab" aria-selected={detailTab === "students"} onClick={() => setDetailTab("students")} className={`pressable min-h-10 rounded-lg px-3 text-xs font-bold ${detailTab === "students" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Öğrenciler <span className="ml-1 tabular-nums opacity-70">{groupedStudents.length}</span></button>
-          <button type="button" role="tab" aria-selected={detailTab === "availability"} onClick={() => setDetailTab("availability")} className={`pressable min-h-10 rounded-lg px-3 text-xs font-bold ${detailTab === "availability" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Uygunluk</button>
+        <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="group" aria-label="Öğretmen ayrıntıları">
+          <button type="button" aria-pressed={detailTab === "students"} onClick={() => setDetailTab("students")} className={`pressable min-h-11 rounded-lg px-3 text-xs font-bold ${detailTab === "students" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Öğrenciler <span className="ml-1 tabular-nums opacity-70">{groupedStudents.length}</span></button>
+          <button type="button" aria-pressed={detailTab === "availability"} onClick={() => setDetailTab("availability")} className={`pressable min-h-11 rounded-lg px-3 text-xs font-bold ${detailTab === "availability" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Uygunluk</button>
         </div>
-        {detailTab === "students" && groupedStudents.length > 6 && <label className="relative ml-auto w-full sm:w-56"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci veya branş ara…" className="field min-h-10 pl-9 py-1.5 text-xs" /></label>}
+        {detailTab === "students" && groupedStudents.length > 6 && <label className="relative ml-auto w-full sm:w-56"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci veya branş ara…" className="field min-h-11 pl-9 py-1.5 text-xs" /></label>}
       </div>
       {detailTab === "students" && <div className="mt-3 overflow-hidden rounded-xl border border-[var(--line)] bg-white">
         {visibleStudents.length > 0 ? <><div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(7rem,.7fr)] items-center gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/45 px-3 py-2 text-micro text-[var(--muted)]"><span>#</span><span>Öğrenci</span><span>Branş</span></div><ol className="max-h-80 divide-y divide-[var(--line)] overflow-y-auto">{visibleStudents.map((student, index) => <li key={student.id} className="grid min-h-10 grid-cols-[2rem_minmax(0,1fr)_minmax(7rem,.7fr)] items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--surface-muted)]/35"><span className="text-[.75rem] tabular-nums text-[var(--muted)]">{index + 1}</span><span className="truncate font-semibold">{student.name}</span><span className="flex min-w-0 flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.75rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></li>)}</ol></> : groupedStudents.length ? <p className="p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}
@@ -292,7 +300,7 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
 
       <div className="inline-flex rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Durum">
         {([["Active", "Aktif"], ["Inactive", "Pasif"]] as const).map(([value, label]) => (
-          <button key={value} type="button" onClick={() => setStatus(value)} aria-pressed={status === value} className={`pressable min-h-8 rounded-lg px-3 text-xs font-bold ${status === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
+          <button key={value} type="button" onClick={() => setStatus(value)} aria-pressed={status === value} className={`pressable min-h-11 rounded-lg px-3 text-xs font-bold ${status === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
         ))}
       </div>
 
@@ -307,7 +315,7 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
                 type="button"
                 onClick={() => toggleInstrument(instrument.id)}
                 aria-pressed={checked}
-                className={`pressable min-h-9 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)]"}`}
+                className={`pressable min-h-11 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)]"}`}
               >
                 {instrument.name}
               </button>
@@ -396,7 +404,7 @@ function AddStudentToTeacherForm({
     <form onSubmit={handleSubmit} className="space-y-3.5">
       <div className="inline-flex rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Öğrenci ekleme yöntemi">
         {([["new", "Yeni öğrenci"], ["existing", "Kayıtlı öğrenci"]] as const).map(([value, label]) => (
-          <button key={value} type="button" onClick={() => { setMode(value); setError(null); }} aria-pressed={mode === value} className={`pressable min-h-8 rounded-lg px-3 text-xs font-bold ${mode === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
+          <button key={value} type="button" onClick={() => { setMode(value); setError(null); }} aria-pressed={mode === value} className={`pressable min-h-11 rounded-lg px-3 text-xs font-bold ${mode === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
         ))}
       </div>
 
@@ -485,7 +493,7 @@ function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: {
                 type="button"
                 onClick={() => toggleInstrument(instrument.id)}
                 aria-pressed={checked}
-                className={`pressable min-h-9 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)]"}`}
+                className={`pressable min-h-11 rounded-full border px-3 text-xs font-semibold ${checked ? "border-[var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)]"}`}
               >
                 {instrument.name}
               </button>

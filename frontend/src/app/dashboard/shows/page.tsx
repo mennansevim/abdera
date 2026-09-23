@@ -33,7 +33,7 @@ function formatDuration(minutes: number) {
 
 export default function ShowsPage() {
   const { data: me } = useMe();
-  const { data: shows, isLoading } = useShows();
+  const { data: shows, isLoading, isError } = useShows();
   const [showCreate, setShowCreate] = useState(false);
   const isAdmin = me?.role === "Admin";
 
@@ -46,6 +46,8 @@ export default function ShowsPage() {
       />
 
       {isLoading && <div className="space-y-3">{[1, 2].map((item) => <div key={item} className="skeleton h-28 rounded-2xl" />)}</div>}
+
+      {isError && <FormMessage tone="error">Gösteriler yüklenemedi. Bağlantınızı kontrol edip sayfayı yenileyin.</FormMessage>}
 
       {!isLoading && shows?.length === 0 && (
         <div className="app-card grid min-h-56 place-items-center p-8 text-center">

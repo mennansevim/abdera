@@ -194,7 +194,7 @@ export function MakeupScheduler({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div><p className="text-xs font-bold">Müsait saatler</p><p className="mt-1 text-[.75rem] text-[var(--muted)]">Öğrenci ve öğretmenin ortak boşlukları</p></div>
             <label className="inline-flex items-center gap-2 text-[.75rem] font-bold text-[var(--muted)]">Süre
-              <select value={durationMinutes} onChange={(event) => { setDurationMinutes(Number(event.target.value)); setSelectedSlot(null); }} className="rounded-lg border border-[var(--line)] bg-white px-2 py-1.5">
+              <select value={durationMinutes} onChange={(event) => { setDurationMinutes(Number(event.target.value)); setSelectedSlot(null); }} className="field min-h-11 w-auto text-sm">
                 <option value={30}>30 dk</option><option value={45}>45 dk</option><option value={60}>60 dk</option>
               </select>
             </label>

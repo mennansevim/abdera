@@ -37,7 +37,7 @@ const COURSE_KINDS: CourseKind[] = ["Individual", "Group"];
 type DiscountDraft = { multiCourse: number; sibling: number; dueDay: number; tiers: PrepayTier[] };
 
 export function TuitionPolicySection() {
-  const { data: rates, isLoading } = useTuitionRates();
+  const { data: rates, isLoading, isError, refetch, isFetching } = useTuitionRates();
   const [newRateFor, setNewRateFor] = useState<CourseKind | null>(null);
 
   const current = useMemo(() => {
@@ -57,7 +57,9 @@ export function TuitionPolicySection() {
 
       {isLoading && <div className="grid gap-3 sm:grid-cols-2">{[1, 2].map((item) => <div key={item} className="skeleton h-32 rounded-2xl" />)}</div>}
 
-      {!isLoading && <div className="grid gap-3 sm:grid-cols-2">
+      {!isLoading && isError && <div className="app-card grid min-h-32 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Tarifeler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+
+      {!isLoading && !isError && <div className="grid gap-3 sm:grid-cols-2">
         {COURSE_KINDS.map((kind) => {
           const rate = current.get(kind);
           return (
@@ -141,10 +143,10 @@ function NewRateModal({ courseKind, onClose }: { courseKind: CourseKind; onClose
       <form onSubmit={handleSubmit} className="space-y-3.5">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="form-label">Aylık tutar (₺)
-            <input type="number" min={0} step={0.01} value={monthlyAmount} onChange={(event) => setMonthlyAmount(event.target.value === "" ? "" : Number(event.target.value))} required autoFocus className="field text-sm" placeholder="6000" />
+            <input type="number" inputMode="decimal" min={0} step={0.01} value={monthlyAmount} onChange={(event) => setMonthlyAmount(event.target.value === "" ? "" : Number(event.target.value))} required autoFocus className="field text-sm" placeholder="6000" />
           </label>
           <label className="form-label">Ayda kaç ders
-            <input type="number" min={1} max={31} value={lessonsPerMonth} onChange={(event) => setLessonsPerMonth(Number(event.target.value))} required className="field text-sm" />
+            <input type="number" inputMode="numeric" min={1} max={31} value={lessonsPerMonth} onChange={(event) => setLessonsPerMonth(Number(event.target.value))} required className="field text-sm" />
           </label>
         </div>
         <label className="form-label">Yürürlük başlangıcı
@@ -161,7 +163,7 @@ function NewRateModal({ courseKind, onClose }: { courseKind: CourseKind; onClose
 // kardeşler için %5" ve "toplu ödemelerde indirim". Birlikte anlam taşıdıkları için tek
 // formda ve tek kaydetmede düzenlenirler - yarım kalmış bir politika bırakmasın.
 function DiscountPolicyCard() {
-  const { data: policy, isLoading } = useBillingPolicy();
+  const { data: policy, isLoading, isError, refetch, isFetching } = useBillingPolicy();
   const updatePolicy = useUpdateBillingPolicy();
   // Sunucudaki politika tek kaynak; düzenlenmemiş alanlar ondan TÜRETİLİR. Taslağı bir
   // effect'te state'e yazmak fazladan bir render turu ve veri geç geldiğinde "önce boş,
@@ -177,7 +179,10 @@ function DiscountPolicyCard() {
     tiers: policy.prepayTiers.map((tier) => ({ minMonths: tier.minMonths, percent: tier.percent })),
   } : null);
 
-  if (isLoading || !draft) return <div className="skeleton h-56 rounded-2xl" />;
+  if (isLoading) return <div className="skeleton h-56 rounded-2xl" />;
+  if (!draft) {
+    return <div className="app-card grid min-h-40 place-items-center p-6 text-center"><div><p className="text-sm font-bold">{isError ? "İndirim politikası yüklenemedi" : "İndirim politikası bulunamadı"}</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>;
+  }
 
   function patch(next: Partial<DiscountDraft>) {
     setEdits({ ...draft!, ...next });
@@ -217,13 +222,13 @@ function DiscountPolicyCard() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="form-label">2 kursa katılan (%)
-          <input type="number" min={0} max={100} step={0.5} value={draft.multiCourse} onChange={(event) => patch({ multiCourse: Number(event.target.value) })} className="field text-sm" />
+          <input type="number" inputMode="decimal" min={0} max={100} step={0.5} value={draft.multiCourse} onChange={(event) => patch({ multiCourse: Number(event.target.value) })} className="field text-sm" />
         </label>
         <label className="form-label">Kardeş (%)
-          <input type="number" min={0} max={100} step={0.5} value={draft.sibling} onChange={(event) => patch({ sibling: Number(event.target.value) })} className="field text-sm" />
+          <input type="number" inputMode="decimal" min={0} max={100} step={0.5} value={draft.sibling} onChange={(event) => patch({ sibling: Number(event.target.value) })} className="field text-sm" />
         </label>
         <label className="form-label">Vade günü
-          <input type="number" min={1} max={28} value={draft.dueDay} onChange={(event) => patch({ dueDay: Number(event.target.value) })} className="field text-sm" />
+          <input type="number" inputMode="numeric" min={1} max={28} value={draft.dueDay} onChange={(event) => patch({ dueDay: Number(event.target.value) })} className="field text-sm" />
         </label>
       </div>
 
@@ -237,10 +242,10 @@ function DiscountPolicyCard() {
           {draft.tiers.map((tier, index) => (
             <div key={index} className="flex flex-wrap items-end gap-2">
               <label className="form-label w-28">En az ay
-                <input type="number" min={2} max={24} value={tier.minMonths} onChange={(event) => patchTier(index, { minMonths: Number(event.target.value) })} className="field min-h-10 text-sm" />
+                <input type="number" inputMode="numeric" min={2} max={24} value={tier.minMonths} onChange={(event) => patchTier(index, { minMonths: Number(event.target.value) })} className="field min-h-11 text-sm" />
               </label>
               <label className="form-label w-28">İndirim (%)
-                <input type="number" min={0} max={100} step={0.5} value={tier.percent} onChange={(event) => patchTier(index, { percent: Number(event.target.value) })} className="field min-h-10 text-sm" />
+                <input type="number" inputMode="decimal" min={0} max={100} step={0.5} value={tier.percent} onChange={(event) => patchTier(index, { percent: Number(event.target.value) })} className="field min-h-11 text-sm" />
               </label>
               <p className="text-meta min-w-0 flex-1 pb-2.5">{tier.minMonths} ay ve üzeri peşin ödeyene %{tier.percent} indirim</p>
               <button type="button" onClick={() => patch({ tiers: draft.tiers.filter((_, i) => i !== index) })} aria-label={`${tier.minMonths} aylık kademeyi sil`} className="icon-btn icon-btn-quiet mb-1 h-10 w-10 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]">

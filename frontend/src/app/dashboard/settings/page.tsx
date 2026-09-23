@@ -160,7 +160,12 @@ function MaintenanceSettingForm({ onClose }: { onClose: () => void }) {
   const [instrumentId, setInstrumentId] = useState("");
   const [maintenanceType, setMaintenanceType] = useState("");
   const [periodDays, setPeriodDays] = useState("180");
-  const [nextReminderAt, setNextReminderAt] = useState(() => new Date().toISOString().slice(0, 16));
+  // datetime-local yerel saat bekler; toISOString UTC verip saati 3 saat geri gösterirdi.
+  const [nextReminderAt, setNextReminderAt] = useState(() => {
+    const date = new Date();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  });
   const [enabled, setEnabled] = useState(true);
   const [preference, setPreference] = useState<"None" | "WhatsApp">("WhatsApp");
   const [error, setError] = useState<string | null>(null);
@@ -206,8 +211,8 @@ function MaintenanceSettingForm({ onClose }: { onClose: () => void }) {
             <option value="None">Bildirim yok</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 self-end pb-2.5 text-xs font-semibold">
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Etkin
+        <label className="flex min-h-11 items-center gap-2 self-end text-xs font-semibold">
+          <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--brand)]" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Etkin
         </label>
       </div>
       {error && <FormMessage tone="error">{error}</FormMessage>}

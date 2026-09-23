@@ -126,7 +126,7 @@ export function RowMenu({ label, children }: { label: string; children: (close: 
         aria-expanded={open}
         aria-label={label}
         title={label}
-        className="icon-btn icon-btn-quiet h-9 w-9 border-transparent bg-transparent"
+        className="icon-btn icon-btn-quiet border-transparent bg-transparent"
       >
         <Icon name="more" className="h-4 w-4" />
       </button>
@@ -146,7 +146,7 @@ export function RowMenuItem({ onClick, icon, tone = "default", children }: { onC
       type="button"
       role="menuitem"
       onClick={onClick}
-      className={`pressable flex min-h-10 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-semibold ${
+      className={`pressable flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm font-semibold ${
         tone === "danger"
           ? "text-[var(--danger-strong)] hover:bg-[var(--danger-soft)]"
           : "text-[var(--foreground)] hover:bg-[var(--surface-muted)]"
@@ -177,15 +177,25 @@ export function Modal({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  // Çağıranlar onClose'u satır içi verir (`onClose={() => setOpen(false)}`). Efektin bağımlılığı
+  // olsaydı üst bileşenin her yeniden çizimi - ör. takvimin 15 sn'lik yenilemesi - efekti
+  // yeniden çalıştırıp paneli odaklıyordu: yazılan alandan odak kayıyor, mobilde klavye
+  // kapanıyordu (gerçek bir hata olarak ölçüldü). En güncel onClose ref'ten okunur.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
-    panelRef.current?.focus();
+    // İçerideki bir alan `autoFocus` ile odağı zaten almışsa (React bunu çocuklar mount olurken,
+    // bu efektten önce yapar) paneli odaklayıp onu geri almayız.
+    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => {
@@ -193,7 +203,7 @@ export function Modal({
       document.body.style.overflow = overflow;
       previouslyFocused.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || typeof document === "undefined") return null;
 
@@ -208,7 +218,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`app-card relative z-10 flex max-h-[calc(100vh-1.5rem)] w-full ${width} flex-col overflow-hidden focus:outline-none`}
+        className={`app-card relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full ${width} flex-col overflow-hidden focus:outline-none`}
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-4 sm:px-5">
           <div className="min-w-0">
@@ -245,7 +255,7 @@ export function Notice({ children, onDismiss }: { children: ReactNode; onDismiss
     <p role="status" className="flex items-center gap-2 rounded-xl border border-[color:var(--success-soft)] bg-[var(--success-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--success-strong)]">
       <Icon name="check" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1">{children}</span>
-      {onDismiss && <button type="button" onClick={onDismiss} aria-label="Bildirimi kapat" className="pressable shrink-0 rounded-lg p-1 hover:bg-white/60"><Icon name="close" className="h-3.5 w-3.5" /></button>}
+      {onDismiss && <button type="button" onClick={onDismiss} aria-label="Bildirimi kapat" className="pressable -my-2 -mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-lg hover:bg-white/60"><Icon name="close" className="h-3.5 w-3.5" /></button>}
     </p>
   );
 }

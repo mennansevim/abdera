@@ -52,8 +52,9 @@ export default function ShowProgramPage() {
   const params = useParams<{ showId: string }>();
   const showId = params.showId;
   const { data: me } = useMe();
-  const { data: show, isLoading } = useShow(showId);
+  const { data: show, isLoading, isError } = useShow(showId);
   const reorder = useReorderShowItems(showId);
+  const [reorderError, setReorderError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ShowItem | null>(null);
   const [adding, setAdding] = useState<ShowItemInput | null>(null);
   const isAdmin = me?.role === "Admin";
@@ -85,7 +86,7 @@ export default function ShowProgramPage() {
     if (target < 0 || target >= items.length) return;
     const ids = items.map((item) => item.id);
     [ids[index], ids[target]] = [ids[target], ids[index]];
-    void reorder.mutateAsync(ids);
+    saveOrder(ids);
   }
 
   function dropOn(fromIndex: number, toIndex: number) {
@@ -93,11 +94,23 @@ export default function ShowProgramPage() {
     const ids = (show?.items ?? []).map((item) => item.id);
     const [moved] = ids.splice(fromIndex, 1);
     ids.splice(toIndex, 0, moved);
-    void reorder.mutateAsync(ids);
+    saveOrder(ids);
+  }
+
+  function saveOrder(ids: string[]) {
+    setReorderError(null);
+    reorder.mutateAsync(ids).catch((err: unknown) =>
+      setReorderError(err instanceof ApiError ? (err.detail ?? err.title) : "Sıra değiştirilemedi."));
   }
 
   if (isLoading) return <div className="space-y-3"><div className="skeleton h-16 rounded-2xl" /><div className="skeleton h-72 rounded-2xl" /></div>;
-  if (!show) return <p className="app-card p-6 text-sm text-[var(--muted)]">Gösteri bulunamadı.</p>;
+  if (!show) {
+    return (
+      <p role={isError ? "alert" : undefined} className="app-card p-6 text-sm text-[var(--muted)]">
+        {isError ? "Gösteri yüklenemedi. Bağlantınızı kontrol edip sayfayı yenileyin." : "Gösteri bulunamadı."}
+      </p>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -149,6 +162,8 @@ export default function ShowProgramPage() {
           )}
         </div>
 
+        {reorderError && <div className="px-4 pt-3 print:hidden"><FormMessage tone="error">{reorderError}</FormMessage></div>}
+
         {show.items.length === 0 && (
           <div className="grid min-h-48 place-items-center p-8 text-center">
             <div>
@@ -199,6 +214,7 @@ function ProgramRow({
   const deleteItem = useDeleteShowItem(showId);
   const [dragOver, setDragOver] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isPerformance = item.kind === "Performance";
 
@@ -231,7 +247,7 @@ function ProgramRow({
         </span>
       )}
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-32">
         {isPerformance ? (
           <>
             <p className="truncate text-sm font-bold">{item.studentName}</p>
@@ -255,15 +271,15 @@ function ProgramRow({
       </span>
 
       {isAdmin && (
-        <div className="flex shrink-0 items-center gap-1 print:hidden">
-          <button type="button" onClick={() => onMove(index, -1)} disabled={index === 0} aria-label="Yukarı taşı" className="icon-btn icon-btn-quiet h-9 w-9 disabled:opacity-30"><Icon name="chevron" className="h-3.5 w-3.5 -rotate-90" /></button>
-          <button type="button" onClick={() => onMove(index, 1)} disabled={index === total - 1} aria-label="Aşağı taşı" className="icon-btn icon-btn-quiet h-9 w-9 disabled:opacity-30"><Icon name="chevron" className="h-3.5 w-3.5 rotate-90" /></button>
-          <button type="button" onClick={onEdit} aria-label="Düzenle" className="icon-btn icon-btn-quiet h-9 w-9"><Icon name="pencil" className="h-3.5 w-3.5" /></button>
+        <div className="flex shrink-0 basis-full items-center justify-end gap-1 sm:basis-auto print:hidden">
+          <button type="button" onClick={() => onMove(index, -1)} disabled={index === 0} aria-label="Yukarı taşı" className="icon-btn icon-btn-quiet disabled:opacity-30"><Icon name="chevron" className="h-3.5 w-3.5 -rotate-90" /></button>
+          <button type="button" onClick={() => onMove(index, 1)} disabled={index === total - 1} aria-label="Aşağı taşı" className="icon-btn icon-btn-quiet disabled:opacity-30"><Icon name="chevron" className="h-3.5 w-3.5 rotate-90" /></button>
+          <button type="button" onClick={onEdit} aria-label="Düzenle" className="icon-btn icon-btn-quiet"><Icon name="pencil" className="h-3.5 w-3.5" /></button>
           <button
             type="button"
             onClick={() => setConfirmingDelete(true)}
             aria-label="Programdan çıkar"
-            className="icon-btn icon-btn-quiet h-9 w-9 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]"
+            className="icon-btn icon-btn-quiet hover:border-[var(--danger)] hover:text-[var(--danger-strong)]"
           >
             <Icon name="x" className="h-3.5 w-3.5" />
           </button>
@@ -271,15 +287,19 @@ function ProgramRow({
       )}
 
       {confirmingDelete && (
-        <Modal open title="Sıra programdan çıkarılsın mı?" onClose={() => setConfirmingDelete(false)} size="sm">
+        <Modal open title="Sıra programdan çıkarılsın mı?" onClose={() => { setConfirmingDelete(false); setDeleteError(null); }} size="sm">
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              void deleteItem.mutateAsync(item.id).then(() => setConfirmingDelete(false));
+              setDeleteError(null);
+              deleteItem.mutateAsync(item.id)
+                .then(() => setConfirmingDelete(false))
+                .catch((err: unknown) => setDeleteError(err instanceof ApiError ? (err.detail ?? err.title) : "Sıra çıkarılamadı."));
             }}
             className="space-y-3.5"
           >
             <p className="text-sm text-[var(--muted)]">{index + 1}. sıra programdan çıkarılacak.</p>
+            {deleteError && <FormMessage tone="error">{deleteError}</FormMessage>}
             <FormActions onCancel={() => setConfirmingDelete(false)} submitLabel="Çıkar" pending={deleteItem.isPending} pendingLabel="Çıkarılıyor…" />
           </form>
         </Modal>

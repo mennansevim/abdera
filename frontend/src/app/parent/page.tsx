@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useGuardianLogout, useRequireGuardianAuth } from "@/lib/guardian-auth";
@@ -38,7 +38,7 @@ export default function ParentPage() {
   const { guardian, isLoading: guardianLoading } = useRequireGuardianAuth();
   const { data: students, isLoading: studentsLoading } = useGuardianStudents();
   const { data: billing, isLoading: billingLoading, isError: billingError, refetch: refetchBilling, isFetching: billingFetching } = useGuardianBilling();
-  const { data: messages, isLoading: messagesLoading } = useGuardianMessages();
+  const { data: messages, isLoading: messagesLoading, isError: messagesError, refetch: refetchMessages } = useGuardianMessages();
   const [tab, setTab] = useState<ParentTab>("home");
   const [selectedDay, setSelectedDay] = useState(1);
   const [studentIndex, setStudentIndex] = useState(0);
@@ -47,9 +47,16 @@ export default function ParentPage() {
   const selectedStudent = students?.[studentIndex % Math.max(students.length, 1)];
   const from = useMemo(() => today.toISOString(), [today]);
   const to = useMemo(() => addDays(today, 60).toISOString(), [today]);
-  const { data: lessons } = useGuardianCalendar(selectedStudent?.studentId, from, to);
+  const { data: lessons, isLoading: lessonsLoading, isError: lessonsError, refetch: refetchLessons } = useGuardianCalendar(selectedStudent?.studentId, from, to);
   const { data: progress, isLoading: progressLoading } = useGuardianProgress(selectedStudent?.studentId);
   const { data: practiceJournal, isLoading: practiceJournalLoading } = useGuardianPracticeJournal(selectedStudent?.studentId);
+
+  // Sayfa değil içteki kutu kaydığı için sekme değişiminde onu başa almak gerekiyor; yoksa
+  // uzun bir sekmenin ortasından kısa bir sekmeye geçen veli boş bir ekran görüyor.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [tab]);
 
   function handleLogout() {
     logout.mutate(undefined, { onSettled: () => router.replace("/parent/login") });
@@ -63,8 +70,12 @@ export default function ParentPage() {
 
   return (
     <main className="min-h-dvh bg-[#efede6] sm:grid sm:place-items-center sm:p-6">
-      <section className="relative mx-auto min-h-dvh w-full max-w-[390px] overflow-hidden border-[#dfd9d0] bg-[#fbf9f5] shadow-[0_12px_40px_rgba(44,35,28,.1)] sm:min-h-[760px] sm:rounded-[1.4rem] sm:border">
-        <div className="h-full overflow-y-auto px-4 pb-24 pt-4">
+      {/* Kabuğun yüksekliği KESİN olmalı (`h-dvh`): önceden `min-h-dvh` idi, içteki `h-full`
+          bir yüksekliğe çözülmüyordu ve kaydırma içteki kutuda değil sayfada oluyordu - alttaki
+          sekme menüsü içeriğin sonuna itilip ekrandan çıkıyordu (390x844'te y=1036'da ölçüldü).
+          Geniş ekrandaki "telefon" kartı da ekran yüksekliğini aşmasın diye sınırlandı. */}
+      <section className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden border-[#dfd9d0] bg-[#fbf9f5] shadow-[0_12px_40px_rgba(44,35,28,.1)] sm:h-[min(760px,calc(100dvh-3rem))] sm:rounded-[1.4rem] sm:border">
+        <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain px-4 pb-24 pt-4">
           <header className="mb-4 flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[linear-gradient(145deg,#d99a22,#a96606)] text-xs font-bold text-white">{initials}</span>
             {selectedStudent ? (
@@ -87,11 +98,11 @@ export default function ParentPage() {
             />
           </header>
 
-          {tab === "home" && <HomeView lessons={lessons} today={today} studentId={selectedStudent?.studentId} billing={billing} messages={messages} />}
-          {tab === "calendar" && <CalendarView lessons={lessons} today={today} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />}
+          {tab === "home" && <HomeView lessons={lessons} lessonsLoading={lessonsLoading} lessonsError={lessonsError} refetchLessons={refetchLessons} messagesError={messagesError} today={today} studentId={selectedStudent?.studentId} billing={billing} messages={messages} />}
+          {tab === "calendar" && <CalendarView lessons={lessons} loading={lessonsLoading} error={lessonsError} refetch={refetchLessons} today={today} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />}
           {tab === "progress" && <ProgressView studentId={selectedStudent?.studentId} progress={progress} practiceJournal={practiceJournal} loading={progressLoading || practiceJournalLoading} />}
           {tab === "billing" && <BillingView billing={billing} loading={billingLoading} error={billingError} refetch={refetchBilling} fetching={billingFetching} studentId={selectedStudent?.studentId} />}
-          {tab === "messages" && <MessagesView messages={messages} loading={messagesLoading} />}
+          {tab === "messages" && <MessagesView messages={messages} loading={messagesLoading} error={messagesError} refetch={refetchMessages} />}
         </div>
         <ParentNavigation tab={tab} setTab={setTab} />
       </section>
@@ -120,7 +131,7 @@ function HeaderMenu({ students, studentIndex, onSelectStudent, onOpenMain, onLog
 
   return (
     <div className="relative shrink-0">
-      <button onClick={() => setOpen((value) => !value)} className="pressable grid h-9 w-9 place-items-center rounded-xl border border-[var(--line)] bg-white text-[#756f7a]" aria-label="Menüyü aç" aria-expanded={open}>
+      <button onClick={() => setOpen((value) => !value)} className="pressable grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-white text-[#756f7a]" aria-label="Menüyü aç" aria-expanded={open}>
         <Icon name="more" className="h-4 w-4" />
       </button>
       {open && (
@@ -165,8 +176,12 @@ function nextRsvpableLesson(lessons: GuardianLesson[] | undefined, today: Date) 
     .sort((a, b) => a.startAt.localeCompare(b.startAt))[0];
 }
 
-function HomeView({ lessons, today, studentId, billing, messages }: {
+function HomeView({ lessons, lessonsLoading, lessonsError, refetchLessons, messagesError, today, studentId, billing, messages }: {
   lessons: GuardianLesson[] | undefined;
+  lessonsLoading: boolean;
+  lessonsError: boolean;
+  refetchLessons: () => unknown;
+  messagesError: boolean;
   today: Date;
   studentId: string | undefined;
   billing: GuardianBilling | undefined;
@@ -202,15 +217,19 @@ function HomeView({ lessons, today, studentId, billing, messages }: {
     <div className="space-y-3">
       <section className="rounded-2xl bg-[linear-gradient(145deg,#fff0d9,#fff8ed)] p-4 shadow-[0_8px_20px_rgba(113,76,28,.08)]">
         <p className="text-[.75rem] font-bold uppercase tracking-[.08em] text-[#b07816]">Sıradaki Ders</p>
-        {nextLesson ? (
+        {lessonsLoading ? (
+          <div className="mt-2 space-y-2" aria-busy="true"><div className="skeleton h-7 w-40 rounded-lg" /><div className="skeleton h-4 w-56 rounded" /></div>
+        ) : lessonsError ? (
+          <LoadError message="Ders bilgisi yüklenemedi" onRetry={refetchLessons} />
+        ) : nextLesson ? (
           <>
             <h1 className="mt-1 font-serif text-[1.4rem] font-bold italic leading-tight text-[#403529]">{nextLesson.instrumentName} Dersi</h1>
             <p className="mt-1 text-[.75rem] text-[#776c60]">{formatLessonWhen(nextLesson.startAt, nextLesson.endAt, today)}</p>
-            <p className="mt-0.5 text-[.75rem] text-[#9a8d7e]">{nextLesson.teacherName} ile</p>
+            <p className="mt-0.5 text-[.75rem] text-[#776c60]">{nextLesson.teacherName} ile</p>
             {showButtons ? (
               <div className="mt-4 grid grid-cols-3 gap-1.5" role="group" aria-label="Derse katılım yanıtı">
-                <button onClick={() => respond("Attending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#36a561] px-1 text-[.75rem] font-bold text-white disabled:opacity-60"><Icon name="check" className="h-4 w-4" /> Geliyorum</button>
-                <button onClick={() => respond("AttendingLate")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#d99a2b] px-1 text-[.75rem] font-bold text-white disabled:opacity-60"><Icon name="clock" className="h-4 w-4" /> Geç kalacağım</button>
+                <button onClick={() => respond("Attending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#23804a] px-1 text-[.75rem] font-bold text-white disabled:opacity-60"><Icon name="check" className="h-4 w-4" /> Geliyorum</button>
+                <button onClick={() => respond("AttendingLate")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#a86d0c] px-1 text-[.75rem] font-bold text-white disabled:opacity-60"><Icon name="clock" className="h-4 w-4" /> Geç kalacağım</button>
                 <button onClick={() => respond("NotAttending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-white px-1 text-[.75rem] font-bold text-[#b84c4c] disabled:opacity-60"><Icon name="x" className="h-4 w-4" /> Gelemiyorum</button>
               </div>
             ) : (
@@ -219,7 +238,7 @@ function HomeView({ lessons, today, studentId, billing, messages }: {
                   <Icon name={rsvp === "Attending" ? "check" : rsvp === "AttendingLate" ? "clock" : "x"} className="h-4 w-4" />
                   {rsvp === "Attending" ? "Geliyorum olarak işaretlendi" : rsvp === "AttendingLate" ? "Geç kalacağım olarak işaretlendi" : "Gelemiyorum olarak işaretlendi"}
                 </p>
-                <button onClick={() => setForceEditing(true)} className="pressable mt-2 w-full text-center text-[.75rem] font-semibold text-[var(--muted)] underline">Yanıtını değiştir</button>
+                <button onClick={() => setForceEditing(true)} className="pressable mt-1 min-h-11 w-full text-center text-[.75rem] font-semibold text-[var(--muted)] underline">Yanıtını değiştir</button>
               </>
             )}
           </>
@@ -250,7 +269,9 @@ function HomeView({ lessons, today, studentId, billing, messages }: {
         <h2 className="mb-2 text-xs font-bold">Son Bildirimler</h2>
         <div className="space-y-2">
           {messages?.slice(0, 3).map((message) => <MessageCard key={message.id} message={message} compact />)}
-          {!messages?.length && <p className="app-card p-4 text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}
+          {messagesError
+            ? <p role="alert" className="app-card p-4 text-xs text-[var(--danger-strong)]">Bildirimler yüklenemedi.</p>
+            : !messages?.length && <p className="app-card p-4 text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}
         </div>
       </section>
     </div>
@@ -272,8 +293,8 @@ function formatLessonWhen(startAt: string, endAt: string, today: Date) {
 
 // Takvim haftası değil, bugünden başlayan kayan 7 gün - bir sonraki takvim haftasına düşen bir
 // telafi dersi, Pazartesi-başlangıçlı sabit bir haftada görünmez kalırdı.
-function CalendarView({ lessons, today, selectedDay, setSelectedDay }: {
-  lessons: GuardianLesson[] | undefined; today: Date; selectedDay: number; setSelectedDay: (index: number) => void;
+function CalendarView({ lessons, loading, error, refetch, today, selectedDay, setSelectedDay }: {
+  lessons: GuardianLesson[] | undefined; loading: boolean; error: boolean; refetch: () => unknown; today: Date; selectedDay: number; setSelectedDay: (index: number) => void;
 }) {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today]);
   const lessonsByDate = useMemo(() => {
@@ -294,14 +315,14 @@ function CalendarView({ lessons, today, selectedDay, setSelectedDay }: {
       <p className="mt-1 text-xs text-[var(--muted)]">Yaklaşan derslerin</p>
       <div className="my-4 grid grid-cols-7 gap-1">
         {weekDays.map((day, index) => (
-          <button key={day.toISOString()} onClick={() => setSelectedDay(index)} className={`pressable flex min-h-12 flex-col items-center justify-center rounded-xl text-[.75rem] font-semibold ${selectedDay === index ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[#746d79]"}`}>
+          <button key={day.toISOString()} onClick={() => setSelectedDay(index)} aria-pressed={selectedDay === index} className={`pressable flex min-h-12 flex-col items-center justify-center rounded-xl text-[.75rem] font-semibold ${selectedDay === index ? "bg-[var(--brand-strong)] text-white" : "border border-[var(--line)] bg-white text-[#746d79]"}`}>
             <span>{day.toLocaleDateString("tr-TR", { weekday: "short" }).replace(".", "") || WEEKDAY_SHORT_FALLBACK[index]}</span>
             <span className="mt-0.5 text-[.75rem] font-bold">{day.getDate()}</span>
           </button>
         ))}
       </div>
       <div className="space-y-3">
-        {dayLessons.length ? dayLessons.map((lesson) => (
+        {loading ? <div className="skeleton h-24 rounded-2xl" aria-busy="true" /> : error ? <div className="app-card p-4"><LoadError message="Takvim yüklenemedi" onRetry={refetch} /></div> : dayLessons.length ? dayLessons.map((lesson) => (
           <article key={lesson.id} className="app-card p-4">
             <p className="text-[.75rem] font-bold text-[var(--brand)]">{selected.toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" })}</p>
             <h2 className="mt-1 text-sm font-bold">{lesson.instrumentName} Dersi</h2>
@@ -375,7 +396,7 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
   }
 
   if (error) {
-    return <div><h1 className="text-xl font-bold">Aidat</h1><p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p><div role="alert" className="app-card mt-4 grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[#ffe0de] text-[#b3403c]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Aidat listesi yüklenemedi</p><p className="mt-1 text-[.75rem] text-[var(--muted)]">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={fetching} className="pressable mt-3 min-h-10 rounded-xl bg-[var(--brand)] px-4 text-xs font-bold text-white disabled:opacity-60">{fetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div></div>;
+    return <div><h1 className="text-xl font-bold">Aidat</h1><p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p><div role="alert" className="app-card mt-4 grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[#ffe0de] text-[#b3403c]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Aidat listesi yüklenemedi</p><p className="mt-1 text-[.75rem] text-[var(--muted)]">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={fetching} className="pressable mt-3 min-h-11 rounded-xl bg-[var(--brand-strong)] px-4 text-xs font-bold text-white disabled:opacity-60">{fetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div></div>;
   }
 
   return (
@@ -426,7 +447,7 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
               <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">Havale yaparken açıklama alanına öğrenci adını ve dönem bilgisini ekle.</p>
               <p className="mt-3 break-all rounded-xl bg-[var(--surface-muted)] px-3 py-2 text-xs font-bold tracking-wide">{billing.virtualIban.iban}</p>
               <p className="mt-1 text-[.75rem] text-[var(--muted)]">Sağlayıcı: {billing.virtualIban.provider}</p>
-              <button className="pressable mt-3 min-h-11 w-full rounded-xl bg-[var(--brand)] text-xs font-bold text-white disabled:opacity-60" onClick={copyIban} disabled={copyState === "copied"}>
+              <button className="pressable mt-3 min-h-11 w-full rounded-xl bg-[var(--brand-strong)] text-xs font-bold text-white disabled:opacity-60" onClick={copyIban} disabled={copyState === "copied"}>
                 {copyState === "copied" ? "IBAN kopyalandı" : "IBAN’ı kopyala"}
               </button>
               {copyState === "error" && <p role="alert" className="mt-2 text-center text-[.75rem] text-[#b3403c]">IBAN kopyalanamadı; yukarıdaki numarayı seçip kopyalayabilirsin.</p>}
@@ -444,8 +465,8 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
   );
 }
 
-function MessagesView({ messages, loading }: { messages: GuardianMessage[] | undefined; loading: boolean }) {
-  return <div><h1 className="text-xl font-bold">Mesajlar</h1><p className="mt-1 text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-4 space-y-2">{loading ? <div className="skeleton h-24 rounded-2xl" /> : messages?.length ? messages.map((message) => <MessageCard key={message.id} message={message} />) : <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}</div></div>;
+function MessagesView({ messages, loading, error, refetch }: { messages: GuardianMessage[] | undefined; loading: boolean; error: boolean; refetch: () => unknown }) {
+  return <div><h1 className="text-xl font-bold">Mesajlar</h1><p className="mt-1 text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-4 space-y-2">{loading ? <div className="skeleton h-24 rounded-2xl" /> : error ? <div className="app-card p-4"><LoadError message="Mesajlar yüklenemedi" onRetry={refetch} /></div> : messages?.length ? messages.map((message) => <MessageCard key={message.id} message={message} />) : <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}</div></div>;
 }
 
 function ProgressView({ studentId, progress, practiceJournal, loading }: { studentId: string | undefined; progress: GuardianProgress | undefined; practiceJournal: PracticeJournal | undefined; loading: boolean }) {
@@ -463,7 +484,7 @@ function ProgressView({ studentId, progress, practiceJournal, loading }: { stude
 
 function PracticeJournalPanel({ studentId, journal }: { studentId: string | undefined; journal: PracticeJournal | undefined }) {
   const createEntry = useCreateGuardianPracticeEntry(studentId);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localIsoDate);
   const [durationMinutes, setDurationMinutes] = useState("30");
   const [goal, setGoal] = useState("");
   const [note, setNote] = useState("");
@@ -482,7 +503,7 @@ function PracticeJournalPanel({ studentId, journal }: { studentId: string | unde
   }
 
   return <section className="app-card mt-3 p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[.75rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">Çalışma günlüğü</p><p className="mt-1 text-xs font-bold">Toplam {journal?.totalMinutes ?? 0} dakika</p></div><div className="flex flex-wrap justify-end gap-1">{journal?.badges.map((badge) => <span key={badge} className="rounded-full bg-[#fff3dd] px-2 py-1 text-[.75rem] font-bold text-[#8a651d]">{badge}</span>)}</div></div>
-    <form onSubmit={submit} className="mt-3 space-y-2"><div className="grid grid-cols-2 gap-2"><label className="text-[.75rem] font-bold text-[var(--muted)]">Tarih<input type="date" max={new Date().toISOString().slice(0, 10)} value={date} onChange={(event) => setDate(event.target.value)} required className="field mt-1 text-xs" /></label><label className="text-[.75rem] font-bold text-[var(--muted)]">Süre (dk)<input type="number" min="1" max="600" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required className="field mt-1 text-xs" /></label></div><input value={goal} onChange={(event) => setGoal(event.target.value)} required maxLength={500} placeholder="Bugünkü hedef" className="field text-xs" /><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} placeholder="İsteğe bağlı not" className="field resize-y text-xs" />{error && <p role="alert" className="text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}<button disabled={createEntry.isPending || !studentId} className="pressable min-h-10 w-full rounded-xl bg-[var(--brand)] text-xs font-bold text-white disabled:opacity-50">{createEntry.isPending ? "Kaydediliyor…" : "Çalışmayı kaydet ve onayla"}</button></form>
+    <form onSubmit={submit} className="mt-3 space-y-2"><div className="grid grid-cols-2 gap-2"><label className="text-[.75rem] font-bold text-[var(--muted)]">Tarih<input type="date" max={localIsoDate()} value={date} onChange={(event) => setDate(event.target.value)} required className="field mt-1 text-xs" /></label><label className="text-[.75rem] font-bold text-[var(--muted)]">Süre (dk)<input type="number" inputMode="numeric" min="1" max="600" value={durationMinutes} onChange={(event) => setDurationMinutes(event.target.value)} required className="field mt-1 text-xs" /></label></div><label className="block text-[.75rem] font-bold text-[var(--muted)]">Bugünkü hedef<input value={goal} onChange={(event) => setGoal(event.target.value)} required maxLength={500} placeholder="Ör. sol el gamı, yavaş tempo" className="field mt-1 text-xs" /></label><label className="block text-[.75rem] font-bold text-[var(--muted)]">Not (isteğe bağlı)<textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={2000} rows={2} className="field mt-1 resize-y text-xs" /></label>{error && <p role="alert" className="text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}<button disabled={createEntry.isPending || !studentId} className="pressable min-h-11 w-full rounded-xl bg-[var(--brand-strong)] text-xs font-bold text-white disabled:opacity-50">{createEntry.isPending ? "Kaydediliyor…" : "Çalışmayı kaydet ve onayla"}</button></form>
     {!!journal?.entries.length && <div className="mt-3 space-y-2 border-t border-[var(--line)] pt-3">{journal.entries.slice(0, 5).map((entry) => <article key={entry.id} className="rounded-xl bg-[var(--surface-muted)] px-3 py-2"><div className="flex justify-between gap-2 text-[.75rem] text-[var(--muted)]"><span>{new Date(`${entry.date}T00:00:00`).toLocaleDateString("tr-TR")}</span><span>{entry.durationMinutes} dk · {entry.parentApproved ? "Veli onaylı" : "Onay bekliyor"}</span></div><p className="mt-1 text-xs font-bold">{entry.goal}</p>{entry.note && <p className="mt-1 text-[.75rem] text-[var(--muted)]">{entry.note}</p>}</article>)}</div>}
   </section>;
 }
@@ -517,7 +538,7 @@ function MessageCard({ message, compact }: { message: GuardianMessage; compact?:
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="note" className="h-3.5 w-3.5" /></span>
       <span className="min-w-0">
         <span className={`block text-[.75rem] leading-relaxed text-[#554e59] ${compact ? "line-clamp-2" : ""}`}>{message.body}</span>
-        <span className="mt-1 block text-[.75rem] text-[#a19aa5]">
+        <span className="mt-1 block text-[.75rem] text-[var(--muted)]">
           {compact ? formatRelativeTime(message.createdAt) : new Date(message.createdAt).toLocaleString("tr-TR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
         </span>
       </span>
@@ -527,5 +548,24 @@ function MessageCard({ message, compact }: { message: GuardianMessage; compact?:
 
 function ParentNavigation({ tab, setTab }: { tab: ParentTab; setTab: (tab: ParentTab) => void }) {
   const items: { id: ParentTab; label: string; icon: IconName }[] = [{id:"home",label:"Ana Sayfa",icon:"home"},{id:"calendar",label:"Takvim",icon:"calendar"},{id:"progress",label:"Gelişim",icon:"activity"},{id:"billing",label:"Aidat",icon:"wallet"},{id:"messages",label:"Mesajlar",icon:"note"}];
-  return <nav className="absolute inset-x-0 bottom-0 grid grid-cols-5 border-t border-[var(--line)] bg-white/95 px-1 pb-[max(.3rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">{items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 text-[.75rem] font-semibold ${tab===item.id?"text-[var(--brand)]":"text-[#9a949e]"}`}><Icon name={item.icon} className="h-4 w-4" />{item.label}</button>)}</nav>;
+  return <nav aria-label="Veli menüsü" className="absolute inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-[var(--line)] bg-white/95 px-1 pb-[max(.3rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-xl">{items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} aria-current={tab===item.id ? "page" : undefined} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 text-[.75rem] font-semibold ${tab===item.id?"text-[var(--brand-strong)]":"text-[var(--muted)]"}`}><Icon name={item.icon} className="h-4 w-4" />{item.label}</button>)}</nav>;
+}
+
+// Takvim ve mesaj istekleri başarısız olduğunda boş durum ("ders yok") yerine gösterilir -
+// veliye yanlış bilgi vermemek için hata ile "gerçekten boş" ayrı tutulur.
+function LoadError({ message, onRetry }: { message: string; onRetry: () => unknown }) {
+  return (
+    <div role="alert" className="mt-2 flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs font-semibold text-[var(--danger-strong)]">{message}</p>
+      <button type="button" onClick={() => void onRetry()} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-xs font-bold text-[var(--foreground)]">Tekrar dene</button>
+    </div>
+  );
+}
+
+// `toISOString()` UTC tarihini verir: İstanbul'da 00:00-03:00 arası "bugün" dün görünüyor ve
+// `max` yüzünden seçilemiyordu. Tarih alanları yerel takvim gününü kullanır.
+function localIsoDate() {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }

@@ -141,7 +141,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
               {(["Present","Absent","Excused"] as const).map((item) => {
                 const labels = { Present:"Geldi", Absent:"Gelmedi", Excused:"Mazeretli" };
                 const active = status === item;
-                return <button key={item} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.75rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{labels[item]}</button>;
+                return <button key={item} type="button" aria-pressed={active} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.75rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{labels[item]}</button>;
               })}
             </div>
           </div>
@@ -188,7 +188,7 @@ function ChangeRequestForm({ onSubmit }: { onSubmit: (start: string, end: string
     <form onSubmit={handleSubmit} className="grid gap-3 rounded-2xl border border-[var(--line)] bg-white p-3 sm:grid-cols-2">
       <label className="form-label">Önerilen gün<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required className="field text-xs" /></label>
       <label className="form-label">Önerilen saat<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required className="field text-xs" /></label>
-      <label className="form-label">Süre (dk)<input type="number" min={15} step={15} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-xs" /></label>
+      <label className="form-label">Süre (dk)<input type="number" inputMode="numeric" min={15} step={15} value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-xs" /></label>
       <label className="form-label">Sebep <span className="font-medium">· opsiyonel</span><input value={reason} onChange={(event) => setReason(event.target.value)} className="field text-xs" /></label>
       <button type="submit" className="btn btn-primary sm:col-span-2">Talebi gönder</button>
       {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] sm:col-span-2">{error}</p>}

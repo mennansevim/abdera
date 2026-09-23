@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AdminGate, PageHeader } from "@/components/ui";
+import { AdminGate, FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useGuardians } from "@/lib/people";
 import {
@@ -114,7 +114,7 @@ function TransactionsSection() {
       <div className="flex flex-wrap gap-2">
         {(["NeedsReview", "Matched", "Ignored", "all"] as const).map((f) => (
           <button key={f} onClick={() => handleFilterChange(f)}
-            className={`pressable min-h-10 rounded-full px-4 text-xs font-bold ${
+            className={`pressable min-h-11 rounded-full px-4 text-xs font-bold ${
               filter === f ? "bg-[var(--brand)] text-white" : "border-2 border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"
             }`}>
             {f === "all" ? "Tümü" : STATUS_LABELS[f]}
@@ -133,7 +133,7 @@ function TransactionsSection() {
               <th className="px-4 py-3">Açıklama</th>
               <th className="px-4 py-3">Tutar</th>
               <th className="px-4 py-3">Durum</th>
-              <th className="px-4 py-3" />
+              <th className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-4 py-3"><span className="sr-only">İşlem</span></th>
             </tr>
           </thead>
           <tbody>
@@ -158,14 +158,14 @@ function TransactionsSection() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="pressable min-h-10 rounded-xl border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              className="pressable min-h-11 rounded-xl border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               Önceki
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="pressable min-h-10 rounded-xl border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
+              className="pressable min-h-11 rounded-xl border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
             >
               Sonraki
             </button>
@@ -180,11 +180,13 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
   const resolve = useResolveBankTransaction();
   const [receivableId, setReceivableId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [confirmingIgnore, setConfirmingIgnore] = useState(false);
 
   async function handleResolve(receivableIdOrNull: string | null) {
     setError(null);
     try {
       await resolve.mutateAsync({ transactionId: transaction.id, receivableId: receivableIdOrNull });
+      setConfirmingIgnore(false);
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "İşlem çözülemedi.");
     }
@@ -199,23 +201,40 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
       <td className="px-4 py-3">
         <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${STATUS_CLASSES[transaction.status]}`}>{STATUS_LABELS[transaction.status]}</span>
       </td>
-      <td className="px-4 py-3">
+      {/* Tablo mobilde yatay kayar; işlem sütunu sağa yapışık kalır ki asıl eylem
+          kaydırmadan görünsün. Dar ekranda içerik alt alta dizilip sütunu dar tutar. */}
+      <td className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-4 py-3">
         {transaction.status === "NeedsReview" && (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex w-40 flex-col items-stretch gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <input value={receivableId} onChange={(e) => setReceivableId(e.target.value)}
+              aria-label="Aidat ID"
               placeholder="Aidat ID (Aidatlar sayfasından)"
-              className="field min-h-9 w-48 text-xs" />
-            <button onClick={() => handleResolve(receivableId)} disabled={!receivableId || resolve.isPending}
-              className="pressable min-h-9 rounded-lg bg-[var(--brand)] px-2.5 text-xs font-bold text-white hover:bg-[var(--brand-strong)] disabled:opacity-50">
+              className="field min-h-11 w-full text-xs sm:w-48" />
+            <button type="button" onClick={() => handleResolve(receivableId)} disabled={!receivableId || resolve.isPending}
+              className="pressable min-h-11 rounded-lg bg-[var(--brand)] px-2.5 text-xs font-bold text-white hover:bg-[var(--brand-strong)] disabled:opacity-50">
               Bu aidata say
             </button>
-            <button onClick={() => handleResolve(null)} disabled={resolve.isPending}
-              className="pressable min-h-9 rounded-lg border-2 border-[var(--line)] px-2.5 text-xs font-bold text-[var(--muted)] hover:bg-[var(--surface-muted)]">
+            <button type="button" onClick={() => { setError(null); setConfirmingIgnore(true); }} disabled={resolve.isPending}
+              className="pressable min-h-11 rounded-lg border-2 border-[var(--line)] px-2.5 text-xs font-bold text-[var(--muted)] hover:bg-[var(--surface-muted)]">
               Hiçbirine sayma
             </button>
           </div>
         )}
-        {error && <p className="mt-1 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
+        {error && !confirmingIgnore && <p role="alert" className="mt-1 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
+        {confirmingIgnore && (
+          <Modal open title="İşlem hiçbir aidata sayılmasın mı?" onClose={() => setConfirmingIgnore(false)} size="sm">
+            <form
+              onSubmit={(event) => { event.preventDefault(); void handleResolve(null); }}
+              className="space-y-3.5"
+            >
+              <p className="text-sm text-[var(--muted)]">
+                {transaction.amount.toLocaleString("tr-TR")} {transaction.currency} tutarındaki havale &ldquo;yok sayıldı&rdquo; olarak işaretlenecek ve hiçbir aidata işlenmeyecek.
+              </p>
+              {error && <FormMessage tone="error">{error}</FormMessage>}
+              <FormActions onCancel={() => setConfirmingIgnore(false)} submitLabel="Hiçbirine sayma" pending={resolve.isPending} pendingLabel="İşleniyor…" />
+            </form>
+          </Modal>
+        )}
       </td>
     </tr>
   );

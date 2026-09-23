@@ -100,7 +100,11 @@ function BackupsPageContent() {
                 <td className="px-3 py-3">{run.triggeredManually ? "Manuel" : "Otomatik"}</td>
                 <td className={`px-3 py-3 font-bold ${STATUS_CLASS[run.status]}`}>{STATUS_LABELS[run.status]}</td>
                 <td className="text-meta px-3 py-3">{formatSize(run.sizeBytes)}</td>
-                <td className="text-meta max-w-xs truncate px-3 py-3" title={run.errorMessage ?? undefined}>{run.errorMessage ?? "—"}</td>
+                <td className="text-meta max-w-xs px-3 py-3">
+                  {run.errorMessage
+                    ? <details className="group"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{run.errorMessage}</summary></details>
+                    : "—"}
+                </td>
               </tr>
             ))}
             {runs?.items.length === 0 && !isLoading && <tr><td colSpan={5} className="px-3 py-8 text-center text-sm text-[var(--muted)]">Henüz yedekleme kaydı yok.</td></tr>}

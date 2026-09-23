@@ -16,6 +16,28 @@ const ROLE_OPTIONS: { role: LoginRole; title: string; description: string; icon:
   { role: "Guardian", title: "Veliyim", description: "Ders ve ödeme bildirimlerini takip ederim", icon: "students", color: "#2b918d" },
 ];
 
+const STAFF_OPTIONS = ROLE_OPTIONS.filter((option) => option.role !== "Guardian");
+const GUARDIAN_OPTION = ROLE_OPTIONS.find((option) => option.role === "Guardian");
+
+function roleCardClass(active: boolean) {
+  return `pressable flex min-h-[4rem] w-full items-center gap-3 rounded-xl border px-3 text-left shadow-[0_2px_8px_rgba(45,37,31,.025)] ${active ? "border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[#e0c39d]"}`;
+}
+
+function RoleCardContent({ option }: { option: (typeof ROLE_OPTIONS)[number] }) {
+  return (
+    <>
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ color: option.color, backgroundColor: `${option.color}18` }}>
+        <Icon name={option.icon} className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold">{option.title}</span>
+        <span className="text-meta mt-0.5 block leading-snug">{option.description}</span>
+      </span>
+      <Icon name="chevron" className="h-4 w-4 text-[var(--muted)]" />
+    </>
+  );
+}
+
 const DEMO_PASSWORD = "AbderaDemo2026!";
 const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 const DEMO_EMAILS: Record<StaffRole, string> = {
@@ -38,6 +60,7 @@ function LoginPageContent() {
   const { destination, isResolving } = useSessionDestination();
   const shouldChooseRole = searchParams.get("chooseRole") === "1";
   const emailRef = useRef<HTMLInputElement>(null);
+  const roleRefs = useRef<Partial<Record<StaffRole, HTMLButtonElement | null>>>({});
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
   const [email, setEmail] = useState(DEMO_ENABLED ? DEMO_EMAILS.Admin : "");
   const [password, setPassword] = useState(DEMO_ENABLED ? DEMO_PASSWORD : "");
@@ -78,6 +101,23 @@ function LoginPageContent() {
     requestAnimationFrame(() => emailRef.current?.focus());
   }
 
+  // WAI-ARIA radyo grubu: oklar seçimi değiştirir ve odağı yeni seçili seçeneğe taşır.
+  function handleRoleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1
+      : event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1
+        : 0;
+    if (!step) return;
+    event.preventDefault();
+    const roles = STAFF_OPTIONS.map((option) => option.role as StaffRole);
+    const currentIndex = Math.max(0, roles.indexOf(selectedRole as StaffRole));
+    const next = roles[(currentIndex + step + roles.length) % roles.length]!;
+    setSelectedRole(next);
+    setError(null);
+    setEmail(DEMO_ENABLED ? DEMO_EMAILS[next] : "");
+    setPassword(DEMO_ENABLED ? DEMO_PASSWORD : "");
+    roleRefs.current[next]?.focus();
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (selectedRole === "Guardian") return; // form zaten gizli; tip daraltması için.
@@ -101,30 +141,33 @@ function LoginPageContent() {
             <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Rolüne göre sana özel çalışma alanına yönlendirilirsin.</p>
           </div>
 
-          <div className="space-y-2.5" role="radiogroup" aria-label="Giriş rolü">
-            {ROLE_OPTIONS.map((option) => {
+          {/* Personel rolleri gerçek bir radyo grubu (ok tuşlarıyla gezilir, yalnızca seçili
+              olan Tab durağıdır). "Veliyim" seçim değil, ayrı bir giriş ekranına geçiş olduğu
+              için grubun dışında sıradan bir düğme. */}
+          <div className="space-y-2.5" role="radiogroup" aria-label="Giriş rolü" onKeyDown={handleRoleKeyDown}>
+            {STAFF_OPTIONS.map((option) => {
               const active = selectedRole === option.role;
               return (
                 <button
                   key={option.role}
+                  ref={(element) => { roleRefs.current[option.role as StaffRole] = element; }}
                   type="button"
                   role="radio"
                   aria-checked={active}
+                  tabIndex={active ? 0 : -1}
                   onClick={() => chooseRole(option.role)}
-                  className={`pressable flex min-h-[4rem] w-full items-center gap-3 rounded-xl border px-3 text-left shadow-[0_2px_8px_rgba(45,37,31,.025)] ${active ? "border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[#e0c39d]"}`}
+                  className={roleCardClass(active)}
                 >
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl" style={{ color: option.color, backgroundColor: `${option.color}18` }}>
-                    <Icon name={option.icon} className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold">{option.title}</span>
-                    <span className="text-meta mt-0.5 block leading-snug">{option.description}</span>
-                  </span>
-                  <Icon name="chevron" className="h-4 w-4 text-[var(--muted)]" />
+                  <RoleCardContent option={option} />
                 </button>
               );
             })}
           </div>
+          {GUARDIAN_OPTION && (
+            <button type="button" onClick={() => chooseRole("Guardian")} className={`mt-2.5 ${roleCardClass(false)}`}>
+              <RoleCardContent option={GUARDIAN_OPTION} />
+            </button>
+          )}
 
           {selectedRole !== "Guardian" && (
             <form onSubmit={handleSubmit} className="mt-7">

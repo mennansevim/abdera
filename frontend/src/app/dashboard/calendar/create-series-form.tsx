@@ -33,7 +33,7 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
   const { data: enrollments } = useEnrollments(studentId);
   const { data: teachers } = useTeachers();
   const { data: instruments } = useInstruments();
-  const { data: lessons } = useCalendar(range.from, range.to);
+  const { data: lessons, isLoading: lessonsLoading } = useCalendar(range.from, range.to);
 
   const [enrollmentId, setEnrollmentId] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(45);
@@ -52,7 +52,10 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
   const teacher = teachers?.find((item) => item.id === enrollment?.teacherId);
   const instrument = instruments?.find((item) => item.id === enrollment?.instrumentId);
   const { data: availability, isLoading: availabilityLoading } = useTeacherAvailability(enrollment?.teacherId ?? "");
-  const suggestions = enrollment ? findRecurringSlots({ effectiveFrom, durationMinutes, teacherId: enrollment.teacherId, studentId, availability: availability ?? [], lessons: lessons ?? [] }) : [];
+  // Takvim henüz yüklenmemişken boş ders listesiyle öneri üretmek, dolu saatleri boş gibi
+  // gösterirdi; tarama bitene kadar öneri listesi boş kalır.
+  const scanning = availabilityLoading || lessonsLoading;
+  const suggestions = enrollment && !scanning ? findRecurringSlots({ effectiveFrom, durationMinutes, teacherId: enrollment.teacherId, studentId, availability: availability ?? [], lessons: lessons ?? [] }) : [];
   const manualMode = isTeacher || showManual;
 
   async function handleSubmit(event: FormEvent) {
@@ -136,8 +139,8 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
 
       {enrollment && !manualMode && (
         <section className="rounded-2xl border border-[var(--line)] p-3 sm:p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-meta font-bold">Önerilen saatler</p>{availabilityLoading && <span className="text-meta">Takvim taranıyor…</span>}</div>
-          {suggestions.length ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{suggestions.map((slot, index) => { const active = (selectedSlot ?? suggestions[0])?.start.getTime() === slot.start.getTime(); return <button key={slot.start.toISOString()} type="button" onClick={() => setSelectedSlot(slot)} aria-pressed={active} className={`pressable flex min-h-16 items-center gap-3 rounded-xl border p-3 text-left ${active ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-sm" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold ${active ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--brand-strong)]"}`}>{index + 1}</span><span><span className="block text-xs font-bold">{DAY_NAMES_TR[DAY_KEYS[slot.start.getDay()]!]} · {hhmm(slot.start)}</span><span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">{slot.reason}</span></span></button>; })}</div> : <div className="rounded-xl bg-[var(--warning-soft)] px-3 py-3 text-xs font-semibold text-[var(--warning-strong)]">Bu aralıkta düzenli boşluk bulunamadı. Özel saat belirleyebilir veya başlangıç tarihini değiştirebilirsin.</div>}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><p className="text-meta font-bold">Önerilen saatler</p>{scanning && <span className="text-meta">Takvim taranıyor…</span>}</div>
+          {scanning ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-16 rounded-xl" />)}</div> : suggestions.length ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{suggestions.map((slot, index) => { const active = (selectedSlot ?? suggestions[0])?.start.getTime() === slot.start.getTime(); return <button key={slot.start.toISOString()} type="button" onClick={() => setSelectedSlot(slot)} aria-pressed={active} className={`pressable flex min-h-16 items-center gap-3 rounded-xl border p-3 text-left ${active ? "border-[var(--brand)] bg-[var(--brand-soft)] shadow-sm" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-bold ${active ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--brand-strong)]"}`}>{index + 1}</span><span><span className="block text-xs font-bold">{DAY_NAMES_TR[DAY_KEYS[slot.start.getDay()]!]} · {hhmm(slot.start)}</span><span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">{slot.reason}</span></span></button>; })}</div> : <div className="rounded-xl bg-[var(--warning-soft)] px-3 py-3 text-xs font-semibold text-[var(--warning-strong)]">Bu aralıkta düzenli boşluk bulunamadı. Özel saat belirleyebilir veya başlangıç tarihini değiştirebilirsin.</div>}
         </section>
       )}
 
@@ -145,7 +148,7 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
         <div className="grid min-w-0 gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:grid-cols-2">
           <fieldset className="min-w-0">
             <legend className="form-label">Gün</legend>
-            <div className="mt-1 grid grid-cols-7 gap-1" role="radiogroup" aria-label="Ders günü">
+            <div className="mt-1 grid grid-cols-4 gap-1.5 sm:grid-cols-7" role="radiogroup" aria-label="Ders günü">
               {WEEKDAY_ORDER.map((day) => {
                 const active = manualDay === day;
                 return <button key={day} type="button" role="radio" aria-checked={active} onClick={() => setManualDay(day)} className={`pressable grid min-h-11 place-items-center rounded-xl border px-1 text-xs font-bold ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-sm" : "border-[var(--line)] bg-white text-[var(--foreground)] hover:border-[var(--brand)]"}`}>{DAY_SHORT_TR[day]}</button>;
@@ -159,7 +162,10 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
       {summary && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--success-strong)]">{summary}</p>}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] pt-4">
+      {/* Uzun formda gönder butonu ekranın altında kaybolmasın: Modal gövdesinin (px-4 py-4
+          sm:px-5) ve hızlı ekleme penceresinin aynı dolgusuna göre yapışkan alt şerit
+          (FormActions ile aynı kalıp). */}
+      <div className="sticky bottom-[-1rem] z-10 -mx-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:-mx-5 sm:px-5">
         {!isTeacher && (
           <button type="button" onClick={() => setShowManual((value) => !value)} className="btn btn-quiet">
             {showManual ? "Akıllı önerilere dön" : "Özel saat belirle"}

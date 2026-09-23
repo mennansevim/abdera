@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
@@ -17,6 +17,10 @@ import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 
 const HOUR_HEIGHT_REM = 3.6;
+// Ders kartının CSS minimum yüksekliği ve dakika karşılığı - çakışma yerleşimi kısa dersi bu
+// süre kadar uzun sayar, yoksa kart bir sonraki dersin üstüne biner (lib/week-grid-layout.ts).
+const LESSON_CARD_MIN_HEIGHT_REM = 1.85;
+const LESSON_CARD_MIN_MINUTES = Math.ceil((LESSON_CARD_MIN_HEIGHT_REM / HOUR_HEIGHT_REM) * 60);
 
 // Ders bloklarındaki katılım noktası ve haftalık ızgara başlığındaki gösterge için ortak sözlük -
 // teacher-today-lessons.tsx'teki StatusBadge ile aynı terimler (Geliyor/Cevap yok/Gelmiyor).
@@ -71,7 +75,7 @@ export default function DashboardPage() {
 function AdminDashboard({ email }: { email: string }) {
   const [weekStart, setWeekStart] = useState(() => weekStartFor(new Date()));
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
-  const { data: lessons, isLoading: lessonsLoading } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
+  const { data: lessons, isLoading: lessonsLoading, isError: lessonsError, isFetching: lessonsFetching, refetch: refetchLessons } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
   const { data: today, isLoading: statsLoading } = useDashboardToday();
   const { data: receivables } = useReceivables();
   const { data: failedNotifications } = useNotifications("Failed", 1, 1);
@@ -91,7 +95,7 @@ function AdminDashboard({ email }: { email: string }) {
       </section>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <WeeklySchedule weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
+        <WeeklySchedule weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} error={lessonsError} retrying={lessonsFetching} onRetry={() => void refetchLessons()} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
         <AdminAttentionRail lessons={lessons ?? []} birthdays={today?.upcomingBirthdays} />
       </div>
     </>
@@ -122,7 +126,7 @@ function DashboardTopbar({ email }: { email: string }) {
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1 xl:w-[19rem] xl:flex-none">
           <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} className="field min-h-11 pl-10 pr-4 text-xs" placeholder="Öğrenci veya öğretmen ara…" aria-label="Öğrenci veya öğretmen ara" />
+          <input type="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} className="field min-h-11 pl-10 pr-4 text-xs" placeholder="Öğrenci veya öğretmen ara…" aria-label="Öğrenci veya öğretmen ara" />
           {normalized && (
             <div className="app-card absolute right-0 top-[calc(100%+.45rem)] z-20 w-full min-w-[17rem] overflow-hidden p-1.5">
               {results.length ? results.map((result) => (
@@ -133,9 +137,9 @@ function DashboardTopbar({ email }: { email: string }) {
             </div>
           )}
         </div>
-        <Link href="/dashboard/notifications" className="pressable relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 border-[var(--line)] bg-white text-[var(--brand-strong)] shadow-sm" aria-label="Bildirimleri aç">
+        <Link href="/dashboard/notifications" className="pressable relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 border-[var(--line)] bg-white text-[var(--brand-strong)] shadow-sm" aria-label={failedNotifications?.totalCount ? `Bildirimleri aç, ${failedNotifications.totalCount} gönderilemeyen bildirim` : "Bildirimleri aç"}>
           <Icon name="bell" className="h-[1.1rem] w-[1.1rem]" />
-          {!!failedNotifications?.totalCount && <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--danger)] ring-2 ring-white" />}
+          {!!failedNotifications?.totalCount && <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--danger)] ring-2 ring-white" aria-hidden="true" />}
         </Link>
       </div>
     </header>
@@ -207,7 +211,7 @@ const RSVP_LEGEND: { color: string; label: string }[] = [
   { color: "var(--danger)", label: "Gelmiyor" },
 ];
 
-function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; onWeekChange: (offset: number) => void }) {
+function WeeklySchedule({ weekStart, lessons: allLessons, loading, error, retrying, onRetry, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; error: boolean; retrying: boolean; onRetry: () => void; onWeekChange: (offset: number) => void }) {
   const weekdays = Array.from({ length: 5 }, (_, index) => addDays(weekStart, index));
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bu eski kaydı ızgarada göstermeye devam
@@ -224,21 +228,25 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, onWeekChange 
         <div>
           <div className="flex items-center gap-2.5">
             <h2 className="text-title">Bu Hafta</h2>
-            <Link href="/dashboard/calendar" className="text-[.75rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
+            <Link href="/dashboard/calendar" className="inline-flex min-h-11 items-center text-[.75rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
           </div>
           <p className="text-meta mt-0.5">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p>
         </div>
-        <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 lg:flex">
-          {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} />{item.label}</span>)}
+        <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 md:flex">
+          {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} aria-hidden="true" />{item.label}</span>)}
         </div>
         <div className="flex items-center gap-1.5">
-          <button onClick={() => onWeekChange(-1)} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
-          <button onClick={() => onWeekChange(0)} className="pressable min-h-10 rounded-xl border border-[var(--line)] bg-white px-3 text-[.75rem] font-semibold hover:bg-[var(--surface-muted)]">Bu hafta</button>
-          <button onClick={() => onWeekChange(1)} className="pressable grid h-10 w-10 place-items-center rounded-xl border border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onWeekChange(-1)} className="icon-btn icon-btn-quiet" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
+          <button type="button" onClick={() => onWeekChange(0)} className="btn btn-quiet px-3 text-[.75rem] font-semibold">Bu hafta</button>
+          <button type="button" onClick={() => onWeekChange(1)} className="icon-btn icon-btn-quiet" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
         </div>
       </div>
 
-      {loading ? <ScheduleSkeleton /> : (
+      {/* Hata boş günler gibi görünmesin ("Planlanmış ders yok" yanıltıcı olur) - takvim
+          sayfasındaki hata kutusuyla aynı dil. */}
+      {loading ? <ScheduleSkeleton /> : error ? (
+        <div className="grid min-h-48 place-items-center border-t border-[var(--line)] p-8 text-center"><div><p className="text-sm font-bold">Ders programı yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={onRetry} disabled={retrying} className="btn btn-quiet mt-3 disabled:opacity-50">{retrying ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>
+      ) : (
         <>
           {/* Izgara görünümü ≥768px'te (docs/14-ui-design-prompt.md B3.1) - önceden yalnızca ≥1280px'te
               açılıyordu, 768-1279 arasında istenmeyen bir ajanda görünümüne düşüyordu. */}
@@ -285,7 +293,7 @@ function TimeLabels({ hourWindow }: { hourWindow: { startHour: number; endHour: 
 
 function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; lessons: CalendarLesson[]; colors: Map<string, InstrumentTone>; hourWindow: { startHour: number; endHour: number }; onOpen: (lesson: CalendarLesson) => void }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
-  const layout = useMemo(() => layoutDayLessons(entries, hourWindow), [entries, hourWindow]);
+  const layout = useMemo(() => layoutDayLessons(entries, hourWindow, { minDurationMinutes: LESSON_CARD_MIN_MINUTES }), [entries, hourWindow]);
   const isToday = day.toDateString() === new Date().toDateString();
   const totalHours = hourWindow.endHour - hourWindow.startHour;
   return (
@@ -309,9 +317,9 @@ function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; le
             onClick={() => onOpen(lesson)}
             title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`}
             className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm hover:z-20 hover:shadow-md ${isCancelled ? "opacity-55" : ""}`}
-            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: "1.85rem", background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
+            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem`, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
-            {dot.label && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
+            {dot.label && <><span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-hidden="true" /><span className="sr-only">Katılım: {dot.label}</span></>}
             <span className={`block text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
             <span className={`mt-0.5 block truncate text-[.75rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
             <span className="block truncate text-[.75rem] opacity-75">{lesson.instrumentName}</span>
@@ -335,7 +343,7 @@ function AgendaLesson({ lesson, tone, onOpen }: { lesson: CalendarLesson; tone: 
         <span className={`block truncate text-xs font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
         <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
       </span>
-      {dot.label && <span className="shrink-0 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-label={dot.label} />}
+      {dot.label && <><span className="shrink-0 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-hidden="true" /><span className="sr-only">Katılım: {dot.label}</span></>}
     </button>
   );
 }
@@ -345,11 +353,27 @@ function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone
   const end = new Date(lesson.endAt);
   const dot = rsvpDotTone(lesson);
 
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    onCloseRef.current = onClose;
   }, [onClose]);
+  // Arka plan kaydırması kilitlenir, Escape kapatır, odak açılışta Kapat'a taşınıp kapanışta
+  // önceki öğeye döner. onClose her render'da yeni fonksiyon geldiği için ref'ten okunur -
+  // effect yalnızca açılış/kapanışta çalışır.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = overflow;
+      previouslyFocused?.focus();
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-[#2b1a10]/40 p-4 backdrop-blur-[2px]" onClick={onClose}>
@@ -359,7 +383,7 @@ function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone
             <p className="truncate text-sm font-bold" style={{ color: tone.text }}>{lesson.studentName}</p>
             <p className="mt-0.5 text-[.75rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</p>
           </div>
-          <button onClick={onClose} className="pressable grid h-8 w-8 shrink-0 place-items-center rounded-lg hover:bg-black/5" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
+          <button ref={closeButtonRef} type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
         <div className="space-y-2 p-4 text-sm">
           <p className="flex items-center gap-2 text-[var(--foreground)]"><Icon name="clock" className="h-4 w-4 text-[var(--muted)]" />{start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · {start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</p>
@@ -375,7 +399,7 @@ function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone
 }
 
 function ScheduleSkeleton() {
-  return <div className="grid h-[21.5rem] grid-cols-5 gap-3 border-t border-[var(--line)] p-4">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton rounded-xl" />)}</div>;
+  return <div className="grid gap-3 border-t border-[var(--line)] p-4 max-md:[&>*]:h-14 md:h-[21.5rem] md:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton rounded-xl" />)}</div>;
 }
 
 function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[]; birthdays?: UpcomingBirthday[] }) {
@@ -410,7 +434,7 @@ function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[];
       )}
 
       {hasRequests && <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Bekleyen Değişiklik Talepleri</h2><Link href="/dashboard/change-requests" className="text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Bekleyen Değişiklik Talepleri</h2><Link href="/dashboard/change-requests" className="inline-flex min-h-11 items-center text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
         <div className="divide-y divide-[var(--line)]">
           {requests?.slice(0, 3).map((request) => {
             const lesson = lessons.find((item) => item.id === request.lessonId);
@@ -420,7 +444,7 @@ function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[];
       </section>}
 
       {hasBankItems && <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Gözden Geçirilmesi Gereken Banka İşlemleri</h2><Link href="/dashboard/banking" className="text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Gözden Geçirilmesi Gereken Banka İşlemleri</h2><Link href="/dashboard/banking" className="inline-flex min-h-11 items-center text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
         <div className="divide-y divide-[var(--line)]">
           {bankItems?.items.map((item) => (
             <Link key={item.id} href="/dashboard/banking" className="pressable flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
@@ -460,7 +484,7 @@ function UpcomingBirthdaysRail({ birthdays }: { birthdays?: UpcomingBirthday[] }
       {!birthdays?.length && <EmptyRail text="Yaklaşan doğum günü yok." />}
       <div className="divide-y divide-[var(--line)]">
         {birthdays?.slice(0, 5).map((item) => (
-          <Link key={item.studentId} href={`/dashboard/students#student-${item.studentId}`} className="pressable flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+          <Link key={item.studentId} href={`/dashboard/students#student-${item.studentId}`} className="pressable flex min-h-11 items-center gap-3 py-3 first:pt-0 last:pb-0">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name="cake" className="h-4 w-4" /></span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[.75rem] font-bold">{item.studentName}</span>
@@ -489,14 +513,15 @@ function TeacherDashboard({ email }: { email: string }) {
         <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">{selectedIsToday ? "Bugün" : selectedDate.toLocaleDateString("tr-TR", { weekday: "long" })}</h1><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(selectedDate)}</p></div>
         <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
       </header>
-      {/* Gün şeridi 390px'te taşarsa yatay kaydırılabilir (docs/14-ui-design-prompt.md C) - 7 gün
-          sabit grid-cols-7 ile önceden dar ekranda okunmaz hale sıkışıyordu. */}
-      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] sm:grid sm:grid-cols-7 sm:overflow-visible" style={{ scrollSnapType: "x proximity" }}>
+      {/* Gün şeridi: gizli kaydırma çubuklu yatay şerit 360/390px'te son günleri ekran dışına
+          itiyor ve kaydırılabildiği fark edilmiyordu. Hücreler min-w-0 ile daralabilen 7 sütunlu
+          ızgarada ~328px'e sığar (hücre başı ~43px, kısa gün adı + tarih). */}
+      <div className="mb-3 grid grid-cols-7 gap-1 sm:gap-1.5">
         {weekDays.map((day) => {
           const active = day.toDateString() === selectedDate.toDateString();
           const isToday = day.toDateString() === new Date().toDateString();
           return (
-            <button key={day.toISOString()} onClick={() => setSelectedDate(day)} style={{ scrollSnapAlign: "start" }} className={`pressable relative flex min-h-[3.2rem] w-12 shrink-0 flex-col items-center justify-center rounded-xl border text-[.75rem] sm:w-auto ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(168,78,31,.2)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>
+            <button key={day.toISOString()} type="button" onClick={() => setSelectedDate(day)} aria-pressed={active} className={`pressable relative flex min-h-[3.2rem] min-w-0 flex-col items-center justify-center rounded-xl border text-[.75rem] ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_7px_16px_rgba(168,78,31,.2)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>
               <span>{day.toLocaleDateString("tr-TR", { weekday:"short" }).replace(".","")}</span>
               <span className="mt-1 text-[.75rem] font-bold">{day.getDate()}</span>
               {isToday && !active && <span className="absolute bottom-1.5 h-1 w-1 rounded-full bg-[var(--brand)]" />}

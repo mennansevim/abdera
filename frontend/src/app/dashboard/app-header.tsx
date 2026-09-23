@@ -151,7 +151,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               <span className="block text-[.75rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
             </span>
             {me.role === "Teacher" && <NotificationBell />}
-            <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap">
+            <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-11 w-11 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap">
               <Icon name="logout" className="h-4 w-4" />
             </button>
           </div>

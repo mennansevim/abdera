@@ -44,8 +44,8 @@ export function StudentDetail({
   const [editingStudent, setEditingStudent] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
   const [programEnrollmentId, setProgramEnrollmentId] = useState<string | null>(null);
-  const { data: guardians } = useStudentGuardians(canManage ? studentId : "");
-  const { data: enrollments } = useEnrollments(studentId);
+  const { data: guardians, isLoading: guardiansLoading } = useStudentGuardians(canManage ? studentId : "");
+  const { data: enrollments, isLoading: enrollmentsLoading } = useEnrollments(studentId);
   // "Her hafta Pazartesi 18:00 piyano" - kurs satırının altında haftalık program görünür ve
   // buradan taşınabilir (kullanıcı isteği). Liste kurs kaydına göre eşlenir.
   const { data: lessonSeries } = useStudentLessonSeries(studentId);
@@ -73,7 +73,7 @@ export function StudentDetail({
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span>{isAdmin && student.siblingDiscount && <span className="ml-1.5 rounded-full bg-[var(--success-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">Kardeş indirimi</span>}</p>
-        <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet h-9 min-h-9 text-xs"><Icon name="activity" className="h-3.5 w-3.5" /> Gelişim</Link>
+        <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet text-xs"><Icon name="activity" className="h-3.5 w-3.5" /> Gelişim</Link>
         {canManage && <RowMenu label={`${fullName} için işlemler`}>{(close) => <>
           {activeEnrollments.length > 0 && <RowMenuItem icon="calendar" onClick={() => { close(); setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__"); }}>Ders programı</RowMenuItem>}
           <RowMenuItem icon="pencil" onClick={() => { close(); setEditingStudent(true); }}>Bilgileri düzenle</RowMenuItem>
@@ -88,8 +88,8 @@ export function StudentDetail({
         {canManage && (
           <section className="app-card relative">
             <div className="flex min-h-12 items-center gap-2 border-b border-[var(--line)] px-3 py-2">
-              <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Veliler</h3><p className="text-meta">{guardians?.length ?? 0} kayıtlı kişi</p></div>
-              <button type="button" onClick={() => setShowGuardianForm(true)} className="pressable min-h-9 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Veli</button>
+              <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Veliler</h3><p className="text-meta">{guardiansLoading ? "Yükleniyor…" : `${guardians?.length ?? 0} kayıtlı kişi`}</p></div>
+              <button type="button" onClick={() => setShowGuardianForm(true)} className="pressable min-h-11 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Veli</button>
             </div>
             <ul className="divide-y divide-[var(--line)]">
               {guardians?.map((guardian) => (
@@ -113,6 +113,7 @@ export function StudentDetail({
                   </RowMenu>
                 </li>
               ))}
+              {guardiansLoading && <li className="space-y-2 px-3 py-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</li>}
               {guardians?.length === 0 && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz veli eklenmemiş.</li>}
             </ul>
           </section>
@@ -120,8 +121,8 @@ export function StudentDetail({
 
         <section className="app-card relative">
           <div className="flex min-h-12 items-center gap-2 border-b border-[var(--line)] px-3 py-2">
-            <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Kurslar</h3><p className="text-meta">{activeEnrollments.length} aktif kayıt</p></div>
-            {canManage && <button type="button" onClick={() => setShowEnrollmentForm(true)} className="pressable min-h-9 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Kurs</button>}
+            <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Kurslar</h3><p className="text-meta">{enrollmentsLoading ? "Yükleniyor…" : `${activeEnrollments.length} aktif kayıt`}</p></div>
+            {canManage && <button type="button" onClick={() => setShowEnrollmentForm(true)} className="pressable min-h-11 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Kurs</button>}
           </div>
           <ul className="divide-y divide-[var(--line)]">
             {activeEnrollments.map((enrollment) => {
@@ -141,7 +142,8 @@ export function StudentDetail({
                 />
               );
             })}
-            {!activeEnrollments.length && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz aktif kurs yok.</li>}
+            {enrollmentsLoading && <li className="space-y-2 px-3 py-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</li>}
+            {!enrollmentsLoading && enrollments && !activeEnrollments.length && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz aktif kurs yok.</li>}
           </ul>
         </section>
       </div>
@@ -292,7 +294,7 @@ function EditGuardianForm({ studentId, guardian, onClose }: { studentId: string;
         <label className="form-label">Ad<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required className="field text-sm" /></label>
         <label className="form-label">Soyad<input value={lastName} onChange={(event) => setLastName(event.target.value)} required className="field text-sm" /></label>
       </div>
-      <label className="form-label">Telefon<input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} required className="field text-sm" /></label>
+      <label className="form-label">Telefon<input type="tel" inputMode="tel" autoComplete="tel" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} required className="field text-sm" /></label>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Değişiklikleri kaydet" pending={updateGuardian.isPending} />
     </form>
@@ -361,7 +363,7 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
           <span className="text-meta">Haftalık program girilmemiş.</span>
         )}
         {canManage && (
-          <button type="button" onClick={() => setEditingSchedule(true)} className="pressable min-h-8 rounded-lg px-2 text-[.75rem] font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
+          <button type="button" onClick={() => setEditingSchedule(true)} className="pressable min-h-11 rounded-lg px-2 text-[.75rem] font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
             {series ? "Değiştir" : "Program gir"}
           </button>
         )}
@@ -386,9 +388,9 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
       {confirming && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2">
           <p className="text-[.75rem] font-semibold text-[var(--danger-strong)]">Kurs sonlandırılsın mı? Gelecekteki dersler durdurulur.</p>
-          <span className="flex gap-1.5">
-            <button type="button" onClick={() => setConfirming(false)} className="pressable min-h-8 rounded-lg bg-white px-2.5 text-[.75rem] font-bold">Vazgeç</button>
-            <button type="button" onClick={remove} disabled={endEnrollment.isPending} className="pressable min-h-8 rounded-lg bg-[var(--danger)] px-2.5 text-[.75rem] font-bold text-white disabled:opacity-50">
+          <span className="flex gap-2">
+            <button type="button" onClick={() => setConfirming(false)} className="btn btn-quiet text-xs">Vazgeç</button>
+            <button type="button" onClick={remove} disabled={endEnrollment.isPending} className="btn bg-[var(--danger)] text-xs text-white hover:bg-[var(--danger-strong)] disabled:opacity-50">
               {endEnrollment.isPending ? "Sonlandırılıyor…" : "Sonlandır"}
             </button>
           </span>
@@ -518,7 +520,7 @@ function AddGuardianForm({ studentId, open, onClose }: { studentId: string; open
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="form-label">Ad<input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field text-sm" /></label>
           <label className="form-label">Soyad<input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field text-sm" /></label>
-          <label className="form-label">Telefon<input placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="field text-sm" /></label>
+          <label className="form-label">Telefon<input type="tel" inputMode="tel" autoComplete="tel" placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="field text-sm" /></label>
           <label className="form-label">Yakınlık<input placeholder="Anne / baba" value={relationship} onChange={(e) => setRelationship(e.target.value)} className="field text-sm" /></label>
         </div>
         {error && <FormMessage tone="error">{error}</FormMessage>}

@@ -165,14 +165,14 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
     <section className="app-card overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/30 px-4 py-3">
         <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{visibleStudents.length}</strong> öğrenci gösteriliyor</p>
-        <label className="min-w-[9rem]"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-9 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
-        <label className="relative min-w-[12rem]"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-9 pl-9 text-xs font-semibold" /></label>
+        <label className="min-w-0 flex-1 basis-40"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-11 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+        <label className="relative min-w-0 flex-1 basis-40"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-11 pl-9 text-xs font-semibold" /></label>
         <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
       </div>
 
       <div className="hidden grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Kurslar</span><span>Bu ay</span><span className="text-right">İşlem</span></div>
       {isLoading && <div className="space-y-2 p-4">{[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-16 rounded-xl" />)}</div>}
-      {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Öğrenci listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="pressable mt-3 min-h-9 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--foreground)] disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
+      {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Öğrenci listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
       {!isLoading && !isError && visibleStudents.length > 0 && <ul className="divide-y divide-[var(--line)]">{visibleStudents.map(({ student, instruments }) => <StudentRow key={student.id} student={student} instruments={instruments} thisMonthDues={duesByStudentThisPeriod.get(student.id) ?? []} />)}</ul>}
       {!isLoading && !isError && !visibleStudents.length && <div className="grid min-h-52 place-items-center p-8 text-center"><div>
         <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="wallet" className="h-5 w-5" /></span>
@@ -212,7 +212,7 @@ function StudentRow({ student, instruments, thisMonthDues }: { student: Student;
       <strong className="min-w-0 truncate text-sm">{student.firstName} {student.lastName}</strong>
       <span className="text-meta truncate">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
       <span className={`inline-flex w-fit rounded-full px-2 py-1 text-[.75rem] font-bold ${hasRecord ? STATUS_TONES[stateStatus] : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{stateLabel}</span>
-      <div className="flex justify-end"><button type="button" onClick={() => setShowDetail((visible) => !visible)} aria-expanded={showDetail} className="pressable inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--line)] bg-white px-3 text-[.75rem] font-bold text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
+      <div className="flex justify-end"><button type="button" onClick={() => setShowDetail((visible) => !visible)} aria-expanded={showDetail} className="btn btn-quiet text-xs">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
     </div>
     {showDetail && <div className="px-4 pb-4"><PaymentHistoryCollapse studentId={student.id} /></div>}
   </li>;
@@ -347,10 +347,10 @@ function QuickCollectPanel({
       <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="form-label">İlk dönem
-            <input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required aria-invalid={!hasStartPeriod} className="field min-h-10 bg-white text-xs" />
+            <input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required aria-invalid={!hasStartPeriod} className="field min-h-11 bg-white text-xs" />
           </label>
           <label className="form-label">Kaç aylık ödeme?
-            <input type="number" min={1} max={24} value={months} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} className="field min-h-10 bg-white text-xs" />
+            <input type="number" inputMode="numeric" min={1} max={24} value={months} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} className="field min-h-11 bg-white text-xs" />
           </label>
         </div>
 
@@ -396,7 +396,7 @@ function QuickCollectPanel({
       </div>
     )}
 
-    {studentId && <button type="button" onClick={() => onOpenFullAccount(studentId)} className="text-[.75rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Farklı dönem eklemek veya indirimi değiştirmek için tam hesabı aç →</button>}
+    {studentId && <button type="button" onClick={() => onOpenFullAccount(studentId)} className="inline-flex min-h-11 items-center text-left text-[.75rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Farklı dönem eklemek veya indirimi değiştirmek için tam hesabı aç →</button>}
   </div>;
 }
 
@@ -459,16 +459,16 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   return <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div><p className="text-micro text-[var(--brand-strong)]">Aidat takvimi</p><p className="text-meta mt-0.5">Bir aya dokunarak ödeme ayrıntısını gör, ödenmemişse tahsilat al.</p></div>
-      {!!years.length && <div className="flex items-center gap-1" aria-label="Ödeme takvimi yılı">
-        <button type="button" onClick={() => selectYear(activeYearIndex - 1)} disabled={activeYearIndex <= 0} className="pressable grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] bg-white text-[var(--muted)] disabled:opacity-35" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-3.5 w-3.5" /></button>
+      {!!years.length && <div className="flex items-center gap-1" role="group" aria-label="Ödeme takvimi yılı">
+        <button type="button" onClick={() => selectYear(activeYearIndex - 1)} disabled={activeYearIndex <= 0} className="icon-btn icon-btn-quiet disabled:opacity-35" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-3.5 w-3.5" /></button>
         <strong className="min-w-14 text-center text-xs tabular-nums">{activeYear}</strong>
-        <button type="button" onClick={() => selectYear(activeYearIndex + 1)} disabled={activeYearIndex < 0 || activeYearIndex >= years.length - 1} className="pressable grid h-8 w-8 place-items-center rounded-lg border border-[var(--line)] bg-white text-[var(--muted)] disabled:opacity-35" aria-label="Sonraki yıl"><Icon name="arrow-right" className="h-3.5 w-3.5" /></button>
+        <button type="button" onClick={() => selectYear(activeYearIndex + 1)} disabled={activeYearIndex < 0 || activeYearIndex >= years.length - 1} className="icon-btn icon-btn-quiet disabled:opacity-35" aria-label="Sonraki yıl"><Icon name="arrow-right" className="h-3.5 w-3.5" /></button>
       </div>}
     </div>
     {isLoading && <div className="mt-2 space-y-1.5">{[1, 2].map((item) => <div key={item} className="skeleton h-9 rounded-lg" />)}</div>}
     {!isLoading && isError && <p className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">Ödeme geçmişi yüklenemedi.</p>}
     {!isLoading && !isError && !periods.length && <p className="text-meta mt-2">Bu öğrenci için kayıtlı bir aidat dönemi yok.</p>}
-    {!isLoading && !isError && periods.length > 0 && <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(22rem,1.15fr)_minmax(18rem,.85fr)]">
+    {!isLoading && !isError && periods.length > 0 && <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
       <section className="rounded-xl border border-[var(--line)] bg-white p-3" aria-label={`${activeYear} ödeme takvimi`}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {MONTHS_TR.map((monthName, monthIndex) => {
@@ -564,22 +564,22 @@ function ReceivablePeriodCard({
     }
   }
 
-  return <article className="rounded-xl border border-[var(--line)] p-3">
+  return <article className="@container rounded-xl border border-[var(--line)] p-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <span><strong className="block text-xs">{instrumentName}</strong><span className="text-meta mt-0.5 block">Vade {formatDay(receivable.dueDate)}</span></span>
       <span className="text-right"><strong className="block text-sm tabular-nums">{formatMoney(receivable.amount, receivable.currency)}</strong><span className={`text-[.75rem] font-bold ${remaining ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{remaining ? `${formatMoney(remaining, receivable.currency)} kaldı` : "Tamamı ödendi"}</span></span>
       {canCollect && <button type="button" onClick={() => setShowForm((visible) => !visible)} className="btn btn-primary">Tahsilat</button>}
     </div>
 
-    {/* İki sabit sütun (viewport genişliğine göre DEĞİL): bu form artık takvimin dar
-        "Seçili dönem" panelinin içinde render ediliyor - eski geniş satırdaki `sm:` kırılma
-        noktası burada panel ~18rem'e kadar daralabildiği için taşma yapıyordu. */}
-    {showForm && <form onSubmit={collect} className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
-      <label className="form-label">Tutar<input type="number" min={0.01} max={remaining} step={0.01} value={amount} onChange={resetValidity((event) => setAmount(Number(event.target.value)))} onInvalid={onInvalidTurkish} required className="field min-h-10 w-full bg-white text-xs" /></label>
-      <label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-10 w-full bg-white text-xs" /></label>
-      <label className="form-label col-span-2">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-10 w-full bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
-      <button type="submit" disabled={recordPayment.isPending} className="btn btn-primary col-span-2">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>
-      {error && <p role="alert" className="col-span-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+    {/* Sütun sayısı viewport'a göre DEĞİL, kartın kendi genişliğine göre (container query):
+        bu form takvimin dar "Seçili dönem" panelinin içinde render ediliyor - `sm:` kırılma
+        noktası panel daraldığında taşma yapıyordu, sabit iki sütun da 360px telefonda sığmıyordu. */}
+    {showForm && <form onSubmit={collect} className="mt-3 grid grid-cols-1 gap-2 @xs:grid-cols-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
+      <label className="form-label">Tutar<input type="number" inputMode="decimal" min={0.01} max={remaining} step={0.01} value={amount} onChange={resetValidity((event) => setAmount(Number(event.target.value)))} onInvalid={onInvalidTurkish} required className="field min-h-11 w-full bg-white text-xs" /></label>
+      <label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-11 w-full bg-white text-xs" /></label>
+      <label className="form-label @xs:col-span-2">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-11 w-full bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
+      <button type="submit" disabled={recordPayment.isPending} className="btn btn-primary @xs:col-span-2">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>
+      {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] @xs:col-span-2">{error}</p>}
     </form>}
 
     {!receivable.payments.length && <p className="mt-3 rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem] font-semibold text-[var(--muted)]">Henüz ödeme alınmadı.</p>}

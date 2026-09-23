@@ -92,8 +92,8 @@ export function DeleteStudentDialog({
                   {impact.payments} ödeme kaydı da silinecek · {money(impact.collectedAmount, impact.currency)}
                 </p>
                 <p className="text-meta mt-1">Bu, tahsil edilmiş paranın muhasebe geçmişidir. Silindikten sonra geri getirilemez.</p>
-                <label className="mt-2 flex items-start gap-2 text-xs font-semibold">
-                  <input type="checkbox" checked={acceptsMoneyLoss} onChange={(event) => setAcceptsMoneyLoss(event.target.checked)} className="mt-0.5" />
+                <label className="mt-2 flex min-h-11 items-center gap-2 text-xs font-semibold">
+                  <input type="checkbox" checked={acceptsMoneyLoss} onChange={(event) => setAcceptsMoneyLoss(event.target.checked)} className="h-5 w-5 shrink-0 accent-[var(--brand)]" />
                   <span>Tahsilat geçmişinin de silineceğini anlıyorum.</span>
                 </label>
               </div>
@@ -116,7 +116,7 @@ export function DeleteStudentDialog({
             type="button"
             onClick={confirm}
             disabled={deleteStudent.isPending || blocked || isLoading}
-            className="pressable min-h-11 rounded-xl bg-[var(--danger-strong)] px-4 text-sm font-bold text-white disabled:opacity-50"
+            className="btn bg-[var(--danger)] text-white hover:bg-[var(--danger-strong)] disabled:opacity-50"
           >
             {deleteStudent.isPending ? "Siliniyor…" : "Kalıcı olarak sil"}
           </button>
@@ -202,8 +202,8 @@ export function DeleteTeacherDialog({
                   {impact.affectedStudents} öğrencinin {impact.payments} ödeme kaydı silinecek · {money(impact.collectedAmount, impact.currency)}
                 </p>
                 <p className="text-meta mt-1">Yukarıdan bir öğretmen seçersen bu geçmiş korunur.</p>
-                <label className="mt-2 flex items-start gap-2 text-xs font-semibold">
-                  <input type="checkbox" checked={acceptsMoneyLoss} onChange={(event) => setAcceptsMoneyLoss(event.target.checked)} className="mt-0.5" />
+                <label className="mt-2 flex min-h-11 items-center gap-2 text-xs font-semibold">
+                  <input type="checkbox" checked={acceptsMoneyLoss} onChange={(event) => setAcceptsMoneyLoss(event.target.checked)} className="h-5 w-5 shrink-0 accent-[var(--brand)]" />
                   <span>Öğrencilerin tahsilat geçmişinin de silineceğini anlıyorum.</span>
                 </label>
               </div>
@@ -226,7 +226,7 @@ export function DeleteTeacherDialog({
             type="button"
             onClick={confirm}
             disabled={deleteTeacher.isPending || blocked || isLoading}
-            className="pressable min-h-11 rounded-xl bg-[var(--danger-strong)] px-4 text-sm font-bold text-white disabled:opacity-50"
+            className="btn bg-[var(--danger)] text-white hover:bg-[var(--danger-strong)] disabled:opacity-50"
           >
             {deleteTeacher.isPending ? "Siliniyor…" : reassignTo ? "Devret ve sil" : "Kalıcı olarak sil"}
           </button>

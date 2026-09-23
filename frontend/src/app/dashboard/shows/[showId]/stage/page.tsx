@@ -37,7 +37,7 @@ function ProgressBar({ value, total }: { value: number; total: number }) {
 function UpNextCard({ label, item }: { label: string; item: StageItem | null }) {
   return (
     <article className="min-w-0 flex-1 rounded-2xl border border-[#e9cfc0] bg-white/65 p-4 shadow-[0_10px_30px_rgba(126,65,45,.08)] backdrop-blur-md">
-      <p className="text-[.7rem] font-bold uppercase tracking-[.18em] text-[#9d5a4d]">{label}</p>
+      <p className="text-[.75rem] font-bold uppercase tracking-[.18em] text-[#9d5a4d]">{label}</p>
       {!item && <p className="mt-2 text-sm text-[#9a7c6f]">—</p>}
       {item && (
         <div className="mt-2 flex items-center gap-3">
@@ -119,7 +119,7 @@ function PerformerProgressStrip({ position, totalItems, groupName }: { position:
   const percent = totalItems > 0 ? Math.min(100, Math.round(((position + 1) / totalItems) * 100)) : 0;
   return (
     <div className="absolute inset-x-0 bottom-0 bg-[linear-gradient(180deg,rgba(255,250,246,0),rgba(255,250,246,.95)_42%)] px-[4cqw] pb-[1.4cqh] pt-[4.2cqh] backdrop-blur-[1px]">
-      <p className="truncate font-bold text-[#76483e]" style={{ fontSize: "1.75cqw" }}>
+      <p className="truncate font-bold text-[#76483e]" style={{ fontSize: "clamp(.75rem, 1.75cqw, 2.5rem)" }}>
         {groupName ? `${groupName} · ` : ""}{position + 1} / {totalItems} sıra
       </p>
       <div className="mt-[.7cqh] h-[1.2cqh] w-full overflow-hidden rounded-full bg-[#c47560]/20">
@@ -154,9 +154,9 @@ function TemplatedPerformerCard({ current, totalItems, template, fillHeight }: {
         className={`absolute text-center ${styles.performerDetails}`}
         style={{ left: `${template.details.x}%`, top: `${template.details.y}%`, width: `${template.details.w}%` }}
       >
-        <p className="truncate font-serif font-bold text-[#6f302e]" style={{ fontSize: "2.9cqw", lineHeight: 1.05 }}>{current.studentName}</p>
-        <p className={`mt-[1cqh] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "1.95cqw", lineHeight: 1.12 }}>{current.pieceTitle}</p>
-        {current.composer && <p className="mt-[.55cqh] truncate font-semibold text-[#775d55]" style={{ fontSize: "1.25cqw" }}>{current.composer}</p>}
+        <p className="truncate font-serif font-bold text-[#6f302e]" style={{ fontSize: "clamp(1rem, 2.9cqw, 4.5rem)", lineHeight: 1.05 }}>{current.studentName}</p>
+        <p className={`mt-[1cqh] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "clamp(.875rem, 1.95cqw, 3rem)", lineHeight: 1.12 }}>{current.pieceTitle}</p>
+        {current.composer && <p className="mt-[.55cqh] truncate font-semibold text-[#775d55]" style={{ fontSize: "clamp(.75rem, 1.25cqw, 2rem)" }}>{current.composer}</p>}
       </div>
 
       <PerformerProgressStrip position={current.position} totalItems={totalItems} groupName={current.groupName} />
@@ -176,7 +176,7 @@ function GradientPerformerCard({ current, totalItems, fillHeight }: { current: S
       <div aria-hidden className="pointer-events-none absolute -left-16 -top-16 h-56 w-56 rounded-full bg-[#f29070]/20 blur-2xl" />
       <div aria-hidden className="pointer-events-none absolute -right-10 top-1/3 h-40 w-40 rounded-full bg-white/45 blur-2xl" />
       <div aria-hidden className="pointer-events-none absolute -bottom-20 left-1/4 h-64 w-64 rounded-full bg-[#b74f5d]/10 blur-3xl" />
-      <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden h-9 w-9 -rotate-12 text-[#b74f5d]/30 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
+      <Icon name="music" className="pointer-events-none absolute right-8 top-6 hidden -rotate-12 text-[#b74f5d]/30 sm:block sm:right-12 sm:top-8 sm:h-11 sm:w-11" />
 
       {/* Şablon görsellerinin aksine burada sabit bir "üstten %X" varsayımı yok - dikey
           alan içerik akışıyla paylaşılıyor ki dar/mobil genişlikte (fotoğraf+metin alt alta
@@ -201,14 +201,14 @@ function GradientPerformerCard({ current, totalItems, fillHeight }: { current: S
             {current.instrumentName && (() => {
               const badge = instrumentBadgeStyle(current.instrumentName);
               return (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/65 px-[3cqw] py-[1cqw] font-bold backdrop-blur-sm" style={{ fontSize: "2.2cqw" }}>
-                  <Icon name={badge.icon} style={{ width: "2.6cqw", height: "2.6cqw" }} />{current.instrumentName}
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/65 px-[3cqw] py-[1cqw] font-bold backdrop-blur-sm" style={{ fontSize: "clamp(.75rem, 2.2cqw, 3rem)" }}>
+                  <Icon name={badge.icon} style={{ width: "clamp(.875rem, 2.6cqw, 3.5rem)", height: "clamp(.875rem, 2.6cqw, 3.5rem)" }} />{current.instrumentName}
                 </span>
               );
             })()}
-            <p className="mt-[2cqw] truncate font-serif font-bold italic text-[#6f302e]" style={{ fontSize: "3.2cqw" }}>{current.studentName}</p>
-            <p className={`mt-[1.2cqw] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "2.7cqw", lineHeight: 1.12 }}>{current.pieceTitle}</p>
-            {current.composer && <p className="mt-[.8cqw] truncate font-semibold text-[#775d55]" style={{ fontSize: "1.6cqw" }}>{current.composer}</p>}
+            <p className="mt-[2cqw] truncate font-serif font-bold italic text-[#6f302e]" style={{ fontSize: "clamp(1rem, 3.2cqw, 5rem)" }}>{current.studentName}</p>
+            <p className={`mt-[1.2cqw] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "clamp(.875rem, 2.7cqw, 4rem)", lineHeight: 1.12 }}>{current.pieceTitle}</p>
+            {current.composer && <p className="mt-[.8cqw] truncate font-semibold text-[#775d55]" style={{ fontSize: "clamp(.75rem, 1.6cqw, 2.5rem)" }}>{current.composer}</p>}
           </div>
         </div>
       </div>
@@ -222,10 +222,13 @@ export default function StagePage() {
   const params = useParams<{ showId: string }>();
   const showId = params.showId;
   const { data: me } = useMe();
-  const { data: stage, isLoading } = useStage(showId);
+  const { data: stage, isLoading, isError } = useStage(showId);
   const control = useStageControl(showId);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // iPhone Safari öğe tam ekranını desteklemiyor; düğmeyi yalnızca çalışacağı yerde göster.
+  // SSR ile uyuşmazlık olmasın diye mount sonrası okunur.
+  const [canFullscreen, setCanFullscreen] = useState(false);
   const isAdmin = me?.role === "Admin";
   const isLive = stage?.status === "Live";
 
@@ -263,6 +266,8 @@ export default function StagePage() {
   // aşağıdaki fillHeight kullanımı). Normal sayfa akışında (tam ekran değilken) sayfa zaten
   // kayabildiği için eski genişlik odaklı boyutlandırma korunuyor.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- tarayıcı yeteneği yalnızca istemcide okunabilir
+    setCanFullscreen(document.fullscreenEnabled === true);
     function onFullscreenChange() {
       setIsFullscreen(document.fullscreenElement?.id === "stage-screen");
     }
@@ -271,10 +276,36 @@ export default function StagePage() {
   }, []);
 
   if (isLoading) return <div className="skeleton h-[70vh] rounded-3xl" />;
-  if (!stage) return <p className="app-card p-6 text-sm text-[var(--muted)]">Gösteri bulunamadı.</p>;
+  if (!stage) {
+    return (
+      <p role={isError ? "alert" : undefined} className="app-card p-6 text-sm text-[var(--muted)]">
+        {isError ? "Sahne bilgisi yüklenemedi. Bağlantınızı kontrol edip sayfayı yenileyin." : "Gösteri bulunamadı."}
+      </p>
+    );
+  }
 
   const current = stage.current;
   const behindMinutes = stage.elapsedMinutes - stage.totalDurationMinutes;
+
+  // Aynı düğmeler hem sayfa akışında hem tam ekranın alt çubuğunda kullanılır.
+  const controls = (
+    <>
+      {stage.status !== "Live" && (
+        <button type="button" onClick={() => send(stage.status === "Completed" ? "reopen" : "start")} disabled={control.isPending || stage.totalItems === 0} className="btn btn-primary">
+          {stage.status === "Completed" ? "Yeniden aç" : "Gösteriyi başlat"}
+        </button>
+      )}
+      {isLive && (
+        <>
+          <button type="button" onClick={() => send("back")} disabled={control.isPending} className="btn btn-quiet"><Icon name="arrow-left" className="h-4 w-4" />Geri</button>
+          <button type="button" onClick={() => send("advance")} disabled={control.isPending} className="btn btn-primary flex-1 sm:flex-none">
+            Sıradakine geç<Icon name="arrow-right" className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={() => send("finish")} disabled={control.isPending} className="btn btn-quiet">Gösteriyi bitir</button>
+        </>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-3">
@@ -286,17 +317,19 @@ export default function StagePage() {
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />Sahnede
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              const root = document.getElementById("stage-screen");
-              if (!document.fullscreenElement) void root?.requestFullscreen?.();
-              else void document.exitFullscreen();
-            }}
-            className="btn btn-quiet"
-          >
-            Tam ekran
-          </button>
+          {canFullscreen && (
+            <button
+              type="button"
+              onClick={() => {
+                const root = document.getElementById("stage-screen");
+                if (!document.fullscreenElement) void root?.requestFullscreen?.();
+                else void document.exitFullscreen();
+              }}
+              className="btn btn-quiet"
+            >
+              Tam ekran
+            </button>
+          )}
         </div>
       </div>
 
@@ -363,7 +396,7 @@ export default function StagePage() {
           {isLive && current && current.kind !== "Performance" && (
             <div className={`grid place-items-center text-center ${isFullscreen ? "h-full" : "min-h-[16rem]"}`}>
               <div>
-                <p className="text-[.7rem] font-bold uppercase tracking-[.2em] text-[#9d5a4d]">{SHOW_ITEM_KIND_LABEL[current.kind]}</p>
+                <p className="text-[.75rem] font-bold uppercase tracking-[.2em] text-[#9d5a4d]">{SHOW_ITEM_KIND_LABEL[current.kind]}</p>
                 <p className="mt-3 font-serif text-5xl font-bold leading-tight text-[#623b33] sm:text-7xl">{current.pieceTitle ?? SHOW_ITEM_KIND_LABEL[current.kind]}</p>
                 {current.note && <p className="mt-3 text-lg text-[#8c6c60]">{current.note}</p>}
               </div>
@@ -389,26 +422,23 @@ export default function StagePage() {
           <UpNextCard label="Sıradaki" item={stage.next} />
           <UpNextCard label="Ondan sonraki" item={stage.onDeck} />
         </div>
+
+        {/* Tam ekran yalnızca bu bölümü kapsar; dokunmatik tablette klavye olmadığı için
+            ilerletme düğmeleri tam ekranın içinde de erişilebilir olmalı. */}
+        {isAdmin && isFullscreen && (
+          <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2 rounded-2xl bg-white/70 p-2 backdrop-blur-md">
+            {controls}
+            <button type="button" onClick={() => void document.exitFullscreen()} className="btn btn-quiet sm:ml-auto">Tam ekrandan çık</button>
+            {error && <p role="alert" className="w-full text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+          </div>
+        )}
       </section>
 
-      {isAdmin && (
+      {isAdmin && !isFullscreen && (
         <section className="app-card p-3">
           <div className="flex flex-wrap items-center gap-2">
-            {stage.status !== "Live" && (
-              <button type="button" onClick={() => send(stage.status === "Completed" ? "reopen" : "start")} disabled={control.isPending || stage.totalItems === 0} className="btn btn-primary">
-                {stage.status === "Completed" ? "Yeniden aç" : "Gösteriyi başlat"}
-              </button>
-            )}
-            {isLive && (
-              <>
-                <button type="button" onClick={() => send("back")} disabled={control.isPending} className="btn btn-quiet"><Icon name="arrow-left" className="h-4 w-4" />Geri</button>
-                <button type="button" onClick={() => send("advance")} disabled={control.isPending} className="btn btn-primary flex-1 sm:flex-none">
-                  Sıradakine geç<Icon name="arrow-right" className="h-4 w-4" />
-                </button>
-                <button type="button" onClick={() => send("finish")} disabled={control.isPending} className="btn btn-quiet">Gösteriyi bitir</button>
-                <p className="text-meta w-full sm:ml-auto sm:w-auto">Boşluk veya → ileri, ← geri</p>
-              </>
-            )}
+            {controls}
+            {isLive && <p className="text-meta w-full sm:ml-auto sm:w-auto">Boşluk veya → ileri, ← geri</p>}
           </div>
           {error && <p role="alert" className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
         </section>

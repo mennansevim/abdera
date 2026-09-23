@@ -220,8 +220,10 @@ textarea:focus-visible {
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .btn:disabled:active { transform: none; }
 
-  .btn-primary { background: var(--brand); color: var(--on-brand); }
-  .btn-primary:hover:not(:disabled) { background: var(--brand-strong); }
+  /* Zemin --brand-strong: beyaz yazı --brand (#d9662a) üzerinde 3.6:1 kalıyordu, 13px kalın
+     buton metni için WCAG AA'nın (4.5:1) altı. --brand-strong ile 5.6:1. */
+  .btn-primary { background: var(--brand-strong); color: var(--on-brand); }
+  .btn-primary:hover:not(:disabled) { background: #8a3f18; }
 
   .btn-quiet { border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
   .btn-quiet:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
@@ -241,8 +243,8 @@ textarea:focus-visible {
   .icon-btn:disabled { opacity: .5; cursor: not-allowed; }
   .icon-btn:disabled:active { transform: none; }
 
-  .icon-btn-brand { background: var(--brand); color: var(--on-brand); }
-  .icon-btn-brand:hover:not(:disabled) { background: var(--brand-strong); }
+  .icon-btn-brand { background: var(--brand-strong); color: var(--on-brand); }
+  .icon-btn-brand:hover:not(:disabled) { background: #8a3f18; }
 
   .icon-btn-quiet { border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
   .icon-btn-quiet:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
@@ -263,4 +265,18 @@ textarea:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .btn:active, .icon-btn:active { transform: none; }
+}
+
+/* iOS Safari, yazı boyutu 16px'in altındaki bir alana odaklanınca sayfayı yakınlaştırır ve
+   yerleşim kayar. Ekranlar alanlara text-sm/text-xs veriyor, .form-label içindeki alanlar da
+   etiketin 13px'ini miras alıyordu. Bu kural bilinçli olarak KATMANSIZ: katmansız stil
+   katmanlı utilities'i ezer, böylece tek tek ekranlara dokunmadan tüm dokunmatik cihazlarda
+   alanlar en az 16px olur. Masaüstünde (ince imleç, geniş ekran) yoğun görünüm korunur. */
+@media (max-width: 1023px), (pointer: coarse) {
+  .field,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
 }

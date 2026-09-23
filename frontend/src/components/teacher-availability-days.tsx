@@ -64,7 +64,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
     <div className={self || embedded ? "" : "mt-3 border-t border-[var(--line)] pt-3"}>
       {!self && <p className="text-meta font-bold">Uygun günler</p>}
       {isLoading ? (
-        <div className="mt-2 flex gap-1.5">{AVAILABILITY_DAYS.map((day) => <div key={day.key} className="skeleton h-9 w-14 rounded-lg" />)}</div>
+        <div className="mt-2 flex flex-wrap gap-1.5">{AVAILABILITY_DAYS.map((day) => <div key={day.key} className="skeleton h-11 w-14 rounded-lg" />)}</div>
       ) : (
         <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Uygun günler">
           {AVAILABILITY_DAYS.map((day) => {
@@ -78,7 +78,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
                 disabled={busy}
                 aria-pressed={active}
                 title={active ? `${day.label}: uygun (${DEFAULT_AVAILABILITY_START}–${DEFAULT_AVAILABILITY_END}) - kapatmak için tıkla` : `${day.label}: uygun değil - açmak için tıkla`}
-                className={`pressable min-h-9 w-14 rounded-lg border text-xs font-bold disabled:opacity-50 ${active ? "border-[var(--success-strong)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
+                className={`pressable min-h-11 w-14 rounded-lg border text-xs font-bold disabled:opacity-50 ${active ? "border-[var(--success-strong)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
               >
                 {day.label}
               </button>
@@ -86,7 +86,8 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
           })}
         </div>
       )}
-      <p className="text-meta mt-2">
+      <p className="text-meta mt-2">Seçilen günlerde uygunluk saati: {DEFAULT_AVAILABILITY_START}–{DEFAULT_AVAILABILITY_END}</p>
+      <p className="text-meta mt-1">
         {!isLoading && !rowsByDay.size
           ? self
             ? "Hiçbir gün seçilmedi - şu an her gün uygun sayılıyorsun."

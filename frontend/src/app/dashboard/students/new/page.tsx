@@ -98,15 +98,15 @@ function NewStudentForm() {
   // --- başarı ekranı ---
   if (result) {
     return (
-      <div className="mx-auto max-w-[640px]">
+      <div className="mx-auto max-w-[640px] space-y-4">
         <PageHeader title="Öğrenci kaydedildi" />
         <div className="app-card p-5">
           <div className="mb-4 flex items-center gap-2 text-[var(--brand-strong)]">
             <Icon name="check" className="h-5 w-5" />
             <span className="text-title font-bold">{firstName} {lastName} sisteme eklendi.</span>
           </div>
-          <div className="rounded-xl bg-[#f5f1ff] p-4">
-            <p className="text-meta mb-2 font-semibold text-[#5948aa]">{"Veli giriş bilgileri (WhatsApp'tan gönderildi)"}</p>
+          <div className="rounded-xl bg-[var(--brand-soft)] p-4">
+            <p className="text-meta mb-2 font-semibold text-[var(--brand-strong)]">{"Veli giriş bilgileri (WhatsApp'tan gönderildi)"}</p>
             <dl className="space-y-1 text-sm">
               <div className="flex justify-between"><dt className="text-[var(--muted)]">Telefon (kullanıcı adı)</dt><dd className="font-mono font-semibold">{result.guardian.phoneNumber}</dd></div>
               <div className="flex justify-between"><dt className="text-[var(--muted)]">Şifre</dt><dd className="font-mono font-semibold">{result.guardian.password}</dd></div>
@@ -118,9 +118,9 @@ function NewStudentForm() {
           {scheduleNow && result.lessonScheduled && (
             <p className="text-meta mt-3 text-[var(--muted)]">Ders günü: {DAY_NAMES_TR[dayOfWeek]} {startTime} — takvime eklendi.</p>
           )}
-          <div className="mt-5 flex gap-3">
-            <button type="button" onClick={resetForm} className="btn btn-primary">Yeni öğrenci ekle</button>
-            <Link href="/dashboard/students" className="btn btn-quiet">Öğrenci listesine dön</Link>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row">
+            <button type="button" onClick={resetForm} className="btn btn-primary w-full sm:w-auto">Yeni öğrenci ekle</button>
+            <Link href="/dashboard/students" className="btn btn-quiet w-full sm:w-auto">Öğrenci listesine dön</Link>
           </div>
         </div>
       </div>
@@ -130,7 +130,7 @@ function NewStudentForm() {
   const pending = register.isPending;
 
   return (
-    <div className="mx-auto max-w-[640px]">
+    <div className="mx-auto max-w-[640px] space-y-4">
       <PageHeader title="Yeni öğrenci kaydı" description="Öğrenci, eğitim, ders günü ve veli bilgilerini tek ekranda gir." />
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* 1) Öğrenci */}
@@ -166,9 +166,9 @@ function NewStudentForm() {
         {/* 3) Ders günü */}
         <fieldset className="app-card p-5">
           <legend className="text-meta mb-3 font-bold uppercase tracking-wide text-[var(--muted)]">3 · Ders günü</legend>
-          <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-2"><input type="radio" name="sched" checked={!scheduleNow} onChange={() => setScheduleNow(false)} /> Sonra belirle</label>
-            <label className="flex items-center gap-2"><input type="radio" name="sched" checked={scheduleNow} onChange={() => setScheduleNow(true)} /> Şimdi belirle</label>
+          <div className="flex flex-wrap gap-x-4 text-sm">
+            <label className="flex min-h-11 items-center gap-2"><input type="radio" name="sched" className="h-5 w-5 accent-[var(--brand)]" checked={!scheduleNow} onChange={() => setScheduleNow(false)} /> Sonra belirle</label>
+            <label className="flex min-h-11 items-center gap-2"><input type="radio" name="sched" className="h-5 w-5 accent-[var(--brand)]" checked={scheduleNow} onChange={() => setScheduleNow(true)} /> Şimdi belirle</label>
           </div>
           {scheduleNow && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -189,7 +189,7 @@ function NewStudentForm() {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="form-label">Ad<input className="field" required value={gFirstName} onChange={resetValidity((e) => setGFirstName(e.target.value))} onInvalid={onInvalidTurkish} /></label>
             <label className="form-label">Soyad<input className="field" placeholder={lastName || "Öğrenciyle aynı"} value={gLastName} onChange={(e) => setGLastName(e.target.value)} /></label>
-            <label className="form-label">Telefon<input type="tel" className="field" required placeholder="0555 123 45 67" value={gPhone} onChange={resetValidity((e) => setGPhone(e.target.value))} onInvalid={onInvalidTurkish} /></label>
+            <label className="form-label">Telefon<input type="tel" inputMode="tel" autoComplete="tel" className="field" required placeholder="0555 123 45 67" value={gPhone} onChange={resetValidity((e) => setGPhone(e.target.value))} onInvalid={onInvalidTurkish} /></label>
             <label className="form-label">Yakınlık<input className="field" value={relationship} onChange={(e) => setRelationship(e.target.value)} /></label>
           </div>
           <p className="text-meta mt-2 text-[var(--muted)]">{"Veliye giriş şifresi otomatik üretilip WhatsApp'tan gönderilir; kayıttan sonra ekranda da gösterilir."}</p>
