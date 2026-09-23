@@ -194,14 +194,19 @@ test.describe.serial("Abdera critical role flows", () => {
       expect(branchSeries.status()).toBe(index === otherBranches.length - 1 ? 400 : 201);
     }
 
-    // Demo seed merkezi ücret tarifesini kurar; kayıt bazlı FeePlan artık yoktur.
+    // Demo seed merkezi ücret tarifesini kurar; kayıt bazlı FeePlan artık yoktur. Kurs kaydı
+    // açılırken o ayın aidatı sunucuda otomatik açılır (EnrollmentReceivableOpener) - elle
+    // açmaya çalışmak artık 409 döner, bu yüzden burada yalnızca var olduğu doğrulanır.
     const currentPeriod = localDateString(new Date()).slice(0, 7);
-    expect((await page.request.post(`${apiUrl}/api/receivables`, {
-      data: { enrollmentId: enrollment.id, period: currentPeriod },
-    })).status()).toBe(201);
+    const billingRows = await (await page.request.get(`${apiUrl}/api/students/${student.id}/billing`)).json();
+    expect(billingRows.flatMap((row: { receivables: { period: string }[] }) => row.receivables)
+      .some((receivable: { period: string }) => receivable.period === currentPeriod)).toBeTruthy();
 
+    // Aidat ekranı öğrenci-önce: tahsilat, öğrencinin "Detay" takviminde seçili ayın kartından alınır.
     await page.goto("/dashboard/billing");
     await expect(page.getByRole("heading", { name: "Aidat yönetimi" })).toBeVisible();
+    await page.getByLabel("Öğrenci adına göre ara").fill(`Öğrenci ${suffix}`);
+    await page.getByRole("button", { name: "Detay" }).first().click();
     await page.getByRole("button", { name: "Tahsilat", exact: true }).first().click();
     const paymentForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Ödemeyi kaydet" }) });
     await paymentForm.getByLabel("Tutar").fill("1");

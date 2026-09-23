@@ -58,7 +58,7 @@ gh api "repos/mennansevim/abdera/deployments?sha=$SHA&environment=Production" \
 gh api "repos/mennansevim/abdera/deployments/<id>/statuses" --jq '.[0] | {state, environment_url, log_url}'
 ```
 
-- Kayıt push'tan sonra birkaç saniye içinde düşer; `state` sırasıyla `pending`/`in_progress` →
+- Kayıt push'tan sonra düşer ama 2-3 dakika gecikebilir (gözlendi) — bu sürede "kayıt yok" hata değildir; `state` sırasıyla `pending`/`in_progress` →
   `success` ya da `failure`/`error` olur. Derleme (frontend + .NET container) birkaç dakika sürer.
 - Beklerken foreground `sleep` kullanma. Monitor aracıyla bir until-döngüsü kur (ör. 20 sn'de bir
   yukarıdaki durum sorgusu, `success|failure|error` görünce çık, üst sınır ~15 dk) ya da komutu
@@ -84,10 +84,10 @@ Giriş yapıp ekran test etmek bu skill'in işi değil (şifre girilmez).
 gh run list --commit "$SHA" --json name,status,conclusion --jq '.[] | "\(.name): \(.status) \(.conclusion)"'
 ```
 
-Vercel deploy'u CI'ı beklemez; CI sonucu bilgi amaçlı raporlanır. Bilinen durum (2026-09-23):
-`e2e-smoke` job'u birkaç commit'tir aynı 4 testte (giriş sonrası `waitForURL` zaman aşımı,
-`OTP isteği başarısız (HTTP 404)`) düşüyor; `guard-secrets`, `frontend-build-lint`,
-`backend-build-test` geçiyor. Yeni bir job ya da farklı bir test düşüyorsa bunu ayrıca vurgula.
+Vercel deploy'u CI'ı beklemez; CI sonucu bilgi amaçlı raporlanır. CI henüz bitmediyse
+"koşuyor" de, sonucu tahmin etme. Kırmızıysa hangi job/testin düştüğünü `gh run view <id>
+--log-failed` ile bul ve bir önceki commit'in koşusuyla karşılaştır: aynı hata önceden de
+varsa bunu açıkça belirt, bu commit'le yeni başladıysa ayrıca vurgula.
 
 ### 6. Özetle
 

@@ -494,7 +494,7 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
       }))}
       onOpened={() => setSelectedPeriod(thisPeriod)}
     />}
-    {!isLoading && !isError && !periods.length && !unopenedThisMonth.length && <p className="text-meta mt-2">Bu öğrenci için kayıtlı bir aidat dönemi yok.</p>}
+    {!isLoading && !isError && !periods.length && !unopenedThisMonth.length && <p className="text-meta mt-2">Bu öğrencinin henüz açılmış bir aidatı yok.</p>}
     {!isLoading && !isError && periods.length > 0 && <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
       <section className="rounded-xl border border-[var(--line)] bg-white p-3" aria-label={`${activeYear} ödeme takvimi`}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -509,7 +509,7 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
             const isOverdue = activeReceivables.some(({ receivable }) => receivable.status === "Overdue");
             const hasRecord = rows.length > 0;
             const prepayMonths = Math.max(0, ...rows.flatMap(({ receivable }) => receivable.payments.map((payment) => payment.prepayPlanMonths ?? 0)));
-            const stateLabel = !hasRecord ? "Kayıt yok" : isPaid ? "Ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? "Vadesi geçti" : "Ödenmedi";
+            const stateLabel = !hasRecord ? "Açılmadı" : isPaid ? "Ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? "Vadesi geçti" : "Ödenmedi";
             const stateClass = isPaid
               ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]"
               : isPartial
@@ -538,7 +538,7 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--success-strong)]" />Ödendi</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--warning-strong)]" />Kısmi</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--danger-strong)]" />Vadesi geçti</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full border border-[var(--line)] bg-white" />Kayıt yok</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full border border-[var(--line)] bg-white" />Açılmadı</span>
         </div>
       </section>
 
