@@ -442,6 +442,20 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(MakeupCreditStatus.Used, usedCredit.Status);
         Assert.NotNull(usedCredit.UsedLessonId);
 
+        // Kullanıcı isteği: "ders telafi / iptal durumlarında bildirim gelsin". Öğretmen kendi
+        // dersini iptal edip telafi planladı: yönetici ikisini de ziline alır, işlemi yapan
+        // öğretmenin kendisine bildirim düşmez.
+        var adminUserId = await db.Users.Where(user => user.Email == "admin@test.local").Select(user => user.Id).SingleAsync();
+        var teacherUserId = await db.Teachers.Where(item => item.Id == own.TeacherId).Select(item => item.UserId).SingleAsync();
+        var cancelNotice = await db.StaffNotifications.AsNoTracking().SingleAsync(item =>
+            item.UserId == adminUserId && item.Type == StaffNotificationType.LessonCancelled && item.ReferenceId == own.LessonId);
+        Assert.Contains("telafi hakkı tanındı", cancelNotice.Body);
+        Assert.Contains("Telafi hakkıyla iptal", cancelNotice.Body);
+        Assert.True(await db.StaffNotifications.AnyAsync(item =>
+            item.UserId == adminUserId && item.Type == StaffNotificationType.MakeupScheduled && item.ReferenceId == usedCredit.UsedLessonId));
+        Assert.False(await db.StaffNotifications.AnyAsync(item =>
+            item.UserId == teacherUserId && (item.ReferenceId == own.LessonId || item.ReferenceId == usedCredit.UsedLessonId)));
+
         var foreignResponse = await teacher.PostAsJsonAsync(
             $"/api/lessons/{foreign.LessonId}/cancel",
             new CancelLesson.Request(CancelLesson.CancelledBy.School, "Yetkisiz deneme"));

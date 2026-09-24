@@ -99,10 +99,10 @@ export function DeleteStudentDialog({
               </div>
             )}
 
-            {impact.guardiansLeftWithoutStudents > 0 && (
+            {impact.guardiansToDelete > 0 && (
               <p className="rounded-lg bg-[var(--warning-soft)]/60 px-3 py-2 text-xs text-[var(--warning-strong)]">
-                {impact.guardiansLeftWithoutStudents} veli hiçbir öğrenciye bağlı kalmayacak. Veli kayıtları silinmez;
-                istersen Veliler ekranından ayrıca kaldırabilirsin.
+                {impact.guardiansToDelete} veli kaydı da silinecek (başka öğrencisi yok). Kardeşi kayıtlı olan veli silinmez,
+                yalnızca bu öğrenciyle bağı kalkar.
               </p>
             )}
           </>

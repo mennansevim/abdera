@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { MonthInput } from "@/components/month-input";
 import { onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { isValidPeriod } from "@/lib/billing-format";
@@ -190,7 +191,7 @@ function AddTuitionForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 p-4">
       {enrollments.length > 1 && <label className="form-label">Kurs<select value={enrollmentId} onChange={(event) => setEnrollmentId(event.target.value)} required className="field min-h-10 text-sm">{enrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment.id)}</option>)}</select></label>}
-      <label className="form-label">Dönem<input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} required className="field min-h-10 text-sm" /></label>
+      <div className="form-label">Dönem<MonthInput label="Dönem" value={period} onChange={setPeriod} /></div>
       <button type="submit" disabled={createReceivable.isPending || !enrollmentId || !isValidPeriod(period)} className="btn btn-primary">{createReceivable.isPending ? "Ekleniyor…" : "Aidatı oluştur"}</button>
       {error && <p role="alert" className="w-full text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
     </form>

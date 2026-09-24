@@ -48,3 +48,19 @@ export function currentPeriod() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
+
+// Kullanıcı kuralı: kayıt olan her öğrenci kayıt ayından itibaren her ayın aidatından
+// sorumludur - "aidat açılmadı" diye bir durum yoktur, ay ya ödenmiştir ya ödenmemiştir.
+// Kayıttan önceki aylar (ve biten kaydın bitişinden sonrası) sorumluluk dışıdır.
+export function isObligatedPeriod(period: string, enrollment: { startedAt: string | null; endedAt?: string | null }) {
+  if (!isValidPeriod(period) || !enrollment.startedAt) return false;
+  if (period < enrollment.startedAt.slice(0, 7)) return false;
+  return !enrollment.endedAt || period <= enrollment.endedAt.slice(0, 7);
+}
+
+// Kayıt ayından itibaren taahhüt edilen 12 ayın sonuncusu ("önündeki 12 ay").
+export function commitmentEndPeriod(startedAt: string) {
+  const [year, month] = startedAt.slice(0, 7).split("-").map(Number);
+  const end = new Date(year, month - 1 + 11, 1);
+  return `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`;
+}

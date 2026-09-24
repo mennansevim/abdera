@@ -38,7 +38,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
   return (
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <h1 className="text-display font-serif italic">{title}</h1>
+        <h1 className="text-display font-serif">{title}</h1>
         {description && <p className="text-meta mt-1">{description}</p>}
       </div>
       {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">{actions}</div>}
@@ -126,9 +126,11 @@ export function RowMenu({ label, children }: { label: string; children: (close: 
         aria-expanded={open}
         aria-label={label}
         title={label}
-        className="icon-btn icon-btn-quiet border-transparent bg-transparent"
+        // Eskiden kenarlıksız ve şeffaftı; "…" satırın içinde kayboluyor, buton olduğu
+        // anlaşılmıyordu (kullanıcı geri bildirimi). Yanındaki btn-quiet düğmelerle aynı çerçeve.
+        className={`icon-btn icon-btn-quiet rounded-[1rem] text-[#5c4d3f] ${open ? "border-[var(--brand)] text-[var(--brand)]" : ""}`}
       >
-        <Icon name="more" className="h-4 w-4" />
+        <Icon name="more" className="h-5 w-5" />
       </button>
       {open && (
         <div role="menu" className="app-card absolute right-0 top-[calc(100%+.25rem)] z-30 w-52 overflow-hidden p-1">

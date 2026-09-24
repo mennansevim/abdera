@@ -8,16 +8,16 @@ namespace Abdera.Api.Modules.Progress.Features;
 
 // Gelişim ekranındaki "Genel gelişim" yorumu: öğretmen notlarından AI ile üretilen kısa özet.
 //
-// Üretim tembeldir (lazy): ekran açıldığında önbellekteki yorum kaynak notlarla hâlâ
-// uyuşuyorsa aynen döner; yeni bir not girilmişse sağlayıcıya bir kez gidilir ve önbellek
-// yenilenir. Böylece "gelişim girdikçe yorum güncellenir" sağlanırken not kaydetme akışı
-// sağlayıcının gecikmesine veya hatasına hiç bağlı kalmaz.
+// Üretim tembeldir (lazy): ekran açıldığında karar ProgressSummary.Decide'dadır - ilk yorum
+// 4 not girilince üretilir, sonrasında en fazla ayda bir yenilenir; arada kayıtlı yorum
+// gösterilir. Not kaydetme akışı sağlayıcının gecikmesine veya hatasına hiç bağlı kalmaz.
 public static class StudentProgressSummary
 {
     public enum SummaryStatus
     {
         Ready,      // Güncel yorum (ya da sağlayıcı geçici hata verdiyse son üretilen, IsStale=true)
         NoNotes,    // Yorumlanacak not yok
+        NotEnoughNotes, // İlk yorum için en az ProgressSummary.MinimumNotes not gerekli
         Unavailable, // AI sağlayıcısı yapılandırılmamış ve daha önce üretilmiş yorum yok
         Failed,     // Sağlayıcı hata verdi ve gösterilecek önceki yorum yok
     }
@@ -27,7 +27,11 @@ public static class StudentProgressSummary
         string? Summary,
         DateTimeOffset? GeneratedAt,
         int SourceNoteCount,
-        bool IsStale);
+        bool IsStale,
+        // Arayüz için: "yorum 4 nottan sonra oluşur (2/4)" ve "sonraki yenileme 1 Ekim".
+        int NoteCount = 0,
+        int MinimumNotes = ProgressSummary.MinimumNotes,
+        DateOnly? NextRefreshOn = null);
 
     public static void MapStudentProgressSummary(this IEndpointRouteBuilder app)
     {
@@ -64,14 +68,21 @@ public static class StudentProgressSummary
         var cached = await db.ProgressSummaries.SingleOrDefaultAsync(
             summary => summary.StudentId == studentId && summary.TeacherId == teacherScope,
             cancellationToken);
-        if (cached is not null && cached.IsCurrentFor(noteCount, latestNoteAt))
-            return Results.Ok(ToResponse(cached, isStale: false));
+        switch (ProgressSummary.Decide(cached, noteCount, latestNoteAt, clock.UtcNow, clock.ToSchoolLocal))
+        {
+            case ProgressSummaryDecision.NotEnoughNotes:
+                return Results.Ok(new Response(SummaryStatus.NotEnoughNotes, null, null, 0, false, noteCount));
+            case ProgressSummaryDecision.ServeCached:
+                // Yeni notlar varsa yorum bir sonraki ay onları da kapsayacak - bu "hata" değil,
+                // politika; IsStale yalnızca sağlayıcı hatasında true olur.
+                return Results.Ok(ToResponse(cached!, isStale: false, noteCount, clock));
+        }
 
         if (!generator.IsAvailable)
         {
             return Results.Ok(cached is not null
-                ? ToResponse(cached, isStale: true)
-                : new Response(SummaryStatus.Unavailable, null, null, noteCount, false));
+                ? ToResponse(cached, isStale: true, noteCount, clock)
+                : new Response(SummaryStatus.Unavailable, null, null, noteCount, false, noteCount));
         }
 
         // Sıralama projeksiyondan ÖNCE, ham ara tip üzerinde (CLAUDE.md "OrderBy sırası").
@@ -107,8 +118,8 @@ public static class StudentProgressSummary
             loggerFactory.CreateLogger(typeof(StudentProgressSummary))
                 .LogWarning("Gelişim yorumu üretilemedi: {Error}", result.Error);
             return Results.Ok(cached is not null
-                ? ToResponse(cached, isStale: true)
-                : new Response(SummaryStatus.Failed, null, null, noteCount, false));
+                ? ToResponse(cached, isStale: true, noteCount, clock)
+                : new Response(SummaryStatus.Failed, null, null, noteCount, false, noteCount));
         }
 
         var summaryText = result.Summary.Length > 2000 ? result.Summary[..2000] : result.Summary;
@@ -133,9 +144,12 @@ public static class StudentProgressSummary
             // geçerli. Bu isteğin ürettiği metin yine de gösterilebilir - ikisi de aynı notlardan.
         }
 
-        return Results.Ok(new Response(SummaryStatus.Ready, summaryText, now, noteCount, false));
+        return Results.Ok(new Response(
+            SummaryStatus.Ready, summaryText, now, noteCount, false, noteCount,
+            NextRefreshOn: cached.NextRefreshOn(clock.ToSchoolLocal)));
     }
 
-    private static Response ToResponse(ProgressSummary summary, bool isStale) =>
-        new(SummaryStatus.Ready, summary.Summary, summary.UpdatedAt, summary.SourceNoteCount, isStale);
+    private static Response ToResponse(ProgressSummary summary, bool isStale, int noteCount, IClock clock) =>
+        new(SummaryStatus.Ready, summary.Summary, summary.UpdatedAt, summary.SourceNoteCount, isStale,
+            noteCount, NextRefreshOn: summary.NextRefreshOn(clock.ToSchoolLocal));
 }

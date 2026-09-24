@@ -58,13 +58,19 @@ export function useStudentProgress(studentId: string) {
 }
 
 // Gelişim ekranındaki "Genel gelişim" yorumu: öğretmen notlarından AI ile üretilir. Sunucu
-// yorumu önbellekte tutar ve yalnızca yeni not girildiğinde yeniden üretir; bu yüzden istek
-// ilk açılışta birkaç saniye sürebilir, sonrakiler anında döner.
+// yorumu kaydeder: ilk yorum 4 not girilince oluşur, sonrasında en fazla ayda bir yenilenir;
+// arada kayıtlı yorum anında döner. Üretildiği açılış birkaç saniye sürebilir.
 export interface ProgressSummary {
-  status: "Ready" | "NoNotes" | "Unavailable" | "Failed";
+  status: "Ready" | "NoNotes" | "NotEnoughNotes" | "Unavailable" | "Failed";
   summary: string | null;
   generatedAt: string | null;
+  // Yorumun kapsadığı not sayısı.
   sourceNoteCount: number;
+  // Şu anki toplam not sayısı - fazlası bir sonraki aylık yenilemede yoruma girer.
+  noteCount: number;
+  minimumNotes: number;
+  // Kayıtlı yorumun en erken yenileneceği gün (YYYY-MM-DD).
+  nextRefreshOn: string | null;
   // Sağlayıcı geçici hata verdiyse son üretilen yorum döner; yeni notları henüz kapsamıyor.
   isStale: boolean;
 }

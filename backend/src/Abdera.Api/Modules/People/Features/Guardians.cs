@@ -14,6 +14,7 @@ public static class Guardians
     public record CreateRequest(string FirstName, string LastName, string PhoneNumber);
     public record UpdateRequest(string FirstName, string LastName, string PhoneNumber);
     public record GuardianResponse(Guid Id, string FirstName, string LastName, string PhoneNumber, bool NotificationConsent);
+    public record PhoneLookupResponse(Guid Id, string FirstName, string LastName, string PhoneNumber, List<string> StudentNames);
     // Şifre düz metni yalnızca bu yanıtta bir kez döner (öğretmen TemporaryPassword desenيyle
     // aynı) - admin ekranı gösterebilsin, agent doğrulama için kullanabilsin.
     public record ResetPasswordResponse(Guid Id, string PhoneNumber, string Password, string Message);
@@ -30,6 +31,10 @@ public static class Guardians
         // kişinin velisini de girebilmesi gerekiyor.
         group.MapGet("", ListAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        // "Bu numara zaten kayıtlı" çakışmasında yöneticinin mevcut veliyi (kardeşin velisi)
+        // yeni öğrenciye bağlayabilmesi için. Hangi öğrencinin velisi olduğunu da söylediği
+        // için yalnızca Admin'e açık - öğretmen başka öğretmenin öğrencisini öğrenmemeli.
+        group.MapGet("/by-phone", LookupByPhoneAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPatch("/{guardianId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         // Veli şifresi sıfırlama hesap devralmaya yol açabilecek bir yönetim işlemidir.
         // Öğretmen kendi öğrencisinin iletişim bilgisini güncelleyebilir ama oturum
@@ -51,18 +56,56 @@ public static class Guardians
     private static async Task<IResult> CreateAsync(CreateRequest request, AbderaDbContext db, IClock clock)
     {
         var normalizedPhone = PhoneNumberNormalizer.Normalize(request.PhoneNumber);
-        if (await db.Guardians.AnyAsync(g => g.PhoneNumber == normalizedPhone))
+        var existing = await db.Guardians.SingleOrDefaultAsync(g => g.PhoneNumber == normalizedPhone);
+        if (existing is not null)
         {
-            throw new ConflictException("Bu telefon numarasıyla kayıtlı bir veli zaten var.");
+            if (await db.StudentGuardians.AnyAsync(link => link.GuardianId == existing.Id))
+            {
+                throw new ConflictException("Bu telefon numarasıyla kayıtlı bir veli zaten var.");
+            }
+
+            // Hiçbir öğrenciye bağlı olmayan veli: öğrencisi silinmiş (eski silme akışı veliyi
+            // bırakıyordu) ya da bağlanmadan yarım kalmış bir kayıt. Aynı numara aynı kişidir;
+            // yeni bir satır açılamayacağı (UNIQUE phone_number) için bu kayıt yeniden kullanılır.
+            existing.Update(request.FirstName, request.LastName, request.PhoneNumber, clock.UtcNow);
+            await db.SaveChangesAsync();
+            return Results.Ok(ToResponse(existing));
         }
 
         var guardian = Guardian.Create(request.FirstName, request.LastName, request.PhoneNumber, clock.UtcNow);
         db.Guardians.Add(guardian);
         await db.SaveChangesAsync();
 
-        return Results.Created($"/api/guardians/{guardian.Id}",
-            new GuardianResponse(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, guardian.NotificationConsent));
+        return Results.Created($"/api/guardians/{guardian.Id}", ToResponse(guardian));
     }
+
+    private static async Task<IResult> LookupByPhoneAsync(string phone, AbderaDbContext db)
+    {
+        string normalizedPhone;
+        try
+        {
+            normalizedPhone = PhoneNumberNormalizer.Normalize(phone);
+        }
+        catch (ArgumentException)
+        {
+            throw new NotFoundException("Bu numarayla kayıtlı veli yok.");
+        }
+
+        var guardian = await db.Guardians.AsNoTracking().SingleOrDefaultAsync(g => g.PhoneNumber == normalizedPhone)
+            ?? throw new NotFoundException("Bu numarayla kayıtlı veli yok.");
+
+        var studentNames = await db.StudentGuardians
+            .Where(link => link.GuardianId == guardian.Id)
+            .Join(db.Students, link => link.StudentId, student => student.Id, (link, student) => new { student.FirstName, student.LastName })
+            .OrderBy(x => x.FirstName).ThenBy(x => x.LastName)
+            .Select(x => x.FirstName + " " + x.LastName)
+            .ToListAsync();
+
+        return Results.Ok(new PhoneLookupResponse(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, studentNames));
+    }
+
+    private static GuardianResponse ToResponse(Guardian guardian) =>
+        new(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, guardian.NotificationConsent);
 
     private static async Task<IResult> UpdateAsync(
         Guid guardianId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)

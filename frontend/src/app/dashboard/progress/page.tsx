@@ -327,7 +327,7 @@ function SummaryCard({ analysis, studentId }: { analysis: ProgressAnalysis; stud
   );
 }
 
-// Yorum sunucuda üretilip önbelleğe alınır; yeni not girilince bir sonraki açılışta yenilenir.
+// Yorum sunucuda üretilip kaydedilir: ilk yorum 4 nottan sonra, sonrasında ayda bir yenilenir.
 // Kural tabanlı eski özet metni (buildProgressAnalysis.summary) burada artık gösterilmiyor:
 // "yapay zekâ" etiketi yalnızca gerçekten modelden gelen metnin üstünde durmalı.
 function AiProgressSummary({ studentId }: { studentId: string }) {
@@ -346,6 +346,10 @@ function AiProgressSummary({ studentId }: { studentId: string }) {
           <div className="skeleton h-3.5 w-2/3 rounded" />
           <p className="pt-1 text-[.75rem] text-[var(--muted)]">Ders notları yorumlanıyor…</p>
         </div>
+      ) : data?.status === "NotEnoughNotes" ? (
+        <p className="mt-1.5 text-sm text-[var(--muted)]">
+          Yapay zekâ yorumu {data.minimumNotes} öğretmen notu girildikten sonra oluşur ({data.noteCount}/{data.minimumNotes}). Sonrasında ayda bir yenilenir.
+        </p>
       ) : data?.status === "Unavailable" ? (
         // Gizlemek yerine yerini gösterir: kutu hiç görünmeyince "yapay zekâ yorumu nerede?"
         // sorusu cevapsız kalıyordu. Sunucuda Ai__Provider=OpenAi + Ai__ApiKey tanımlanınca dolar.
@@ -362,6 +366,9 @@ function AiProgressSummary({ studentId }: { studentId: string }) {
             {data.isStale
               ? "Son notları henüz kapsamıyor; bir sonraki açılışta yenilenecek."
               : `${data.sourceNoteCount} öğretmen notundan üretildi${data.generatedAt ? ` · ${formatDate(data.generatedAt, true)}` : ""}`}
+            {!data.isStale && data.nextRefreshOn && (
+              <> · Ayda bir yenilenir, sonraki {formatDate(data.nextRefreshOn, true)}{data.noteCount > data.sourceNoteCount ? ` (${data.noteCount - data.sourceNoteCount} yeni not eklenecek)` : ""}</>
+            )}
           </p>
         </>
       )}

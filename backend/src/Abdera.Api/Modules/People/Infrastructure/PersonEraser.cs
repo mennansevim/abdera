@@ -24,7 +24,7 @@ public static class PersonEraser
         int Enrollments, int Lessons, int Attendances, int Receivables,
         int Payments, decimal CollectedAmount, string Currency,
         int MakeupCredits, int Assessments, int ShowItems,
-        int GuardiansLeftWithoutStudents);
+        int GuardiansToDelete);
 
     public record TeacherImpact(
         Guid TeacherId, string TeacherName,
@@ -48,18 +48,7 @@ public static class PersonEraser
         var receivableIds = receivables.Select(r => r.Id).ToList();
         var payments = await db.Payments.Where(p => receivableIds.Contains(p.ReceivableId)).ToListAsync();
 
-        // Silindikten sonra hiçbir öğrencisi kalmayacak veliler. Otomatik silinmezler -
-        // veli kaydı başka bir çocuk için tekrar kullanılabilir, ve kişisel veriyi
-        // kullanıcının haberi olmadan silmek yerine sayısını bildirip kararı ona bırakıyoruz.
-        var guardianIds = await db.StudentGuardians.Where(link => link.StudentId == studentId)
-            .Select(link => link.GuardianId).ToListAsync();
-        var orphanGuardians = 0;
-        foreach (var guardianId in guardianIds)
-        {
-            var others = await db.StudentGuardians
-                .CountAsync(link => link.GuardianId == guardianId && link.StudentId != studentId);
-            if (others == 0) orphanGuardians++;
-        }
+        var guardiansToDelete = await CountGuardiansToDeleteAsync(studentId, db);
 
         return new StudentImpact(
             studentId, $"{student.FirstName} {student.LastName}",
@@ -73,8 +62,23 @@ public static class PersonEraser
             await db.MakeupCredits.CountAsync(c => c.StudentId == studentId),
             await db.SkillAssessments.CountAsync(a => a.StudentId == studentId),
             await db.ShowItems.CountAsync(i => i.StudentId == studentId),
-            orphanGuardians);
+            guardiansToDelete);
     }
+
+    // Öğrenciyle birlikte silinecek veliler: başka hiçbir öğrenciye bağlı olmayanlar.
+    // Kullanıcı isteği: "öğrenci silinince veli de silinmeli" - eskiden veli kalıyordu ve aynı
+    // numarayla yeniden kayıt "Bu telefon numarasıyla kayıtlı bir veli zaten var" hatasına
+    // takılıyordu. Kardeşi olan veli (başka öğrenciye de bağlı) kalır, yalnızca bağ kopar.
+    // Sanal IBAN'ına banka havalesi düşmüş veli de kalır: banka işlemi harici bir finansal
+    // kayıttır ve silinmez, IBAN'ı (dolayısıyla veliyi) işaret etmeye devam etmeli.
+    // Koşul StudentSql'deki `_gua` tablosunun birebir karşılığı - biri değişirse öbürü de.
+    private static async Task<int> CountGuardiansToDeleteAsync(Guid studentId, AbderaDbContext db) =>
+        await db.StudentGuardians
+            .Where(link => link.StudentId == studentId)
+            .Where(link => !db.StudentGuardians.Any(other => other.GuardianId == link.GuardianId && other.StudentId != studentId))
+            .Where(link => !db.VirtualIbans.Any(iban => iban.GuardianId == link.GuardianId
+                && db.BankIncomingTransactions.Any(tx => tx.VirtualIbanId == iban.Id)))
+            .CountAsync();
 
     public static async Task<TeacherImpact> DescribeTeacherAsync(Guid teacherId, AbderaDbContext db)
     {
@@ -211,7 +215,33 @@ public static class PersonEraser
 
         DELETE FROM library_suggestions WHERE student_id = @student_id;
         DELETE FROM student_photos WHERE student_id = @student_id;
+
+        -- Başka öğrencisi kalmayan veliler de gider (CountGuardiansToDeleteAsync ile aynı koşul).
+        -- Bağlar silinmeden ÖNCE belirlenmeli, sonrasında "yalnız bu öğrenciye bağlı" bilgisi kaybolur.
+        CREATE TEMP TABLE _gua ON COMMIT DROP AS
+            SELECT sg.guardian_id AS id FROM student_guardians sg
+            WHERE sg.student_id = @student_id
+              AND NOT EXISTS (SELECT 1 FROM student_guardians other
+                               WHERE other.guardian_id = sg.guardian_id AND other.student_id <> @student_id)
+              AND NOT EXISTS (SELECT 1 FROM virtual_ibans iban
+                               JOIN bank_incoming_transactions tx ON tx.virtual_iban_id = iban.id
+                               WHERE iban.guardian_id = sg.guardian_id);
+
         DELETE FROM student_guardians WHERE student_id = @student_id;
+
+        -- Veliye gidecek bekleyen mesajlar telefonla adreslenir (NotificationJob'da guardian_id yok).
+        DELETE FROM notification_jobs
+         WHERE status = 'Pending'
+           AND recipient_phone_number IN (SELECT phone_number FROM guardians WHERE id IN (SELECT id FROM _gua));
+        DELETE FROM guardian_login_codes WHERE guardian_id IN (SELECT id FROM _gua);
+        DELETE FROM instrument_maintenance_reminders WHERE guardian_id IN (SELECT id FROM _gua);
+        DELETE FROM lesson_rsvps WHERE guardian_id IN (SELECT id FROM _gua);
+        UPDATE practice_journal_entries SET parent_approved_by_guardian_id = NULL
+         WHERE parent_approved_by_guardian_id IN (SELECT id FROM _gua);
+        DELETE FROM whatsapp_messages WHERE guardian_id IN (SELECT id FROM _gua);
+        DELETE FROM virtual_ibans WHERE guardian_id IN (SELECT id FROM _gua);
+        DELETE FROM guardians WHERE id IN (SELECT id FROM _gua);
+
         DELETE FROM students WHERE id = @student_id;
         """;
 

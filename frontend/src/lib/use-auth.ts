@@ -77,9 +77,3 @@ export function useChangePassword() {
     mutationFn: (payload) => api.post("/api/auth/change-password", payload),
   });
 }
-
-export function useVerifyPassword() {
-  return useMutation<void, ApiError, string>({
-    mutationFn: (currentPassword) => api.post("/api/auth/verify-password", { currentPassword, newPassword: "not-used" }),
-  });
-}

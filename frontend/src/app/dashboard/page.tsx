@@ -118,7 +118,7 @@ function DashboardTopbar({ email }: { email: string }) {
   return (
     <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div>
-        <h1 className="font-serif text-[1.45rem] font-bold italic tracking-[-0.02em] sm:text-[1.7rem]">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
+        <h1 className="font-serif text-[1.45rem] font-bold tracking-[-0.01em] sm:text-[1.7rem]">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
         <p className="mt-1 text-xs text-[var(--muted)]">
           {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())} · Okulun bugünkü akışı burada
         </p>

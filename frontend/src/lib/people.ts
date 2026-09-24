@@ -136,8 +136,16 @@ export function useInstruments() {
   return useQuery({ queryKey: ["instruments"], queryFn: () => api.get<Instrument[]>("/api/instruments") });
 }
 
+// Açılır menüler ve listeler ekranda "Ad Soyad" gösteriyor; sunucu ise soyada ve veritabanı
+// harmanlamasına göre sıralıyor (Ç/Ö/Ş sona düşüyordu). Burada görünen ada göre, Türkçe
+// alfabeyle sıralanır - bu kancayı kullanan her menü birlikte düzelir.
+export function byDisplayName<T extends { firstName: string; lastName: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) =>
+    `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`, "tr-TR", { sensitivity: "base", numeric: true }));
+}
+
 export function useStudents() {
-  return useQuery({ queryKey: ["students"], queryFn: () => api.get<Student[]>("/api/students") });
+  return useQuery({ queryKey: ["students"], queryFn: () => api.get<Student[]>("/api/students"), select: byDisplayName });
 }
 
 export interface StudentInstrumentSummary {
@@ -148,6 +156,8 @@ export interface StudentInstrumentSummary {
 export interface StudentOverview {
   student: Student;
   instruments: StudentInstrumentSummary[];
+  // Aktif kurs kayıtlarının en erken başlangıcı (YYYY-MM-DD); aktif kurs yoksa null.
+  enrolledSince: string | null;
 }
 
 // Öğrenci listesindeki enstrüman rozetleri buna dayanır - useTeacherOverviews ile aynı
@@ -240,6 +250,19 @@ export function useStudentGuardians(studentId: string) {
   });
 }
 
+export interface GuardianPhoneLookup {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  studentNames: string[];
+}
+
+// "Bu numara zaten kayıtlı" çakışmasında mevcut veliyi bulmak için (yalnızca yönetici).
+export function lookupGuardianByPhone(phone: string) {
+  return api.get<GuardianPhoneLookup>(`/api/guardians/by-phone?phone=${encodeURIComponent(phone)}`);
+}
+
 export function useLinkGuardian(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -280,7 +303,7 @@ export function useCreateAndLinkGuardian(studentId: string) {
 }
 
 export function useTeachers() {
-  return useQuery({ queryKey: ["teachers"], queryFn: () => api.get<Teacher[]>("/api/teachers") });
+  return useQuery({ queryKey: ["teachers"], queryFn: () => api.get<Teacher[]>("/api/teachers"), select: byDisplayName });
 }
 
 export function useTeacherOverviews(enabled = true) {
@@ -359,13 +382,17 @@ export interface RegisterStudentInput {
   instrumentId: string;
   startedAt: string;
   guardian: { firstName: string; lastName: string; phoneNumber: string; relationship?: string };
+  // Numara zaten bir kardeşin velisine aitse yönetici o veliyi seçer: yeni veli açılmaz,
+  // şifresi de SIFIRLANMAZ (kardeşin velisi mevcut şifresiyle girmeye devam etmeli).
+  existingGuardianId?: string;
   lesson?: { dayOfWeek: string; startTime: string; durationMinutes: number };
 }
 
 export interface RegisterStudentResult {
   studentId: string;
   enrollmentId: string;
-  guardian: GuardianCredential;
+  // Mevcut veli bağlandıysa şifre üretilmez - null.
+  guardian: GuardianCredential | null;
   lessonScheduled: boolean;
   lessonWarning: string | null;
 }
@@ -378,6 +405,15 @@ export function useRegisterStudent() {
   const queryClient = useQueryClient();
   return useMutation<RegisterStudentResult, unknown, RegisterStudentInput>({
     mutationFn: async (input) => {
+      // Veli ÖNCE çözülür: numara çakışırsa (409) hiçbir şey oluşmadan durur. Eskiden önce
+      // öğrenci açılıyordu; veli hatasında öğrenci velisiz kalıyor ve her yeni denemede bir
+      // kopyası daha oluşuyordu (kullanıcı geri bildirimi, gerçek hata).
+      const guardianId = input.existingGuardianId ?? (await api.post<Guardian>("/api/guardians", {
+        firstName: input.guardian.firstName,
+        lastName: input.guardian.lastName,
+        phoneNumber: input.guardian.phoneNumber,
+      })).id;
+
       const created = await api.post<TeacherStudentEnrollment>(`/api/teachers/${input.teacherId}/students`, {
         firstName: input.student.firstName,
         lastName: input.student.lastName,
@@ -386,20 +422,17 @@ export function useRegisterStudent() {
         startedAt: input.startedAt,
       });
 
-      const guardian = await api.post<Guardian>("/api/guardians", {
-        firstName: input.guardian.firstName,
-        lastName: input.guardian.lastName,
-        phoneNumber: input.guardian.phoneNumber,
-      });
       await api.post(`/api/students/${created.studentId}/guardians`, {
-        guardianId: guardian.id,
+        guardianId,
         relationship: input.guardian.relationship,
         isPrimary: true,
       });
-      const cred = await api.post<{ id: string; phoneNumber: string; password: string; message: string }>(
-        `/api/guardians/${guardian.id}/reset-password`,
-        {},
-      );
+      const cred = input.existingGuardianId
+        ? null
+        : await api.post<{ id: string; phoneNumber: string; password: string; message: string }>(
+            `/api/guardians/${guardianId}/reset-password`,
+            {},
+          );
 
       let lessonScheduled = false;
       let lessonWarning: string | null = null;
@@ -422,7 +455,7 @@ export function useRegisterStudent() {
       return {
         studentId: created.studentId,
         enrollmentId: created.enrollmentId,
-        guardian: { guardianId: guardian.id, phoneNumber: cred.phoneNumber, password: cred.password },
+        guardian: cred ? { guardianId, phoneNumber: cred.phoneNumber, password: cred.password } : null,
         lessonScheduled,
         lessonWarning,
       };
@@ -502,7 +535,7 @@ export interface StudentDeletionImpact {
   makeupCredits: number;
   assessments: number;
   showItems: number;
-  guardiansLeftWithoutStudents: number;
+  guardiansToDelete: number;
 }
 
 export interface TeacherDeletionImpact {

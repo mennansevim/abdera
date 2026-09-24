@@ -122,8 +122,12 @@ public static class UpdateLesson
                 clock.UtcNow,
                 before,
                 JsonSerializer.Serialize(new { Status = lesson.Status.ToString() })));
+            await LessonChangeNotice.NotifyCancelledAsync(
+                staffNotifier, db, clock, actorId, lesson.TeacherId, lesson.StudentId,
+                lesson.StartAt, lesson.Id, makeupCreditEarned: true, reason: null);
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
+            await staffNotifier.FlushEmailsAsync();
             return Results.Ok(new Response(lesson.Id, null, lesson.Status));
         }
 
@@ -182,14 +186,14 @@ public static class UpdateLesson
         // dersi kaybeden taraf sessiz kalmasın diye eski öğretmene de düşer.
         if (replacement.StartAt != lesson.StartAt)
         {
-            await LessonMovedNotice.NotifyTeacherAsync(
-                staffNotifier, db, clock, replacement.TeacherId, replacement.StudentId,
+            await LessonChangeNotice.NotifyMovedAsync(
+                staffNotifier, db, clock, actorId, replacement.TeacherId, replacement.StudentId,
                 lesson.StartAt, replacement.StartAt, replacement.Id);
 
             if (replacement.TeacherId != lesson.TeacherId)
             {
-                await LessonMovedNotice.NotifyTeacherAsync(
-                    staffNotifier, db, clock, lesson.TeacherId, replacement.StudentId,
+                await LessonChangeNotice.NotifyMovedAsync(
+                    staffNotifier, db, clock, actorId, lesson.TeacherId, replacement.StudentId,
                     lesson.StartAt, replacement.StartAt, replacement.Id,
                     extraNote: "ders başka bir öğretmene aktarıldı");
             }
@@ -214,6 +218,7 @@ public static class UpdateLesson
 
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
+        await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new Response(replacement.Id, lesson.Id, replacement.Status));
     }
 }

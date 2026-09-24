@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { MonthInput } from "@/components/month-input";
 import { FormMessage, Modal, onInvalidTurkish, resetValidity } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  COURSE_KIND_LABEL,
   useBillingDues,
   useCorrectPayment,
   useCreatePrepayPlan,
-  useCreateReceivable,
   usePrepayPreview,
   useRecordPayment,
   useStudentBilling,
@@ -18,7 +17,7 @@ import {
   type PaymentRecord,
   type Receivable,
 } from "@/lib/billing";
-import { currentPeriod, formatDay, formatMoney, formatPeriod, isValidPeriod } from "@/lib/billing-format";
+import { commitmentEndPeriod, currentPeriod, formatDay, formatMoney, formatPeriod, isObligatedPeriod, isValidPeriod } from "@/lib/billing-format";
 import { useEnrollments, useInstruments, useStudentOverviews, useStudents, useTeachers, type StudentInstrumentSummary, type Student } from "@/lib/people";
 import { useSessionState } from "@/lib/use-session-state";
 import { StudentBillingSection } from "./student-billing-section";
@@ -48,14 +47,6 @@ export interface BillingFilterSummary {
 }
 
 const MONTHS_TR = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-
-const STATUS_TONES: Record<BillingDue["status"], string> = {
-  Unpaid: "bg-[var(--surface-muted)] text-[var(--muted)]",
-  Partial: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
-  Paid: "bg-[var(--success-soft)] text-[var(--success-strong)]",
-  Overdue: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
-  Cancelled: "bg-[var(--surface-muted)] text-[var(--muted)]",
-};
 
 function isOpen(status: BillingDue["status"]) {
   return status === "Unpaid" || status === "Partial" || status === "Overdue";
@@ -113,17 +104,26 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
     return map;
   }, [dues]);
 
-  const thisPeriod = useMemo(() => currentPeriod(), []);
-  const duesByStudentThisPeriod = useMemo(() => {
-    const map = new Map<string, BillingDue[]>();
+  // Satırdaki "son 3 ay" kutucukları: eskiden yalnızca bu ayın durumu yazıyordu ("23 gün
+  // gecikti") - kullanıcı geri bildirimi: "bu gösterimin kimseye faydası yok". Üç ayı yan yana
+  // görmek kimin düzenli ödediğini, kimin birikmiş borcu olduğunu tek bakışta söylüyor.
+  const recentPeriods = useMemo(() => {
+    const [year, month] = currentPeriod().split("-").map(Number);
+    return [2, 1, 0].map((back) => {
+      const date = new Date(year, month - 1 - back, 1);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    });
+  }, []);
+  const duesByStudentPeriod = useMemo(() => {
+    const map = new Map<string, Map<string, BillingDue[]>>();
     for (const due of dues ?? []) {
-      if (due.period !== thisPeriod || due.status === "Cancelled") continue;
-      const rows = map.get(due.studentId) ?? [];
-      rows.push(due);
-      map.set(due.studentId, rows);
+      if (!recentPeriods.includes(due.period) || due.status === "Cancelled") continue;
+      const byPeriod = map.get(due.studentId) ?? new Map<string, BillingDue[]>();
+      byPeriod.set(due.period, [...(byPeriod.get(due.period) ?? []), due]);
+      map.set(due.studentId, byPeriod);
     }
     return map;
-  }, [dues, thisPeriod]);
+  }, [dues, recentPeriods]);
 
   const visibleStudents = useMemo(() => {
     const query = studentSearch.trim().toLocaleLowerCase("tr-TR");
@@ -135,8 +135,13 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
           .join(" ").toLocaleLowerCase("tr-TR");
         return haystack.includes(query);
       })
-      .sort((a, b) => `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`, "tr-TR"));
-  }, [overviews, studentSearch, teacherFilter, studentTeacherIds]);
+      // Kullanıcı isteği: "ödeyenleri en altta göster, ödemeyenler ya da gecikenler yukarıda
+      // olsun". Önce aciliyet (paymentRank), eşitlikte ad sırası.
+      .sort((a, b) =>
+        paymentRank(duesByStudentPeriod.get(a.student.id), recentPeriods, a.enrolledSince)
+          - paymentRank(duesByStudentPeriod.get(b.student.id), recentPeriods, b.enrolledSince)
+        || `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`, "tr-TR"));
+  }, [overviews, studentSearch, teacherFilter, studentTeacherIds, duesByStudentPeriod, recentPeriods]);
 
   // Üstteki özet kartları arama/öğretmen daraltmasını takip etsin - dönem artık bir
   // daraltma boyutu olmadığı için tüm geçmiş bu kapsamda toplanır (aynı page.tsx'teki
@@ -174,10 +179,10 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
         <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
       </div>
 
-      <div className="hidden grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Kurslar</span><span>Bu ay</span><span className="text-right">İşlem</span></div>
+      <div className="hidden grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Kurslar</span><span>Son 3 ay</span><span className="text-right">İşlem</span></div>
       {isLoading && <div className="space-y-2 p-4">{[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-16 rounded-xl" />)}</div>}
       {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Öğrenci listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
-      {!isLoading && !isError && visibleStudents.length > 0 && <ul className="divide-y divide-[var(--line)]">{visibleStudents.map(({ student, instruments }) => <StudentRow key={student.id} student={student} instruments={instruments} thisMonthDues={duesByStudentThisPeriod.get(student.id) ?? []} />)}</ul>}
+      {!isLoading && !isError && visibleStudents.length > 0 && <ul className="divide-y divide-[var(--line)]">{visibleStudents.map(({ student, instruments, enrolledSince }) => <StudentRow key={student.id} student={student} instruments={instruments} enrolledSince={enrolledSince} periods={recentPeriods} duesByPeriod={duesByStudentPeriod.get(student.id)} />)}</ul>}
       {!isLoading && !isError && !visibleStudents.length && <div className="grid min-h-52 place-items-center p-8 text-center"><div>
         <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]"><Icon name="wallet" className="h-5 w-5" /></span>
         {!overviews?.length
@@ -193,34 +198,81 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
   </div>;
 }
 
-// Bir öğrenci satırı: ad, aktif kursları, bu ayki aidat durumu (triyaj için - hangi
-// öğrenciyi araması gerektiğini görmek için tek tek "Detay" açmasına gerek kalmasın) ve
-// geçmiş dahil tüm dönemleri açan "Detay" butonu.
-function StudentRow({ student, instruments, thisMonthDues }: { student: Student; instruments: StudentInstrumentSummary[]; thisMonthDues: BillingDue[] }) {
-  const [showDetail, setShowDetail] = useState(false);
-  const totalDue = thisMonthDues.reduce((total, due) => total + due.amount, 0);
-  const totalPaid = thisMonthDues.reduce((total, due) => total + due.totalPaid, 0);
-  const hasRecord = thisMonthDues.length > 0;
-  const isPaid = totalDue > 0 && totalPaid >= totalDue;
-  const isPartial = totalPaid > 0 && !isPaid;
-  const overdueDues = thisMonthDues.filter((due) => due.status === "Overdue");
-  const isOverdue = overdueDues.length > 0;
-  const worstDueDate = overdueDues.map((due) => due.dueDate).sort().at(0);
-  const lateDays = worstDueDate ? daysOverdue(worstDueDate) : 0;
+// Kullanıcı kuralı: yalnızca iki durum var - ödendi (yeşil) ya da ödenmedi (kırmızı). Kısmi
+// ödeme de ödenmemiş sayılır (kalan tutar ipucunda yazar); "aidat açılmadı" diye bir durum
+// yoktur, kayıtlı öğrenci kayıt ayından itibaren her aydan sorumludur.
+function isMonthPaid(dues: BillingDue[]) {
+  const due = dues.reduce((total, item) => total + item.amount, 0);
+  const paid = dues.reduce((total, item) => total + item.totalPaid, 0);
+  return dues.length > 0 && due > 0 && paid >= due;
+}
 
-  const stateStatus: BillingDue["status"] = !hasRecord ? "Unpaid" : isPaid ? "Paid" : isPartial ? "Partial" : isOverdue ? "Overdue" : "Unpaid";
-  // "Bu ay kayıt yok" yazıyordu: aktif kaydı olan öğrenci için "kayıtlı değil" gibi okunuyordu.
-  // Sorun öğrencinin kaydı değil, bu ayın aidat satırının açılmamış olması - Detay'dan açılır.
-  const stateLabel = !hasRecord ? (instruments.length ? "Aidat açılmadı" : "Aktif kurs yok") : isPaid ? "Bu ay ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? `${lateDays} gün gecikti` : "Ödeme bekliyor";
+function monthTitle(period: string, dues: BillingDue[]) {
+  if (isMonthPaid(dues)) {
+    const paid = dues.reduce((total, item) => total + item.totalPaid, 0);
+    return `${formatPeriod(period)}: Ödendi · ${formatMoney(paid, dues[0].currency)}`;
+  }
+  if (!dues.length) return `${formatPeriod(period)}: Ödenmedi`;
+  const remaining = dues.reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0);
+  const lateDue = dues.filter((item) => item.status === "Overdue").map((item) => item.dueDate).sort().at(0);
+  return `${formatPeriod(period)}: Ödenmedi · ${formatMoney(remaining, dues[0].currency)} kaldı${lateDue ? ` · ${daysOverdue(lateDue)} gün gecikti` : ""}`;
+}
+
+function obligatedPeriods(periods: string[], enrolledSince: string | null) {
+  return enrolledSince ? periods.filter((period) => isObligatedPeriod(period, { startedAt: enrolledSince })) : [];
+}
+
+// Listedeki sıra (kullanıcı isteği: "ödeyenleri en altta göster"): son 3 aydan ödenmemiş ay
+// sayısı çok olan en üstte, hepsini ödemiş olan en altta; aktif kursu olmayan en sonda.
+function paymentRank(duesByPeriod: Map<string, BillingDue[]> | undefined, periods: string[], enrolledSince: string | null) {
+  const obligated = obligatedPeriods(periods, enrolledSince);
+  if (!obligated.length) return 100;
+  const unpaid = obligated.filter((period) => !isMonthPaid(duesByPeriod?.get(period) ?? [])).length;
+  return unpaid > 0 ? 10 - unpaid : 50;
+}
+
+// Bir öğrenci satırı: ad, aktif kursları, son 3 ayın aidat kutucukları ve geçmiş dahil tüm
+// dönemleri açan "Detay". Kutucuğa tıklamak takvimi o ay seçili olarak açar (oradan ödeme alınır).
+function StudentRow({ student, instruments, enrolledSince, periods, duesByPeriod }: { student: Student; instruments: StudentInstrumentSummary[]; enrolledSince: string | null; periods: string[]; duesByPeriod?: Map<string, BillingDue[]> }) {
+  const [detailPeriod, setDetailPeriod] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+
+  function openMonth(period: string) {
+    setDetailPeriod(period);
+    setShowDetail(true);
+  }
 
   return <li>
     <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto]">
       <strong className="min-w-0 truncate text-sm">{student.firstName} {student.lastName}</strong>
       <span className="text-meta truncate">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
-      <span className={`inline-flex w-fit rounded-full px-2 py-1 text-[.75rem] font-bold ${hasRecord ? STATUS_TONES[stateStatus] : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{stateLabel}</span>
-      <div className="flex justify-end"><button type="button" onClick={() => setShowDetail((visible) => !visible)} aria-expanded={showDetail} className="btn btn-quiet text-xs">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
+      <div className="flex gap-1.5" role="group" aria-label="Son 3 ayın aidat durumu">
+        {!obligatedPeriods(periods, enrolledSince).length && <span className="text-meta">Aktif kurs yok</span>}
+        {obligatedPeriods(periods, enrolledSince).map((period) => {
+          const dues = duesByPeriod?.get(period) ?? [];
+          const paid = isMonthPaid(dues);
+          const title = monthTitle(period, dues);
+          const monthName = MONTHS_TR[Number(period.slice(5, 7)) - 1];
+          return (
+            <button
+              key={period}
+              type="button"
+              onClick={() => openMonth(period)}
+              title={title}
+              aria-label={title}
+              className={`pressable grid h-10 min-w-12 place-items-center rounded-lg border px-2 text-[.75rem] font-extrabold ${paid ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--danger)]/40 bg-[var(--danger-soft)] text-[var(--danger-strong)]"} ${showDetail && detailPeriod === period ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+            >
+              <span className="flex items-center gap-1">
+                <Icon name={paid ? "check" : "x"} className="h-3 w-3" aria-hidden="true" />
+                {monthName}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex justify-end"><button type="button" onClick={() => { setDetailPeriod(null); setShowDetail((visible) => !visible); }} aria-expanded={showDetail} className="btn btn-quiet text-xs">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
     </div>
-    {showDetail && <div className="px-4 pb-4"><PaymentHistoryCollapse studentId={student.id} /></div>}
+    {showDetail && <div className="px-4 pb-4"><PaymentHistoryCollapse key={detailPeriod ?? "latest"} studentId={student.id} initialPeriod={detailPeriod} /></div>}
   </li>;
 }
 
@@ -235,23 +287,32 @@ function QuickCollectPanel({
   pickerRef,
   onOpenFullAccount,
   onCollected,
+  initialStudentId,
+  initialPeriod,
 }: {
-  pickerRef: React.RefObject<HTMLSelectElement | null>;
-  onOpenFullAccount: (studentId: string) => void;
+  pickerRef?: React.RefObject<HTMLSelectElement | null>;
+  onOpenFullAccount?: (studentId: string) => void;
   onCollected: () => void;
+  // Aidat takviminde bir aya tıklayıp "Ödeme yap" denince öğrenci ve dönem hazır gelir.
+  initialStudentId?: string;
+  initialPeriod?: string;
 }) {
   const { data: students } = useStudents();
   const { data: instruments } = useInstruments();
   const { data: teachers } = useTeachers();
-  const [studentId, setStudentId] = useState("");
+  const [studentId, setStudentId] = useState(initialStudentId ?? "");
   const [rawEnrollmentId, setRawEnrollmentId] = useState("");
   const { data: enrollments, isLoading: enrollmentsLoading } = useEnrollments(studentId);
   const { data: billing } = useStudentBilling(studentId, { enabled: !!studentId });
   const recordPayment = useRecordPayment(studentId);
   const [pendingMethod, setPendingMethod] = useState<PaymentMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [startPeriod, setStartPeriod] = useState(() => currentPeriod());
+  const [startPeriod, setStartPeriod] = useState(() => initialPeriod ?? currentPeriod());
   const [months, setMonths] = useState(1);
+  // Elle girilen tahsilat tutarı (kullanıcı isteği: "ödenecek rakamı o anda editleyebileyim,
+  // küsüratlar değişebiliyor"). Hesaplandığı seçime (kurs + dönem + ay sayısı) bağlı tutulur:
+  // seçim değişince eski rakam sessizce yeni hesaba taşınmaz, hesaplanan tutara dönülür.
+  const [override, setOverride] = useState<{ key: string; value: number | "" } | null>(null);
 
   const activeEnrollments = useMemo(
     () => enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [],
@@ -278,7 +339,14 @@ function QuickCollectPanel({
   const settleRemainingOnly = months === 1 && !!existing && existing.status !== "Paid";
   const remaining = existing ? Math.max(0, existing.amount - existing.totalPaid) : 0;
 
-  const payableTotal = settleRemainingOnly ? remaining : preview?.total ?? 0;
+  const computedTotal = settleRemainingOnly ? remaining : preview?.total ?? 0;
+  const overrideKey = `${enrollmentId}|${startPeriod}|${months}|${settleRemainingOnly ? "rest" : "plan"}`;
+  const activeOverride = override?.key === overrideKey ? override.value : null;
+  const payableTotal = activeOverride === null || activeOverride === "" ? computedTotal : activeOverride;
+  const isAdjusted = activeOverride !== null && activeOverride !== "" && activeOverride !== computedTotal;
+  // Sınırlar sunucudakiyle aynı: kalan bakiyede kalanı, planda tarife toplamını aşamaz.
+  const maxPayable = settleRemainingOnly ? remaining : preview?.baseTotal ?? 0;
+  const amountInvalid = activeOverride === "" || payableTotal <= 0 || payableTotal > maxPayable;
   const currency = preview?.currency ?? existing?.currency ?? "TRY";
   const blockers = settleRemainingOnly ? [] : preview?.blockers ?? [];
   const busy = pendingMethod !== null;
@@ -303,7 +371,7 @@ function QuickCollectPanel({
       if (settleRemainingOnly && existing) {
         await recordPayment.mutateAsync({
           receivableId: existing.id,
-          amount: remaining,
+          amount: payableTotal,
           paymentDate: new Date().toISOString().slice(0, 10),
           method,
         });
@@ -314,6 +382,7 @@ function QuickCollectPanel({
           paymentDate: new Date().toISOString().slice(0, 10),
           method,
           expectedTotal: preview?.total,
+          ...(isAdjusted ? { agreedTotal: payableTotal } : {}),
         });
       }
       onCollected();
@@ -327,7 +396,7 @@ function QuickCollectPanel({
   return <div className="mt-4 max-w-xl space-y-3">
     <label className="form-label block">
       <span>Öğrenci</span>
-      <select ref={pickerRef} value={studentId} onChange={(event) => { setStudentId(event.target.value); setRawEnrollmentId(""); setError(null); }} className="field min-h-11 text-sm">
+      <select ref={pickerRef} value={studentId} disabled={!!initialStudentId} onChange={(event) => { setStudentId(event.target.value); setRawEnrollmentId(""); setError(null); }} className="field min-h-11 text-sm">
         <option value="">Öğrenci seç…</option>
         {students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}
       </select>
@@ -352,9 +421,9 @@ function QuickCollectPanel({
     {enrollmentId && (
       <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-4">
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="form-label">İlk dönem
-            <input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required aria-invalid={!hasStartPeriod} className="field min-h-11 bg-white text-xs" />
-          </label>
+          <div className="form-label">İlk dönem
+            <MonthInput label="İlk dönem" value={startPeriod} onChange={(value) => { setStartPeriod(value); setError(null); }} />
+          </div>
           <label className="form-label">Kaç aylık ödeme?
             <input type="number" inputMode="numeric" min={1} max={24} value={months} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} className="field min-h-11 bg-white text-xs" />
           </label>
@@ -383,26 +452,53 @@ function QuickCollectPanel({
           </dl>}
 
           <div className="mt-2 flex flex-wrap items-end justify-between gap-2 border-t border-[var(--line)] pt-2">
-            <strong className="text-lg tabular-nums text-[var(--brand-strong)]">{formatMoney(payableTotal, currency)}</strong>
+            <span>
+              {isAdjusted && <span className="block text-[.75rem] tabular-nums text-[var(--muted)] line-through">{formatMoney(computedTotal, currency)}</span>}
+              <strong className="text-lg tabular-nums text-[var(--brand-strong)]">{formatMoney(payableTotal, currency)}</strong>
+            </span>
             {settleRemainingOnly
-              ? <span className="rounded-full bg-[var(--warning-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--warning-strong)]">Kalan bakiye</span>
-              : preview && preview.savingTotal > 0
-                ? <span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--success-strong)]">{formatMoney(preview.savingTotal, preview.currency)} indirim</span>
+              ? <span className="rounded-full bg-[var(--danger-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--danger-strong)]">Kalan bakiye</span>
+              : preview && preview.baseTotal - payableTotal > 0
+                ? <span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--success-strong)]">{formatMoney(preview.baseTotal - payableTotal, preview.currency)} indirim</span>
                 : null}
           </div>
+
+          <label className="form-label mt-3 block">
+            <span>Tahsil edilen tutar</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0.01}
+              max={maxPayable || undefined}
+              step={0.01}
+              value={activeOverride ?? computedTotal}
+              onChange={(event) => { setOverride({ key: overrideKey, value: event.target.value === "" ? "" : Number(event.target.value) }); setError(null); }}
+              aria-invalid={amountInvalid}
+              className="field min-h-11 bg-white text-sm tabular-nums"
+            />
+          </label>
+          {isAdjusted && !amountInvalid && <p className="mt-1.5 text-[.75rem] text-[var(--muted)]">
+            {settleRemainingOnly
+              ? "Kalandan az girersen ay kısmi ödendi olarak kalır."
+              : `Hesaplanan ${formatMoney(computedTotal, currency)}. Aylar yine ödendi sayılır; fark aylara dağıtılıp "Tahsilatta elle düzeltme" olarak kaydedilir.`}
+          </p>}
+          {isAdjusted && <button type="button" onClick={() => setOverride(null)} className="mt-1 text-[.75rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Hesaplanan tutara dön</button>}
+          {amountInvalid && activeOverride !== null && <p role="alert" className="mt-1.5 text-[.75rem] font-semibold text-[var(--danger-strong)]">
+            Tutar 0&apos;dan büyük ve {formatMoney(maxPayable, currency)} ya da daha az olmalı.
+          </p>}
         </div>}
 
-        {blockers.length > 0 && <p role="alert" className="mt-3 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs font-semibold text-[var(--warning-strong)]">{blockers.join(" ")} İlk dönemi değiştirin.</p>}
+        {blockers.length > 0 && <p role="alert" className="mt-3 rounded-lg bg-[var(--warning-soft)] px-3 py-2 text-xs font-semibold text-[var(--warning-strong)]">{blockers.join(" ")}</p>}
 
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={() => void collect("Cash")} disabled={!hasStartPeriod || busy || blockers.length > 0 || payableTotal <= 0} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--success-strong)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Cash" ? "Kaydediliyor…" : months > 1 ? `${months} ayı nakit ödendi` : "Elden alındı"}</button>
-          <button type="button" onClick={() => void collect("Transfer")} disabled={!hasStartPeriod || busy || blockers.length > 0 || payableTotal <= 0} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Transfer" ? "Kaydediliyor…" : months > 1 ? `${months} aylık havale geldi` : "Havale geldi"}</button>
+          <button type="button" onClick={() => void collect("Cash")} disabled={!hasStartPeriod || busy || blockers.length > 0 || amountInvalid} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--success-strong)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Cash" ? "Kaydediliyor…" : months > 1 ? `${months} ayı nakit ödendi` : "Elden alındı"}</button>
+          <button type="button" onClick={() => void collect("Transfer")} disabled={!hasStartPeriod || busy || blockers.length > 0 || amountInvalid} className="pressable min-h-11 flex-1 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">{pendingMethod === "Transfer" ? "Kaydediliyor…" : months > 1 ? `${months} aylık havale geldi` : "Havale geldi"}</button>
         </div>
         {error && <p role="alert" className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
       </div>
     )}
 
-    {studentId && <button type="button" onClick={() => onOpenFullAccount(studentId)} className="inline-flex min-h-11 items-center text-left text-[.75rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Farklı dönem eklemek veya indirimi değiştirmek için tam hesabı aç →</button>}
+    {studentId && onOpenFullAccount && <button type="button" onClick={() => onOpenFullAccount(studentId)} className="inline-flex min-h-11 items-center text-left text-[.75rem] font-bold text-[var(--brand-strong)] underline underline-offset-2">Farklı dönem eklemek veya indirimi değiştirmek için tam hesabı aç →</button>}
   </div>;
 }
 
@@ -410,24 +506,20 @@ function QuickCollectPanel({
 // sağdaki panel ise seçili ayın tahsilat ayrıntısını ve (ödenmemişse) tahsilat formunu
 // gösterir. Veri yalnızca detay açıldığında çekilir; sayfadaki her satır için gizli istek
 // atılmaz.
-function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
+function PaymentHistoryCollapse({ studentId, initialPeriod = null }: { studentId: string; initialPeriod?: string | null }) {
   const { data: billing, isLoading, isError } = useStudentBilling(studentId);
-  const { data: enrollments } = useEnrollments(studentId);
   const { data: instruments } = useInstruments();
-  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(initialPeriod);
+  const [payPeriod, setPayPeriod] = useState<string | null>(null);
   const thisPeriod = useMemo(() => currentPeriod(), []);
 
-  // "Kayıtlı öğrenci her ay ödeme yapabilmeli": bu ayın satırı olmayan AKTİF kurs kayıtları.
-  // Sunucu kaydı açarken bu ayı zaten açıyor; burada kalan satır ya kayıt öncesinden kalma
-  // ya da o ayı kapsayan tarife olmadığı için açılamamış bir aydır. İleri bir ayda başlayan
-  // kayıt bu ayın borcunu doğurmaz (sunucudaki EnrollmentReceivableOpener ile aynı kural).
-  const unopenedThisMonth = useMemo(() => {
-    const monthEnd = `${thisPeriod}-31`;
-    return (enrollments ?? [])
-      .filter((enrollment) => enrollment.status === "Active" && enrollment.startedAt <= monthEnd)
-      .map((enrollment) => billing?.find((row) => row.enrollmentId === enrollment.id))
-      .filter((row): row is NonNullable<typeof row> => !!row && !row.receivables.some((receivable) => receivable.period === thisPeriod));
-  }, [billing, enrollments, thisPeriod]);
+  // Kayıt ayından itibaren her ay öğrencinin sorumluluğunda (kullanıcı kuralı: "kayıt olan her
+  // öğrenci aidata tabidir, önündeki 12 ay boyunca ödeme yapmak zorundadır"). Takvim bu
+  // aralıktaki her ayı ödendi/ödenmedi gösterir; "açılmadı" diye bir durum yok.
+  const isObligated = useCallback(
+    (period: string) => (billing ?? []).some((row) => isObligatedPeriod(period, row)),
+    [billing],
+  );
 
   const rowsByPeriod = useMemo(() => {
     const grouped = new Map<string, Array<{ receivable: NonNullable<typeof billing>[number]["receivables"][number]; instrumentName: string }>>();
@@ -443,14 +535,26 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   }, [billing, instruments]);
 
   const periods = useMemo(() => [...rowsByPeriod.keys()].filter(isValidPeriod).sort(), [rowsByPeriod]);
-  const years = useMemo(() => [...new Set(periods.map((period) => Number(period.slice(0, 4))))].sort((a, b) => a - b), [periods]);
-  const fallbackPeriod = useMemo(() => [...periods].reverse().find((period) =>
-    rowsByPeriod.get(period)?.some(({ receivable }) => receivable.payments.some((payment) => payment.kind === "Payment"))) ?? periods.at(-1) ?? null,
-  [periods, rowsByPeriod]);
+  // Gezinilebilen yıllar: ilk kayıttan, taahhüt edilen 12 ayın sonuna (ya da bugüne) kadar.
+  const years = useMemo(() => {
+    const bounds = [...periods, thisPeriod];
+    for (const row of billing ?? []) {
+      if (!row.startedAt) continue;
+      bounds.push(row.startedAt.slice(0, 7), commitmentEndPeriod(row.startedAt));
+    }
+    const sorted = bounds.filter(isValidPeriod).sort();
+    const first = Number(sorted[0].slice(0, 4));
+    const last = Number(sorted.at(-1)!.slice(0, 4));
+    return Array.from({ length: last - first + 1 }, (_, index) => first + index);
+  }, [billing, periods, thisPeriod]);
+  const fallbackPeriod = isObligated(thisPeriod) ? thisPeriod : periods.at(-1) ?? thisPeriod;
   const activePeriod = isValidPeriod(selectedPeriod) ? selectedPeriod : fallbackPeriod;
   const activeYear = activePeriod ? Number(activePeriod.slice(0, 4)) : years.at(-1) ?? new Date().getFullYear();
   const activeYearIndex = years.indexOf(activeYear);
   const selectedRows = activePeriod ? rowsByPeriod.get(activePeriod) ?? [] : [];
+  const selectedActive = selectedRows.filter(({ receivable }) => receivable.status !== "Cancelled");
+  const selectedMonthPaid = selectedActive.length > 0
+    && selectedActive.every(({ receivable }) => receivable.status === "Paid" || receivable.totalPaid >= receivable.amount);
 
   const prepayCoverage = useMemo(() => {
     const coverage = new Map<string, Set<string>>();
@@ -470,10 +574,8 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
   function selectYear(nextYearIndex: number) {
     const year = years[nextYearIndex];
     if (!year) return;
-    const yearPeriods = periods.filter((period) => period.startsWith(`${year}-`));
-    const latestPaidPeriod = [...yearPeriods].reverse().find((period) =>
-      rowsByPeriod.get(period)?.some(({ receivable }) => receivable.payments.some((payment) => payment.kind === "Payment")));
-    setSelectedPeriod(latestPaidPeriod ?? yearPeriods.at(-1) ?? `${year}-01`);
+    const yearPeriods = MONTHS_TR.map((_, index) => `${year}-${String(index + 1).padStart(2, "0")}`);
+    setSelectedPeriod(yearPeriods.find((period) => isObligated(period)) ?? `${year}-01`);
   }
 
   return <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/60 p-3">
@@ -487,17 +589,8 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
     </div>
     {isLoading && <div className="mt-2 space-y-1.5">{[1, 2].map((item) => <div key={item} className="skeleton h-9 rounded-lg" />)}</div>}
     {!isLoading && isError && <p className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">Ödeme geçmişi yüklenemedi.</p>}
-    {!isLoading && !isError && unopenedThisMonth.length > 0 && <OpenCurrentPeriodBlock
-      studentId={studentId}
-      period={thisPeriod}
-      rows={unopenedThisMonth.map((row) => ({
-        enrollmentId: row.enrollmentId,
-        label: `${instruments?.find((instrument) => instrument.id === row.instrumentId)?.name ?? "Kurs"} · ${COURSE_KIND_LABEL[row.courseKind]}`,
-      }))}
-      onOpened={() => setSelectedPeriod(thisPeriod)}
-    />}
-    {!isLoading && !isError && !periods.length && !unopenedThisMonth.length && <p className="text-meta mt-2">Bu öğrencinin henüz açılmış bir aidatı yok.</p>}
-    {!isLoading && !isError && periods.length > 0 && <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
+    {!isLoading && !isError && !(billing ?? []).length && <p className="text-meta mt-2">Bu öğrencinin kurs kaydı yok.</p>}
+    {!isLoading && !isError && (billing ?? []).length > 0 && <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)]">
       <section className="rounded-xl border border-[var(--line)] bg-white p-3" aria-label={`${activeYear} ödeme takvimi`}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {MONTHS_TR.map((monthName, monthIndex) => {
@@ -506,48 +599,55 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
             const activeReceivables = rows.filter(({ receivable }) => receivable.status !== "Cancelled");
             const totalDue = activeReceivables.reduce((total, { receivable }) => total + receivable.amount, 0);
             const totalPaid = activeReceivables.reduce((total, { receivable }) => total + receivable.totalPaid, 0);
-            const isPaid = totalDue > 0 && totalPaid >= totalDue;
-            const isPartial = totalPaid > 0 && !isPaid;
-            const isOverdue = activeReceivables.some(({ receivable }) => receivable.status === "Overdue");
-            const hasRecord = rows.length > 0;
+            const obligated = isObligated(period) || activeReceivables.length > 0;
+            const isPaid = activeReceivables.length > 0 && totalDue > 0 && totalPaid >= totalDue;
+            const currency = activeReceivables[0]?.receivable.currency ?? "TRY";
             const prepayMonths = Math.max(0, ...rows.flatMap(({ receivable }) => receivable.payments.map((payment) => payment.prepayPlanMonths ?? 0)));
-            const stateLabel = !hasRecord ? "Açılmadı" : isPaid ? "Ödendi" : isPartial ? "Kısmi ödendi" : isOverdue ? "Vadesi geçti" : "Ödeme bekliyor";
-            const stateClass = isPaid
-              ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]"
-              : isPartial
-                ? "border-[var(--warning)]/45 bg-[var(--warning-soft)] text-[var(--warning-strong)]"
-                : isOverdue
-                  ? "border-[var(--danger)]/35 bg-[var(--danger-soft)] text-[var(--danger-strong)]"
-                  : hasRecord
-                    ? "border-[var(--line)] bg-[var(--surface-muted)] text-[var(--muted)]"
-                    : "border-dashed border-[var(--line)] bg-white text-[var(--muted)]";
+            if (!obligated) {
+              // Kayıttan önceki (ya da biten kaydın sonrasındaki) ay: öğrencinin borcu yok.
+              return <div key={period} aria-label={`${formatPeriod(period)}: kayıt dönemi dışında`} className="min-h-[5.5rem] rounded-xl border border-transparent bg-[var(--surface-muted)]/50 p-2 text-[var(--muted)]/60">
+                <strong className="text-[.75rem]">{monthName}</strong>
+              </div>;
+            }
+            const stateLabel = isPaid ? "Ödendi" : "Ödenmedi";
             return <button
               key={period}
               type="button"
               onClick={() => setSelectedPeriod(period)}
               aria-pressed={activePeriod === period}
               aria-label={`${formatPeriod(period)}: ${stateLabel}`}
-              className={`pressable relative min-h-[5.5rem] rounded-xl border p-2 text-left ${stateClass} ${activePeriod === period ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+              className={`pressable relative min-h-[5.5rem] rounded-xl border p-2 text-left ${isPaid ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--danger)]/35 bg-[var(--danger-soft)] text-[var(--danger-strong)]"} ${activePeriod === period ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             >
-              <span className="flex items-center justify-between gap-1"><strong className="text-[.75rem]">{monthName}</strong><span className={`grid h-5 w-5 place-items-center rounded-full border ${isPaid ? "border-[var(--success-strong)] bg-[var(--success-strong)] text-white" : "border-current bg-white/60"}`}>{isPaid ? <Icon name="check" className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}</span></span>
+              <span className="flex items-center justify-between gap-1"><strong className="text-[.75rem]">{monthName}</strong><span className={`grid h-5 w-5 place-items-center rounded-full ${isPaid ? "bg-[var(--success-strong)]" : "bg-[var(--danger-strong)]"} text-white`}><Icon name={isPaid ? "check" : "x"} className="h-3 w-3" /></span></span>
               <span className="mt-2 block text-[.75rem] font-bold">{stateLabel}</span>
-              {hasRecord && <span className="mt-0.5 block truncate text-[.75rem] tabular-nums">{formatMoney(isPaid || isPartial ? totalPaid : totalDue, activeReceivables[0]?.receivable.currency ?? "TRY")}</span>}
+              {isPaid && <span className="mt-0.5 block truncate text-[.75rem] tabular-nums">{formatMoney(totalPaid, currency)}</span>}
+              {!isPaid && totalDue > 0 && <span className="mt-0.5 block truncate text-[.75rem] tabular-nums">{formatMoney(Math.max(0, totalDue - totalPaid), currency)} kaldı</span>}
               {prepayMonths > 1 && <span className="mt-1 inline-flex rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--brand-strong)]">Peşin · {prepayMonths} ay</span>}
             </button>;
           })}
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-[var(--line)] pt-2 text-[.75rem] font-semibold text-[var(--muted)]">
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--success-strong)]" />Ödendi</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--warning-strong)]" />Kısmi</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--danger-strong)]" />Vadesi geçti</span>
-          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full border border-[var(--line)] bg-white" />Açılmadı</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[var(--danger-strong)]" />Ödenmedi</span>
         </div>
       </section>
 
       <section className="rounded-xl border border-[var(--line)] bg-white p-4" aria-live="polite">
-        <p className="text-micro text-[var(--brand-strong)]">Seçili dönem</p>
-        <h4 className="mt-1 font-serif text-base font-bold capitalize">{formatPeriod(activePeriod)}</h4>
-        {!selectedRows.length && <div className="mt-4 grid min-h-36 place-items-center rounded-xl bg-[var(--surface-muted)] p-4 text-center"><div><Icon name="calendar" className="mx-auto h-5 w-5 text-[var(--muted)]" /><p className="text-meta mt-2">Bu ay için aidat kaydı bulunmuyor.</p></div></div>}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-micro text-[var(--brand-strong)]">Seçili dönem</p>
+            <h4 className="mt-1 font-serif text-base font-bold capitalize">{formatPeriod(activePeriod)}</h4>
+          </div>
+          {/* Ay açılmamış ya da tam ödenmemişse doğrudan bu aya (ve istenirse sonraki aylara)
+              ödeme alınır - kullanıcı isteği: "ayın üzerine tıklayınca ödeme yap butonu çıksın". */}
+          {activePeriod && !selectedMonthPaid && (isObligated(activePeriod) || selectedActive.length > 0) && <button type="button" onClick={() => setPayPeriod(activePeriod)} className="btn btn-primary">
+            <Icon name="wallet" className="h-4 w-4" />Ödeme yap
+          </button>}
+        </div>
+        {!selectedRows.length && <div className={`mt-4 grid min-h-36 place-items-center rounded-xl p-4 text-center ${activePeriod && isObligated(activePeriod) ? "bg-[var(--danger-soft)]/60" : "bg-[var(--surface-muted)]"}`}><div>
+          <Icon name={activePeriod && isObligated(activePeriod) ? "x" : "calendar"} className={`mx-auto h-5 w-5 ${activePeriod && isObligated(activePeriod) ? "text-[var(--danger-strong)]" : "text-[var(--muted)]"}`} />
+          <p className="text-meta mt-2">{activePeriod && isObligated(activePeriod) ? "Bu ayın aidatı ödenmedi. \"Ödeme yap\" ile tahsil edebilirsin." : "Bu ay öğrencinin kayıt dönemi dışında."}</p>
+        </div></div>}
         {!!selectedRows.length && <div className="mt-3 space-y-2.5">
           {selectedRows.map(({ receivable, instrumentName }) => (
             <ReceivablePeriodCard key={receivable.id} studentId={studentId} receivable={receivable} instrumentName={instrumentName} prepayCoverage={prepayCoverage} />
@@ -555,54 +655,14 @@ function PaymentHistoryCollapse({ studentId }: { studentId: string }) {
         </div>}
       </section>
     </div>}
-  </div>;
-}
-
-// Bu ayın aidat satırı olmayan aktif kurs kayıtları için tek iş: satırı aç. Tutarı sunucu
-// tarifeden hesaplar (POST /api/receivables); açıldıktan sonra takvimde görünür ve tahsilat
-// her zamanki gibi ReceivablePeriodCard'dan alınır. Borç AÇMAK ile para ALMAK ayrı işler
-// (CLAUDE.md H12) - bu blok tahsilat yapmaz. Tarife yoksa sunucunun sebebi (ders türü + dönem)
-// olduğu gibi gösterilir.
-function OpenCurrentPeriodBlock({
-  studentId,
-  period,
-  rows,
-  onOpened,
-}: {
-  studentId: string;
-  period: string;
-  rows: Array<{ enrollmentId: string; label: string }>;
-  onOpened: () => void;
-}) {
-  const createReceivable = useCreateReceivable(studentId);
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function open(enrollmentId: string) {
-    setError(null);
-    setPendingId(enrollmentId);
-    try {
-      await createReceivable.mutateAsync({ enrollmentId, period });
-      onOpened();
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Aidat açılamadı.");
-    } finally {
-      setPendingId(null);
-    }
-  }
-
-  return <div className="mt-3 rounded-xl border border-[var(--warning)]/45 bg-[var(--warning-soft)]/60 p-3">
-    <p className="text-sm font-bold capitalize">{formatPeriod(period)}</p>
-    <p className="text-meta mt-0.5">Bu ay için henüz aidat satırı açılmamış. Satırı açınca tutar tarifeden hesaplanır ve tahsilat alabilirsin.</p>
-    <ul className="mt-3 space-y-2">
-      {rows.map((row) => <li key={row.enrollmentId} className="flex flex-wrap items-center justify-between gap-2">
-        {rows.length > 1 && <span className="text-xs font-semibold">{row.label}</span>}
-        <button type="button" onClick={() => void open(row.enrollmentId)} disabled={pendingId !== null} className="btn btn-primary disabled:opacity-50">
-          <Icon name="plus" className="h-4 w-4" />{pendingId === row.enrollmentId ? "Açılıyor…" : "Bu ayın aidatını aç"}
-        </button>
-      </li>)}
-    </ul>
-    {error && <div className="mt-3"><FormMessage tone="error">{error}</FormMessage></div>}
+    <Modal
+      open={payPeriod !== null}
+      title="Ödeme yap"
+      description="Dönem hazır geldi; birkaç ay birden ödendiyse ay sayısını artır. Tutarı gerekirse elle düzeltebilirsin."
+      onClose={() => setPayPeriod(null)}
+    >
+      {payPeriod && <QuickCollectPanel key={payPeriod} initialStudentId={studentId} initialPeriod={payPeriod} onCollected={() => { setSelectedPeriod(payPeriod); setPayPeriod(null); }} />}
+    </Modal>
   </div>;
 }
 
@@ -668,7 +728,7 @@ function ReceivablePeriodCard({
         return <div key={payment.id} className="rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem]">
           <div className="flex flex-wrap items-center justify-between gap-1.5"><span className="font-semibold">{payment.paymentDate} · {paymentMethodLabel(payment.method)}</span><strong className="tabular-nums">{payment.kind === "Correction" && payment.previousAmount != null ? `${payment.previousAmount.toLocaleString("tr-TR")} → ` : ""}{payment.amount.toLocaleString("tr-TR")} {receivable.currency}</strong></div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {payment.kind === "Correction" && <span className="rounded-full bg-[var(--warning-soft)] px-1.5 py-0.5 font-bold text-[var(--warning-strong)]">{payment.amount === 0 ? "Geri alındı" : "Düzeltme"}</span>}
+            {payment.kind === "Correction" && <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 font-bold text-[var(--muted)]">{payment.amount === 0 ? "Geri alındı" : "Düzeltme"}</span>}
             {effective === 0 && <span className="rounded-full bg-[var(--surface)] px-1.5 py-0.5 font-bold text-[var(--muted)]">Geri alındı</span>}
             {payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}
             {coveredPeriods.length > 1 && <span className="text-[var(--muted)]">{formatPeriod(coveredPeriods[0])} – {formatPeriod(coveredPeriods.at(-1))}</span>}

@@ -50,7 +50,7 @@ export interface PagedResponse<T> {
 
 // Ekran içi personel bildirimi (staff_notifications) - WhatsApp job'larından ayrı bir akış:
 // bunlar dışarı gönderilmez, oturumdaki kullanıcının kendi zilinde görünür.
-export type StaffNotificationType = "LessonMoved";
+export type StaffNotificationType = "LessonMoved" | "LessonCancelled" | "MakeupScheduled" | "StudentDeletionRequested";
 
 export type StaffNotification = {
   id: string;
@@ -65,15 +65,15 @@ export type StaffNotification = {
 
 export type StaffNotificationList = { items: StaffNotification[]; unreadCount: number };
 
-// Ders taşıma bildiriminin, öğretmen sayfayı yenilemeden de düşmesi gerekiyor; okul
-// ölçeğinde (6-8 öğretmen) dakikada bir küçük bir istek yeterli - websocket/push
+// Bildirim sayfa yenilenmeden de düşmeli (ekrandaki açılır kart bu yoklamayla tetiklenir);
+// okul ölçeğinde (6-8 personel) 30 saniyede bir küçük bir istek yeterli - websocket/push
 // altyapısı kurmaya değmez (CLAUDE.md: gereksiz bağımlılık ekleme).
 export function useStaffNotifications(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["staff-notifications"],
     queryFn: () => api.get<StaffNotificationList>("/api/me/notifications"),
     enabled: options?.enabled ?? true,
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,
     refetchOnWindowFocus: true,
   });
 }

@@ -117,8 +117,8 @@ public static class ChangeRequests
         }
 
         // Dersi taşıyan çoğu zaman yönetici olur; öğretmen değişikliği kendi ekranında görsün.
-        await LessonMovedNotice.NotifyTeacherAsync(
-            staffNotifier, db, clock, lesson.TeacherId, lesson.StudentId,
+        await LessonChangeNotice.NotifyMovedAsync(
+            staffNotifier, db, clock, AuthContext.GetUserId(principal), lesson.TeacherId, lesson.StudentId,
             lesson.StartAt, newLesson.StartAt, newLesson.Id);
 
         db.AuditLogs.Add(AuditLog.Record(
@@ -144,6 +144,7 @@ public static class ChangeRequests
             })));
 
         await db.SaveChangesAsync();
+        await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new ApproveResponse(ToResponse(changeRequest), newLesson.Id));
     }
 

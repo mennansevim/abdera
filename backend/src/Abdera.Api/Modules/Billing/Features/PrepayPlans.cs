@@ -27,7 +27,11 @@ public static class PrepayPlans
         PaymentMethod Method,
         string? Reference,
         string? Note,
-        decimal? ExpectedTotal);
+        decimal? ExpectedTotal,
+        // Yöneticinin o anda elle girdiği tahsilat toplamı (küsürat/yuvarlama). Boşsa ya da
+        // sunucunun hesabıyla aynıysa hesaplanan tutar geçerlidir. ExpectedTotal'ın yerini
+        // TUTMAZ: istemci önce sunucunun hesabını gördüğünü teyit eder, sonra onu değiştirir.
+        decimal? AgreedTotal = null);
 
     public record MonthRow(
         string Period, DateOnly DueDate, decimal BaseAmount, decimal Amount,
@@ -103,14 +107,37 @@ public static class PrepayPlans
         // Tek aylık ödeme bir "kampanya" değil - plan kimliği yalnızca 2+ ayda üretilir,
         // böylece arayüz gerçekten toplu olan tahsilatı ayırt edebilir.
         var prepayPlanId = request.Months > 1 ? Guid.NewGuid() : (Guid?)null;
-        var targets = new List<Receivable>();
-
+        var priced = new List<(string Period, TuitionRate Rate, TuitionCalculator.Breakdown Breakdown)>();
         foreach (var period in periods)
         {
             var (rate, breakdown) = pricer.Price(enrollment, period, prepayPercent)
-                ?? throw new ConflictException(
-                    "Bu ders türü için geçerli bir ücret tarifesi yok. Önce Fiyat politikası ekranından tarifeyi tanımlayın.");
+                ?? throw new ConflictException(pricer.MissingRateMessage(enrollment.CourseKind, period));
+            priced.Add((period, rate, breakdown));
+        }
 
+        var manuallyAdjusted = request.AgreedTotal is { } agreed && agreed != preview.Total;
+        if (manuallyAdjusted)
+        {
+            IReadOnlyList<TuitionCalculator.Breakdown> adjusted;
+            try
+            {
+                adjusted = TuitionCalculator.AdjustToAgreedTotal(
+                    priced.Select(row => row.Breakdown).ToList(), request.AgreedTotal!.Value);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new ValidationFailedException(new Dictionary<string, string[]>
+                {
+                    ["agreedTotal"] = [ex.Message.Split(" (Parameter")[0]],
+                });
+            }
+
+            priced = priced.Select((row, index) => (row.Period, row.Rate, adjusted[index])).ToList();
+        }
+
+        var targets = new List<Receivable>();
+        foreach (var (period, rate, breakdown) in priced)
+        {
             if (existing.TryGetValue(period, out var receivable))
             {
                 // Ay zaten açılmış ama ödenmemişse kampanya oranıyla yeniden fiyatlanır.
@@ -151,6 +178,8 @@ public static class PrepayPlans
                     amount = receivable.Amount,
                     months = request.Months,
                     prepayPlanId,
+                    computedTotal = preview.Total,
+                    agreedTotal = manuallyAdjusted ? request.AgreedTotal : null,
                     newStatus = receivable.Status.ToString(),
                 })));
         }
@@ -161,14 +190,15 @@ public static class PrepayPlans
         var totals = await Receivables.ComputeTotalsPaidAsync(ids, db);
         var payments = await Receivables.ComputePaymentsAsync(ids, db);
 
+        var total = targets.Sum(receivable => receivable.Amount);
         return Results.Ok(new CreateResponse(
             prepayPlanId ?? Guid.Empty,
             request.StartPeriod,
             request.Months,
             prepayPercent,
             preview.BaseTotal,
-            preview.Total,
-            preview.SavingTotal,
+            total,
+            preview.BaseTotal - total,
             preview.Currency,
             targets.Select(receivable => Receivables.ToResponse(
                 receivable, totals.GetValueOrDefault(receivable.Id), payments.GetValueOrDefault(receivable.Id) ?? []))
@@ -208,8 +238,7 @@ public static class PrepayPlans
             var priced = pricer.Price(enrollment, period, prepayPercent);
             if (priced is null)
             {
-                var kindLabel = enrollment.CourseKind == CourseKind.Group ? "Grup" : "Birebir";
-                blockers.Add($"{period}: {kindLabel} dersi için geçerli ücret tarifesi yok.");
+                blockers.Add(pricer.MissingRateMessage(enrollment.CourseKind, period));
                 rows.Add(new MonthRow(period, pricer.DueDateFor(period), 0m, 0m, existing.ContainsKey(period), "Tarife yok"));
                 continue;
             }

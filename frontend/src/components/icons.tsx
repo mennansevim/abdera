@@ -23,6 +23,8 @@ export type IconName =
   | "music"
   | "arrow-left"
   | "arrow-right"
+  | "chevrons-left"
+  | "chevrons-right"
   | "more"
   | "settings"
   | "shield"
@@ -62,6 +64,8 @@ const paths: Record<IconName, React.ReactNode> = {
   music: <><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></>,
   "arrow-left": <path d="m15 18-6-6 6-6"/>,
   "arrow-right": <path d="m9 18 6-6-6-6"/>,
+  "chevrons-left": <path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/>,
+  "chevrons-right": <path d="m6 17 5-5-5-5M13 17l5-5-5-5"/>,
   more: <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></>,
   settings: <><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/><path d="m19.4 15 .1.1a2 2 0 0 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4v.2a2 2 0 0 1-4 0v-.2a2 2 0 0 0-3.4-1.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A2 2 0 0 0 3.6 12a2 2 0 0 0-.6-1.4l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a2 2 0 0 0 3.4-1.4v-.2a2 2 0 1 1 4 0v.2a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a2 2 0 0 0 0 2.8Z"/></>,
   shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12l2 2 4-4"/></>,

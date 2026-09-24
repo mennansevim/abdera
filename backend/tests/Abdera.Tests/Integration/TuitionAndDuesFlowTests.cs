@@ -544,6 +544,82 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Prepay_plan_accepts_a_manually_agreed_total_and_still_settles_every_month()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "Kusurat", piano);
+        var student = await CreateStudentAsync(admin, "Kusurat");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+
+        var preview = await ReadAsync<PrepayPlans.PreviewResponse>(await admin.GetAsync(
+            $"/api/enrollments/{enrollment.Id}/prepay-preview?startPeriod=2028-01&months=3"));
+        Assert.Equal(18000m, preview.Total);
+
+        // Veli 18.000 yerine 17.500 ödedi: aylar yine "Ödendi" olmalı, fark indirim olarak kalır.
+        var created = await ReadAsync<PrepayPlans.CreateResponse>(await admin.PostAsJsonAsync(
+            $"/api/enrollments/{enrollment.Id}/prepay-plans",
+            new PrepayPlans.CreateRequest(
+                "2028-01", 3, new DateOnly(2028, 1, 2), PaymentMethod.Cash, null, null,
+                ExpectedTotal: preview.Total, AgreedTotal: 17500m)));
+
+        Assert.Equal(17500m, created.Total);
+        Assert.All(created.Receivables, receivable =>
+        {
+            Assert.Equal(ReceivableStatus.Paid, receivable.Status);
+            Assert.Equal(6000m, receivable.BaseAmount);
+            Assert.Contains(TuitionCalculator.ManualAdjustmentReason, receivable.DiscountReason);
+        });
+        Assert.Equal(17500m, created.Receivables.Sum(receivable => receivable.Amount));
+        Assert.True(await db.AuditLogs.AnyAsync(log =>
+            log.Action == "receivable.prepay_payment_recorded" && log.EntityId == created.Receivables[0].Id));
+
+        // Tarife toplamının üstü reddedilir - aidat tarifenin üstüne çıkamaz.
+        var tooMuch = await admin.PostAsJsonAsync(
+            $"/api/enrollments/{enrollment.Id}/prepay-plans",
+            new PrepayPlans.CreateRequest(
+                "2028-06", 1, new DateOnly(2028, 6, 1), PaymentMethod.Cash, null, null,
+                ExpectedTotal: 6000m, AgreedTotal: 6500m));
+        Assert.Equal(HttpStatusCode.BadRequest, tooMuch.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_tariff_can_be_backfilled_before_the_earliest_one_to_cover_an_earlier_month()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "Geriye", piano);
+        var student = await CreateStudentAsync(admin, "Geriye");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+
+        var earliest = await db.TuitionRates.AsNoTracking()
+            .Where(rate => rate.CourseKind == CourseKind.Individual)
+            .MinAsync(rate => rate.EffectiveFrom);
+        var gapMonth = earliest.AddMonths(-1);
+        var gapPeriod = $"{gapMonth:yyyy-MM}";
+
+        // Önce: tarifeden önceki ay tahsil edilemez ve sebebi açıkça söylenir.
+        var blocked = await ReadAsync<PrepayPlans.PreviewResponse>(await admin.GetAsync(
+            $"/api/enrollments/{enrollment.Id}/prepay-preview?startPeriod={gapPeriod}&months=1"));
+        Assert.Contains(blocked.Blockers, blocker => blocker.Contains($"{earliest:yyyy-MM-dd} tarihinde başlıyor"));
+
+        var backfilled = await ReadAsync<TuitionRates.TuitionRateResponse>(await admin.PostAsJsonAsync(
+            "/api/tuition-rates",
+            new TuitionRates.CreateRequest(CourseKind.Individual, 4, 6000m, new DateOnly(gapMonth.Year, gapMonth.Month, 1), "TRY")));
+
+        // Yeni satır en eski tarifenin bir gün öncesinde kapanır; açık uçlu tarife değişmez.
+        Assert.Equal(earliest.AddDays(-1), backfilled.EffectiveUntil);
+        Assert.Equal(1, await db.TuitionRates.CountAsync(rate => rate.CourseKind == CourseKind.Individual && rate.EffectiveUntil == null));
+
+        var preview = await ReadAsync<PrepayPlans.PreviewResponse>(await admin.GetAsync(
+            $"/api/enrollments/{enrollment.Id}/prepay-preview?startPeriod={gapPeriod}&months=1"));
+        Assert.Empty(preview.Blockers);
+        Assert.Equal(6000m, preview.Total);
+    }
+
     // --- Tarife değişikliği -------------------------------------------------------
 
     [Fact]

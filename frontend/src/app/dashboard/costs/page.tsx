@@ -1,56 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Icon } from "@/components/icons";
 import { AddButton, AdminGate, FormActions, FormMessage, Modal, PageHeader, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useCreateExpense, useExpenses, useReceivables, type ExpenseCategory } from "@/lib/billing";
-import { useVerifyPassword } from "@/lib/use-auth";
 
 export default function CostsPage() {
   return <AdminGate><CostsPageContent /></AdminGate>;
 }
 
-// Maliyet/maaş verisi tamamen Admin'e özel (docs/04-permissions.md) - AdminGate bir
-// öğretmenin bu sayfayı doğrudan adresle açmasını (ve kendi şifresiyle aşağıdaki
-// "doğrula" kutusuna girip kabuğu görmesini) engeller. Şifre-doğrulama adımı bunun
-// YERİNE geçmiyor, ÜSTÜNE ekleniyor: paylaşılan bir bilgisayarda oturum açık kalmış bir
-// yönetici için ek bir onay.
+// Maliyet/maaş verisi tamamen Admin'e özel (docs/04-permissions.md): AdminGate ekranı, sunucu
+// da `/api/expenses` ve aidat uçlarını yalnızca yönetici oturumuna açar. Eskiden bunun üstüne
+// bir "şifreni tekrar doğrula" adımı vardı; kullanıcı geri bildirimi üzerine kaldırıldı
+// ("admin zaten giriş yapmış") - asıl koruma oturum ve sunucu yetkisi, ek şifre sorusu değil.
 function CostsPageContent() {
-  const [unlocked, setUnlocked] = useState(false);
-  const [password, setPassword] = useState("");
-  const verifyPassword = useVerifyPassword();
-  const [error, setError] = useState<string | null>(null);
-
-  async function unlock(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await verifyPassword.mutateAsync(password);
-      setUnlocked(true);
-      setPassword("");
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? "Şifre doğrulanamadı.") : "Şifre doğrulanamadı.");
-    }
-  }
-
-  return unlocked ? <CostDashboard onLock={() => setUnlocked(false)} /> : (
-    <div className="mx-auto max-w-md pt-10">
-      <section className="app-card p-5 sm:p-6">
-        <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name="bank" className="h-5 w-5" /></span>
-        <h1 className="text-display mt-4 font-serif italic">Maliyet takibi</h1>
-        <p className="text-meta mt-1">Bu ekran yöneticiye özeldir; açmak için şifreni bir kez daha doğrula.</p>
-        <form onSubmit={unlock} className="mt-4 space-y-3.5">
-          <label className="form-label">Hesap şifren<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" className="field text-sm" autoFocus /></label>
-          {error && <FormMessage tone="error">{error}</FormMessage>}
-          <button type="submit" disabled={verifyPassword.isPending} className="btn btn-primary w-full">{verifyPassword.isPending ? "Kontrol ediliyor…" : "Maliyet takibini aç"}</button>
-        </form>
-      </section>
-    </div>
-  );
+  return <CostDashboard />;
 }
 
-function CostDashboard({ onLock }: { onLock: () => void }) {
+function CostDashboard() {
   const { data: receivables, isLoading } = useReceivables();
   const { data: expenses } = useExpenses();
   const expensesTotal = (expenses ?? []).reduce((total, expense) => total + expense.amount, 0);
@@ -70,7 +37,6 @@ function CostDashboard({ onLock }: { onLock: () => void }) {
       <PageHeader
         title="Maliyet takibi"
         description="Bekleyen tahsilatlar, toplanan aidatlar ve işletme giderleri."
-        actions={<button type="button" onClick={onLock} className="btn btn-quiet">Ekranı kilitle</button>}
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CostStat label="Bekleyen ödemeler" value={isLoading ? "…" : `${stats.pendingCount} kayıt`} secondary={`₺${stats.pendingAmount.toLocaleString("tr-TR")}`} tone="warning" />

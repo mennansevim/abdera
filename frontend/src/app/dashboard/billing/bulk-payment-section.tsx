@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { MonthInput } from "@/components/month-input";
 import { FormMessage, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
@@ -187,9 +188,9 @@ export function BulkPaymentSection() {
             <div>
               <p className="text-micro text-[var(--muted)]">3 · Tahsilat</p>
               <div className="mt-1.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="form-label">Başlangıç ayı
-                  <input type="month" value={startPeriod} onChange={(event) => { setStartPeriod(event.target.value); setError(null); }} required className="field min-h-11 text-sm" />
-                </label>
+                <div className="form-label">Başlangıç ayı
+                  <MonthInput label="Başlangıç ayı" value={startPeriod} onChange={(value) => { setStartPeriod(value); setError(null); }} />
+                </div>
                 <label className="form-label">Ödeme tarihi
                   <input type="date" value={paymentDate} onChange={(event) => { setPaymentDate(event.target.value); setError(null); }} required className="field min-h-11 text-sm" />
                 </label>

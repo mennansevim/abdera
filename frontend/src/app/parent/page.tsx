@@ -224,7 +224,7 @@ function HomeView({ lessons, lessonsLoading, lessonsError, refetchLessons, messa
           <LoadError message="Ders bilgisi yüklenemedi" onRetry={refetchLessons} />
         ) : nextLesson ? (
           <>
-            <h1 className="mt-1 font-serif text-[1.4rem] font-bold italic leading-tight text-[#403529]">{nextLesson.instrumentName} Dersi</h1>
+            <h1 className="mt-1 font-serif text-[1.4rem] font-bold leading-tight text-[#403529]">{nextLesson.instrumentName} Dersi</h1>
             <p className="mt-1 text-[.75rem] text-[#776c60]">{formatLessonWhen(nextLesson.startAt, nextLesson.endAt, today)}</p>
             <p className="mt-0.5 text-[.75rem] text-[#776c60]">{nextLesson.teacherName} ile</p>
             {showButtons ? (

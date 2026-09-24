@@ -13,7 +13,10 @@ public static class StudentBilling
     public record StudentBillingResponse(
         Guid EnrollmentId, Guid InstrumentId, CourseKind CourseKind,
         decimal? ManualDiscountPercent, string? ManualDiscountReason,
-        List<Receivables.ReceivableResponse> Receivables);
+        List<Receivables.ReceivableResponse> Receivables,
+        // Aidat takvimi için: kayıtlı öğrenci kayıt ayından itibaren her aydan sorumludur
+        // (kullanıcı kuralı) - takvim bu aralıktaki her ayı "ödendi/ödenmedi" gösterir.
+        DateOnly? StartedAt = null, DateOnly? EndedAt = null, EnrollmentStatus? Status = null);
     public record DueListItemResponse(
         Guid Id, Guid EnrollmentId, Guid StudentId, string StudentName, Guid TeacherId, string TeacherName, Guid InstrumentId, string InstrumentName,
         string Period, decimal Amount, string Currency, DateOnly DueDate, ReceivableStatus Status,
@@ -44,7 +47,8 @@ public static class StudentBilling
             e.Id, e.InstrumentId, e.CourseKind, e.ManualDiscountPercent, e.ManualDiscountReason,
                 receivables.Where(r => r.EnrollmentId == e.Id)
                 .Select(r => Receivables.ToResponse(r, totals.GetValueOrDefault(r.Id), payments.GetValueOrDefault(r.Id) ?? []))
-                .ToList()));
+                .ToList(),
+            e.StartedAt, e.EndedAt, e.Status));
 
         return Results.Ok(result);
     }

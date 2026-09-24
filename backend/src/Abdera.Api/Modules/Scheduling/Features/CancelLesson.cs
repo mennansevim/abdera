@@ -31,7 +31,8 @@ public static class CancelLesson
     }
 
     private static async Task<IResult> HandleAsync(
-        Guid lessonId, Request request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler)
+        Guid lessonId, Request request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler,
+        IStaffNotifier staffNotifier)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -92,7 +93,12 @@ public static class CancelLesson
                 Reason = request.Reason,
             })));
 
+        await LessonChangeNotice.NotifyCancelledAsync(
+            staffNotifier, db, clock, AuthContext.GetUserId(principal), lesson.TeacherId, lesson.StudentId,
+            lesson.StartAt, lesson.Id, earnsCredit, request.Reason);
+
         await db.SaveChangesAsync();
+        await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new Response(lesson.Id, earnsCredit));
     }
 }

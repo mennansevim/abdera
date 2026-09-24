@@ -79,6 +79,28 @@ public sealed class TuitionPricer
             .OrderByDescending(rate => rate.EffectiveFrom)
             .FirstOrDefault();
 
+    // "Tarife yok" hatasını açıklamak için: bu ders türünün en erken tarifesi nerede başlıyor.
+    // Dönem ondan önceyse sebep net - tarifeler bu aydan sonra başlıyor.
+    public DateOnly? EarliestRateStart(CourseKind courseKind) =>
+        _rates.Where(rate => rate.CourseKind == courseKind)
+            .Select(rate => (DateOnly?)rate.EffectiveFrom)
+            .Min();
+
+    // Kullanıcıya gösterilen "tarife yok" metni - aidat açma, peşin ödeme ve aylık üretim aynı
+    // cümleyi kursun. Tohum tarifesi 1 Eylül 2026'da başladığı için en sık rastlanan durum
+    // sezondan önceki bir ayı seçmek; o durumda ne yapılacağı da söylenir.
+    public string MissingRateMessage(CourseKind courseKind, string period)
+    {
+        var kindLabel = courseKind == CourseKind.Group ? "Grup" : "Birebir";
+        var earliest = EarliestRateStart(courseKind);
+        if (earliest is null)
+            return $"{period}: {kindLabel} dersi için hiç ücret tarifesi tanımlı değil. Fiyat politikası ekranından tarife tanımlayın.";
+        if (BillingPeriod.FirstDay(period) < earliest)
+            return $"{period}: {kindLabel} ders tarifesi {earliest:yyyy-MM-dd} tarihinde başlıyor, bu ayı kapsamıyor. " +
+                   $"İlk dönemi {earliest:yyyy-MM} yapın ya da Fiyat politikası ekranından {period}-01 başlangıçlı bir tarife ekleyin.";
+        return $"{period}: {kindLabel} dersi için bu ayı kapsayan ücret tarifesi yok. Fiyat politikası ekranından tarife tanımlayın.";
+    }
+
     public TuitionCalculator.DiscountContext ContextFor(Enrollment enrollment) => new(
         AttendsMultipleCourses: _multiCourseStudents.Contains(enrollment.StudentId),
         HasSibling: _studentsWithSibling.Contains(enrollment.StudentId),

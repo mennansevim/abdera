@@ -6,6 +6,10 @@ public enum StaffNotificationType
     LessonMoved,
     // Bir öğretmen kendi öğrencisinin silinmesini talep etti; yönetici karara bağlamalı.
     StudentDeletionRequested,
+    // Ders iptal edildi (telafi hakkı doğup doğmadığı metinde yazar).
+    LessonCancelled,
+    // Telafi hakkından yeni bir telafi dersi planlandı.
+    MakeupScheduled,
 }
 
 // docs/03-erd.md - Messaging > staff_notifications. WhatsApp tarafındaki NotificationJob

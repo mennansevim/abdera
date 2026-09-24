@@ -69,9 +69,7 @@ public static class Receivables
         // Tarife dönemin İLK gününe göre seçilir (TuitionPricer.Price) - ay ortasında
         // yürürlüğe giren bir tarife o ayı kapsamaz.
         var priced = pricer.Price(enrollment, request.Period)
-            ?? throw new ConflictException(
-                $"{(enrollment.CourseKind == CourseKind.Group ? "Grup" : "Birebir")} dersi için {request.Period} döneminde " +
-                "geçerli ücret tarifesi yok. Fiyat politikası ekranından bu ayı kapsayan bir tarife tanımlayın.");
+            ?? throw new ConflictException(pricer.MissingRateMessage(enrollment.CourseKind, request.Period));
 
         var now = clock.UtcNow;
         var receivable = Receivable.Create(

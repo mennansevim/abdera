@@ -19,10 +19,13 @@ import {
   useEndEnrollment,
   useEnrollments,
   useInstruments,
+  lookupGuardianByPhone,
+  useLinkGuardian,
   useStudentGuardians,
   useTeachers,
   useUpdateGuardian,
   useUpdateStudent,
+  type GuardianPhoneLookup,
   type Student,
   type StudentGuardianLink,
   whatsAppChatUrl,
@@ -162,7 +165,7 @@ export function StudentDetail({
 
       {canManage && (
         <>
-          <AddGuardianForm studentId={studentId} open={showGuardianForm} onClose={() => setShowGuardianForm(false)} />
+          <AddGuardianForm studentId={studentId} isAdmin={isAdmin} open={showGuardianForm} onClose={() => setShowGuardianForm(false)} />
           <Modal open={showEnrollmentForm} title="Kurs ekle" description="Öğretmen ve enstrümanı seçerek bu öğrenciye bağla." onClose={() => setShowEnrollmentForm(false)} size="sm">
             <AddEnrollmentForm studentId={studentId} teachers={teachers ?? []} instruments={instruments ?? []} onClose={() => setShowEnrollmentForm(false)} />
           </Modal>
@@ -503,26 +506,56 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
   );
 }
 
-function AddGuardianForm({ studentId, open, onClose }: { studentId: string; open: boolean; onClose: () => void }) {
+function AddGuardianForm({ studentId, isAdmin, open, onClose }: { studentId: string; isAdmin: boolean; open: boolean; onClose: () => void }) {
   const createAndLink = useCreateAndLinkGuardian(studentId);
+  const linkGuardian = useLinkGuardian(studentId);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [relationship, setRelationship] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Numara kardeşin velisine aitse: yeni kayıt açılamaz (numara tekil), ama aynı veli bu
+  // öğrenciye de bağlanabilir. Yalnızca yönetici görür - kimin velisi olduğunu söylüyor.
+  const [existing, setExisting] = useState<GuardianPhoneLookup | null>(null);
+
+  function reset() {
+    setFirstName("");
+    setLastName("");
+    setPhoneNumber("");
+    setRelationship("");
+    setExisting(null);
+    setError(null);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setExisting(null);
     try {
       await createAndLink.mutateAsync({ firstName, lastName, phoneNumber, relationship, isPrimary: true });
-      setFirstName("");
-      setLastName("");
-      setPhoneNumber("");
-      setRelationship("");
+      reset();
       onClose();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && isAdmin) {
+        const found = await lookupGuardianByPhone(phoneNumber).catch(() => null);
+        if (found) {
+          setExisting(found);
+          return;
+        }
+      }
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Veli eklenemedi.");
+    }
+  }
+
+  async function linkExisting() {
+    if (!existing) return;
+    setError(null);
+    try {
+      await linkGuardian.mutateAsync({ guardianId: existing.id, relationship: relationship || undefined, isPrimary: true });
+      reset();
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Veli bağlanamadı.");
     }
   }
 
@@ -532,9 +565,21 @@ function AddGuardianForm({ studentId, open, onClose }: { studentId: string; open
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="form-label">Ad<input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field text-sm" /></label>
           <label className="form-label">Soyad<input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field text-sm" /></label>
-          <label className="form-label">Telefon<input type="tel" inputMode="tel" autoComplete="tel" placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required className="field text-sm" /></label>
+          <label className="form-label">Telefon<input type="tel" inputMode="tel" autoComplete="tel" placeholder="0555 111 22 33" value={phoneNumber} onChange={(e) => { setPhoneNumber(e.target.value); setExisting(null); }} required className="field text-sm" /></label>
           <label className="form-label">Yakınlık<input placeholder="Anne / baba" value={relationship} onChange={(e) => setRelationship(e.target.value)} className="field text-sm" /></label>
         </div>
+        {existing && (
+          <div role="alert" className="rounded-xl border border-[var(--warning)]/45 bg-[var(--warning-soft)]/60 p-3 text-xs">
+            <p className="font-bold text-[var(--warning-strong)]">
+              Bu numara {existing.firstName} {existing.lastName} adına kayıtlı
+              {existing.studentNames.length > 0 && <> ({existing.studentNames.join(", ")} velisi)</>}.
+            </p>
+            <p className="mt-1 text-[var(--muted)]">Kardeşse aynı veliyi bu öğrenciye de bağlayabilirsin; veli bilgisi değişmez.</p>
+            <button type="button" onClick={() => void linkExisting()} disabled={linkGuardian.isPending} className="btn btn-primary mt-2 disabled:opacity-50">
+              {linkGuardian.isPending ? "Bağlanıyor…" : "Mevcut veliyi bağla"}
+            </button>
+          </div>
+        )}
         {error && <FormMessage tone="error">{error}</FormMessage>}
         <FormActions onCancel={onClose} submitLabel="Veli ekle" pending={createAndLink.isPending} pendingLabel="Ekleniyor…" />
       </form>

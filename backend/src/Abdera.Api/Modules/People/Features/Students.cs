@@ -30,7 +30,9 @@ public static class Students
         string InstrumentName,
         string? GuardianPhoneMasked);
     public record StudentInstrumentSummary(Guid InstrumentId, string InstrumentName);
-    public record StudentOverviewResponse(StudentResponse Student, List<StudentInstrumentSummary> Instruments);
+    // EnrolledSince: aktif kurs kayıtlarının en erken başlangıcı - aidat listesi öğrencinin
+    // hangi aylardan sorumlu olduğunu buradan bilir.
+    public record StudentOverviewResponse(StudentResponse Student, List<StudentInstrumentSummary> Instruments, DateOnly? EnrolledSince = null);
 
     public static void MapStudents(this IEndpointRouteBuilder app)
     {
@@ -74,6 +76,11 @@ public static class Students
             enrollmentsQuery = enrollmentsQuery.Where(e => e.TeacherId == filterTeacherId);
         }
 
+        var enrolledSince = await enrollmentsQuery
+            .GroupBy(e => e.StudentId)
+            .Select(group => new { StudentId = group.Key, Since = group.Min(e => e.StartedAt) })
+            .ToDictionaryAsync(item => item.StudentId, item => item.Since);
+
         var instrumentsByStudent = await enrollmentsQuery
             .Join(db.Instruments, e => e.InstrumentId, i => i.Id, (e, i) => new { e.StudentId, InstrumentId = i.Id, InstrumentName = i.Name })
             .Distinct()
@@ -84,7 +91,8 @@ public static class Students
             instrumentsByStudent.Where(item => item.StudentId == student.Id)
                 .Select(item => new StudentInstrumentSummary(item.InstrumentId, item.InstrumentName))
                 .OrderBy(item => item.InstrumentName)
-                .ToList())));
+                .ToList(),
+            enrolledSince.TryGetValue(student.Id, out var since) ? since : null)));
     }
 
     private static async Task<IResult> SearchAsync(string query, AbderaDbContext db)

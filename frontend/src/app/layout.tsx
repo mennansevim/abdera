@@ -17,10 +17,13 @@ import { FontSizeController } from "@/components/font-size-controller";
 // parti bir servise bağlı olmamalı; dosyalar `./fonts` altında duruyor.
 //
 // Hepsi DEĞİŞKEN (variable) font: aile başına tek dosya tüm ağırlıkları taşır, bu yüzden
-// ağırlıklar tek tek listelenmez - aralık verilir. Yalnızca temel `latin` alt kümesi
-// indirildi (latin-ext/vietnamese gereksiz ağırlık getirirdi).
+// ağırlıklar tek tek listelenmez - aralık verilir. Alt küme `latin` + `latin-ext`: Türkçenin
+// ğ Ğ ş Ş İ harfleri Google'ın `latin` kümesinde YOK, yalnızca `latin-ext`'te. Eskiden yalnızca
+// `latin` tutuluyordu ve bu harfler sessizce yedek fonttan (Arial/Times) çiziliyordu - başlıkta
+// "öğrenci"nin ğ'si başka bir yazı tipinde görünüyordu (kullanıcı geri bildirimi). Dosyalar
+// google/fonts deposundaki değişken TTF'lerden pyftsubset ile üretildi (vietnamese yok).
 const figtree = localFont({
-  src: "./fonts/Figtree-latin.woff2",
+  src: "./fonts/Figtree-latin-ext.woff2",
   variable: "--font-figtree",
   weight: "300 900",
   display: "swap",
@@ -28,8 +31,8 @@ const figtree = localFont({
 
 const lora = localFont({
   src: [
-    { path: "./fonts/Lora-latin.woff2", style: "normal", weight: "400 700" },
-    { path: "./fonts/Lora-Italic-latin.woff2", style: "italic", weight: "400 700" },
+    { path: "./fonts/Lora-latin-ext.woff2", style: "normal", weight: "400 700" },
+    { path: "./fonts/Lora-Italic-latin-ext.woff2", style: "italic", weight: "400 700" },
   ],
   variable: "--font-lora",
   display: "swap",

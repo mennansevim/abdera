@@ -32,7 +32,7 @@ Modules/Billing/
 - Zaman: veritabanında her zaman `timestamptz` (UTC instant). Yerel gösterim/hesaplama `Europe/Istanbul` ile uygulama katmanında yapılır, saat dilimi konfigürasyondan okunur — hardcode etme.
 - Dışa açık kaynak id'leri: UUID. Sıralı int public API'de görünmez.
 - Mutasyona açık her tabloda `created_at`, `updated_at`. Eşzamanlı düzenleme riski olan tablolarda optimistic concurrency (`xmin` veya `rowversion` kolonu).
-- Finansal/audit kayıt **silinmez** — durum kolonu veya soft delete kullanılır (`CancelledAt`, `Status=INACTIVE`). **Tek istisna:** yöneticinin bir öğrenciyi/öğretmeni kalıcı silmesi (`docs/10-decisions.md` I1) — kullanıcının açık talebi. O yol `Modules/People/Infrastructure/PersonEraser.cs` üzerinden gider; ne silineceğini önce sayar, para varsa açık onay ister ve `audit_log`'a yazar. `audit_log`'un kendisi bu akışta da asla temizlenmez.
+- Finansal/audit kayıt **silinmez** — durum kolonu veya soft delete kullanılır (`CancelledAt`, `Status=INACTIVE`). **Tek istisna:** yöneticinin bir öğrenciyi/öğretmeni kalıcı silmesi (`docs/10-decisions.md` I1) — kullanıcının açık talebi. O yol `Modules/People/Infrastructure/PersonEraser.cs` üzerinden gider; ne silineceğini önce sayar, para varsa açık onay ister ve `audit_log`'a yazar. Başka öğrencisi kalmayan veli de öğrenciyle birlikte silinir (kardeşi olan veya sanal IBAN'ına havale düşmüş veli kalır - `docs/10-decisions.md` M1). `audit_log`'un kendisi bu akışta da asla temizlenmez.
 - Para, takvim ve rıza (consent) değiştiren her use-case `audit_log`'a yazar: kim, ne zaman, hangi kayıt, önceki/yeni değer.
 
 ## Kritik veritabanı kısıtları (bunları migration'dan düşürme)
@@ -47,7 +47,7 @@ CHECK (end_at > start_at)
 CHECK (amount >= 0)
 ```
 
-`tuition_rates`: aynı ders türü (`course_kind`) için **açık uçlu yalnızca bir tarife** olabilir — `UNIQUE (course_kind) WHERE effective_until IS NULL`. Yeni tarife açılırken öncekisi bir gün öncesinden kapatılır, böylece hiçbir gün iki tarifeye birden düşmez. Tam aralık çakışması kontrolü yine uygulama katmanındadır (genel `EXCLUDE` kısıtıyla ifade edilemeyecek kadar tabloya özel).
+`tuition_rates`: aynı ders türü (`course_kind`) için **açık uçlu yalnızca bir tarife** olabilir — `UNIQUE (course_kind) WHERE effective_until IS NULL`. Yeni tarife açılırken öncekisi bir gün öncesinden kapatılır, böylece hiçbir gün iki tarifeye birden düşmez. En eski tarifeden önce başlayan tarife (geçmiş bir ayı kapsamak için) en eski tarifenin bir gün öncesinde kapanır (M3). Tam aralık çakışması kontrolü yine uygulama katmanındadır (genel `EXCLUDE` kısıtıyla ifade edilemeyecek kadar tabloya özel).
 
 ## İş kuralları — kodda unutulmaması gerekenler
 
@@ -57,7 +57,8 @@ CHECK (amount >= 0)
 - **Aidat ekranı üç ayrı işe bölünmüştür** (`docs/10-decisions.md` H12): **Aylık aidatlar** (ayın borç satırlarını açar + tek tek tahsilat), **Toplu ödeme** (birkaç ayın peşin tahsilatı, tek ekran) ve **Fiyat politikası** (tarife + indirim kuralları). Aynı iş için ikinci bir giriş noktası açma — toplu ödemenin öğrenci künyesindeki kopyası tam olarak bu yüzden kaldırıldı. Borç AÇMAK (`/api/receivables/monthly-run`) ile PARA ALMAK (`/payments`, `/prepay-plans`) ayrı işlerdir; arayüz metninde ikisini aynı cümlede birleştirme.
 - **Kardeş indirimi açık bir işarettir, çıkarım DEĞİL** (`students.sibling_discount`, `docs/10-decisions.md` H13). Öğrenci künyesindeki kutuyu yalnızca Admin işaretler; ortak veliden (`student_guardians`) kardeşlik türetme kuralı kaldırıldı - iki yönde de yanlış sonuç veriyordu. `Students.UpdateRequest.SiblingDiscount` `bool?`: gönderilmezse alana dokunulmaz, Admin değilse yok sayılır (öğretmenin künye düzenlemesi indirimi kapatmasın). **Çoklu kurs indirimi çıkarım olarak kalır** - aktif kurs kaydı sayısı sistemin kendi verisi.
 - **Ödeme görmüş aidat yeniden fiyatlanamaz:** `Receivable.Reprice` `Paid`/`Partial`/`Cancelled` durumda `ConflictException` fırlatır. Peşin ödeme kampanyası daha önce açılmış ama ödenmemiş bir ayı kampanya oranına çekebilir; para girmiş bir aya dokunamaz.
-- **Peşin ödeme tutarını sunucu hesaplar:** istemci yalnızca gördüğü toplamı (`expectedTotal`) teyit eder, ayrışma varsa işlem durur. İstemcinin gönderdiği tutara güvenme.
+- **Peşin ödeme tutarını sunucu hesaplar:** istemci yalnızca gördüğü toplamı (`expectedTotal`) teyit eder, ayrışma varsa işlem durur. İstemcinin gönderdiği tutara güvenme. Tek istisna yöneticinin açıkça girdiği `agreedTotal`'dır (küsürat/yuvarlama, M2): sunucu yine önce kendi hesabını yapar, sonra farkı `TuitionCalculator.AdjustToAgreedTotal` ile aylara dağıtır; tutar tarife toplamını aşamaz.
+- **Ders değişikliği personel bildirimi:** iptal, saat değişikliği ve telafi planlama `LessonChangeNotice` üzerinden dersin öğretmenine + yöneticilere (işlemi yapan hariç) ekran içi bildirim düşer; e-posta `IStaffNotifier.FlushEmailsAsync` ile SaveChanges'ten **sonra** gönderilir. Yeni bir ders değiştiren yol eklerken ikisini de çağır (M4).
 - **Ders değişince eski job iptali:** bir `Lesson` `RESCHEDULED`/`CANCELLED` olduğunda, o derse bağlı bekleyen (`PENDING`) `NotificationJob` iptal edilir ve gerekiyorsa yeni saate göre yenisi kurulur. Bu invariant'ı bozan her değişiklik testle korunmalı.
 - **Telafi kredisi:** dersten ≥24 saat önce iptal edilirse `MakeupCredit` oluşur (kaynak ders + son kullanma tarihi ile). Habersiz gelmeme (no-show) kredi doğurmaz, ücret tahakkuk eder. Bu **varsayılan** türetmedir: `CancelLesson.Request.GrantMakeupCredit` (`bool?`) dolduysa karar odur — takvimdeki "Telafisiz iptal" okul kaynaklı iptalde de kredi doğurmaz (`docs/10-decisions.md` A2 altındaki satır). Açık seçim `audit_log`'a politikanın ne diyeceğiyle birlikte yazılır.
 - **Sessiz saat:** aidat hatırlatması ve doğum günü mesajı gibi zamanlanmış (cron kaynaklı) bildirimler yalnızca `Notifications__QuietHoursStart/End` penceresinde gönderilir; pencere dışı job bir sonraki pencere başına ötelenir. Ders hatırlatması (dersten 1 saat önce) bu kurala tabi değil.
@@ -100,7 +101,7 @@ düştü ve `docker compose up` hiç ayağa kalkmadı, e2e smoke da onun arkası
 
 Yeni bir ağırlık/stil gerekirse dosyayı indirip `fonts/`'a ekle. Hepsi **değişken (variable)** font:
 aile başına tek dosya tüm ağırlıkları taşır, bu yüzden `weight` tek değer değil aralık verilir
-(`"300 900"`). Yalnızca temel `latin` alt kümesi tutulur.
+(`"300 900"`). Alt küme **`latin` + `latin-ext`** olmak zorunda: Türkçenin ğ Ğ ş Ş İ harfleri Google'ın `latin` kümesinde yok. Yalnızca `latin` tutulduğu dönemde bu harfler sessizce yedek fonttan çiziliyordu. Yeni font eklerken `google/fonts` deposundaki değişken TTF'yi `pyftsubset` ile iki kümenin aralığına indir ve dosyada bu harflerin bulunduğunu doğrula.
 
 ## WhatsApp entegrasyonu
 

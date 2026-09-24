@@ -62,12 +62,25 @@ public static class TuitionRates
         var open = await db.TuitionRates
             .Where(rate => rate.CourseKind == request.CourseKind && rate.EffectiveUntil == null)
             .SingleOrDefaultAsync();
+        var earliestStart = await db.TuitionRates
+            .Where(rate => rate.CourseKind == request.CourseKind)
+            .OrderBy(rate => rate.EffectiveFrom)
+            .Select(rate => (DateOnly?)rate.EffectiveFrom)
+            .FirstOrDefaultAsync();
 
-        if (open is not null)
+        // En eski tarifeden ÖNCE başlayan tarife: geçmiş bir dönemi kapsamak için (örn. tohum
+        // tarifesi 1 Eylül'de başlıyor ama Ağustos'un aidatı da alınacak - "2026-08: Birebir
+        // dersi için geçerli ücret tarifesi yok"). Yeni satır en eski tarifenin bir gün
+        // öncesinde kapanır; hiçbir gün iki tarifeye düşmez ve açık uçlu tarife değişmez.
+        // Mevcut tarifeler arasına (geçmişin ortasına) giren bir tarih hâlâ reddedilir.
+        var backfill = earliestStart is { } earliest && request.EffectiveFrom < earliest;
+
+        if (open is not null && !backfill)
         {
             if (request.EffectiveFrom <= open.EffectiveFrom)
                 throw new ConflictException(
-                    $"Yürürlükteki tarife {open.EffectiveFrom:yyyy-MM-dd} tarihinde başlıyor. Yeni tarife bu tarihten sonra başlamalı.");
+                    $"Yürürlükteki tarife {open.EffectiveFrom:yyyy-MM-dd} tarihinde başlıyor. Yeni tarife bu tarihten sonra " +
+                    $"başlamalı ya da ilk tarifeden ({earliestStart:yyyy-MM-dd}) önceki bir dönemi kapsamalı.");
 
             open.EndOn(request.EffectiveFrom.AddDays(-1));
         }
@@ -75,11 +88,12 @@ public static class TuitionRates
         var rate = TuitionRate.Create(
             request.CourseKind, request.LessonsPerMonth, request.MonthlyAmount,
             request.Currency ?? "TRY", request.EffectiveFrom, actorId, now);
+        if (backfill) rate.EndOn(earliestStart!.Value.AddDays(-1));
 
         db.TuitionRates.Add(rate);
         db.AuditLogs.Add(AuditLog.Record(
             actorId, "tuition_rate.created", nameof(TuitionRate), rate.Id, now,
-            beforeJson: open is null ? null : JsonSerializer.Serialize(new
+            beforeJson: open is null || backfill ? null : JsonSerializer.Serialize(new
             {
                 courseKind = open.CourseKind.ToString(),
                 monthlyAmount = open.MonthlyAmount,
@@ -93,6 +107,7 @@ public static class TuitionRates
                 monthlyAmount = rate.MonthlyAmount,
                 currency = rate.Currency,
                 effectiveFrom = rate.EffectiveFrom,
+                effectiveUntil = rate.EffectiveUntil,
             })));
 
         await db.SaveChangesAsync();

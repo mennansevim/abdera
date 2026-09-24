@@ -195,7 +195,8 @@ public class EnrollmentReceivableFlowTests : IClassFixture<AbderaWebApplicationF
                 "/api/receivables", new Receivables.CreateRequest(enrollment.Id, period));
             Assert.Equal(HttpStatusCode.Conflict, manual.StatusCode);
             var body = await manual.Content.ReadAsStringAsync();
-            Assert.Contains($"Grup dersi için {period} döneminde geçerli ücret tarifesi yok", body);
+            Assert.Contains($"{period}: Grup ders", body);
+            Assert.Contains("Fiyat politikası", body);
         }
         finally
         {

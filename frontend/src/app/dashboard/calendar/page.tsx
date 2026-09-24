@@ -94,6 +94,54 @@ function formatLessonTotal(minutes: number) {
   return `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 }).format(hours)} saat`;
 }
 
+// Enstrüman filtresi: yer varsa yan yana düğmeler, sığmıyorsa aynı seçenekleri taşıyan açılır
+// menü (kullanıcı isteği: "sığmıyorsa combobox yap"). Karar CSS kırılma noktasına göre değil
+// GERÇEK genişliğe göre verilir - kenar çubuğu açık/kapalıyken ve enstrüman sayısı değiştikçe
+// sığma durumu değişiyor. Düğmelerin doğal genişliği görünmez bir ölçüm satırından okunur.
+function InstrumentFilterPicker<T extends string>({ filters, value, onChange }: { filters: readonly T[]; value: T; onChange: (value: T) => void }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [fits, setFits] = useState(true);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const measure = measureRef.current;
+    if (!wrapper || !measure) return;
+    const update = () => setFits(measure.scrollWidth <= wrapper.clientWidth + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(wrapper);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [filters]);
+
+  const chipClass = (active: boolean) => `pressable min-h-11 shrink-0 rounded-xl border px-3 xl:min-h-9 text-xs font-bold xl:px-2.5 ${active ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`;
+
+  return (
+    <div ref={wrapperRef} className="relative min-w-0 flex-1">
+      <div ref={measureRef} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex w-max gap-1.5">
+        {filters.map((filter) => <span key={filter} className={chipClass(false)}>{filter}</span>)}
+      </div>
+      {fits ? (
+        <div className="flex gap-1.5" role="group" aria-label="Enstrümana göre filtrele">
+          {filters.map((filter) => (
+            <button key={filter} type="button" onClick={() => onChange(filter)} aria-pressed={value === filter} className={chipClass(value === filter)}>
+              {filter}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <label className="block">
+          <span className="sr-only">Enstrümana göre filtrele</span>
+          <select value={value} onChange={(event) => onChange(event.target.value as T)} className={`field min-h-11 bg-white text-xs font-bold xl:min-h-9 xl:py-1 ${value !== filters[0] ? "border-[var(--brand)] text-[var(--brand-strong)]" : ""}`}>
+            {filters.map((filter) => <option key={filter} value={filter}>{filter === filters[0] ? `Enstrüman: ${filter}` : filter}</option>)}
+          </select>
+        </label>
+      )}
+    </div>
+  );
+}
+
 function isLessonActive(lesson: CalendarLesson, now: Date) {
   return (lesson.status === "Normal" || lesson.status === "Makeup")
     && new Date(lesson.startAt).getTime() <= now.getTime()
@@ -246,7 +294,7 @@ export default function CalendarPage() {
     <div className="space-y-4">
       <header>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <h1 className="font-serif text-[1.45rem] font-bold italic tracking-[-0.02em] sm:text-[1.7rem]">Ders Programı</h1>
+          <h1 className="font-serif text-[1.45rem] font-bold tracking-[-0.01em] sm:text-[1.7rem]">Ders Programı</h1>
           <p className="text-xs font-semibold text-[var(--muted)]">{visibleLessons.length} ders · {formatLessonTotal(totalMinutes)}</p>
         </div>
       </header>
@@ -292,7 +340,10 @@ export default function CalendarPage() {
         </p>
       )}
 
-      <div className="app-card flex flex-col gap-3 p-3 sm:px-4 xl:flex-row xl:flex-nowrap xl:items-center xl:gap-2">
+      {/* xl'de tek satır varsayılıyordu; kenar çubuğu açıkken 1280px ekranda içerik alanı
+          ~1000px kalıyor ve "Yeni ders" düğmesi sağdan taşıp kesiliyordu (Safari'de bildirildi,
+          Chrome'da da aynı). Sığmadığında kontroller ikinci satıra sarılır. */}
+      <div className="app-card flex flex-col gap-3 p-3 sm:px-4 xl:flex-row xl:flex-wrap xl:items-center xl:gap-2">
         <div className="flex items-center justify-between gap-2 md:hidden">
           <button
             type="button"
@@ -309,7 +360,7 @@ export default function CalendarPage() {
           </button>
           {activeFilterCount > 0 && <button type="button" onClick={clearFilters} className="pressable min-h-11 rounded-xl px-3 text-xs font-bold text-[var(--brand-strong)]">Temizle</button>}
         </div>
-        <div id="calendar-filters" className={`${mobileFiltersOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl bg-[var(--surface-muted)] p-2 md:flex md:bg-transparent md:p-0 xl:flex-none xl:flex-nowrap xl:gap-1.5`}>
+        <div id="calendar-filters" className={`${mobileFiltersOpen ? "flex" : "hidden"} min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl bg-[var(--surface-muted)] p-2 md:flex md:bg-transparent md:p-0 xl:basis-[26rem] xl:flex-nowrap xl:gap-1.5`}>
           {/* Öğrenci/öğretmen filtreleri yalnızca Admin'e görünür: bir öğretmen zaten yalnızca
               kendi derslerini görüyor (backend Calendar.cs bunu zorluyor), "tüm öğretmenler"
               arasından seçim yapabilecekmiş gibi bir kontrol sunmak yanıltıcı ve kullanıcı
@@ -321,17 +372,7 @@ export default function CalendarPage() {
           </>}
           {/* Enstrüman filtresi de aynı kuralı izler: Teacher oturumunda yalnızca kendi
               branşları listelenir (myInstrumentNames/instrumentFilters, yukarıda). */}
-          <div className="flex gap-1.5 overflow-x-auto" aria-label="Enstrümana göre filtrele">{instrumentFilters.map((filter) => (
-              <button
-                key={filter}
-                type="button"
-                onClick={() => setInstrumentFilter(filter)}
-                aria-pressed={instrumentFilter === filter}
-                className={`pressable min-h-11 shrink-0 rounded-xl border px-3 xl:min-h-9 text-xs font-bold xl:px-1.5 2xl:px-4 ${instrumentFilter === filter ? "border-[var(--brand)] bg-[var(--brand)] text-white shadow-[0_5px_12px_rgba(217,102,42,.2)]" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
-              >
-                {filter}
-              </button>
-            ))}</div>
+          <InstrumentFilterPicker filters={instrumentFilters} value={instrumentFilter} onChange={setInstrumentFilter} />
         </div>
         <div className="flex w-full flex-wrap items-center justify-end gap-1.5 border-t border-[var(--line)] pt-3 md:border-t-0 md:pt-0 xl:ml-auto xl:w-auto xl:shrink-0 xl:flex-nowrap" aria-label="Takvim kontrolleri">
           <div className="flex shrink-0 items-center gap-1.5 rounded-[.9rem] bg-[var(--surface-muted)] p-1" aria-label="Hafta değiştir">
@@ -680,7 +721,7 @@ function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: Pendin
       <section className="relative z-10 w-full max-w-md rounded-2xl border border-white/60 bg-[rgba(255,253,249,.96)] p-4 shadow-[0_24px_70px_rgba(52,35,24,.28)] backdrop-blur-2xl sm:p-5">
         <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" aria-hidden="true" />
         <p className="text-micro text-[var(--brand-strong)]">Yeni saat seçildi</p>
-        <h2 className="mt-1 font-serif text-xl font-bold italic">{move.lesson.studentName}</h2>
+        <h2 className="mt-1 font-serif text-xl font-bold">{move.lesson.studentName}</h2>
         <p className="text-meta mt-2 leading-relaxed">
           {source.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(source)} → {move.newStart.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(move.newStart)}
         </p>
@@ -920,7 +961,11 @@ function UpcomingLessonsRail({
   onRetry: () => void;
   onOpenWeek: () => void;
 }) {
-  const activeLesson = lessons.find((lesson) => isLessonActive(lesson, now));
+  // Aynı saatte birden fazla ders olabilir (ör. piyano ve bateri yan yana) - hepsi
+  // listelenir; yalnızca ilkini göstermek diğer dersleri akıştan tamamen düşürüyordu.
+  const activeLessons = lessons
+    .filter((lesson) => isLessonActive(lesson, now))
+    .sort((a, b) => a.startAt.localeCompare(b.startAt));
   const upcomingLessons = lessons
     .filter((lesson) => (lesson.status === "Normal" || lesson.status === "Makeup") && new Date(lesson.startAt).getTime() > now.getTime())
     .sort((a, b) => a.startAt.localeCompare(b.startAt))
@@ -954,7 +999,13 @@ function UpcomingLessonsRail({
           </div>
         ) : (
           <>
-            {activeLesson ? <ActiveLessonCard lesson={activeLesson} tone={colors.get(activeLesson.instrumentName) ?? INSTRUMENT_TONES[0]} now={now} /> : (
+            {activeLessons.length ? (
+              <div className="space-y-2">
+                {activeLessons.map((lesson) => (
+                  <ActiveLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} now={now} />
+                ))}
+              </div>
+            ) : (
               <div className="rounded-xl border border-dashed border-[#e7cbaa] bg-[#fffaf4] px-3 py-4 text-center">
                 <span className="mx-auto grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="clock" className="h-4 w-4" /></span>
                 <p className="mt-2 text-xs font-bold">Şu anda ders yok</p>
@@ -1149,7 +1200,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] p-5">
           <div>
             <p className="text-micro text-[var(--brand-strong)]">Ders ayrıntısı</p>
-            <h2 className="mt-1 font-serif text-xl font-bold italic">{lesson.studentName}</h2>
+            <h2 className="mt-1 font-serif text-xl font-bold">{lesson.studentName}</h2>
             <p className="text-meta mt-1">{lesson.instrumentName} · {lesson.status === "Makeup" ? "Telafi dersi" : "Düzenli ders"}</p>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>

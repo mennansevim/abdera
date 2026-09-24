@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
-import { NotificationBell } from "@/components/notification-bell";
+import { NotificationBell, NotificationToasts } from "@/components/notification-bell";
 import type { Me } from "@/lib/api";
 import { usePendingChangeRequests } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
@@ -123,39 +123,58 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   }
 
   return (
-    <div className={`min-h-dvh bg-[var(--background)] lg:grid ${sidebarCollapsed ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[15rem_minmax(0,1fr)]"}`}>
-      <aside id="desktop-sidebar" className={`sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] px-3 py-5 text-white ${sidebarCollapsed ? "" : "lg:flex"}`}>
-        <Link href="/dashboard" className="mb-6 shrink-0 px-2 text-white"><BrandMark /></Link>
+    // Menü kapatılınca tamamen kaybolmaz, dar bir ikon şeridine iner; aç/kapa düğmesi
+    // (« / ») şeridin kendi üstünde durur (kullanıcı isteği: "ayrı bir buton olarak değil").
+    <div className={`min-h-dvh bg-[var(--background)] lg:grid ${sidebarCollapsed ? "lg:grid-cols-[4.5rem_minmax(0,1fr)]" : "lg:grid-cols-[15rem_minmax(0,1fr)]"}`}>
+      <aside id="desktop-sidebar" className={`sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] py-5 text-white lg:flex ${sidebarCollapsed ? "px-2" : "px-3"}`}>
+        <div className={`mb-6 flex shrink-0 items-center ${sidebarCollapsed ? "flex-col gap-3" : "justify-between gap-2 pl-2"}`}>
+          <Link href="/dashboard" className="min-w-0 text-white" aria-label="Abdera ana sayfa"><BrandMark compact={sidebarCollapsed} /></Link>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="desktop-sidebar"
+            aria-label={sidebarCollapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+            title={sidebarCollapsed ? "Menüyü genişlet" : "Menüyü daralt"}
+            className="pressable grid h-9 w-9 shrink-0 place-items-center rounded-lg text-white/80 hover:bg-white/15 hover:text-white"
+          >
+            <Icon name={sidebarCollapsed ? "chevrons-right" : "chevrons-left"} className="h-4 w-4" />
+          </button>
+        </div>
         <nav className="min-h-0 flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,.35)_transparent] [scrollbar-width:thin]" aria-label="Ana menü">
           {links.map((link, index) => (
             <Fragment key={link.href}>
-            {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-0.5 mt-2 px-3 text-[.75rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>}
+            {(index === 0 || links[index - 1]?.section !== link.section) && (sidebarCollapsed
+              ? index > 0 && <span className="mx-2 my-1.5 h-px bg-white/20" aria-hidden="true" />
+              : <span className="mb-0.5 mt-2 px-3 text-[.75rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>)}
             <Link
               href={link.href}
               aria-current={isActive(pathname, link.href) ? "page" : undefined}
-              className={`pressable group flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm font-bold ${
+              aria-label={sidebarCollapsed ? link.label : undefined}
+              title={sidebarCollapsed ? link.label : undefined}
+              className={`pressable group relative flex min-h-11 items-center gap-3 rounded-2xl text-sm font-bold ${sidebarCollapsed ? "justify-center px-0" : "px-3"} ${
                 isActive(pathname, link.href)
                   ? "bg-white text-[var(--brand-strong)] shadow-[0_4px_14px_rgba(0,0,0,.12)]"
                   : "text-white/85 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Icon name={link.icon} className="h-[1.1rem] w-[1.1rem] shrink-0" />
-              <span className="truncate">{link.label}</span>
-              {link.alert && <span className="ml-auto h-2 w-2 rounded-full bg-[#ffe27a] ring-1 ring-black/10" aria-label="Dikkat gereken kayıtlar olabilir" />}
+              {!sidebarCollapsed && <span className="truncate">{link.label}</span>}
+              {link.alert && <span className={`h-2 w-2 rounded-full bg-[#ffe27a] ring-1 ring-black/10 ${sidebarCollapsed ? "absolute right-2 top-2" : "ml-auto"}`} aria-label="Dikkat gereken kayıtlar olabilir" />}
             </Link>
             </Fragment>
           ))}
         </nav>
         <div className="mt-4 shrink-0 border-t border-white/25 pt-4">
-          <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold">
+          <div className={`flex items-center rounded-xl py-2 ${sidebarCollapsed ? "flex-col gap-1.5 px-0" : "gap-2.5 px-2"}`}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold" title={sidebarCollapsed ? displayName(me.email) || me.email : undefined}>
               {displayName(me.email).slice(0, 2).toLocaleUpperCase("tr-TR")}
             </span>
-            <span className="min-w-0 flex-1">
+            {!sidebarCollapsed && <span className="min-w-0 flex-1">
               <span className="block truncate text-xs font-bold">{displayName(me.email) || me.email}</span>
               <span className="block text-[.75rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
-            </span>
-            {me.role === "Teacher" && <NotificationBell />}
+            </span>}
+            <NotificationBell />
             <button onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-11 w-11 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap">
               <Icon name="logout" className="h-4 w-4" />
             </button>
@@ -171,13 +190,16 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         )}
         <header className={`${me.role === "Teacher" ? "hidden" : "flex"} sticky top-0 z-30 h-16 items-center justify-between border-b border-black/5 bg-[rgba(248,246,241,.82)] px-4 backdrop-blur-xl lg:hidden`}>
           <Link href="/dashboard" className="text-[var(--brand-strong)]"><BrandMark /></Link>
-          <button onClick={() => setIsMenuOpen(true)} className="pressable grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--brand-strong)]" aria-label="Tüm menüyü aç" aria-expanded={isMenuOpen}>
-            <Icon name="menu" className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell variant="header" />
+            <button onClick={() => setIsMenuOpen(true)} className="pressable grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--brand-strong)]" aria-label="Tüm menüyü aç" aria-expanded={isMenuOpen}>
+              <Icon name="menu" className="h-5 w-5" />
+            </button>
+          </div>
         </header>
+        <NotificationToasts />
 
         <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-8 lg:pb-10 lg:pt-7 xl:px-10 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
-          <button type="button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} aria-expanded={!sidebarCollapsed} aria-controls="desktop-sidebar" className="pressable mb-3 hidden min-h-9 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold text-[var(--brand-strong)] lg:inline-flex"><Icon name="menu" className="h-4 w-4" />{sidebarCollapsed ? "Menüyü aç" : "Menüyü kapat"}</button>
           {children}
         </main>
 

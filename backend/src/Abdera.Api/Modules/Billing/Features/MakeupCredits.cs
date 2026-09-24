@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
+using Abdera.Api.Modules.Scheduling.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -63,7 +64,8 @@ public static class MakeupCredits
     }
 
     private static async Task<IResult> UseAsync(
-        Guid creditId, UseRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
+        Guid creditId, UseRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, INotificationScheduler scheduler,
+        IStaffNotifier staffNotifier)
     {
         if (request.DurationMinutes <= 0)
             throw new ValidationFailedException(new Dictionary<string, string[]> { ["durationMinutes"] = ["Süre pozitif olmalı."] });
@@ -160,8 +162,13 @@ public static class MakeupCredits
             await scheduler.ScheduleAsync(NotificationJobType.MakeupApproved, "lesson", makeupLesson.Id, guardianId, clock.UtcNow);
         }
 
+        await LessonChangeNotice.NotifyMakeupScheduledAsync(
+            staffNotifier, db, clock, AuthContext.GetUserId(principal), request.TeacherId, credit.StudentId,
+            makeupLesson.StartAt, makeupLesson.Id);
+
         await db.SaveChangesAsync();
         await transaction.CommitAsync();
+        await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new UseResponse(credit.Id, makeupLesson.Id));
     }
 }

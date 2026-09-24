@@ -83,6 +83,67 @@ public static class TuitionCalculator
         return (Round(best.Percent), best.Reason);
     }
 
+    // Tahsilatta elle girilen tutar (kullanıcı isteği: "ödenecek rakamı o anda editleyebileyim,
+    // küsüratlar değişebiliyor"). Hesap yine sunucuda yapılır; yönetici yalnızca TOPLAMI
+    // değiştirir, fark aylara net tutarları oranında dağıtılır ve kuruş farkı son aya yazılır.
+    // Sonuç her ay için yine tam bir snapshot'tır (taban + yüzde + gerekçe + net) - aidat
+    // satırına bakan kişi "bu tutar nereden geldi"yi hâlâ satırın kendisinden okur.
+    //
+    // Sınırlar: toplam 0'dan büyük ve tarife (indirimsiz) toplamından büyük olamaz - aidat
+    // tarifenin üstüne çıkamaz (CK_receivables_discount_percent 0..100).
+    public const string ManualAdjustmentReason = "Tahsilatta elle düzeltme";
+
+    public static IReadOnlyList<Breakdown> AdjustToAgreedTotal(IReadOnlyList<Breakdown> months, decimal agreedTotal)
+    {
+        if (months.Count == 0) throw new ArgumentException("En az bir ay gerekli.", nameof(months));
+
+        var agreed = Round(agreedTotal);
+        var computed = months.Sum(month => month.NetAmount);
+        var baseTotal = months.Sum(month => month.BaseAmount);
+        if (agreed <= 0) throw new ArgumentException("Tahsil edilen tutar 0'dan büyük olmalı.", nameof(agreedTotal));
+        if (agreed > baseTotal)
+            throw new ArgumentException("Tahsil edilen tutar tarife toplamını aşamaz.", nameof(agreedTotal));
+        if (agreed == computed) return months;
+
+        var result = new List<Breakdown>(months.Count);
+        var allocated = 0m;
+        for (var index = 0; index < months.Count; index++)
+        {
+            var month = months[index];
+            var isLast = index == months.Count - 1;
+            // Hesaplanan toplam 0 ise (tamamen indirimli aylar) tabana göre dağıtılır.
+            var share = computed > 0 ? month.NetAmount / computed : month.BaseAmount / baseTotal;
+            var net = isLast ? agreed - allocated : Round(agreed * share);
+            // Tek bir ay tabanını aşamaz; aşan kısım sonraki aylara kayar (son ay en sonda
+            // kalanın tamamını alır - toplam agreed ≤ baseTotal olduğu için sığar).
+            net = Math.Clamp(net, 0m, month.BaseAmount);
+            allocated += net;
+            result.Add(WithNet(month, net));
+        }
+
+        // Kıstırma son ayda kuruş artığı bırakabilir; tabanı dolmamış aylara geri dağıt.
+        var leftover = agreed - allocated;
+        for (var index = result.Count - 1; leftover > 0 && index >= 0; index--)
+        {
+            var room = result[index].BaseAmount - result[index].NetAmount;
+            if (room <= 0) continue;
+            var add = Math.Min(room, leftover);
+            result[index] = WithNet(result[index], result[index].NetAmount + add);
+            leftover -= add;
+        }
+
+        return result;
+    }
+
+    private static Breakdown WithNet(Breakdown month, decimal net)
+    {
+        var percent = month.BaseAmount > 0 ? Round(100m - net / month.BaseAmount * 100m) : 0m;
+        percent = Math.Clamp(percent, 0m, 100m);
+        var reason = month.DiscountReason is null ? ManualAdjustmentReason : $"{month.DiscountReason} + {ManualAdjustmentReason}";
+        if (reason.Length > 200) reason = reason[..200];
+        return new Breakdown(month.BaseAmount, percent, reason, Round(net));
+    }
+
     private static Breakdown Build(decimal baseAmount, decimal percent, string? reason)
     {
         var rounded = Round(baseAmount);

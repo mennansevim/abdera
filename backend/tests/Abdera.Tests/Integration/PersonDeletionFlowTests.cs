@@ -127,8 +127,8 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(1, impact.Payments);
         Assert.Equal(1000m, impact.CollectedAmount);
         Assert.Equal(1, impact.ShowItems);
-        // Velinin başka çocuğu yok - silindikten sonra sahipsiz kalacağı bildirilmeli.
-        Assert.Equal(1, impact.GuardiansLeftWithoutStudents);
+        // Velinin başka çocuğu yok - öğrenciyle birlikte silineceği bildirilmeli.
+        Assert.Equal(1, impact.GuardiansToDelete);
     }
 
     [Fact]
@@ -191,12 +191,53 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.NotificationJobs.AnyAsync(j => lessonIds.Contains(j.ReferenceId) || receivableIds.Contains(j.ReferenceId)));
         Assert.False(await db.StaffNotifications.AnyAsync(n => lessonIds.Contains(n.ReferenceId) || receivableIds.Contains(n.ReferenceId)));
 
-        // Veli KALIR - kişisel veriyi kullanıcının haberi olmadan silmiyoruz, yalnızca
-        // etkisini bildiriyoruz.
-        Assert.True(await db.Guardians.AnyAsync(g => g.Id == seeded.GuardianId));
+        // Başka öğrencisi olmayan veli de gider - kalırsa aynı numarayla yeniden kayıt
+        // "Bu telefon numarasıyla kayıtlı bir veli zaten var" hatasına takılıyordu.
+        Assert.False(await db.Guardians.AnyAsync(g => g.Id == seeded.GuardianId));
+        Assert.False(await db.GuardianLoginCodes.AnyAsync(c => c.GuardianId == seeded.GuardianId));
+        Assert.False(await db.WhatsAppMessages.AnyAsync(m => m.GuardianId == seeded.GuardianId));
+        Assert.False(await db.VirtualIbans.AnyAsync(v => v.GuardianId == seeded.GuardianId));
 
         // Silme işleminin kendisi audit'te durur.
         Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "student.deleted" && log.EntityId == seeded.StudentId));
+    }
+
+    [Fact]
+    public async Task Deleting_a_student_keeps_a_guardian_who_still_has_a_sibling_enrolled()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLoadedStudentAsync(admin, "kardes");
+
+        var sibling = await ReadAsync<Students.StudentResponse>(await admin.PostAsJsonAsync(
+            "/api/students", new Students.CreateRequest("Kardes", "Ogrenci", new DateOnly(2016, 1, 1))));
+        (await admin.PostAsJsonAsync($"/api/students/{sibling.Id}/guardians",
+            new LinkGuardianToStudent.Request(seeded.GuardianId, "anne", true))).EnsureSuccessStatusCode();
+
+        var impact = await ReadAsync<PersonEraser.StudentImpact>(
+            await admin.GetAsync($"/api/students/{seeded.StudentId}/deletion-impact"));
+        Assert.Equal(0, impact.GuardiansToDelete);
+
+        var deleted = await admin.DeleteAsync($"/api/students/{seeded.StudentId}?force=true");
+        Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.True(await db.Guardians.AnyAsync(g => g.Id == seeded.GuardianId));
+        Assert.True(await db.StudentGuardians.AnyAsync(sg => sg.GuardianId == seeded.GuardianId && sg.StudentId == sibling.Id));
+    }
+
+    [Fact]
+    public async Task A_deleted_students_guardian_phone_can_be_registered_again()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLoadedStudentAsync(admin, "tekrar");
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var phone = (await db.Guardians.AsNoTracking().SingleAsync(g => g.Id == seeded.GuardianId)).PhoneNumber;
+
+        (await admin.DeleteAsync($"/api/students/{seeded.StudentId}?force=true")).EnsureSuccessStatusCode();
+
+        var again = await admin.PostAsJsonAsync("/api/guardians", new Guardians.CreateRequest("Yeni", "Veli", phone));
+        Assert.Equal(HttpStatusCode.Created, again.StatusCode);
     }
 
     [Fact]

@@ -153,4 +153,49 @@ public class TuitionCalculatorTests
         Assert.Equal(0m, result.NetAmount);
         Assert.Equal("Personel çocuğu (%100)", result.DiscountReason);
     }
+
+    [Fact]
+    public void Agreed_total_is_spread_over_the_months_and_sums_exactly()
+    {
+        var month = TuitionCalculator.ComputeMonthly(6000m, Context());
+        var adjusted = TuitionCalculator.AdjustToAgreedTotal([month, month, month], 17999.99m);
+
+        Assert.Equal(17999.99m, adjusted.Sum(row => row.NetAmount));
+        Assert.All(adjusted, row =>
+        {
+            Assert.Equal(6000m, row.BaseAmount);
+            Assert.InRange(row.DiscountPercent, 0m, 100m);
+            Assert.Equal(TuitionCalculator.ManualAdjustmentReason, row.DiscountReason);
+        });
+    }
+
+    [Fact]
+    public void Agreed_total_keeps_the_original_discount_reason_visible()
+    {
+        var month = TuitionCalculator.ComputePrepaidMonthly(6000m, Context(), 10m);
+        var adjusted = TuitionCalculator.AdjustToAgreedTotal([month], 5000m);
+
+        Assert.Equal(5000m, adjusted[0].NetAmount);
+        Assert.StartsWith("Peşin ödeme indirimi", adjusted[0].DiscountReason);
+        Assert.EndsWith(TuitionCalculator.ManualAdjustmentReason, adjusted[0].DiscountReason);
+    }
+
+    [Fact]
+    public void Agreed_total_equal_to_the_computed_total_changes_nothing()
+    {
+        var month = TuitionCalculator.ComputeMonthly(6000m, Context());
+        var adjusted = TuitionCalculator.AdjustToAgreedTotal([month, month], 12000m);
+
+        Assert.Equal([month, month], adjusted);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(12000.01)]
+    public void Agreed_total_must_be_positive_and_not_above_the_tariff(decimal agreed)
+    {
+        var month = TuitionCalculator.ComputeMonthly(6000m, Context());
+
+        Assert.Throws<ArgumentException>(() => TuitionCalculator.AdjustToAgreedTotal([month, month], agreed));
+    }
 }

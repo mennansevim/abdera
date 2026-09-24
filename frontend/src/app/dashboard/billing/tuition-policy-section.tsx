@@ -137,7 +137,7 @@ function NewRateModal({ courseKind, onClose }: { courseKind: CourseKind; onClose
     <Modal
       open
       title={`${COURSE_KIND_LABEL[courseKind]} tarifesi`}
-      description="Bu tarih ve sonrasında oluşturulan aidatlar bu tutardan hesaplanır. Önceki tarife bir gün öncesinde otomatik kapanır; yazılmış aidatlar değişmez."
+      description="Bu tarih ve sonrasında oluşturulan aidatlar bu tutardan hesaplanır. Önceki tarife bir gün öncesinde otomatik kapanır; yazılmış aidatlar değişmez. İlk tarifeden daha eski bir tarih seçersen (ör. sezon öncesi Ağustos), o boşluğu kapatan geçmiş dönem tarifesi eklenir."
       onClose={onClose}
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">

@@ -95,6 +95,9 @@ export interface StudentBillingRow {
   manualDiscountPercent: number | null;
   manualDiscountReason: string | null;
   receivables: Receivable[];
+  startedAt: string | null;
+  endedAt: string | null;
+  status: "Active" | "Ended" | null;
 }
 
 export interface Receivable {
@@ -162,7 +165,63 @@ export function useCreateExpense() {
   });
 }
 
-export type MakeupCreditStatus = "Available" | "Used" | "Expired";
+// Her ay kendiliğinden sayılan gider kalemi (kira, elektrik/su ortalaması, sabit maaş) -
+// docs/10-decisions.md M5. Tutar değişince eski sürüm silinmez, seçilen aydan itibaren yeni
+// sürüm geçerli olur. Aylar "YYYY-MM".
+export interface RecurringExpenseAmount {
+  id: string;
+  monthlyAmount: number;
+  currency: string;
+  effectiveFrom: string;
+  effectiveUntil: string | null;
+}
+export interface RecurringExpense {
+  id: string;
+  category: ExpenseCategory;
+  name: string;
+  note: string | null;
+  isEnded: boolean;
+  currentAmount: number;
+  amounts: RecurringExpenseAmount[];
+}
+
+// Bir kalemin verilen aya ("YYYY-MM") düşen tutarı; o ayda yürürlükte değilse 0. Aylar aynı
+// biçimde olduğu için metin karşılaştırması sıralamayla aynıdır.
+export function recurringAmountFor(item: RecurringExpense, month: string) {
+  return item.amounts.find((amount) => amount.effectiveFrom <= month && (amount.effectiveUntil === null || month <= amount.effectiveUntil))?.monthlyAmount ?? 0;
+}
+
+export function useRecurringExpenses() {
+  return useQuery({ queryKey: ["recurring-expenses"], queryFn: () => api.get<RecurringExpense[]>("/api/recurring-expenses") });
+}
+
+export function useCreateRecurringExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { category: ExpenseCategory; name: string; monthlyAmount: number; effectiveFrom: string; note?: string }) =>
+      api.post<RecurringExpense>("/api/recurring-expenses", body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recurring-expenses"] }),
+  });
+}
+
+export function useChangeRecurringExpenseAmount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; monthlyAmount: number; effectiveFrom: string }) =>
+      api.post<RecurringExpense>(`/api/recurring-expenses/${id}/amounts`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recurring-expenses"] }),
+  });
+}
+
+export function useEndRecurringExpense() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, lastMonth }: { id: string; lastMonth: string }) => api.post<RecurringExpense>(`/api/recurring-expenses/${id}/end`, { lastMonth }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["recurring-expenses"] }),
+  });
+}
+
+export type MakeupCreditStatus ="Available" | "Used" | "Expired";
 export interface MakeupCredit {
   id: string;
   studentId: string;
@@ -345,7 +404,7 @@ export function usePrepayPreview(enrollmentId: string, startPeriod: string, mont
 export function useCreatePrepayPlan(studentId: string, enrollmentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { startPeriod: string; months: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string; expectedTotal?: number }) =>
+    mutationFn: (body: { startPeriod: string; months: number; paymentDate: string; method: PaymentMethod; reference?: string; note?: string; expectedTotal?: number; agreedTotal?: number }) =>
       api.post<PrepayResult>(`/api/enrollments/${enrollmentId}/prepay-plans`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });

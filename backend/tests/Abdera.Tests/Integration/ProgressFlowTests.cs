@@ -395,15 +395,22 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(StudentProgressSummary.SummaryStatus.NoNotes, empty.Status);
 
         await CreateNoteAsync(teacher, seeded.LessonId, "Sol el zayıf, tempo dalgalı.");
+        // İlk yorum için 4 not gerekli (kullanıcı kuralı) - sağlayıcıya hiç gidilmez.
+        var tooFew = await GetSummaryAsync(teacher, seeded.StudentId);
+        Assert.Equal(StudentProgressSummary.SummaryStatus.NotEnoughNotes, tooFew.Status);
+        Assert.Equal(1, tooFew.NoteCount);
+        Assert.Equal(4, tooFew.MinimumNotes);
+
+        await CreateNotesAsync(teacher, seeded.LessonId, 3, "Ek not");
         var disabled = await GetSummaryAsync(teacher, seeded.StudentId);
 
         Assert.Equal(StudentProgressSummary.SummaryStatus.Unavailable, disabled.Status);
         Assert.Null(disabled.Summary);
-        Assert.Equal(1, disabled.SourceNoteCount);
+        Assert.Equal(4, disabled.SourceNoteCount);
     }
 
     [Fact]
-    public async Task Progress_summary_is_cached_and_regenerated_only_after_a_new_note()
+    public async Task Progress_summary_is_generated_after_four_notes_then_refreshed_at_most_monthly()
     {
         var generator = new FakeSummaryGenerator();
         using var factory = WithSummaryGenerator(generator);
@@ -411,6 +418,7 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var seeded = await SeedLessonAsync(admin, "summary-cache");
         using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
         await CreateNoteAsync(teacher, seeded.LessonId, "İlk ders: ritim dağınık.");
+        await CreateNotesAsync(teacher, seeded.LessonId, 3, "Ara ders");
 
         var first = await GetSummaryAsync(teacher, seeded.StudentId);
         var second = await GetSummaryAsync(teacher, seeded.StudentId);
@@ -421,16 +429,31 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Single(generator.Requests);
         Assert.Equal($"Öğrencisummary-cache", generator.Requests[0].StudentFirstName);
 
-        await CreateNoteAsync(teacher, seeded.LessonId, "İkinci ders: ritim oturuyor.");
+        // Aynı ay içinde yeni not: kayıtlı yorum gösterilir, sağlayıcıya gidilmez.
+        await CreateNoteAsync(teacher, seeded.LessonId, "Son ders: ritim oturuyor.");
+        var sameMonth = await GetSummaryAsync(teacher, seeded.StudentId);
+        Assert.Equal("Yorum #1", sameMonth.Summary);
+        Assert.Equal(4, sameMonth.SourceNoteCount);
+        Assert.Equal(5, sameMonth.NoteCount);
+        Assert.False(sameMonth.IsStale);
+        Assert.NotNull(sameMonth.NextRefreshOn);
+        Assert.Single(generator.Requests);
+
+        // Ay değişti (yorum geçen ay üretilmiş gibi): yeni notlarla bir kez yeniden üretilir.
+        await using var db = await _factory.CreateDbContextAsync();
+        await db.ProgressSummaries.Where(summary => summary.StudentId == seeded.StudentId)
+            .ExecuteUpdateAsync(set => set.SetProperty(summary => summary.UpdatedAt, DateTimeOffset.UtcNow.AddDays(-40)));
         var refreshed = await GetSummaryAsync(teacher, seeded.StudentId);
 
         Assert.Equal("Yorum #2", refreshed.Summary);
-        Assert.Equal(2, refreshed.SourceNoteCount);
+        Assert.Equal(5, refreshed.SourceNoteCount);
         Assert.False(refreshed.IsStale);
         // Notlar eskiden yeniye gider - model zaman içindeki değişimi okuyabilsin.
-        Assert.Equal(["İlk ders: ritim dağınık.", "İkinci ders: ritim oturuyor."], generator.Requests[1].Notes.Select(note => note.Note));
+        Assert.Equal("İlk ders: ritim dağınık.", generator.Requests[1].Notes.First().Note);
+        Assert.Equal("Son ders: ritim oturuyor.", generator.Requests[1].Notes.Last().Note);
+        Assert.Equal("Yorum #2", (await GetSummaryAsync(teacher, seeded.StudentId)).Summary);
+        Assert.Equal(2, generator.Requests.Count);
 
-        await using var db = await _factory.CreateDbContextAsync();
         var row = await db.ProgressSummaries.SingleAsync(summary => summary.StudentId == seeded.StudentId);
         Assert.Equal(seeded.TeacherId, row.TeacherId);
         Assert.Equal("fake-model", row.Model);
@@ -446,7 +469,7 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var admin = await CreateAdminClientAsync(factory);
         var seeded = await SeedLessonAsync(admin, "summary-scope");
         using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
-        await CreateNoteAsync(teacher, seeded.LessonId, "Ders notu.");
+        await CreateNotesAsync(teacher, seeded.LessonId, 4, "Ders notu");
 
         await GetSummaryAsync(admin, seeded.StudentId);
         await GetSummaryAsync(teacher, seeded.StudentId);
@@ -467,11 +490,16 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var admin = await CreateAdminClientAsync(factory);
         var seeded = await SeedLessonAsync(admin, "summary-failure");
         using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
-        await CreateNoteAsync(teacher, seeded.LessonId, "İlk not.");
+        await CreateNotesAsync(teacher, seeded.LessonId, 4, "Not");
         await GetSummaryAsync(teacher, seeded.StudentId);
 
         generator.Fail = true;
-        await CreateNoteAsync(teacher, seeded.LessonId, "İkinci not.");
+        await CreateNoteAsync(teacher, seeded.LessonId, "Beşinci not.");
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            await db.ProgressSummaries.Where(summary => summary.StudentId == seeded.StudentId)
+                .ExecuteUpdateAsync(set => set.SetProperty(summary => summary.UpdatedAt, DateTimeOffset.UtcNow.AddDays(-40)));
+        }
         var afterFailure = await GetSummaryAsync(teacher, seeded.StudentId);
 
         Assert.Equal(StudentProgressSummary.SummaryStatus.Ready, afterFailure.Status);
@@ -490,6 +518,12 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var response = await strangerTeacher.GetAsync($"/api/students/{owner.StudentId}/progress-summary");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    private static async Task CreateNotesAsync(HttpClient teacher, Guid lessonId, int count, string prefix)
+    {
+        for (var index = 1; index <= count; index++)
+            await CreateNoteAsync(teacher, lessonId, $"{prefix} {index}.");
     }
 
     private static async Task<StudentProgressSummary.Response> GetSummaryAsync(HttpClient client, Guid studentId)
