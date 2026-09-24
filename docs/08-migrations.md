@@ -192,3 +192,22 @@ Eser adı/bestecisi öneriye donar (katalog frontend'de; sonradan değişse de l
 öğretmene geçer, devredilmeden silinince `teacher_id` ve eklediği eserlerin
 `created_by_user_id`'si boşalır (öneri öğrencinin, eser okulun kütüphanesidir). `Down()`
 eklenen eserlerin PDF'lerini siler ve boş sayfa sayılarını 1 yaparak NOT NULL'a döner.
+
+## recurring_expenses, recurring_expense_amounts (sabit aylık gider, M9)
+
+**AddRecurringExpenses** (Billing modülü): kira, elektrik/su ortalaması, sabit maaş gibi her ay
+kendiliğinden sayılan gider kalemleri ve kalemin aylık tutar sürümleri (`tuition_rates` kalıbı).
+
+```
+recurring_expenses(id, category, name, note, created_by, created_at, updated_at, xmin)
+recurring_expense_amounts(id, recurring_expense_id FK, monthly_amount numeric(12,2), currency,
+                          effective_from, effective_until, superseded_at, created_by,
+                          created_at, updated_at)
+CHECK (monthly_amount > 0)
+CHECK (effective_until IS NULL OR effective_until >= effective_from)
+UNIQUE (recurring_expense_id) WHERE effective_until IS NULL AND superseded_at IS NULL
+```
+
+`effective_from` her zaman ayın ilk günü, `effective_until` ayın son günüdür. Satır silinmez;
+aynı ayda düzeltme eski satırı `superseded_at` ile işaretler. Kişiye referans vermediği için
+`PersonEraser` kapsamında değildir. `Down()` iki tabloyu düşürür.

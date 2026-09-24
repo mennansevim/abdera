@@ -32,6 +32,7 @@ provası" kabul kriterinin nasıl yerine getirileceğini tarif eder.
    SELECT 'receivables', count(*) FROM receivables
    UNION ALL SELECT 'payments', count(*) FROM payments
    UNION ALL SELECT 'expenses', count(*) FROM expenses
+   UNION ALL SELECT 'recurring_expense_amounts', count(*) FROM recurring_expense_amounts
    UNION ALL SELECT 'audit_log', count(*) FROM audit_log
    UNION ALL SELECT 'notification_jobs', count(*) FROM notification_jobs;
 

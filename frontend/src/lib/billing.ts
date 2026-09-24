@@ -166,7 +166,7 @@ export function useCreateExpense() {
 }
 
 // Her ay kendiliğinden sayılan gider kalemi (kira, elektrik/su ortalaması, sabit maaş) -
-// docs/10-decisions.md M5. Tutar değişince eski sürüm silinmez, seçilen aydan itibaren yeni
+// docs/10-decisions.md M9. Tutar değişince eski sürüm silinmez, seçilen aydan itibaren yeni
 // sürüm geçerli olur. Aylar "YYYY-MM".
 export interface RecurringExpenseAmount {
   id: string;

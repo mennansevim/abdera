@@ -64,6 +64,8 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentCorrection> PaymentCorrections => Set<PaymentCorrection>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<RecurringExpense> RecurringExpenses => Set<RecurringExpense>();
+    public DbSet<RecurringExpenseAmount> RecurringExpenseAmounts => Set<RecurringExpenseAmount>();
 
     public DbSet<NotificationJob> NotificationJobs => Set<NotificationJob>();
     public DbSet<StaffNotification> StaffNotifications => Set<StaffNotification>();

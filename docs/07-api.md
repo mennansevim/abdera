@@ -124,6 +124,10 @@ POST   /api/instrument-maintenance-settings/run-due ✅ vadesi gelen rızalı ve
 
 GET    /api/expenses                             ✅ Faz 2 - Maliyet Takibi gider defteri, ?from=&to= filtresiyle
 POST   /api/expenses                             ✅ maaş/elektrik-su/kira/diğer - kayıtlar silinmez
+GET    /api/recurring-expenses                   ✅ M9 - her ay tekrar eden gider kalemleri + tutar geçmişi (aylar "YYYY-MM")
+POST   /api/recurring-expenses                   ✅ kalem + ilk aylık tutar (effectiveFrom ayından itibaren)
+POST   /api/recurring-expenses/{id}/amounts      ✅ seçilen aydan itibaren yeni tutar; eskisi kapanır, silinmez (geçmişe 409)
+POST   /api/recurring-expenses/{id}/end          ✅ kalemi lastMonth ayının sonunda bitirir
 
 POST   /api/guardians/{guardianId}/virtual-iban  ✅ Phase 6 (E1) - veliye sanal IBAN atar, aktifken tekrar atanamaz
 GET    /api/guardians/{guardianId}/virtual-iban  ✅ atanmışsa döner, yoksa 404
