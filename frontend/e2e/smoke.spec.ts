@@ -47,7 +47,7 @@ const ADMIN_PAGES: Array<{ path: string; heading: RegExp }> = [
   { path: "/dashboard/shows", heading: /Yıl sonu gösterisi/i },
   { path: "/dashboard/change-requests", heading: /^Talepler$/ },
   { path: "/dashboard/billing", heading: /Aidat yönetimi/ },
-  { path: "/dashboard/costs", heading: /Maliyet takibi/ },
+  { path: "/dashboard/costs", heading: /Giderler/ },
   { path: "/dashboard/banking", heading: /Banka entegrasyonu/ },
   { path: "/dashboard/notifications", heading: /Mesaj Merkezi/ },
   { path: "/dashboard/backups", heading: /^Yedekleme$/ },
