@@ -48,6 +48,9 @@ export const metadata: Metadata = {
     template: "%s · Abdera",
   },
   description: "Abdera Müzik Okulu Yönetim Sistemi",
+  // İkonlar dosya kuralıyla gelir: app/favicon.ico, app/icon.png, app/apple-icon.png.
+  // Bu alan yalnızca iPhone "Ana Ekrana Ekle" etiketini sayfa başlığından bağımsız sabitler.
+  appleWebApp: { title: "Abdera" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
