@@ -25,6 +25,7 @@ import {
   useUpdateStudent,
   type Student,
   type StudentGuardianLink,
+  whatsAppChatUrl,
 } from "@/lib/people";
 
 // isAdmin=false (Teacher) iken veli bilgisi hiç istenmez - /api/students/{id}/guardians
@@ -103,11 +104,22 @@ export function StudentDetail({
                   {guardian.isPrimary && (
                     <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">Birincil</span>
                   )}
+                  <a
+                    href={whatsAppChatUrl(guardian.phoneNumber)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${guardian.firstName} ${guardian.lastName} için WhatsApp'tan yaz`}
+                    title="WhatsApp'tan yaz"
+                    className="icon-btn icon-btn-quiet shrink-0 border-transparent bg-transparent text-[#1f9e55] hover:bg-[var(--success-soft)]"
+                  >
+                    <Icon name="whatsapp" className="h-[1.15rem] w-[1.15rem]" />
+                  </a>
                   <RowMenu label={`${guardian.firstName} ${guardian.lastName} için işlemler`}>
                     {(close) => (
                       <>
                         <RowMenuItem icon="pencil" onClick={() => { close(); setEditingGuardian(guardian); }}>Veliyi düzenle</RowMenuItem>
                         <RowMenuItem icon="phone" onClick={() => { close(); window.location.href = `tel:${guardian.phoneNumber}`; }}>Ara</RowMenuItem>
+                        <RowMenuItem icon="whatsapp" onClick={() => { close(); window.open(whatsAppChatUrl(guardian.phoneNumber), "_blank", "noopener,noreferrer"); }}>WhatsApp&apos;tan yaz</RowMenuItem>
                       </>
                     )}
                   </RowMenu>

@@ -144,10 +144,10 @@ Kayıt ilişkileri tek bir yerde anlaşılır olmalı; aynı kurs hem öğretmen
 - [x] Öğrenci gelişim ekranında çalışılan eserleri kronolojik listele.
 - [x] Eser kaydına besteci, enstrüman, seviye, durum, hedef tarih ve nota/PDF/link ekle.
 - [x] Zorluk derecesini 1–5 veya Başlangıç/Orta/İleri olarak standardize et.
-- [x] Öğretmen kısa not girince isteğe bağlı “yapıcı metne dönüştür” önizlemesi sun;
-      ham notu veliye otomatik göndermeden önce öğretmen onayı iste.
-      *(OpenAI uyumlu sağlayıcı; `Ai__Provider=OpenAi` + `Ai__ApiKey` ile açılır. Öneri
-      kaydedilmez/onaylanmaz, yalnızca önizlemeye düşer ve geri alınabilir.)*
+- [x] ~~Öğretmen kısa not girince isteğe bağlı “yapıcı metne dönüştür” önizlemesi sun~~
+      *(2026-09-24 kullanıcı isteğiyle kaldırıldı; yerine öğretmen notlarından üretilen
+      "Genel gelişim" AI yorumu geldi - `docs/10-decisions.md` L. Ham not veliye hâlâ
+      otomatik gitmez; veli yorumu öğretmenin elle yazıp onayladığı metindir.)*
 - [x] Veli portalında eser, öğretmen yorumu ve sonraki hedefi ayrı bölümlerde göster.
 - [x] AI sağlayıcısı yoksa mevcut metni bozma; özellik kapalıyken manuel düzenleme
       akışı eksiksiz çalışmaya devam et.

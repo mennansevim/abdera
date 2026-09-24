@@ -788,6 +788,172 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Library.Domain.LibraryPiece", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Composer")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("composer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("Instrument")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("instrument");
+
+                    b.Property<int?>("Level")
+                        .HasColumnType("integer")
+                        .HasColumnName("level");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("notes");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("library_pieces", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_library_pieces_level", "level IS NULL OR level BETWEEN 1 AND 5");
+                        });
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Library.Domain.LibrarySuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Composer")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("composer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("EntryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entry_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<string>("SuggestedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("suggested_by_name");
+
+                    b.Property<Guid?>("TeacherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("teacher_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StudentId", "EntryId")
+                        .IsUnique();
+
+                    b.ToTable("library_suggestions", (string)null);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Library.Domain.ScoreFile", b =>
+                {
+                    b.Property<string>("EntryId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entry_id");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("content");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("PageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("page_count");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.Property<Guid>("Version")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version");
+
+                    b.HasKey("EntryId");
+
+                    b.ToTable("library_score_files", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_library_score_files_pages", "page_count IS NULL OR page_count > 0");
+
+                            t.HasCheckConstraint("ck_library_score_files_size", "size_bytes > 0");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Messaging.Domain.MessageTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1848,6 +2014,64 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.ToTable("practice_journal_entries", (string)null);
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.ProgressSummary", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model");
+
+                    b.Property<DateTimeOffset>("SourceLatestNoteAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("source_latest_note_at");
+
+                    b.Property<int>("SourceNoteCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_note_count");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("summary");
+
+                    b.Property<Guid?>("TeacherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("teacher_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeacherId");
+
+                    b.HasIndex("StudentId", "TeacherId")
+                        .IsUnique();
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("StudentId", "TeacherId"), false);
+
+                    b.ToTable("progress_summaries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_progress_summaries_source_note_count", "source_note_count > 0");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.SkillAssessment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2506,6 +2730,20 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasForeignKey("StudentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.ProgressSummary", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Teacher", null)
+                        .WithMany()
+                        .HasForeignKey("TeacherId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.SkillAssessment", b =>

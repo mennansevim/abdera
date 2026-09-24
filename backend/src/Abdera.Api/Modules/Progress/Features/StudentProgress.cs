@@ -50,7 +50,6 @@ public static class StudentProgress
         string StudentName,
         int EntryCount,
         DateTimeOffset? LastEntryAt,
-        bool AiTransformationAvailable,
         IReadOnlyList<ProgressEntryResponse> Entries,
         IReadOnlyList<SkillAssessmentEntryResponse> SkillAssessments);
 
@@ -157,7 +156,6 @@ public static class StudentProgress
             student.FirstName + " " + student.LastName,
             entries.Count,
             lastEntryAt,
-            false,
             entries,
             skillAssessments));
     }

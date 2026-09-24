@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AppLoader } from "@/components/app-loader";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
-import { useLogin } from "@/lib/use-auth";
+import { useDevAccounts, useLogin } from "@/lib/use-auth";
 
 type LoginRole = "Admin" | "Teacher" | "Guardian";
 type StaffRole = Exclude<LoginRole, "Guardian">;
@@ -46,6 +46,15 @@ const DEMO_EMAILS: Record<StaffRole, string> = {
   Teacher: "demo.ogretmen@abdera.com",
 };
 
+// Yerel geliştirmede şifre yerine hesap listesinden seçilir (/api/dev/auth/*). Karar
+// tarayıcının açtığı adrese göre verilir; asıl koruma sunucudadır - o uçlar yalnızca
+// Development + Auth__DevLogin__Enabled=true iken vardır, başka yerde 404 döner.
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const subscribeToNothing = () => () => {};
+function useIsLocalhost() {
+  return useSyncExternalStore(subscribeToNothing, () => LOCAL_HOSTNAMES.has(window.location.hostname), () => false);
+}
+
 export default function LoginPage() {
   return (
     <Suspense fallback={<SessionCheckLoading />}>
@@ -58,6 +67,10 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const login = useLogin();
+  const isLocalhost = useIsLocalhost();
+  const devAccounts = useDevAccounts(isLocalhost).data;
+  const [usePassword, setUsePassword] = useState(false);
+  const [devEmail, setDevEmail] = useState("");
   const { destination, isResolving } = useSessionDestination();
   const shouldChooseRole = searchParams.get("chooseRole") === "1";
   const emailRef = useRef<HTMLInputElement>(null);
@@ -66,6 +79,10 @@ function LoginPageContent() {
   const [email, setEmail] = useState(DEMO_ENABLED ? DEMO_EMAILS.Admin : "");
   const [password, setPassword] = useState(DEMO_ENABLED ? DEMO_PASSWORD : "");
   const [error, setError] = useState<string | null>(null);
+  const roleAccounts = selectedRole === "Guardian" ? [] : devAccounts?.filter((account) => account.role === selectedRole) ?? [];
+  // Rol değişince önceki rolün seçimi geçersiz kalır; o durumda rolün ilk hesabı seçili sayılır.
+  const selectedDevEmail = roleAccounts.some((account) => account.email === devEmail) ? devEmail : roleAccounts[0]?.email ?? "";
+  const showAccountPicker = !!devAccounts && !usePassword;
 
   useEffect(() => {
     // Veli portalındaki "Ana giriş ekranı" bilinçli bir rol değiştirme isteğidir; bu
@@ -78,10 +95,10 @@ function LoginPageContent() {
   // Seçilen rol sunucuya gönderilir: hesabın rolü seçimle uyuşmuyorsa sunucu 403 döner ve
   // oturum hiç açılmaz. Eskiden yanıt sessizce kabul edilip seçim hesabın gerçek rolüne
   // çekiliyordu - "Yöneticiyim" seçip öğretmen bilgileriyle öğretmen ekranına düşmenin sebebi buydu.
-  async function submitLogin(loginEmail: string, loginPassword: string, role: StaffRole) {
+  async function submitLogin(loginEmail: string, loginPassword: string, role: StaffRole, passwordless = false) {
     setError(null);
     try {
-      const result = await login.mutateAsync({ email: loginEmail, password: loginPassword, expectedRole: role });
+      const result = await login.mutateAsync({ email: loginEmail, password: loginPassword, expectedRole: role, passwordless });
       router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");
@@ -122,6 +139,10 @@ function LoginPageContent() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (selectedRole === "Guardian") return; // form zaten gizli; tip daraltması için.
+    if (showAccountPicker) {
+      await submitLogin(selectedDevEmail, "", selectedRole, true);
+      return;
+    }
     await submitLogin(email, password, selectedRole);
   }
 
@@ -178,11 +199,27 @@ function LoginPageContent() {
                 </div>
               )}
 
-              <label htmlFor="email" className={`${DEMO_ENABLED ? "" : "mt-5"} mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]`}>E-posta</label>
-              <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
+              {showAccountPicker ? (
+                <>
+                  <label htmlFor="dev-account" className="mt-5 mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Hesap <span className="font-normal">· yerel ortam, şifre sorulmaz</span></label>
+                  <select id="dev-account" value={selectedDevEmail} onChange={(event) => setDevEmail(event.target.value)} disabled={!roleAccounts.length} className="field text-sm">
+                    {roleAccounts.length ? roleAccounts.map((account) => (
+                      <option key={account.email} value={account.email}>{account.name ? `${account.name} · ${account.email}` : account.email}</option>
+                    )) : <option value="">Bu rolde aktif hesap yok</option>}
+                  </select>
+                  <button type="button" onClick={() => { setUsePassword(true); setError(null); }} className="mt-2 text-xs font-semibold text-[var(--brand-strong)] underline">Şifreyle giriş yap</button>
+                </>
+              ) : (
+                <>
+                <label htmlFor="email" className={`${DEMO_ENABLED ? "" : "mt-5"} mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]`}>E-posta</label>
+                <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
 
-              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>
-              <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="field text-sm tracking-[.18em]" />
+                <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>
+                <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="field text-sm tracking-[.18em]" />
+
+                  {devAccounts && <button type="button" onClick={() => { setUsePassword(false); setError(null); }} className="mt-2 text-xs font-semibold text-[var(--brand-strong)] underline">Listeden hesap seç</button>}
+                </>
+              )}
 
               {error && <p role="alert" className="mt-3 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 

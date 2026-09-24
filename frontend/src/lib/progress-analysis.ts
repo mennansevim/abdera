@@ -12,23 +12,9 @@ export interface PieceInsight {
 export interface ProgressAnalysis {
   noteCount: number;
   pieceCount: number;
-  averageDifficulty: number | null;
   practiceRate: number;
-  goalCount: number;
-  trend: "positive" | "steady" | "new";
-  headline: string;
-  summary: string;
-  focusAreas: string[];
   pieces: PieceInsight[];
 }
-
-const FOCUS_LABELS: Array<[string, string[]]> = [
-  ["Ritim ve tempo", ["ritim", "tempo", "metronom", "hız"]],
-  ["Teknik akıcılık", ["teknik", "gam", "etüt", "parmak", "akor"]],
-  ["Müzikal ifade", ["dinamik", "ifade", "nüans", "artikülasyon", "legato"]],
-  ["Nota güveni", ["nota", "deşifre", "okuma", "entonasyon"]],
-  ["Duruş ve ses", ["duruş", "postür", "ses", "ton"]],
-];
 
 function normalizedText(entry: ProgressEntry) {
   return [entry.practiced, entry.note, entry.homework, entry.nextGoal]
@@ -94,58 +80,12 @@ export function buildProgressAnalysis(entries: ProgressEntry[]): ProgressAnalysi
     })
     .sort((a, b) => b.latestAt.localeCompare(a.latestAt));
 
-  const difficulties = pieceInsights.map((piece) => piece.averageDifficulty);
-  const averageDifficulty = difficulties.length
-    ? difficulties.reduce((sum, difficulty) => sum + difficulty, 0) / difficulties.length
-    : null;
-  const goalCount = sorted.filter((entry) => entry.nextGoal || entry.homework).length;
   const practiceRate = sorted.length ? Math.round((sorted.filter((entry) => entry.practiced || entry.note).length / sorted.length) * 100) : 0;
-
-  const focusAreas = FOCUS_LABELS
-    .map(([label, keywords]) => ({ label, score: sorted.reduce((score, entry) => {
-      const text = normalizedText(entry);
-      return score + keywords.reduce((keywordScore, keyword) => keywordScore + (text.includes(keyword) ? 1 : 0), 0);
-    }, 0) }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((item) => item.label);
-
-  if (!sorted.length) {
-    return {
-      noteCount: 0,
-      pieceCount: 0,
-      averageDifficulty: null,
-      practiceRate: 0,
-      goalCount: 0,
-      trend: "new",
-      headline: "İlk kayıt için hazır",
-      summary: "Öğretmen notu eklendikçe öğrencinin ritmi, teknik odağı ve eser yolculuğu burada görünür.",
-      focusAreas: [],
-      pieces: [],
-    };
-  }
-
-  const recent = sorted.slice(0, 3);
-  const recentWithGoals = recent.filter((entry) => entry.nextGoal || entry.homework).length;
-  const trend = sorted.length >= 3 && recentWithGoals >= 2 ? "positive" : sorted.length >= 2 ? "steady" : "new";
-  const latestPiece = pieceInsights[0];
-  const difficultyText = latestPiece
-    ? latestPiece.difficultySource === "teacher"
-      ? `${latestPiece.title} için öğretmen değerlendirmesi ${latestPiece.averageDifficulty.toFixed(1)}/5 seviyesinde`
-      : `yapay zekâ ${latestPiece.title} için ${latestPiece.averageDifficulty.toFixed(1)}/5 zorluk öneriyor`
-    : "eser zorluğu henüz işaretlenmemiş";
 
   return {
     noteCount: sorted.length,
     pieceCount: pieceInsights.length,
-    averageDifficulty,
     practiceRate,
-    goalCount,
-    trend,
-    headline: trend === "positive" ? "Düzenli bir gelişim ritmi var" : trend === "steady" ? "Gelişim istikrarlı ilerliyor" : "Gelişim resmi oluşmaya başladı",
-    summary: `${sorted.length} ders kaydı birlikte değerlendirildi. ${difficultyText}. ${goalCount ? `${goalCount} kayıtta bir sonraki adım tanımlanmış.` : "Bir sonraki adımı daha görünür kılmak için hedef ekleyebilirsin."}`,
-    focusAreas: focusAreas.length ? focusAreas : ["Genel ilerleme"],
     pieces: pieceInsights,
   };
 }

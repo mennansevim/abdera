@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type ApiError } from "./api";
+import { api } from "./api";
 
 export interface ProgressEntry {
   id: string;
@@ -32,7 +32,6 @@ export interface StudentProgress {
   studentName: string;
   entryCount: number;
   lastEntryAt: string | null;
-  aiTransformationAvailable: boolean;
   entries: ProgressEntry[];
   skillAssessments: SkillAssessmentEntry[];
 }
@@ -58,6 +57,27 @@ export function useStudentProgress(studentId: string) {
   });
 }
 
+// Gelişim ekranındaki "Genel gelişim" yorumu: öğretmen notlarından AI ile üretilir. Sunucu
+// yorumu önbellekte tutar ve yalnızca yeni not girildiğinde yeniden üretir; bu yüzden istek
+// ilk açılışta birkaç saniye sürebilir, sonrakiler anında döner.
+export interface ProgressSummary {
+  status: "Ready" | "NoNotes" | "Unavailable" | "Failed";
+  summary: string | null;
+  generatedAt: string | null;
+  sourceNoteCount: number;
+  // Sağlayıcı geçici hata verdiyse son üretilen yorum döner; yeni notları henüz kapsamıyor.
+  isStale: boolean;
+}
+
+export function useProgressSummary(studentId: string) {
+  return useQuery({
+    queryKey: ["student-progress-summary", studentId],
+    queryFn: () => api.get<ProgressSummary>(`/api/students/${studentId}/progress-summary`),
+    enabled: !!studentId,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useCreateProgressNote(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -80,6 +100,7 @@ export function useCreateProgressNote(studentId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-progress", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["student-progress-summary", studentId] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
   });
@@ -91,14 +112,6 @@ export function useSetParentComment(studentId: string) {
     mutationFn: ({ noteId, parentComment, approve }: { noteId: string; parentComment: string; approve: boolean }) =>
       api.put<ProgressEntry>(`/api/lesson-notes/${noteId}/parent-comment`, { parentComment, approve }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-progress", studentId] }),
-  });
-}
-
-// Faz 10: ham notu veliye uygun yapıcı bir metne çevirir. Yalnızca ÖNERİ döner - hiçbir şey
-// kaydedilmez. Öğretmen öneriyi düzenleyip useSetParentComment ile kaydeder ya da yok sayar.
-export function useSuggestParentComment() {
-  return useMutation<{ suggestion: string }, ApiError, string>({
-    mutationFn: (noteId) => api.post<{ suggestion: string }>(`/api/lesson-notes/${noteId}/parent-comment/suggest`),
   });
 }
 

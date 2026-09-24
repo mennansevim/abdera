@@ -33,6 +33,7 @@ export type IconName =
   | "plus"
   | "pencil"
   | "phone"
+  | "whatsapp"
   | "piano"
   | "guitar"
   | "violin"
@@ -72,6 +73,8 @@ const paths: Record<IconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14"/>,
   pencil: <><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m14.5 6.5 3 3"/></>,
   phone: <path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5L16 12l4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3.5 5.2 2 2 0 0 1 5.5 3h1Z"/>,
+  // Veliye WhatsApp'tan yazma bağlantısı için - konuşma balonu içinde telefon ahizesi.
+  whatsapp: <><path d="M3.5 20.5 5 16a8.5 8.5 0 1 1 3.2 3.1Z"/><path d="M9 8.5c0 3.6 2.9 6.5 6.5 6.5l1-1.6-2-1-1 .9a4.5 4.5 0 0 1-2.3-2.3l.9-1-1-2Z" fill="currentColor" strokeWidth="1"/></>,
   // Öğrenci listesindeki enstrüman rozetleri için (kullanıcı isteği: "içine girmeden
   // anlayabilelim") - okulda yalnızca dört sabit enstrüman var (Piyano/Gitar/Keman/Bateri),
   // her birine özgü basit bir piktogram.

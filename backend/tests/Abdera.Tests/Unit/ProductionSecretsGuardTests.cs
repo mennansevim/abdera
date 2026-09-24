@@ -179,6 +179,18 @@ public class ProductionSecretsGuardTests
     }
 
     [Fact]
+    public void Throws_in_production_when_passwordless_dev_login_is_enabled()
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["Auth:DevLogin:Enabled"] = "true";
+        var app = BuildApp("Production", configuration);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(app));
+
+        Assert.Contains("Auth__DevLogin__Enabled=false", ex.Message);
+    }
+
+    [Fact]
     public void Throws_in_production_when_data_protection_keys_are_ephemeral()
     {
         var configuration = CompleteProductionConfiguration();

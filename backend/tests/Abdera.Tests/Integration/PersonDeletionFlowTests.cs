@@ -3,12 +3,14 @@ using System.Net.Http.Json;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.Library.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.People.Infrastructure;
 using Abdera.Api.Modules.Scheduling.Features;
 using Abdera.Api.Modules.Show.Domain;
 using Abdera.Api.Modules.Show.Features;
+using Abdera.Api.Modules.Progress.Domain;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Tests.Integration;
@@ -102,6 +104,11 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
             ShowItemKind.Performance, "1. Bölüm", student.Id, piano.Id, teacher.Id, "Eser", "Besteci", 4, null)))
             .EnsureSuccessStatusCode();
 
+        // Kütüphaneden öneri: öğrenciye referans veren satır, silmede kalmamalı.
+        (await admin.PostAsJsonAsync($"/api/students/{student.Id}/library-suggestions",
+            new LibrarySuggestions.Request("book-piyano-albumu-1", "Melodi", "F. Beyer", null)))
+            .EnsureSuccessStatusCode();
+
         return new Seeded(student.Id, teacher.Id, enrollment.Id, guardian.Id, receivable.Id, show.Id);
     }
 
@@ -152,6 +159,10 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         var paymentIds = await db.Payments.Where(p => receivableIds.Contains(p.ReceivableId)).Select(p => p.Id).ToListAsync();
         Assert.NotEmpty(lessonIds);
         Assert.NotEmpty(paymentIds);
+        // Test ortamında AI kapalı; önbellek satırı elle kurulur ki silme kapsamı sınansın.
+        db.ProgressSummaries.Add(ProgressSummary.Create(
+            seeded.StudentId, null, "Genel gelişim yorumu.", 1, DateTimeOffset.UtcNow, "test-model", DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
 
         var deleted = await admin.DeleteAsync($"/api/students/{seeded.StudentId}?force=true");
         Assert.Equal(HttpStatusCode.OK, deleted.StatusCode);
@@ -168,6 +179,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.PracticeAssignments.AnyAsync(p => lessonIds.Contains(p.LessonId)));
         Assert.False(await db.SkillAssessments.AnyAsync(a => a.StudentId == seeded.StudentId));
         Assert.False(await db.PracticeJournalEntries.AnyAsync(p => p.StudentId == seeded.StudentId));
+        Assert.False(await db.ProgressSummaries.AnyAsync(s => s.StudentId == seeded.StudentId));
         Assert.False(await db.Receivables.AnyAsync(r => receivableIds.Contains(r.Id)));
         Assert.False(await db.Payments.AnyAsync(p => paymentIds.Contains(p.Id)));
         Assert.False(await db.PaymentCorrections.AnyAsync(c => paymentIds.Contains(c.PaymentId)));
@@ -175,6 +187,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.StudentGuardians.AnyAsync(sg => sg.StudentId == seeded.StudentId));
         Assert.False(await db.StudentPhotos.AnyAsync(p => p.StudentId == seeded.StudentId));
         Assert.False(await db.ShowItems.AnyAsync(i => i.StudentId == seeded.StudentId));
+        Assert.False(await db.LibrarySuggestions.AnyAsync(l => l.StudentId == seeded.StudentId));
         Assert.False(await db.NotificationJobs.AnyAsync(j => lessonIds.Contains(j.ReferenceId) || receivableIds.Contains(j.ReferenceId)));
         Assert.False(await db.StaffNotifications.AnyAsync(n => lessonIds.Contains(n.ReferenceId) || receivableIds.Contains(n.ReferenceId)));
 
@@ -224,6 +237,10 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         await using var db = await _factory.CreateDbContextAsync();
         var userId = (await db.Teachers.AsNoTracking().SingleAsync(t => t.Id == seeded.TeacherId)).UserId;
         Assert.NotNull(userId);
+        // Öğretmen kapsamlı AI yorum önbelleği FK ile öğretmene bağlı; silmeyi engellememeli.
+        db.ProgressSummaries.Add(ProgressSummary.Create(
+            seeded.StudentId, seeded.TeacherId, "Genel gelişim yorumu.", 1, DateTimeOffset.UtcNow, "test-model", DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
 
         var blocked = await admin.DeleteAsync($"/api/teachers/{seeded.TeacherId}");
         Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
@@ -238,6 +255,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.TeacherInstruments.AnyAsync(ti => ti.TeacherId == seeded.TeacherId));
         Assert.False(await db.Enrollments.AnyAsync(e => e.TeacherId == seeded.TeacherId));
         Assert.False(await db.Receivables.AnyAsync(r => r.Id == seeded.ReceivableId));
+        Assert.False(await db.ProgressSummaries.AnyAsync(s => s.TeacherId == seeded.TeacherId));
         // Öğrencinin kendisi durur - silinen öğretmendi.
         Assert.True(await db.Students.AnyAsync(s => s.Id == seeded.StudentId));
     }

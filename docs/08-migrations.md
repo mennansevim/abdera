@@ -132,3 +132,63 @@ Migration'ın asıl işi kolonu eklemek değil, **geriye dönük doldurmak**: ku
 Doldurmasaydık bugün indirim alan öğrenciler bir sonraki aidat üretiminde sessizce %5 zam
 görürdü. `Down()` yalnızca kolonu düşürür; çıkarım koduna geri dönmez, o yüzden geri alma
 sonrası eski davranışı isteyen bir revert `TuitionPricer.LoadAsync`'i de geri almalıdır.
+
+## library_score_files (nota kitabı eser PDF'leri)
+
+**AddLibraryScoreFiles** (Library modülü, `Modules/Library/Persistence/Migrations`): okulun
+yayıncı izniyle okul içinde kullandığı basılı nota kitaplarından eser başına PDF. Dosyalar
+repo herkese açık olduğu için repoya girmez; bu tabloda durur ve yalnızca giriş yapmış
+öğretmen/yönetici oturumuna sunulur (`Modules/Library/Features/ScoreFiles.cs`). Kitap başına
+değil eser başına satır tutulur: Vercel'de istek/yanıt gövdesi 4,5 MB ile sınırlı, kitaplar 9-11 MB.
+
+```
+library_score_files(entry_id PK, content bytea, size_bytes, page_count, version,
+                    uploaded_by, created_at, updated_at)
+CHECK (size_bytes > 0)
+CHECK (page_count > 0)
+```
+
+`entry_id` frontend'deki `school-books.json` eser kimliğidir (`book-<kitap>-<no>`); katalog
+kodda, dosya veritabanında. Kişiye/derse/aidata referans vermediği için `PersonEraser` kapsamı
+dışında. Dosyalar `tools/import-score-pdfs.py` ile kitap PDF'inden bölünüp yüklenir.
+
+## progress_summaries ("Genel gelişim" AI yorumu önbelleği)
+
+**AddProgressSummaries** (Progress modülü, `Modules/Progress/Persistence/Migrations`): gelişim
+ekranındaki AI yorumunun önbelleği (`docs/10-decisions.md` L). Yorum yalnızca kaynak notlar
+değiştiğinde yeniden üretilir; parmak izi `source_note_count` + `source_latest_note_at`.
+
+```
+progress_summaries(id uuid PK, student_id FK, teacher_id FK NULL, summary varchar(2000),
+                   source_note_count, source_latest_note_at timestamptz, model,
+                   created_at, updated_at)
+UNIQUE (student_id, teacher_id) NULLS NOT DISTINCT   -- teacher_id NULL = yönetici görünümü
+CHECK (source_note_count > 0)
+```
+
+Önbellek olduğu için `PersonEraser` öğrenci ve öğretmen silmede satırları siler; devirde yeni
+öğretmenin yorumu not sayısı değiştiği için kendiliğinden yeniden üretilir. `Down()` yalnızca
+tabloyu düşürür.
+
+## library_pieces, library_suggestions (okulun eklediği eserler, öğrenciye öneri)
+
+**AddLibraryPiecesAndSuggestions** (Library modülü): öğretmen/yöneticinin kütüphaneye kendisinin
+eklediği eserler (katalogda olmayan repertuvar, örn. bateri) ve kütüphaneden öğrenciye öneri.
+Aynı migration `library_score_files.page_count`'u null yapar: tarayıcıdan yüklenen PDF'in sayfa
+sayısı bilinmez (PDF kütüphanesi eklemedik).
+
+```
+library_pieces(id, title, composer, instrument, category, level, notes, created_by_user_id,
+               created_at, updated_at)
+CHECK (level IS NULL OR level BETWEEN 1 AND 5)
+
+library_suggestions(id, student_id, entry_id, title, composer, note, teacher_id,
+                    suggested_by_name, created_at, updated_at)
+UNIQUE (student_id, entry_id)     -- aynı eser bir öğrenciye iki kez önerilmez
+```
+
+Eser adı/bestecisi öneriye donar (katalog frontend'de; sonradan değişse de liste okunur kalır).
+`PersonEraser`: öğrenci silinince önerileri silinir; öğretmen devredilince önerileri yeni
+öğretmene geçer, devredilmeden silinince `teacher_id` ve eklediği eserlerin
+`created_by_user_id`'si boşalır (öneri öğrencinin, eser okulun kütüphanesidir). `Down()`
+eklenen eserlerin PDF'lerini siler ve boş sayfa sayılarını 1 yaparak NOT NULL'a döner.

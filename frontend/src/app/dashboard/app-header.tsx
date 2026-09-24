@@ -11,6 +11,7 @@ import { useBankTransactions } from "@/lib/banking";
 import { useNotifications } from "@/lib/messaging";
 import { useStudentDeletionRequests } from "@/lib/people";
 import { useLogout } from "@/lib/use-auth";
+import { useSessionState } from "@/lib/use-session-state";
 
 type NavItem = { href: string; label: string; icon: IconName; alert?: boolean; section: "Genel" | "Eğitim" | "Planlama" | "Finans" | "İletişim" | "Sistem" };
 
@@ -18,6 +19,7 @@ const CORE_LINKS: NavItem[] = [
   { href: "/dashboard", label: "Bugün", icon: "home", section: "Genel" },
   { href: "/dashboard/students", label: "Öğrenciler", icon: "students", section: "Eğitim" },
   { href: "/dashboard/progress", label: "Gelişim", icon: "activity", section: "Eğitim" },
+  { href: "/dashboard/library", label: "Kütüphane", icon: "note", section: "Eğitim" },
   { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers", section: "Eğitim" },
   { href: "/dashboard/calendar", label: "Takvim", icon: "calendar", section: "Planlama" },
   { href: "/dashboard/shows", label: "Yıl Sonu Gösterisi", icon: "music", section: "Planlama" },
@@ -53,6 +55,7 @@ function useAdminAlerts(enabled: boolean): Record<string, boolean> {
 
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };
 const SECTION_ORDER: NavItem["section"][] = ["Genel", "Eğitim", "Planlama", "Finans", "İletişim", "Sistem"];
+const sidebarStorageOptions = { decode: (value: string) => value === "true" };
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
@@ -73,6 +76,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const logout = useLogout();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useSessionState("abdera:sidebar-collapsed", false, sidebarStorageOptions);
+  const isLibrary = pathname.startsWith("/dashboard/library");
   const isAdmin = me.role === "Admin";
   const alerts = useAdminAlerts(isAdmin);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
@@ -118,8 +123,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--background)] lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] px-3 py-5 text-white lg:flex">
+    <div className={`min-h-dvh bg-[var(--background)] lg:grid ${sidebarCollapsed ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[15rem_minmax(0,1fr)]"}`}>
+      <aside id="desktop-sidebar" className={`sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] px-3 py-5 text-white ${sidebarCollapsed ? "" : "lg:flex"}`}>
         <Link href="/dashboard" className="mb-6 shrink-0 px-2 text-white"><BrandMark /></Link>
         <nav className="min-h-0 flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,.35)_transparent] [scrollbar-width:thin]" aria-label="Ana menü">
           {links.map((link, index) => (
@@ -171,7 +176,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
           </button>
         </header>
 
-        <main className={`mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-8 lg:pb-10 lg:pt-7 xl:px-10 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
+        <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-8 lg:pb-10 lg:pt-7 xl:px-10 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
+          <button type="button" onClick={() => setSidebarCollapsed(!sidebarCollapsed)} aria-expanded={!sidebarCollapsed} aria-controls="desktop-sidebar" className="pressable mb-3 hidden min-h-9 items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2.5 text-xs font-bold text-[var(--brand-strong)] lg:inline-flex"><Icon name="menu" className="h-4 w-4" />{sidebarCollapsed ? "Menüyü aç" : "Menüyü kapat"}</button>
           {children}
         </main>
 

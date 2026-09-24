@@ -5,7 +5,11 @@ using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Progress.Features;
 using Abdera.Api.Modules.Scheduling.Features;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 
 namespace Abdera.Tests.Integration;
@@ -376,92 +380,153 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
             (await unrelatedTeacher.PatchAsync($"/api/practice-assignments/{created.Id}/complete", null)).StatusCode);
     }
 
-    // --- Faz 10: "yapıcı metne dönüştür" (AI) ---
-    // Test ortamında Ai:Provider ayarlanmadığı için DisabledConstructiveTextRewriter aktif.
-    // Korunan davranış: özellik kapalıyken uç nokta ANLAŞILIR bir hata verir (500 değil) ve
-    // veli yorumu akışının geri kalanı hiç bozulmaz.
+    // --- "Genel gelişim" AI yorumu ---
+    // Test ortamında Ai:Provider ayarlanmadığı için DisabledProgressSummaryGenerator aktif;
+    // üretim yolunu sınayan testler sahte bir üreteci WithWebHostBuilder ile enjekte eder.
 
     [Fact]
-    public async Task Ai_suggestion_is_reported_as_unavailable_when_no_provider_is_configured()
+    public async Task Progress_summary_reports_no_notes_and_unavailable_provider_without_failing()
     {
         var admin = await CreateAdminClientAsync();
-        var seeded = await SeedLessonAsync(admin, "progress-ai-disabled");
+        var seeded = await SeedLessonAsync(admin, "summary-disabled");
         using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword);
-        var note = await CreateNoteAsync(teacher, seeded.LessonId, "Sol el zayıf, tempo dalgalı.");
 
-        var response = await teacher.PostAsync($"/api/lesson-notes/{note.Id}/parent-comment/suggest", null);
+        var empty = await GetSummaryAsync(teacher, seeded.StudentId);
+        Assert.Equal(StudentProgressSummary.SummaryStatus.NoNotes, empty.Status);
 
-        // Kontrollü 409 - unhandled 500 değil (feature_targets.md: "Unhandled 500 bırakma").
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Contains("AI sağlayıcısı", await response.Content.ReadAsStringAsync());
+        await CreateNoteAsync(teacher, seeded.LessonId, "Sol el zayıf, tempo dalgalı.");
+        var disabled = await GetSummaryAsync(teacher, seeded.StudentId);
+
+        Assert.Equal(StudentProgressSummary.SummaryStatus.Unavailable, disabled.Status);
+        Assert.Null(disabled.Summary);
+        Assert.Equal(1, disabled.SourceNoteCount);
     }
 
     [Fact]
-    public async Task Manual_parent_comment_flow_still_works_completely_while_ai_is_disabled()
+    public async Task Progress_summary_is_cached_and_regenerated_only_after_a_new_note()
     {
-        // feature_targets.md Faz 10 kabul kriteri: "AI sağlayıcısı yoksa mevcut metni bozma;
-        // özellik kapalıyken manuel düzenleme akışı eksiksiz çalışmaya devam etsin."
-        var admin = await CreateAdminClientAsync();
-        var seeded = await SeedLessonAsync(admin, "progress-ai-manual-fallback");
-        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword);
-        var note = await CreateNoteAsync(teacher, seeded.LessonId, "Ham not.");
+        var generator = new FakeSummaryGenerator();
+        using var factory = WithSummaryGenerator(generator);
+        var admin = await CreateAdminClientAsync(factory);
+        var seeded = await SeedLessonAsync(admin, "summary-cache");
+        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
+        await CreateNoteAsync(teacher, seeded.LessonId, "İlk ders: ritim dağınık.");
 
-        Assert.Equal(
-            HttpStatusCode.Conflict,
-            (await teacher.PostAsync($"/api/lesson-notes/{note.Id}/parent-comment/suggest", null)).StatusCode);
+        var first = await GetSummaryAsync(teacher, seeded.StudentId);
+        var second = await GetSummaryAsync(teacher, seeded.StudentId);
 
-        // AI reddedildikten SONRA elle yazıp onaylamak sorunsuz çalışmalı.
-        var manual = await teacher.PutAsJsonAsync(
-            $"/api/lesson-notes/{note.Id}/parent-comment",
-            new LessonNotes.ParentCommentRequest("Elle yazılmış yapıcı yorum.", true));
+        Assert.Equal(StudentProgressSummary.SummaryStatus.Ready, first.Status);
+        Assert.Equal("Yorum #1", first.Summary);
+        Assert.Equal("Yorum #1", second.Summary);
+        Assert.Single(generator.Requests);
+        Assert.Equal($"Öğrencisummary-cache", generator.Requests[0].StudentFirstName);
 
-        Assert.Equal(HttpStatusCode.OK, manual.StatusCode);
-        var saved = (await manual.Content.ReadFromJsonAsync<LessonNotes.LessonNoteResponse>(TestJson.Options))!;
-        Assert.Equal("Elle yazılmış yapıcı yorum.", saved.ParentComment);
-        Assert.NotNull(saved.ParentCommentApprovedAt);
+        await CreateNoteAsync(teacher, seeded.LessonId, "İkinci ders: ritim oturuyor.");
+        var refreshed = await GetSummaryAsync(teacher, seeded.StudentId);
+
+        Assert.Equal("Yorum #2", refreshed.Summary);
+        Assert.Equal(2, refreshed.SourceNoteCount);
+        Assert.False(refreshed.IsStale);
+        // Notlar eskiden yeniye gider - model zaman içindeki değişimi okuyabilsin.
+        Assert.Equal(["İlk ders: ritim dağınık.", "İkinci ders: ritim oturuyor."], generator.Requests[1].Notes.Select(note => note.Note));
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var row = await db.ProgressSummaries.SingleAsync(summary => summary.StudentId == seeded.StudentId);
+        Assert.Equal(seeded.TeacherId, row.TeacherId);
+        Assert.Equal("fake-model", row.Model);
     }
 
     [Fact]
-    public async Task Ai_suggestion_is_refused_for_a_note_written_by_another_teacher()
+    public async Task Admin_and_teacher_summaries_are_cached_separately()
     {
-        // Yetki sınırı sağlayıcıdan ÖNCE kontrol edilmeli: yabancı bir öğretmen başka bir
-        // öğretmenin ham notunu AI'ya göndertemez (ham not sızıntısı).
+        // Öğretmen yalnızca kendi notlarını görür; yöneticinin tüm notlardan üretilen yorumu
+        // öğretmene dönmemeli (başka öğretmenin notlarını dolaylı sızdırırdı).
+        var generator = new FakeSummaryGenerator();
+        using var factory = WithSummaryGenerator(generator);
+        var admin = await CreateAdminClientAsync(factory);
+        var seeded = await SeedLessonAsync(admin, "summary-scope");
+        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
+        await CreateNoteAsync(teacher, seeded.LessonId, "Ders notu.");
+
+        await GetSummaryAsync(admin, seeded.StudentId);
+        await GetSummaryAsync(teacher, seeded.StudentId);
+
+        Assert.Equal(2, generator.Requests.Count);
+        await using var db = await _factory.CreateDbContextAsync();
+        var scopes = await db.ProgressSummaries.Where(summary => summary.StudentId == seeded.StudentId)
+            .Select(summary => summary.TeacherId).ToListAsync();
+        Assert.Contains(null, scopes);
+        Assert.Contains(seeded.TeacherId, scopes);
+    }
+
+    [Fact]
+    public async Task Provider_failure_keeps_the_previous_summary_marked_as_stale()
+    {
+        var generator = new FakeSummaryGenerator();
+        using var factory = WithSummaryGenerator(generator);
+        var admin = await CreateAdminClientAsync(factory);
+        var seeded = await SeedLessonAsync(admin, "summary-failure");
+        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
+        await CreateNoteAsync(teacher, seeded.LessonId, "İlk not.");
+        await GetSummaryAsync(teacher, seeded.StudentId);
+
+        generator.Fail = true;
+        await CreateNoteAsync(teacher, seeded.LessonId, "İkinci not.");
+        var afterFailure = await GetSummaryAsync(teacher, seeded.StudentId);
+
+        Assert.Equal(StudentProgressSummary.SummaryStatus.Ready, afterFailure.Status);
+        Assert.Equal("Yorum #1", afterFailure.Summary);
+        Assert.True(afterFailure.IsStale);
+    }
+
+    [Fact]
+    public async Task Progress_summary_is_refused_for_an_unassigned_teacher()
+    {
         var admin = await CreateAdminClientAsync();
-        var owner = await SeedLessonAsync(admin, "progress-ai-owner");
-        var unrelated = await SeedLessonAsync(admin, "progress-ai-stranger");
-        using var ownerTeacher = await LoginTeacherAsync(owner.TeacherEmail, owner.TeacherTemporaryPassword);
+        var owner = await SeedLessonAsync(admin, "summary-owner");
+        var unrelated = await SeedLessonAsync(admin, "summary-stranger");
         using var strangerTeacher = await LoginTeacherAsync(unrelated.TeacherEmail, unrelated.TeacherTemporaryPassword);
-        var note = await CreateNoteAsync(ownerTeacher, owner.LessonId, "Sahibinin ham notu.");
 
-        var response = await strangerTeacher.PostAsync($"/api/lesson-notes/{note.Id}/parent-comment/suggest", null);
-
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Admin_cannot_request_an_ai_suggestion()
-    {
-        // Veli yorumu öğretmenin sorumluluğunda - SetParentCommentAsync ile aynı sınır.
-        var admin = await CreateAdminClientAsync();
-        var seeded = await SeedLessonAsync(admin, "progress-ai-admin");
-        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword);
-        var note = await CreateNoteAsync(teacher, seeded.LessonId, "Ham not.");
-
-        var response = await admin.PostAsync($"/api/lesson-notes/{note.Id}/parent-comment/suggest", null);
+        var response = await strangerTeacher.GetAsync($"/api/students/{owner.StudentId}/progress-summary");
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    [Fact]
-    public async Task Me_endpoint_reports_ai_rewrite_as_unavailable_when_not_configured()
+    private static async Task<StudentProgressSummary.Response> GetSummaryAsync(HttpClient client, Guid studentId)
     {
-        // Frontend butonu bu bayrağa göre açıp kapatıyor; yanlış olursa kullanıcı
-        // çalışmayan bir düğmeye basar.
-        var admin = await CreateAdminClientAsync();
+        var response = await client.GetAsync($"/api/students/{studentId}/progress-summary");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<StudentProgressSummary.Response>(TestJson.Options))!;
+    }
 
-        var me = await (await admin.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+    private WebApplicationFactory<Program> WithSummaryGenerator(IProgressSummaryGenerator generator) =>
+        _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IProgressSummaryGenerator>();
+            services.AddSingleton(generator);
+        }));
 
-        Assert.False(me!.AiRewriteAvailable);
+    private sealed class FakeSummaryGenerator : IProgressSummaryGenerator
+    {
+        private readonly List<ProgressSummaryRequest> _requests = [];
+
+        public bool Fail { get; set; }
+        public bool IsAvailable => true;
+        public string ModelName => "fake-model";
+        public IReadOnlyList<ProgressSummaryRequest> Requests { get { lock (_requests) return _requests.ToList(); } }
+
+        public Task<ProgressSummaryResult> GenerateAsync(ProgressSummaryRequest request, CancellationToken cancellationToken = default)
+        {
+            int count;
+            lock (_requests)
+            {
+                _requests.Add(request);
+                count = _requests.Count;
+            }
+            return Task.FromResult(Fail
+                ? new ProgressSummaryResult(false, null, "sağlayıcı hatası")
+                : new ProgressSummaryResult(true, $"Yorum #{count}", null));
+        }
     }
 
     private static async Task<LessonNotes.LessonNoteResponse> CreateNoteAsync(HttpClient teacher, Guid lessonId, string note)
@@ -473,9 +538,9 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         return (await response.Content.ReadFromJsonAsync<LessonNotes.LessonNoteResponse>(TestJson.Options))!;
     }
 
-    private async Task<HttpClient> CreateAdminClientAsync()
+    private async Task<HttpClient> CreateAdminClientAsync(WebApplicationFactory<Program>? factory = null)
     {
-        var client = _factory.CreateClient();
+        var client = (factory ?? _factory).CreateClient();
         var response = await client.PostAsJsonAsync(
             "/api/auth/login",
             new Login.Request("admin@test.local", "Test1234!"));
@@ -483,9 +548,9 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         return client;
     }
 
-    private async Task<HttpClient> LoginTeacherAsync(string email, string temporaryPassword)
+    private async Task<HttpClient> LoginTeacherAsync(string email, string temporaryPassword, WebApplicationFactory<Program>? factory = null)
     {
-        var client = _factory.CreateClient();
+        var client = (factory ?? _factory).CreateClient();
         var response = await client.PostAsJsonAsync(
             "/api/auth/login",
             new Login.Request(email, temporaryPassword));

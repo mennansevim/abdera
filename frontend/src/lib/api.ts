@@ -114,10 +114,6 @@ export interface Me {
   email: string;
   role: UserRole;
   mustChangePassword: boolean;
-  // Okulda bir AI sağlayıcısı (Ai__Provider/Ai__ApiKey) yapılandırılmış mı? Gelişim
-  // ekranındaki "yapıcı metne dönüştür" butonu buna göre açılır - yapılandırılmamışken
-  // buton kapalı kalır ve manuel yorum akışı aynen çalışır.
-  aiRewriteAvailable: boolean;
   // Teacher oturumunda kendisine ait teacher kaydının id'si (Admin'de null). Öğretmen
   // kendi öğrencisini ekleyebildiği için istemcinin bu id'ye ihtiyacı var
   // (POST /api/teachers/{teacherId}/students).

@@ -269,10 +269,11 @@ docker compose --profile prod up -d
 - Profil belirtilmeden `docker compose up` bugünkü gibi 3000/8080 üzerinden çalışmaya devam
   eder; geliştirme akışı değişmez.
 
-### AI ile "yapıcı metne dönüştür" (opsiyonel)
+### AI ile "Genel gelişim" yorumu (opsiyonel)
 
-Öğretmenin ham ders notunu veliye uygun yapıcı bir metne çeviren öneri özelliği
-**opsiyoneldir** ve varsayılan olarak kapalıdır (`Ai__Provider=Disabled`).
+Gelişim ekranındaki "Genel gelişim" kartı, öğretmenlerin girdiği ders notlarından öğrencinin
+genel gidişatını 3-4 cümleyle yorumlar. Özellik **opsiyoneldir** ve varsayılan olarak
+kapalıdır (`Ai__Provider=Disabled`).
 
 ```
 Ai__Provider=OpenAi
@@ -281,11 +282,13 @@ Ai__BaseUrl=https://api.openai.com/v1   # OpenAI uyumlu herhangi bir uç nokta
 Ai__Model=gpt-4o-mini
 ```
 
-- Kapalıyken uygulama hiçbir şekilde bozulmaz: buton pasif görünür, öğretmen veli yorumunu
-  elle yazıp onaylamaya devam eder.
-- Açıkken bile AI çıktısı **doğrudan veliye gitmez**: öneri yalnızca düzenleme alanına düşer,
-  öğretmen düzenleyebilir, geri alabilir ve ancak "Onayla ve veliye aç" dediğinde görünür olur.
-- Audit'e yalnızca isteğin yapıldığı yazılır (ham not ve öneri metni yazılmaz).
+- Kapalıyken uygulama hiçbir şekilde bozulmaz: yorum kutusu gösterilmez, ekranın geri kalanı
+  aynen çalışır.
+- Yorum `progress_summaries` tablosunda önbelleğe alınır ve yalnızca yeni bir ders notu
+  girildiğinde (bir sonraki açılışta) yeniden üretilir; her ekran açılışında sağlayıcıya gidilmez.
+- Öğretmen yalnızca kendi notlarından üretilmiş yorumu görür; yönetici tüm notlardan üretileni.
+- Yorum yalnızca okul ekibine gösterilir, veli portalına gitmez. Sağlayıcıya öğrencinin
+  yalnızca adı ve ders notları gönderilir.
 
 ## Geliştirme ve çalıştırma
 
@@ -304,6 +307,15 @@ docker compose up
 | Sağlık | http://localhost:8080/health |
 
 İlk giriş: `.env`'deki `Bootstrap__AdminEmail` / `Bootstrap__AdminPassword` ile — yalnızca `users` tablosu boşken bir kere çalışır, ilk girişte kalıcı şifre belirlemen istenir.
+
+Nota kitabı PDF'leri (okulun yayıncı izniyle yalnızca okul içinde kullandığı kitaplar) repoya **girmez** — repo herkese açık. Kitap PDF'i eser eser bölünüp veritabanına yüklenir ve yalnızca giriş yapmış öğretmen/yönetici açabilir; herkese açık `/kutuphane` sayfasında kitap eseri hiç görünmez. Sayfa aralıkları `frontend/src/data/school-books.json`'da. Yükleme (yerelde `--dev-login`, canlıda `--api https://...` ile yönetici e-postası/şifresi sorulur):
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install pypdf
+.venv/bin/python tools/import-score-pdfs.py --dev-login --book piyano-albumu="/yol/Piyano Albümü.pdf"
+```
+
+Yerelde şifresiz giriş: `.env`'e `Auth__DevLogin__Enabled=true` ekle (`ASPNETCORE_ENVIRONMENT=Development` ile birlikte). Giriş ekranı `localhost`'tan açıldığında e-posta/şifre yerine seçili rolün hesaplarını listeleyen bir seçici çıkar; hesabı seçip **Giriş yap**'a basmak şifre sormadan oturum açar ("Şifreyle giriş yap" normal forma döner). Uçlar (`GET /api/dev/auth/accounts`, `POST /api/dev/auth/login`) başka hiçbir ortamda kayıtlı değildir; bayrak Production'da açık gelirse API hiç başlamaz.
 
 WhatsApp geliştirmesi Meta hesabı olmadan yapılabilir: `WhatsApp__Provider=Fake` (varsayılan) giden mesajları loglar, gerçek bir API çağrısı yapmaz. Gelen webhook'u taklit eden dev-only uç noktalar (`POST /api/dev/whatsapp/simulate-text`, `simulate-rsvp` — yalnızca Development ortamı) RSVP/opt-out/deterministik intent akışlarını Meta hesabı olmadan uçtan uca test etmeyi sağlıyor. Ayrıntı: [`docs/06-whatsapp.md`](docs/06-whatsapp.md).
 

@@ -33,6 +33,13 @@ public static class ProductionSecretsGuard
             missing.Add("Demo__Enabled=false");
         }
 
+        // Şifresiz yerel giriş (DevLogin) Production'da zaten haritalanmaz; bayrağın yine de
+        // açık gelmesi yanlış bir .env kopyalandığını gösterir, sessizce geçme.
+        if (app.Configuration.GetValue<bool>("Auth:DevLogin:Enabled"))
+        {
+            missing.Add("Auth__DevLogin__Enabled=false");
+        }
+
         if (!app.Configuration.GetValue<bool>("Auth:PersistKeysToDatabase") &&
             string.IsNullOrWhiteSpace(app.Configuration["Auth:KeysDirectory"]))
         {

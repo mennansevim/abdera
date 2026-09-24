@@ -202,12 +202,14 @@ public static class PersonEraser
         DELETE FROM lesson_attendances WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM practice_journal_entries WHERE student_id = @student_id;
+        DELETE FROM progress_summaries WHERE student_id = @student_id;
         DELETE FROM show_items WHERE student_id = @student_id;
 
         DELETE FROM lessons WHERE id IN (SELECT id FROM _les);
         DELETE FROM lesson_series WHERE id IN (SELECT id FROM _ser);
         DELETE FROM enrollments WHERE id IN (SELECT id FROM _enr);
 
+        DELETE FROM library_suggestions WHERE student_id = @student_id;
         DELETE FROM student_photos WHERE student_id = @student_id;
         DELETE FROM student_guardians WHERE student_id = @student_id;
         DELETE FROM students WHERE id = @student_id;
@@ -219,6 +221,7 @@ public static class PersonEraser
         UPDATE skill_assessments SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         UPDATE lesson_notes SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         UPDATE show_items SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
+        UPDATE library_suggestions SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         """;
 
     private const string TeacherSql = """
@@ -251,6 +254,9 @@ public static class PersonEraser
         DELETE FROM skill_assessments
          WHERE teacher_id = @teacher_id OR lesson_id IN (SELECT id FROM _tles);
         DELETE FROM lesson_notes WHERE teacher_id = @teacher_id OR lesson_id IN (SELECT id FROM _tles);
+        -- AI gelişim yorumu önbelleği: devirde notlar yeni öğretmene geçer, onun yorumu bir
+        -- sonraki açılışta not sayısı değiştiği için kendiliğinden yeniden üretilir.
+        DELETE FROM progress_summaries WHERE teacher_id = @teacher_id;
         DELETE FROM lesson_rsvps WHERE lesson_id IN (SELECT id FROM _tles);
         DELETE FROM lesson_attendances WHERE lesson_id IN (SELECT id FROM _tles);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _tles);
@@ -260,6 +266,9 @@ public static class PersonEraser
         DELETE FROM enrollments WHERE id IN (SELECT id FROM _tenr);
 
         UPDATE show_items SET teacher_id = NULL WHERE teacher_id = @teacher_id;
+        -- Öneri öğrencinin repertuvarıdır ve kalır, eklenen eser okulun kütüphanesidir ve kalır;
+        -- yalnızca silinen öğretmene/hesabına işaret eden alan boşalır.
+        UPDATE library_suggestions SET teacher_id = NULL WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_availability WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_time_off WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_instruments WHERE teacher_id = @teacher_id;
@@ -267,6 +276,7 @@ public static class PersonEraser
         -- Öğretmenin giriş hesabı da gider; kalırsa sahipsiz bir kimlik olurdu.
         CREATE TEMP TABLE _tuser ON COMMIT DROP AS
             SELECT user_id AS id FROM teachers WHERE id = @teacher_id AND user_id IS NOT NULL;
+        UPDATE library_pieces SET created_by_user_id = NULL WHERE created_by_user_id IN (SELECT id FROM _tuser);
         DELETE FROM teachers WHERE id = @teacher_id;
         DELETE FROM users WHERE id IN (SELECT id FROM _tuser);
         """;

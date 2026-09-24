@@ -1,3 +1,4 @@
+using Abdera.Api.Modules.Library.Domain;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Banking.Domain;
@@ -53,6 +54,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SkillAssessment> SkillAssessments => Set<SkillAssessment>();
     public DbSet<PracticeAssignment> PracticeAssignments => Set<PracticeAssignment>();
     public DbSet<PracticeJournalEntry> PracticeJournalEntries => Set<PracticeJournalEntry>();
+    public DbSet<ProgressSummary> ProgressSummaries => Set<ProgressSummary>();
 
     public DbSet<MakeupCredit> MakeupCredits => Set<MakeupCredit>();
     public DbSet<TuitionRate> TuitionRates => Set<TuitionRate>();
@@ -76,6 +78,10 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<ShowEvent> ShowEvents => Set<ShowEvent>();
     public DbSet<ShowItem> ShowItems => Set<ShowItem>();
     public DbSet<StudentPhoto> StudentPhotos => Set<StudentPhoto>();
+
+    public DbSet<ScoreFile> ScoreFiles => Set<ScoreFile>();
+    public DbSet<LibraryPiece> LibraryPieces => Set<LibraryPiece>();
+    public DbSet<LibrarySuggestion> LibrarySuggestions => Set<LibrarySuggestion>();
 
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<SystemHealthStatus> SystemHealthStatuses => Set<SystemHealthStatus>();

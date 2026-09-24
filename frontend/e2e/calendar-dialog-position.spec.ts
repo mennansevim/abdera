@@ -19,7 +19,6 @@ test("quick-add dialog stays centered regardless of the double-click position", 
           email: "admin@example.com",
           role: "Admin",
           mustChangePassword: false,
-          aiRewriteAvailable: false,
           teacherId: null,
           instrumentIds: [],
         },
@@ -71,7 +70,7 @@ test("cancelled lesson opens a one-off makeup flow with available slots", async 
   await page.route("**/api/**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === "/api/auth/me") {
-      await route.fulfill({ json: { id: "user-1", email: "teacher@example.com", role: "Teacher", mustChangePassword: false, aiRewriteAvailable: false, teacherId: "teacher-1", instrumentIds: ["instrument-1"] } });
+      await route.fulfill({ json: { id: "user-1", email: "teacher@example.com", role: "Teacher", mustChangePassword: false, teacherId: "teacher-1", instrumentIds: ["instrument-1"] } });
       return;
     }
     if (pathname === "/api/me/notifications") {

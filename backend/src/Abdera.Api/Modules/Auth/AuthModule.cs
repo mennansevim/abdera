@@ -13,5 +13,11 @@ public static class AuthModule
         app.MapMe();
         app.MapChangePassword();
         app.MapResetPassword();
+
+        // Build() sonrası okunduğu için WebApplicationFactory override'ları da görülür.
+        if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Auth:DevLogin:Enabled", false))
+        {
+            app.MapDevLogin();
+        }
     }
 }

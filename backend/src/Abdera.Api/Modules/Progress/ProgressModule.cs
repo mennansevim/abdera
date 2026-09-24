@@ -8,6 +8,7 @@ public static class ProgressModule
     {
         app.MapLessonNotes();
         app.MapStudentProgress();
+        app.MapStudentProgressSummary();
         app.MapSkillAssessments();
         app.MapPracticeAssignments();
         app.MapPracticeJournal();

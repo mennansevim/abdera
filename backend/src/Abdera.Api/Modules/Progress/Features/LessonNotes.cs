@@ -27,8 +27,6 @@ public static class LessonNotes
 
     public record ParentCommentRequest(string ParentComment, bool Approve);
 
-    public record SuggestParentCommentResponse(string Suggestion);
-
     public record LessonNoteResponse(
         Guid Id,
         Guid LessonId,
@@ -56,64 +54,6 @@ public static class LessonNotes
         app.MapPost("/api/lessons/{lessonId:guid}/notes", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPut("/api/lesson-notes/{noteId:guid}/parent-comment", SetParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPost("/api/lesson-notes/{noteId:guid}/parent-comment/revoke", RevokeParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
-        app.MapPost("/api/lesson-notes/{noteId:guid}/parent-comment/suggest", SuggestParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
-    }
-
-    // Faz 10: ham notu veliye uygun yapıcı bir metne çevirir ve YALNIZCA öneri döndürür.
-    // Hiçbir şey kaydedilmez ve onaylanmaz - öğretmen öneriyi düzenleyip
-    // PUT .../parent-comment ile kaydeder, ya da tamamen yok sayar.
-    private static async Task<IResult> SuggestParentCommentAsync(
-        Guid noteId,
-        ClaimsPrincipal principal,
-        AbderaDbContext db,
-        IClock clock,
-        IConstructiveTextRewriter rewriter)
-    {
-        // Aynı yetki sınırı SetParentCommentAsync ile birebir: veli yorumu öğretmenin işi.
-        if (AuthContext.IsAdmin(principal))
-            throw new ForbiddenException("Veli yorumunu yalnızca öğretmen düzenleyip onaylayabilir.");
-
-        var note = await db.LessonNotes.SingleOrDefaultAsync(item => item.Id == noteId)
-            ?? throw new NotFoundException("Ders notu bulunamadı.");
-        var teacherId = await AuthContext.ResolveTeacherScopeAsync(principal, db)
-            ?? throw new ForbiddenException("Öğretmen kaydı bulunamadı.");
-        if (teacherId != note.TeacherId)
-            throw new ForbiddenException("Bu ders notu size ait değil.");
-
-        if (!rewriter.IsAvailable)
-            throw new ConflictException("Yapıcı metne dönüştürme kapalı: okul için bir AI sağlayıcısı yapılandırılmamış.");
-
-        if (string.IsNullOrWhiteSpace(note.Note))
-            throw new ValidationFailedException(new Dictionary<string, string[]>
-            {
-                ["note"] = ["Dönüştürülecek bir ders notu yok."],
-            });
-
-        var studentFirstName = await db.Lessons
-            .Where(lesson => lesson.Id == note.LessonId)
-            .Join(db.Students, lesson => lesson.StudentId, student => student.Id, (_, student) => student.FirstName)
-            .SingleOrDefaultAsync();
-
-        var result = await rewriter.RewriteAsync(
-            new ConstructiveRewriteRequest(note.Note, studentFirstName, note.PieceTitle));
-
-        // Sağlayıcı hatası kullanıcıya anlaşılır bir 409 olarak döner (500/stack trace değil);
-        // öğretmen yorumu elle yazmaya devam edebilir.
-        if (!result.Success || string.IsNullOrWhiteSpace(result.Suggestion))
-            throw new ConflictException(result.Error ?? "Yapıcı metin önerisi üretilemedi.");
-
-        // Audit: isteğin yapıldığı kaydedilir, ham not veya öneri metni YAZILMAZ
-        // (CreateAsync'teki HasRawNote deseninin aynısı - audit hassas içeriği çoğaltmaz).
-        db.AuditLogs.Add(AuditLog.Record(
-            AuthContext.GetUserId(principal),
-            "lesson_note.ai_suggestion_requested",
-            nameof(LessonNote),
-            note.Id,
-            clock.UtcNow,
-            afterJson: JsonSerializer.Serialize(new { note.TeacherId, SuggestionLength = result.Suggestion.Length })));
-        await db.SaveChangesAsync();
-
-        return Results.Ok(new SuggestParentCommentResponse(result.Suggestion));
     }
 
     private static async Task<IResult> ListAsync(Guid lessonId, ClaimsPrincipal principal, AbderaDbContext db)

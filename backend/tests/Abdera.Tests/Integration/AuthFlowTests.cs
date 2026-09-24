@@ -282,4 +282,80 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(TestJson.Options);
         Assert.Equal("Giriş başarısız", problem!.Title);
     }
+
+    // Yerel hızlı giriş (DevLogin): şifresiz oturum açtığı için yalnızca Development + açık
+    // bayrakla haritalanır. Paylaşılan factory Development'ta çalıştığından ilk test,
+    // ortam adının TEK BAŞINA bu yolu açmadığını doğrular.
+    [Fact]
+    public async Task Dev_login_is_not_mapped_unless_explicitly_enabled()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/dev/auth/login", new DevLogin.Request(UserRole.Admin));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Dev_accounts_list_is_only_available_with_dev_login()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var plainClient = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await plainClient.GetAsync("/api/dev/auth/accounts")).StatusCode);
+
+        using var devFactory = WithDevLogin(_factory);
+        using var client = devFactory.CreateClient();
+        var accounts = await client.GetFromJsonAsync<List<DevLogin.Account>>("/api/dev/auth/accounts", TestJson.Options);
+
+        Assert.Contains(accounts!, a => a.Email == "admin@test.local" && a.Role == UserRole.Admin);
+    }
+
+    [Fact]
+    public async Task Dev_login_opens_a_session_for_the_first_active_account_of_the_chosen_role()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var devFactory = WithDevLogin(_factory);
+        using var client = devFactory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/dev/auth/login", new DevLogin.Request(UserRole.Admin));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<Login.Response>(TestJson.Options);
+        Assert.False(body!.MustChangePassword); // yerelde her girişte şifre değiştirmeye yönlendirmez
+        var me = await client.GetFromJsonAsync<Me.Response>("/api/auth/me", TestJson.Options);
+        Assert.Equal("admin@test.local", me!.Email);
+        Assert.True(me.MustChangePassword); // hesaptaki bayrak değişmedi
+    }
+
+    [Fact]
+    public async Task Dev_login_keeps_the_role_choice_binding()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var devFactory = WithDevLogin(_factory);
+        using var client = devFactory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/dev/auth/login",
+            new DevLogin.Request(UserRole.Teacher, "admin@test.local"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/auth/me")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Dev_login_stays_unmapped_outside_development_even_when_the_flag_is_on()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var stagingFactory = WithDevLogin(_factory).WithWebHostBuilder(builder => builder.UseEnvironment("Staging"));
+        using var client = stagingFactory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/dev/auth/login", new DevLogin.Request(UserRole.Admin));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private static WebApplicationFactory<Program> WithDevLogin(WebApplicationFactory<Program> factory) =>
+        factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["Auth:DevLogin:Enabled"] = "true" })));
 }

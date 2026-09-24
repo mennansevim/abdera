@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Abdera.Api.Modules.Auth.Domain;
-using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,11 +7,6 @@ namespace Abdera.Api.Modules.Auth.Features;
 
 public static class Me
 {
-    // AiRewriteAvailable: Faz 10'daki "yapıcı metne dönüştür" özelliği yapılandırılmış mı?
-    // Frontend butonu buna göre açar/kapatır - kullanıcı çalışmayan bir düğmeye basmasın.
-    // Ayrı bir /api/capabilities ucu açmak yerine buraya eklendi: istemci zaten her açılışta
-    // bu yanıtı okuyor, ikinci bir istek gereksiz olurdu.
-    //
     // InstrumentIds: Teacher oturumunda kendi TeacherInstruments'ı (Admin'de her zaman boş
     // dizi) - Takvim ekranındaki enstrüman filtresini "yalnızca kendi branşı" ile
     // sınırlamak için (kullanıcı isteği: "öğretmen sadece kendi branşını görebilir").
@@ -22,7 +16,7 @@ public static class Me
     // teacher kaydının id'sine ihtiyacı var (POST /api/teachers/{teacherId}/students).
     // Admin'de null.
     public record Response(
-        Guid Id, string Email, UserRole Role, bool MustChangePassword, bool AiRewriteAvailable,
+        Guid Id, string Email, UserRole Role, bool MustChangePassword,
         Guid[] InstrumentIds, Guid? TeacherId);
 
     public static void MapMe(this IEndpointRouteBuilder app)
@@ -30,7 +24,7 @@ public static class Me
         app.MapGet("/api/auth/me", HandleAsync).RequireAuthorization();
     }
 
-    private static async Task<IResult> HandleAsync(ClaimsPrincipal principal, AbderaDbContext db, IConstructiveTextRewriter rewriter)
+    private static async Task<IResult> HandleAsync(ClaimsPrincipal principal, AbderaDbContext db)
     {
         var id = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -54,7 +48,7 @@ public static class Me
             : [];
 
         return Results.Ok(new Response(
-            user.Id, user.Email, user.Role, user.MustChangePassword, rewriter.IsAvailable,
+            user.Id, user.Email, user.Role, user.MustChangePassword,
             instrumentIds, teacherId));
     }
 }

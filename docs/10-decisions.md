@@ -72,7 +72,7 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 |---|---|---|
 | C1 | 8 modül × 4 katman (`api/application/domain/infrastructure`) | Modül başına dikey dilim: `Domain/ Features/ Persistence/` |
 | C2 | EF Core üstüne Repository pattern | `DbContext` zaten Unit of Work + Repository; handler'lar doğrudan kullanır |
-| C3 | `ProgressSummaryGenerator` AI arayüzü Phase 0'da açılması | Sıfır implementasyonlu arayüz spekülatif soyutlama — Phase 6'ya ertelendi |
+| C3 | `ProgressSummaryGenerator` AI arayüzü Phase 0'da açılması | Sıfır implementasyonlu arayüz spekülatif soyutlama — Phase 6'ya ertelendi. **2026-09-24: kullanıcı isteğiyle açıldı, bkz. L bölümü.** |
 | C4 | Her testte Testcontainers | Yalnızca gerçek Postgres davranışı gerektiren ~8 testte (bkz. `docs/09-testing.md`) |
 | C5 | Dashboard'daki "upcoming recital" için ayrı entity | `SchoolCalendarDay`'e `EVENT` tipi olarak girdi, ayrı tablo açılmadı |
 | C6 | FluentValidation (denetim ARC-4, `docs/13-audit-fix-prompt.md`) | Paket `csproj`'da duruyordu ama kodda tek bir `AbstractValidator` yoktu - doğrulama her yerde elle `throw new ValidationFailedException(...)` ile yapılıyor. Bu ölçekte (69 endpoint, çoğu tek-iki alanlık kontrol) ayrı bir doğrulama kütüphanesi gereksiz görülüp paket kaldırıldı; mevcut elle doğrulama deseni tek tutarlı yaklaşım olarak korundu. |
@@ -224,6 +224,19 @@ Kullanıcı isteği: "öğretmenler kendi programları yapsınlar, ders programl
 | K8 | Taşıma = kapat + aç | Seri YERİNDE güncellenmez: eskisi bir gün öncesinden kapanır, yenisi seçilen tarihten açılır. Tablo zaten `EffectiveFrom`/`EffectiveUntil` ile bunun için tasarlandı; yerinde güncelleme geçmişe dönük olarak "bu ders hep Pazartesi'ydi" derdi. Taşınan tarihten sonraki üretilmiş `Normal` dersler ve onlara kurulmuş bekleyen hatırlatma job'ları silinir (CLAUDE.md "ders değişince eski job iptali"). Aynı boşluk `PATCH /api/lesson-series/{id}` (seri sonlandırma) yolunda da vardı, orada da kapatıldı. |
 | K9 | Aynı enstrüman için tek program | Kullanıcı kuralı: "bir öğrenci aynı enstrüman için birden fazla ders alamasın, farklı saatler de olsa." `EnsureSingleSeriesPerInstrumentAsync` — tarih aralığı çakışan ikinci bir aktif seri `409`. Kayıt (enrollment) seviyesindeki eski kısıt yalnızca aynı ÖĞRETMEN için mükerrer kaydı engelliyordu; aynı enstrümanı ikinci bir öğretmenden almak ve tek kayıt üzerine ikinci program açmak hâlâ mümkündü. Haftalık 4 ders sınırı korundu ama artık ancak 4 FARKLI branşla dolabilir. **Kural yalnızca yeni kayıtlara uygulanır — mevcut mükerrer programlar temizlenmedi, veri düzeltmesi ayrı bir karardır.** |
 | K6 | Yetki sızıntısı koruması | J5'teki desen sürdürüldü: her uç için hem izin verilen hem REDDEDİLEN yol ayrı test edilir (`TeacherPortalFlowTests`: `Teacher_sets_its_own_availability_but_not_another_teachers`, `Teacher_enters_and_ends_its_own_lesson_schedule`, `Teacher_cannot_touch_another_teachers_lesson_series`). |
+
+## L — "Genel gelişim" AI yorumu (2026-09-24)
+
+Kullanıcı isteği: "Veli yorumunu yapıcı metne çeviren yapay zekâ kısmını kaldır. Sadece öğretmen yorumlarına göre, gelişim girdikçe yapay zekâdan destek alan bir özet yorum alalım; gpt-4o-mini yeterli."
+
+| # | Konu | Karar |
+|---|---|---|
+| L1 | Yapıcı metne dönüştürme | Kaldırıldı: `POST /api/lesson-notes/{id}/parent-comment/suggest`, `IConstructiveTextRewriter` ve `/api/auth/me`'deki `aiRewriteAvailable`. Veli yorumu artık yalnızca öğretmenin elle yazdığı metin. |
+| L2 | Özet üreteci | `IProgressSummaryGenerator` (`OpenAi` / `Disabled`), aynı `Ai__*` yapılandırmasıyla. Girdi yalnızca öğretmen ders notları (son 30, eskiden yeniye) ve öğrencinin adı; veli yorumu, soyad, veli/iletişim bilgisi gönderilmez. |
+| L3 | Ne zaman üretilir | Tembel: `GET /api/students/{id}/progress-summary` önbellekteki yorumu kaynak notlarla karşılaştırır (not sayısı + en yeni notun zamanı; notlar değişmez). Yeni not varsa bir kez üretir ve `progress_summaries`'e yazar. Not kaydetme akışı sağlayıcıya hiç bağlı değil. Sağlayıcı hata verirse son yorum `isStale=true` ile döner. |
+| L4 | Kapsam | Öğretmen gelişim ekranında yalnızca kendi notlarını görür; yorum da (öğrenci, öğretmen) başına üretilir ve önbelleğe alınır (`teacher_id NULL` = yönetici, tüm notlar). Aksi hâlde başka öğretmenin notları özet üzerinden sızardı. `UNIQUE (student_id, teacher_id) NULLS NOT DISTINCT`. |
+| L5 | Görünürlük | Yalnızca okul ekibi. Ham öğretmen notundan türediği için veli portalına gitmez. Para/takvim/rıza değiştirmediği için `audit_log`'a yazılmaz. |
+| L6 | Kural tabanlı eski özet | Gelişim ekranındaki kural tabanlı başlık/özet/odak metni (`buildProgressAnalysis`) kaldırıldı. "Yapay zekâ" etiketi yalnızca gerçekten modelden gelen metnin üstünde durur. Eser zorluğu önerisi kural tabanlı olarak kaldı ("öneri" etiketiyle). |
 
 ## Master prompt'un "Required First Response" listesiyle eşleme
 

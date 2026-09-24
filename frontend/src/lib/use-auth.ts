@@ -25,8 +25,13 @@ export function useLogin() {
   const queryClient = useQueryClient();
   // expectedRole: giriş ekranında seçilen rol. Sunucu, şifre doğru olsa bile hesabın
   // rolü seçimle uyuşmuyorsa 403 döner ve oturum açılmaz - seçim kozmetik değil.
-  return useMutation<LoginResponse, ApiError, { email: string; password: string; expectedRole: UserRole }>({
-    mutationFn: (credentials) => api.post<LoginResponse>("/api/auth/login", credentials),
+  //
+  // passwordless: yalnızca localhost'taki hesap seçicisinden gelir. Sunucudaki
+  // /api/dev/auth/login Development + Auth__DevLogin__Enabled=true dışında hiç yoktur (404).
+  return useMutation<LoginResponse, ApiError, { email: string; password: string; expectedRole: UserRole; passwordless?: boolean }>({
+    mutationFn: ({ passwordless, ...credentials }) => passwordless
+      ? api.post<LoginResponse>("/api/dev/auth/login", { role: credentials.expectedRole, email: credentials.email || null })
+      : api.post<LoginResponse>("/api/auth/login", credentials),
     // invalidate yerine BEKLENEN bir refetch: giriş ekranı açılırken /api/auth/me bir kez 401
     // alır ve React Query bu hatayı önbellekte tutar. Sadece invalidate edip hemen
     // /dashboard'a geçersek, dashboard layout'u henüz tazelenmemiş sorguyu okur, eski 401'i
@@ -41,6 +46,20 @@ export function useLogin() {
       clearSessionData(queryClient);
       return queryClient.prefetchQuery({ queryKey: ME_QUERY_KEY, queryFn: () => api.get<Me>("/api/auth/me") });
     },
+  });
+}
+
+export type DevAccount = { email: string; role: UserRole | "Guardian"; name: string | null };
+
+// Yerel hesap seçicisi. Uç yalnızca Development + Auth__DevLogin__Enabled=true iken vardır;
+// başka her yerde 404 döner ve giriş ekranı normal e-posta/şifre formunda kalır.
+export function useDevAccounts(enabled: boolean) {
+  return useQuery<DevAccount[], ApiError>({
+    queryKey: ["auth", "dev-accounts"],
+    queryFn: () => api.get<DevAccount[]>("/api/dev/auth/accounts"),
+    enabled,
+    retry: false,
+    staleTime: Infinity,
   });
 }
 

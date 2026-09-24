@@ -74,6 +74,15 @@ public static class Login
                 detail: $"Bu hesap {RoleLabel(user.Role)} hesabı. Lütfen \"{RoleChoiceLabel(user.Role)}\" seçeneğiyle giriş yap.");
         }
 
+        await SignInAsync(httpContext, user);
+
+        return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword));
+    }
+
+    // Personel oturum çerezini kurar. Şifreli giriş ve yalnızca yerelde açılan DevLogin aynı
+    // claim setini kullanır; böylece iki yolla açılan oturumlar sunucuda ayırt edilemez.
+    internal static async Task SignInAsync(HttpContext httpContext, User user)
+    {
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -94,21 +103,19 @@ public static class Login
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity),
             properties);
-
-        return Results.Ok(new Response(user.Id, user.Email, user.Role, user.MustChangePassword));
     }
 
     // Kullanıcıya görünen metin Türkçe (CLAUDE.md "Dil"). Rol adları hata mesajında
     // geçtiği için burada tutuluyor; giriş ekranındaki kart başlıklarıyla birebir aynı
     // olmalı ki kullanıcı hangi seçeneğe basacağını arayıp bulmasın.
-    private static string RoleLabel(UserRole role) => role switch
+    internal static string RoleLabel(UserRole role) => role switch
     {
         UserRole.Admin => "bir yönetici",
         UserRole.Teacher => "bir öğretmen",
         _ => "bir veli",
     };
 
-    private static string RoleChoiceLabel(UserRole role) => role switch
+    internal static string RoleChoiceLabel(UserRole role) => role switch
     {
         UserRole.Admin => "Yöneticiyim",
         UserRole.Teacher => "Öğretmenim",

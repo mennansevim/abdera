@@ -1,0 +1,1644 @@
+{
+ "note": "Contents-page facts of the printed books the school teaches from (publisher permission for internal use). The score PDFs are NOT in this repo: they live in the database and are served only to signed-in teachers and admins (see tools/import-score-pdfs.py).",
+ "books": [
+  {
+   "id": "piyano-albumu",
+   "title": "Piyano Albümü",
+   "authors": "Gül Çimen, Nevhiz Ercan",
+   "publisher": "Arkadaş Yayınevi",
+   "edition": "5. baskı",
+   "category": "education",
+   "levelBasis": "Albüm eserleri güçlük sırasına göre dizer; basamak albümdeki sıradan önerilir.",
+   "entries": [
+    {
+     "id": "book-piyano-albumu-1",
+     "no": 1,
+     "composer": "F. Beyer",
+     "title": "Melodi",
+     "page": 5,
+     "endPage": 5,
+     "style": "Romantic",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-2",
+     "no": 2,
+     "composer": "J. Krieger",
+     "title": "Menuet",
+     "page": 6,
+     "endPage": 6,
+     "style": "Baroque",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-3",
+     "no": 3,
+     "composer": "C. Graupner",
+     "title": "Bourrée",
+     "page": 6,
+     "endPage": 6,
+     "style": "Baroque",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-4",
+     "no": 4,
+     "composer": "A. Diabelli",
+     "title": "Bagatelle",
+     "page": 7,
+     "endPage": 7,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-5",
+     "no": 5,
+     "composer": "D. G. Türk",
+     "title": "Rondino",
+     "page": 8,
+     "endPage": 8,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-6",
+     "no": 6,
+     "composer": "Lebert - Stark",
+     "title": "Melodi",
+     "page": 9,
+     "endPage": 9,
+     "style": "Romantic",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-7",
+     "no": 7,
+     "composer": "B. Bartók",
+     "title": "Yugoslav Tarzında",
+     "page": 10,
+     "endPage": 10,
+     "style": "Modern",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-8",
+     "no": 8,
+     "composer": "Müller",
+     "title": "Staccato-Legato",
+     "page": 11,
+     "endPage": 11,
+     "style": "",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-9",
+     "no": 9,
+     "composer": "L. Mozart",
+     "title": "Menuet",
+     "page": 11,
+     "endPage": 11,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-10",
+     "no": 10,
+     "composer": "J. Haydn",
+     "title": "Alman Dansı",
+     "page": 12,
+     "endPage": 12,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-11",
+     "no": 11,
+     "composer": "J. N. Hummel",
+     "title": "Ecossaise",
+     "page": 13,
+     "endPage": 13,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-12",
+     "no": 12,
+     "composer": "P. Járdányi",
+     "title": "Zıpzıp",
+     "page": 14,
+     "endPage": 14,
+     "style": "Modern",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-13",
+     "no": 13,
+     "composer": "J. Haydn",
+     "title": "Menuet",
+     "page": 15,
+     "endPage": 15,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-14",
+     "no": 14,
+     "composer": "I. Pleyel",
+     "title": "Oyun",
+     "page": 16,
+     "endPage": 16,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-15",
+     "no": 15,
+     "composer": "W. A. Mozart",
+     "title": "Alman Dansı",
+     "page": 17,
+     "endPage": 17,
+     "style": "Classical",
+     "level": 1
+    },
+    {
+     "id": "book-piyano-albumu-16",
+     "no": 16,
+     "composer": "Loránd",
+     "title": "Kovalamaca",
+     "page": 18,
+     "endPage": 18,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-17",
+     "no": 17,
+     "composer": "L. Mozart",
+     "title": "Polonaise",
+     "page": 19,
+     "endPage": 19,
+     "style": "Classical",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-18",
+     "no": 18,
+     "composer": "J. S. Bach",
+     "title": "Menuet (Sol Majör)",
+     "page": 20,
+     "endPage": 20,
+     "style": "Baroque",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-19",
+     "no": 19,
+     "composer": "A. Gretchaninoff",
+     "title": "Balodan Sonra",
+     "page": 21,
+     "endPage": 21,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-20",
+     "no": 20,
+     "composer": "L. v. Beethoven",
+     "title": "Ecossaise",
+     "page": 22,
+     "endPage": 22,
+     "style": "Classical",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-21",
+     "no": 21,
+     "composer": "J. Schaum",
+     "title": "Bongo-Boogie",
+     "page": 23,
+     "endPage": 23,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-22",
+     "no": 22,
+     "composer": "H. Lichner",
+     "title": "Öykü",
+     "page": 24,
+     "endPage": 25,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-23",
+     "no": 23,
+     "composer": "J. S. Bach",
+     "title": "Menuet (Sol Minör)",
+     "page": 26,
+     "endPage": 26,
+     "style": "Baroque",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-24",
+     "no": 24,
+     "composer": "J. F. F. Burgmüller",
+     "title": "Arabesk",
+     "page": 27,
+     "endPage": 27,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-25",
+     "no": 25,
+     "composer": "Szelényi",
+     "title": "Oyun Yerinde",
+     "page": 28,
+     "endPage": 28,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-26",
+     "no": 26,
+     "composer": "B. Bartók",
+     "title": "Oyun",
+     "page": 29,
+     "endPage": 29,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-27",
+     "no": 27,
+     "composer": "J. Schaum",
+     "title": "Blues",
+     "page": 30,
+     "endPage": 30,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-28",
+     "no": 28,
+     "composer": "T. Oesten",
+     "title": "Polka-Mazurka",
+     "page": 31,
+     "endPage": 31,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-29",
+     "no": 29,
+     "composer": "R. Schumann",
+     "title": "Asker Marşı",
+     "page": 32,
+     "endPage": 33,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-30",
+     "no": 30,
+     "composer": "C. Gurlitt",
+     "title": "Bahçede",
+     "page": 32,
+     "endPage": 33,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-31",
+     "no": 31,
+     "composer": "J.-B. Duvernoy",
+     "title": "Etüd",
+     "page": 34,
+     "endPage": 35,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-32",
+     "no": 32,
+     "composer": "J. S. Bach",
+     "title": "Musette",
+     "page": 36,
+     "endPage": 36,
+     "style": "Baroque",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-33",
+     "no": 33,
+     "composer": "Schüngeler",
+     "title": "Tema ve Çeşitlemeler",
+     "page": 37,
+     "endPage": 37,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-34",
+     "no": 34,
+     "composer": "J. Haydn",
+     "title": "Scherzo",
+     "page": 38,
+     "endPage": 38,
+     "style": "Classical",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-35",
+     "no": 35,
+     "composer": "D. Scarlatti",
+     "title": "Dans",
+     "page": 39,
+     "endPage": 39,
+     "style": "Baroque",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-36",
+     "no": 36,
+     "composer": "A. Gretchaninoff",
+     "title": "Korkunç Olay",
+     "page": 40,
+     "endPage": 40,
+     "style": "Modern",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-37",
+     "no": 37,
+     "composer": "J. S. Bach",
+     "title": "Menuet (Re Minör)",
+     "page": 41,
+     "endPage": 41,
+     "style": "Baroque",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-38",
+     "no": 38,
+     "composer": "L. v. Beethoven",
+     "title": "Sonatin (Sol Majör)",
+     "page": 42,
+     "endPage": 44,
+     "style": "Classical",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-39",
+     "no": 39,
+     "composer": "J. Schaum",
+     "title": "Tutku",
+     "page": 45,
+     "endPage": 45,
+     "style": "Modern",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-40",
+     "no": 40,
+     "composer": "C. Gurlitt",
+     "title": "Küçük Norveçli",
+     "page": 46,
+     "endPage": 46,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-41",
+     "no": 41,
+     "composer": "J. S. Bach",
+     "title": "Küçük Prelüd (Do Majör)",
+     "page": 47,
+     "endPage": 47,
+     "style": "Baroque",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-42",
+     "no": 42,
+     "composer": "J. F. F. Burgmüller",
+     "title": "Hüzün",
+     "page": 48,
+     "endPage": 48,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-43",
+     "no": 43,
+     "composer": "P. I. Tchaikovsky",
+     "title": "Eski Fransız Ezgisi",
+     "page": 49,
+     "endPage": 49,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-44",
+     "no": 44,
+     "composer": "L. Köhler",
+     "title": "Sonatin",
+     "page": 50,
+     "endPage": 51,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-45",
+     "no": 45,
+     "composer": "M. Clementi",
+     "title": "Sonatin (Do Majör)",
+     "page": 52,
+     "endPage": 55,
+     "style": "Classical",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-46",
+     "no": 46,
+     "composer": "R. Schumann",
+     "title": "Vahşi Atlı",
+     "page": 56,
+     "endPage": 56,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-47",
+     "no": 47,
+     "composer": "G. F. Händel",
+     "title": "Sarabande",
+     "page": 57,
+     "endPage": 57,
+     "style": "Baroque",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-48",
+     "no": 48,
+     "composer": "F. Kuhlau",
+     "title": "Bir Avusturya Halk Şarkısı Üzerine Çeşitlemeler",
+     "page": 58,
+     "endPage": 59,
+     "style": "Classical",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-49",
+     "no": 49,
+     "composer": "J. F. F. Burgmüller",
+     "title": "Ballade",
+     "page": 60,
+     "endPage": 61,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-50",
+     "no": 50,
+     "composer": "A. Diabelli",
+     "title": "Sonatin (Sol Majör)",
+     "page": 62,
+     "endPage": 67,
+     "style": "Classical",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-51",
+     "no": 51,
+     "composer": "J. F. F. Burgmüller",
+     "title": "Vals",
+     "page": 68,
+     "endPage": 69,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-52",
+     "no": 52,
+     "composer": "R. Schumann",
+     "title": "Siciliano",
+     "page": 70,
+     "endPage": 70,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-53",
+     "no": 53,
+     "composer": "S. Heller",
+     "title": "Uçuşan Yapraklar",
+     "page": 71,
+     "endPage": 71,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-54",
+     "no": 54,
+     "composer": "F. Kuhlau",
+     "title": "Sonatin",
+     "page": 72,
+     "endPage": 77,
+     "style": "Classical",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-55",
+     "no": 55,
+     "composer": "J. S. Bach",
+     "title": "Küçük Prelüd (Re Minör)",
+     "page": 78,
+     "endPage": 79,
+     "style": "Baroque",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-56",
+     "no": 56,
+     "composer": "M. Clementi",
+     "title": "Air Suisse",
+     "page": 80,
+     "endPage": 81,
+     "style": "Classical",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-57",
+     "no": 57,
+     "composer": "G. F. Händel",
+     "title": "Eski İngiliz Saray Dansı",
+     "page": 82,
+     "endPage": 83,
+     "style": "Baroque",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-58",
+     "no": 58,
+     "composer": "R. Schumann",
+     "title": "Neşeli Çiftçi",
+     "page": 84,
+     "endPage": 84,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-59",
+     "no": 59,
+     "composer": "R. Schumann",
+     "title": "İlk Yitik",
+     "page": 85,
+     "endPage": 85,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-60",
+     "no": 60,
+     "composer": "L. v. Beethoven",
+     "title": "Gertrude'nin Rüyası Valsi",
+     "page": 86,
+     "endPage": 87,
+     "style": "Classical",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-61",
+     "no": 61,
+     "composer": "P. I. Tchaikovsky",
+     "title": "Napoliten Şarkı",
+     "page": 88,
+     "endPage": 89,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-62",
+     "no": 62,
+     "composer": "L. v. Beethoven",
+     "title": "Bagatelle",
+     "page": 90,
+     "endPage": 91,
+     "style": "Classical",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-63",
+     "no": 63,
+     "composer": "R. Schumann",
+     "title": "Noel Baba",
+     "page": 92,
+     "endPage": 93,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-64",
+     "no": 64,
+     "composer": "F. Chopin",
+     "title": "Mazurka",
+     "page": 94,
+     "endPage": 95,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-65",
+     "no": 65,
+     "composer": "F. Chopin",
+     "title": "Prelude",
+     "page": 96,
+     "endPage": 96,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-66",
+     "no": 66,
+     "composer": "D. Kabalevsky",
+     "title": "Rondo - Toccata",
+     "page": 97,
+     "endPage": 99,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-67",
+     "no": 67,
+     "composer": "D. Kabalevsky",
+     "title": "Sonatin",
+     "page": 100,
+     "endPage": 101,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-68",
+     "no": 68,
+     "composer": "A. Khatchaturian",
+     "title": "Andantino",
+     "page": 102,
+     "endPage": 102,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-69",
+     "no": 69,
+     "composer": "A. Khatchaturian",
+     "title": "Etüde",
+     "page": 103,
+     "endPage": 106,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-70",
+     "no": 70,
+     "composer": "A. Khatchaturian",
+     "title": "Bir Halk Şarkısı",
+     "page": 107,
+     "endPage": 110,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-71",
+     "no": 71,
+     "composer": "Erkin",
+     "title": "Kağnı",
+     "page": 111,
+     "endPage": 111,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-72",
+     "no": 72,
+     "composer": "Levent",
+     "title": "Özlem",
+     "page": 112,
+     "endPage": 113,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-73",
+     "no": 73,
+     "composer": "Tuğcular",
+     "title": "Yaramaz",
+     "page": 114,
+     "endPage": 115,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-74",
+     "no": 74,
+     "composer": "Küçük",
+     "title": "Etüt",
+     "page": 116,
+     "endPage": 116,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-75",
+     "no": 75,
+     "composer": "Küçük",
+     "title": "Zeybek",
+     "page": 117,
+     "endPage": 117,
+     "style": "Modern",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-d1",
+     "no": 1,
+     "section": "four-hands",
+     "composer": "Rüstemov",
+     "title": "Yağmur",
+     "page": 120,
+     "endPage": 121,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-d2",
+     "no": 2,
+     "section": "four-hands",
+     "composer": "Nasırbekov",
+     "title": "Kuşlar",
+     "page": 120,
+     "endPage": 121,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-d3",
+     "no": 3,
+     "section": "four-hands",
+     "composer": "Yegorova",
+     "title": "Neşeli Kazlar",
+     "page": 122,
+     "endPage": 123,
+     "style": "Modern",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-d4",
+     "no": 4,
+     "section": "four-hands",
+     "composer": "Ruthard",
+     "title": "Kısa Veda",
+     "page": 122,
+     "endPage": 123,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-piyano-albumu-d5",
+     "no": 5,
+     "section": "four-hands",
+     "composer": "C. Czerny",
+     "title": "Etüd",
+     "page": 124,
+     "endPage": 125,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-d6",
+     "no": 6,
+     "section": "four-hands",
+     "composer": "Löw",
+     "title": "Bohemya Dansı",
+     "page": 126,
+     "endPage": 127,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-d7",
+     "no": 7,
+     "section": "four-hands",
+     "composer": "Löw",
+     "title": "Rus Dansı",
+     "page": 128,
+     "endPage": 129,
+     "style": "Romantic",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-d8",
+     "no": 8,
+     "section": "four-hands",
+     "composer": "D. Şostakoviç",
+     "title": "Şarmanka",
+     "page": 130,
+     "endPage": 131,
+     "style": "Modern",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-d9",
+     "no": 9,
+     "section": "four-hands",
+     "composer": "F.-J. Gossec",
+     "title": "Gavotte",
+     "page": 132,
+     "endPage": 135,
+     "style": "Classical",
+     "level": 3
+    },
+    {
+     "id": "book-piyano-albumu-d10",
+     "no": 10,
+     "section": "four-hands",
+     "composer": "W. A. Mozart",
+     "title": "Don Juan Operası'ndan Düet",
+     "page": 136,
+     "endPage": 137,
+     "style": "Classical",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-d11",
+     "no": 11,
+     "section": "four-hands",
+     "composer": "F. Schubert",
+     "title": "Alabalık",
+     "page": 138,
+     "endPage": 139,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-d12",
+     "no": 12,
+     "section": "four-hands",
+     "composer": "C. M. v. Weber",
+     "title": "Avcı",
+     "page": 140,
+     "endPage": 141,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-d13",
+     "no": 13,
+     "section": "four-hands",
+     "composer": "M. Moszkowski",
+     "title": "İspanyol Dansı",
+     "page": 142,
+     "endPage": 147,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-piyano-albumu-d14",
+     "no": 14,
+     "section": "four-hands",
+     "composer": "Rossomandi",
+     "title": "İspanyol Dansı",
+     "page": 148,
+     "endPage": 153,
+     "style": "Romantic",
+     "level": 4
+    }
+   ],
+   "pdfPageMap": [
+    {
+     "fromPage": 1,
+     "offset": -1
+    },
+    {
+     "fromPage": 83,
+     "offset": 1
+    }
+   ]
+  },
+  {
+   "id": "really-easy-50-popular",
+   "title": "50 Popular Songs",
+   "authors": "Really Easy Piano Collection",
+   "publisher": "Wise Publications",
+   "edition": "",
+   "category": "popular",
+   "levelBasis": "Yayıncının Really Easy Piano serisi: sadeleştirilmiş piyano düzenlemesi.",
+   "entries": [
+    {
+     "id": "book-really-easy-50-popular-1",
+     "no": 1,
+     "composer": "Bill Withers",
+     "title": "Ain't No Sunshine",
+     "page": 9,
+     "endPage": 11,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-2",
+     "no": 2,
+     "composer": "Casablanca (film)",
+     "title": "As Time Goes By",
+     "page": 12,
+     "endPage": 13,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-3",
+     "no": 3,
+     "composer": "Leona Lewis",
+     "title": "Bleeding Love",
+     "page": 14,
+     "endPage": 15,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-4",
+     "no": 4,
+     "composer": "Delta Goodrem",
+     "title": "Born To Try",
+     "page": 16,
+     "endPage": 17,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-5",
+     "no": 5,
+     "composer": "The Mamas and the Papas",
+     "title": "California Dreamin'",
+     "page": 18,
+     "endPage": 18,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-6",
+     "no": 6,
+     "composer": "Elvis Presley",
+     "title": "Can't Help Falling In Love",
+     "page": 19,
+     "endPage": 19,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-7",
+     "no": 7,
+     "composer": "The Lion King (Disney)",
+     "title": "Circle Of Life",
+     "page": 20,
+     "endPage": 21,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-8",
+     "no": 8,
+     "composer": "Joseph and the Amazing Technicolor Dreamcoat (müzikal)",
+     "title": "Close Every Door",
+     "page": 22,
+     "endPage": 23,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-9",
+     "no": 9,
+     "composer": "Patsy Cline",
+     "title": "Crazy",
+     "page": 24,
+     "endPage": 25,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-10",
+     "no": 10,
+     "composer": "ABBA",
+     "title": "Dancing Queen",
+     "page": 26,
+     "endPage": 27,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-11",
+     "no": 11,
+     "composer": "Norah Jones",
+     "title": "Don't Know Why",
+     "page": 28,
+     "endPage": 29,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-12",
+     "no": 12,
+     "composer": "No Doubt",
+     "title": "Don't Speak",
+     "page": 30,
+     "endPage": 31,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-13",
+     "no": 13,
+     "composer": "EastEnders (dizi)",
+     "title": "Theme from EastEnders",
+     "page": 32,
+     "endPage": 32,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-14",
+     "no": 14,
+     "composer": "W. A. Mozart",
+     "title": "Eine Kleine Nachtmusik",
+     "page": 33,
+     "endPage": 33,
+     "style": "Classical",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-15",
+     "no": 15,
+     "composer": "Survivor",
+     "title": "Eye Of The Tiger",
+     "page": 34,
+     "endPage": 35,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-16",
+     "no": 16,
+     "composer": "Forrest Gump (film)",
+     "title": "Feather Theme",
+     "page": 36,
+     "endPage": 37,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-17",
+     "no": 17,
+     "composer": "Kate Nash",
+     "title": "Foundations",
+     "page": 38,
+     "endPage": 39,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-18",
+     "no": 18,
+     "composer": "Love Actually (film)",
+     "title": "Glasgow Love Theme",
+     "page": 40,
+     "endPage": 41,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-19",
+     "no": 19,
+     "composer": "",
+     "title": "God Bless' The Child",
+     "page": 42,
+     "endPage": 43,
+     "style": "Jazz",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-20",
+     "no": 20,
+     "composer": "Goldfinger (film)",
+     "title": "Goldfinger",
+     "page": 44,
+     "endPage": 45,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-21",
+     "no": 21,
+     "composer": "The Royle Family (dizi)",
+     "title": "Half The World Away",
+     "page": 46,
+     "endPage": 47,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-22",
+     "no": 22,
+     "composer": "Happy Days (dizi)",
+     "title": "Happy Days",
+     "page": 48,
+     "endPage": 49,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-23",
+     "no": 23,
+     "composer": "The Piano (film)",
+     "title": "The Heart Asks Pleasure First",
+     "page": 50,
+     "endPage": 51,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-24",
+     "no": 24,
+     "composer": "The Beatles",
+     "title": "Hey Jude",
+     "page": 52,
+     "endPage": 53,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-25",
+     "no": 25,
+     "composer": "Ray Charles",
+     "title": "Hit The Road Jack",
+     "page": 54,
+     "endPage": 55,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-26",
+     "no": 26,
+     "composer": "James Brown",
+     "title": "I Got You (I Feel Good)",
+     "page": 56,
+     "endPage": 57,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-27",
+     "no": 27,
+     "composer": "Aretha Franklin",
+     "title": "I Say A Little Prayer",
+     "page": 58,
+     "endPage": 59,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-28",
+     "no": 28,
+     "composer": "Kylie Minogue",
+     "title": "I Should Be So Lucky",
+     "page": 60,
+     "endPage": 61,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-29",
+     "no": 29,
+     "composer": "Gloria Gaynor",
+     "title": "I Will Survive",
+     "page": 62,
+     "endPage": 63,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-30",
+     "no": 30,
+     "composer": "Jurassic Park (film)",
+     "title": "Theme from Jurassic Park",
+     "page": 64,
+     "endPage": 65,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-31",
+     "no": 31,
+     "composer": "A. Dvořák",
+     "title": "Largo (from 'From the New World' Symphony)",
+     "page": 66,
+     "endPage": 66,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-32",
+     "no": 32,
+     "composer": "E. Grieg",
+     "title": "Morning (from Peer Gynt)",
+     "page": 67,
+     "endPage": 67,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-33",
+     "no": 33,
+     "composer": "Sinéad O'Connor",
+     "title": "Nothing Compares 2 U",
+     "page": 68,
+     "endPage": 69,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-34",
+     "no": 34,
+     "composer": "L. v. Beethoven",
+     "title": "Ode To Joy (from Symphony No. 9)",
+     "page": 70,
+     "endPage": 70,
+     "style": "Classical",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-35",
+     "no": 35,
+     "composer": "Les Misérables (müzikal)",
+     "title": "On My Own",
+     "page": 72,
+     "endPage": 73,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-36",
+     "no": 36,
+     "composer": "Britney Spears",
+     "title": "Oops!... I Did It Again",
+     "page": 74,
+     "endPage": 75,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-37",
+     "no": 37,
+     "composer": "The Phantom of the Opera (müzikal)",
+     "title": "The Phantom Of The Opera",
+     "page": 76,
+     "endPage": 77,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-38",
+     "no": 38,
+     "composer": "Star Trek (film)",
+     "title": "Theme from Star Trek (The Motion Picture)",
+     "page": 78,
+     "endPage": 79,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-39",
+     "no": 39,
+     "composer": "",
+     "title": "Take The 'A' Train",
+     "page": 80,
+     "endPage": 81,
+     "style": "Jazz",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-40",
+     "no": 40,
+     "composer": "Frank Sinatra",
+     "title": "That's Life",
+     "page": 82,
+     "endPage": 83,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-41",
+     "no": 41,
+     "composer": "Vanessa Carlton",
+     "title": "A Thousand Miles",
+     "page": 84,
+     "endPage": 86,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-42",
+     "no": 42,
+     "composer": "Blondie",
+     "title": "The Tide Is High",
+     "page": 90,
+     "endPage": 91,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-43",
+     "no": 43,
+     "composer": "Rihanna & Jay-Z",
+     "title": "Umbrella",
+     "page": 87,
+     "endPage": 89,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-44",
+     "no": 44,
+     "composer": "Christina Aguilera",
+     "title": "The Voice Within",
+     "page": 92,
+     "endPage": 93,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-45",
+     "no": 45,
+     "composer": "Louis Armstrong",
+     "title": "What A Wonderful World",
+     "page": 94,
+     "endPage": 95,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-46",
+     "no": 46,
+     "composer": "Spice Girls",
+     "title": "Who Do You Think You Are?",
+     "page": 96,
+     "endPage": 97,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-47",
+     "no": 47,
+     "composer": "Oliver! (müzikal)",
+     "title": "Who Will Buy",
+     "page": 98,
+     "endPage": 99,
+     "style": "Film",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-48",
+     "no": 48,
+     "composer": "G. Rossini",
+     "title": "William Tell Overture (from William Tell)",
+     "page": 71,
+     "endPage": 71,
+     "style": "Romantic",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-49",
+     "no": 49,
+     "composer": "Coldplay",
+     "title": "Yellow",
+     "page": 100,
+     "endPage": 101,
+     "style": "Popular",
+     "level": 2
+    },
+    {
+     "id": "book-really-easy-50-popular-50",
+     "no": 50,
+     "composer": "Elton John",
+     "title": "Your Song",
+     "page": 102,
+     "endPage": 103,
+     "style": "Popular",
+     "level": 2
+    }
+   ],
+   "pdfPageMap": [
+    {
+     "fromPage": 1,
+     "offset": -2
+    }
+   ]
+  },
+  {
+   "id": "clayderman-piano-solos",
+   "title": "The Piano Solos of Richard Clayderman",
+   "authors": "Richard Clayderman",
+   "publisher": "Hal Leonard",
+   "edition": "",
+   "category": "popular",
+   "levelBasis": "Clayderman'ın konser düzenlemeleri: orta-ileri düzey piyano.",
+   "entries": [
+    {
+     "id": "book-clayderman-piano-solos-1",
+     "no": 1,
+     "composer": "P. de Senneville",
+     "title": "Ballade Pour Adeline",
+     "page": 2,
+     "endPage": 4,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-2",
+     "no": 2,
+     "composer": "J. Offenbach",
+     "title": "Barcarolle",
+     "page": 5,
+     "endPage": 7,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-3",
+     "no": 3,
+     "composer": "A. Lloyd Webber",
+     "title": "Don't Cry For Me Argentina",
+     "page": 8,
+     "endPage": 11,
+     "style": "Film",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-4",
+     "no": 4,
+     "composer": "M. Albert",
+     "title": "Feelings",
+     "page": 12,
+     "endPage": 15,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-5",
+     "no": 5,
+     "composer": "J. Fernández",
+     "title": "Guantanamera",
+     "page": 20,
+     "endPage": 22,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-6",
+     "no": 6,
+     "composer": "Louiguy",
+     "title": "La Vie En Rose",
+     "page": 16,
+     "endPage": 19,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-7",
+     "no": 7,
+     "composer": "M. Jarre",
+     "title": "Lara's Theme",
+     "page": 28,
+     "endPage": 29,
+     "style": "Film",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-8",
+     "no": 8,
+     "composer": "F. Liszt",
+     "title": "Liebestraum",
+     "page": 23,
+     "endPage": 27,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-9",
+     "no": 9,
+     "composer": "S. Fain",
+     "title": "Love Is A Many-Splendored Thing",
+     "page": 30,
+     "endPage": 32,
+     "style": "Film",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-10",
+     "no": 10,
+     "composer": "A. Popp",
+     "title": "Love Is Blue",
+     "page": 33,
+     "endPage": 35,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-11",
+     "no": 11,
+     "composer": "F. Lai",
+     "title": "Love Story",
+     "page": 36,
+     "endPage": 39,
+     "style": "Film",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-12",
+     "no": 12,
+     "composer": "C. Trenet · Lennon–McCartney · C. Danvers",
+     "title": "Medley: La Mer / Yesterday / Till",
+     "page": 40,
+     "endPage": 45,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-13",
+     "no": 13,
+     "composer": "H. Mancini",
+     "title": "Moon River",
+     "page": 46,
+     "endPage": 50,
+     "style": "Film",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-14",
+     "no": 14,
+     "composer": "N. Rota",
+     "title": "Romeo And Juliet",
+     "page": 56,
+     "endPage": 57,
+     "style": "Film",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-15",
+     "no": 15,
+     "composer": "F. Schubert",
+     "title": "Serenade",
+     "page": 62,
+     "endPage": 64,
+     "style": "Romantic",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-16",
+     "no": 16,
+     "composer": "L. v. Beethoven",
+     "title": "Sonate au clair de lune (Moonlight Sonata)",
+     "page": 51,
+     "endPage": 53,
+     "style": "Classical",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-17",
+     "no": 17,
+     "composer": "B. Kaempfert",
+     "title": "Strangers In The Night",
+     "page": 58,
+     "endPage": 61,
+     "style": "Popular",
+     "level": 4
+    },
+    {
+     "id": "book-clayderman-piano-solos-18",
+     "no": 18,
+     "composer": "R. Schumann",
+     "title": "Träumerei",
+     "page": 54,
+     "endPage": 55,
+     "style": "Romantic",
+     "level": 4
+    }
+   ],
+   "pdfPageMap": [
+    {
+     "fromPage": 1,
+     "offset": 1
+    }
+   ]
+  }
+ ]
+}

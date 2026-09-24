@@ -76,3 +76,8 @@ loadtest/results/
 # Toplu kurulum araci ciktilari - veli sifreleri ve kosu raporlari repoya girmemeli.
 tools/bulk-seed/sample-credentials.json
 tools/bulk-seed/last-run-report.*
+
+# Nota kitabı PDF'leri yayıncı izniyle yalnızca okul içinde kullanılır; repo herkese açık.
+# Dosyalar veritabanında durur (tools/import-score-pdfs.py), buraya asla girmez.
+*.pdf
+.venv/
