@@ -69,14 +69,16 @@ def parse_page(offset):
         parser.feed(table)
         c, links = parser.cells, parser.links
         info = next((x for x in links if 'piece-info.cgi?id=' in x), None)
-        downloads = [urljoin(BASE, x) for x in links if re.search(r'-a4\.(pdf|zip)$', x)]
+        downloads = [urljoin(BASE, x) for x in links if re.search(r'-a4(?:\.pdf|-pdfs\.zip)$', x)]
         if not info or not downloads or len(c) < 12:
             continue
         raw = c[4].removeprefix('for ').strip()
         instrument_rules = {'piano': r'\bpiano|pianoforte', 'violin': r'\bviolin\b|\bviolins\b|\bstring', 'guitar': r'\bguitar', 'flute': r'\bflute|\brecorder', 'cello': r'\bcello', 'voice': r'\bvoice|\bchoir|\bvocal|\bsatb', 'organ': r'\borgan|harpsichord'}
         instruments = [key for key, rule in instrument_rules.items() if re.search(rule, raw, re.I)] or ['other']
         title = c[0]
-        category = 'education' if c[6] == 'Technique' or re.search(r'\betude|\bétude|\bstudy|\bstudies|\bexercise|\blesson|\bétudes', title, re.I) else 'world' if c[6] == 'Folk' else 'classical'
+        category = 'education' if c[6] == 'Technique' or re.search(r'\betude|\bétude|\betüde|\bstudy|\bstudies|\bexercise|\blesson|\bétudes|übungsstücke', title, re.I) else 'world' if c[6] == 'Folk' else 'classical'
+        if re.search('Burgmüller', c[1], re.I) and re.search(r'\b100\b', c[2]):
+            category = 'education'
         if re.search(r'twinkle|fr[eè]re jacques|children|kinders|kinderlieder|nursery', title, re.I):
             category = 'children'
         records.append({

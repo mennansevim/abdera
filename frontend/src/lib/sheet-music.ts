@@ -82,7 +82,12 @@ export function buildLibrary(schoolBooks: SchoolBooks | null, archive: ArchiveCa
       book, number: entry.no, page: entry.page, endPage: entry.endPage, fourHands,
     };
   }));
-  return [...books, ...archive.items.map(item => withPracticeSuggestion({ ...item, source: "mutopia" as const }))];
+  const scores = archive.items.map(item => withPracticeSuggestion({ ...item, source: "mutopia" as const }));
+  scores.sort((a, b) => {
+    const priority = (piece: ArchiveScore) => piece.level ?? (piece.instruments.includes("piano") ? 10 : piece.instruments.includes("violin") ? 11 : 12);
+    return priority(a) - priority(b) || a.composer.localeCompare(b.composer, "tr") || a.title.localeCompare(b.title, "tr", { numeric: true });
+  });
+  return [...books, ...scores];
 }
 
 export const instruments: Record<string, string> = {
@@ -150,7 +155,13 @@ function withPracticeSuggestion(piece: ArchiveScore): ArchiveScore {
   let basis: string | null = null;
   const text = normalizeSearch(piece.title + " " + piece.opus);
   const composer = normalizeSearch(piece.composer);
-  if (composer.includes("burgmuller") && /\b100\b/.test(text)) {
+  if (composer.includes("diabelli") && /\b149\b/.test(text)) {
+    const number = text.match(/no\.?\s*(\d+)/)?.[1];
+    level = number && Number(number) <= 10 ? 1 : 2;
+    basis = "Diabelli Op. 149: öğrencinin üst partisi için öneri. Alt parti öğretmen / eşlikçi içindir; aynı seviye önerisi eşliğe uygulanmaz.";
+  } else if (composer.includes("bach") && /anh\.?\s*(118|120|121)\b/.test(text)) {
+    level = 2; basis = "Kısa menüetlerde düzenli vuruş ve iki sesin koordinasyonu için öneri.";
+  } else if (composer.includes("burgmuller") && /\b100\b/.test(text)) {
     level = 3; basis = "Burgmüller Op. 100: cümleleme ve artikülasyon çalışmaları.";
   } else if (composer.includes("czerny") && /\b599\b/.test(text)) {
     const number = text.match(/(?:no\.?|nr\.?)\s*(\d+)/)?.[1];
