@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
+import { AppLoader } from "@/components/app-loader";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
@@ -197,12 +198,5 @@ function LoginPageContent() {
 }
 
 function SessionCheckLoading() {
-  return (
-    <main className="grid min-h-dvh place-items-center bg-[var(--background)]">
-      <div className="flex flex-col items-center gap-3 text-sm font-semibold text-[var(--muted)]">
-        <BrandMark compact />
-        Oturum kontrol ediliyor…
-      </div>
-    </main>
-  );
+  return <AppLoader message="Oturum kontrol ediliyor…" />;
 }

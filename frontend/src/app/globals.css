@@ -280,3 +280,118 @@ textarea:focus-visible {
     font-size: max(16px, 1rem);
   }
 }
+
+/* Tam sayfa yükleyici (components/app-loader.tsx). Logo 1.2 sn'lik bir vuruşla "ritim tutar";
+   enstrüman rozetleri aynı vuruşa sırayla, dalga gibi eşlik eder. Yörünge döner, rozetler ters
+   yönde aynı hızla döndüğü için daima dik kalır - bu yüzden rozetin kendisine gecikme verilmez
+   (dönüş fazı kayar, ikon eğik durur); gecikme yalnızca içteki ikondaki vuruştadır. */
+@layer components {
+  .app-loader {
+    position: relative;
+    display: grid;
+    height: 14rem;
+    width: 14rem;
+    place-items: center;
+  }
+
+  .app-loader-logo {
+    position: relative;
+    z-index: 2;
+    height: 6rem;
+    width: 6rem;
+    border-radius: 9999px;
+    background: white;
+    box-shadow: 0 10px 28px rgba(110, 50, 45, .24);
+    animation: app-loader-beat 1.2s ease-in-out infinite;
+  }
+
+  .app-loader-wave {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    height: 6rem;
+    width: 6rem;
+    margin: -3rem 0 0 -3rem;
+    border: 2px solid #a65658;
+    border-radius: 9999px;
+    opacity: 0;
+    animation: app-loader-wave 2.4s ease-out infinite;
+  }
+
+  .app-loader-orbit {
+    position: absolute;
+    inset: 0;
+    animation: app-loader-spin 18s linear infinite;
+  }
+
+  .app-loader-orbit-item {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    height: 2.4rem;
+    width: 2.4rem;
+    margin: -1.2rem 0 0 -1.2rem;
+    transform: rotate(var(--angle)) translateY(-5.6rem) rotate(calc(-1 * var(--angle)));
+  }
+
+  .app-loader-badge {
+    display: grid;
+    height: 100%;
+    width: 100%;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 9999px;
+    background: var(--surface);
+    color: #a65658;
+    box-shadow: 0 6px 16px rgba(120, 70, 30, .14);
+    animation: app-loader-spin 18s linear infinite reverse;
+  }
+
+  .app-loader-badge > svg {
+    animation: app-loader-bob 1.2s ease-in-out infinite;
+    animation-delay: var(--beat-delay, 0s);
+  }
+
+  .app-loader-note {
+    position: absolute;
+    bottom: 50%;
+    z-index: 1;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--brand);
+    opacity: 0;
+    animation: app-loader-note 2.8s ease-out infinite;
+  }
+}
+
+@keyframes app-loader-beat {
+  0%, 100% { transform: scale(1); }
+  15% { transform: scale(1.06); }
+  30% { transform: scale(.98); }
+  45% { transform: scale(1.02); }
+}
+
+@keyframes app-loader-wave {
+  0% { transform: scale(1); opacity: .45; }
+  100% { transform: scale(2.3); opacity: 0; }
+}
+
+@keyframes app-loader-spin { to { transform: rotate(360deg); } }
+
+@keyframes app-loader-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  20% { transform: translateY(-3px) scale(1.14); }
+  40% { transform: translateY(0) scale(1); }
+}
+
+@keyframes app-loader-note {
+  0% { transform: translate(0, 0) rotate(-8deg); opacity: 0; }
+  20% { opacity: .85; }
+  100% { transform: translate(var(--drift, 0), -6.5rem) rotate(10deg); opacity: 0; }
+}
+
+/* Hareket azaltma: global kural animasyonları tek kareye indirir; dalga ve notalar o karede
+   görünmez kalır, logo ve rozetler yerinde durur. */
+@media (prefers-reduced-motion: reduce) {
+  .app-loader-wave, .app-loader-note { display: none; }
+}

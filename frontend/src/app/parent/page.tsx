@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { AppLoader } from "@/components/app-loader";
 import { Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useGuardianLogout, useRequireGuardianAuth } from "@/lib/guardian-auth";
@@ -63,7 +64,7 @@ export default function ParentPage() {
   }
 
   if (guardianLoading || studentsLoading || !guardian) {
-    return <main className="grid min-h-dvh place-items-center bg-[#efede6]"><div className="skeleton h-12 w-12 rounded-2xl" /></main>;
+    return <AppLoader message="Veli portalı açılıyor…" background="#efede6" />;
   }
 
   const initials = selectedStudent ? `${selectedStudent.firstName.charAt(0)}${selectedStudent.lastName.charAt(0)}`.toLocaleUpperCase("tr-TR") : "?";
