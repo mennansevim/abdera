@@ -35,8 +35,9 @@ export interface StudentBenchmarkRow {
 }
 
 // weekStart: seçilen haftanın Pazartesi'si (yyyy-MM-dd). Haftalık metrikler bu haftaya göre.
-export function useTeacherBenchmark(weekStart: string) {
+export function useTeacherBenchmark(weekStart: string, options?: { enabled?: boolean }) {
   return useQuery({
+    enabled: options?.enabled ?? true,
     queryKey: ["benchmark", "teachers", weekStart],
     queryFn: () => api.get<TeacherBenchmarkRow[]>(`/api/benchmark/teachers?weekStart=${weekStart}`),
     staleTime: 60_000,
