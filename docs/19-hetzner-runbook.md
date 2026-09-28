@@ -259,41 +259,19 @@ api ──SFTP (iç ağ, :2022)──► backup-gw (rclone) ──HTTPS──►
    - Çıkan **Access Key ID**, **Secret Access Key** ve hesap sayfasındaki **Account ID**'yi
      parola yöneticisine kaydet. Secret bir daha gösterilmez.
 
-### 7.2 Repo değişikliği: `backup-gw` servisi
+### 7.2 `backup-gw` servisi
 
-§13.2'deki PR'a eklenir. `docker-compose.yml`, `prod` profili:
+`docker-compose.yml`'de, yalnızca `prod` profilinde: `rclone/rclone:1.75.1` sabit sürüm,
+`serve sftp r2:<bucket>`, port publish yok (yalnızca compose iç ağından `backup-gw:2022`).
+`--vfs-cache-mode=off` bilinçli: dosya kapanırken R2'ye yükleme bitmiş olur ve R2 hatası
+`BackupService`'e döner. Cache açık olsaydı yükleme arka planda sürer, hata uygulamaya hiç
+ulaşmaz ve yedek "Succeeded" görünürdü. R2 anahtarları `.env`'deki `R2_*` değişkenlerinden
+gelir. Karar kaydı: `docs/10-decisions.md` P2.
 
-```yaml
-  # Uygulamanın SFTP yedeğini Cloudflare R2'ye yazan köprü (docs/19 §7). Port publish
-  # EDİLMEZ - yalnızca compose iç ağından "backup-gw:2022" ile erişilir.
-  backup-gw:
-    image: rclone/rclone:<sabit sürüm>   # "latest" kullanma; sürüm bilinçli yükseltilir
-    restart: unless-stopped
-    profiles: [prod]
-    command:
-      - serve
-      - sftp
-      - r2:${R2_BUCKET:-abdera-backups}
-      - --addr=:2022
-      - --user=abdera
-      - --pass=${BACKUP_GW_PASSWORD:-}
-      # cache kapalı: dosya kapanırken R2'ye yükleme BİTMİŞ olur, hata SFTP istemcisine
-      # (BackupService) döner ve yedek "Failed" + e-posta alarmı üretir. Cache açık olsaydı
-      # yükleme arka planda sürer, R2 hatası uygulamaya hiç ulaşmazdı.
-      - --vfs-cache-mode=off
-    environment:
-      RCLONE_CONFIG_R2_TYPE: s3
-      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
-      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
-      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-}.r2.cloudflarestorage.com
-      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
-```
-
-`${VAR:?}` yerine `${VAR:-}` kullanılıyor, Caddy servisindeki gerekçeyle aynı: compose
-değişkenleri profilden bağımsız çözdüğü için `:?` geliştirme ortamında
-`docker compose up`'ı kırardı. Kurulum ayrıca `docs/10-decisions.md`'ye bir satırla
-kaydedilir: yeni sunucu bileşeni; uygulama bağımlılığı değil.
+Yerel doğrulama (rclone 1.75.1, 2026-09-28): bucket tabanlı bir arka uçta
+`stat`→`mkdir`→`put`→`listdir` akışı uygulamanın SFTP adımlarıyla aynı sırada çalıştı.
+Erişilemeyen bir S3 uç noktasında hata SFTP istemcisine döndü. Gerçek R2 ve uygulamanın
+SSH.NET istemcisiyle doğrulama §7.3'teki testlerle yapılır.
 
 ### 7.3 Sunucu tarafı
 
@@ -513,117 +491,14 @@ push main ──► CI (test + build + e2e) ──yeşil──► Deploy workflo
   eklenirse her deploy telefondan tek tıkla onaylanmadan başlamaz. Başlangıçta açık tutmak
   iyi olur; alışınca kapatılabilir.
 
-### 13.2 Repoya eklenecek dosyalar (tek PR; §7.2'deki `backup-gw` servisi de bu PR'da)
+### 13.2 Repodaki dosyalar
 
-**`deploy/hetzner/abdera-deploy`**
-```bash
-#!/usr/bin/env bash
-# GitHub Actions'ın SSH ile çalıştırabildiği TEK komut (authorized_keys "command=").
-# Elle de çağrılabilir: abdera-deploy <40 karakterlik commit sha>
-set -euo pipefail
-
-SHA="${1:-${SSH_ORIGINAL_COMMAND:-}}"
-[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Geçersiz commit: '$SHA'" >&2; exit 2; }
-
-exec 9>/tmp/abdera-deploy.lock
-flock -n 9 || { echo "Başka bir deploy sürüyor." >&2; exit 3; }
-
-cd /opt/abdera
-git fetch --quiet origin main
-git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA main'de değil." >&2; exit 4; }
-
-PREV="$(git rev-parse HEAD)"
-if [ "$PREV" = "$SHA" ]; then echo "Zaten $SHA'da."; exit 0; fi
-
-# Deploy öncesi döküm - alınamazsa deploy yapılmaz (set -e + pipefail).
-mkdir -p ~/predeploy
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
-  | gzip > ~/predeploy/"$(date +%F-%H%M)-${PREV:0:7}.sql.gz"
-ls -1t ~/predeploy/*.sql.gz | tail -n +6 | xargs -r rm --
-
-deploy() {
-  git checkout --quiet --force --detach "$1"
-  docker compose --profile prod up -d --build --remove-orphans
-}
-healthy() {
-  for _ in $(seq 1 36); do
-    curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && return 0
-    sleep 5
-  done
-  return 1
-}
-
-deploy "$SHA"
-if healthy; then
-  docker image prune -f >/dev/null
-  echo "OK: ${PREV:0:7} -> ${SHA:0:7}"
-else
-  echo "Sağlık kontrolü geçmedi, ${PREV:0:7}'e geri dönülüyor." >&2
-  deploy "$PREV"
-  healthy || echo "UYARI: geri dönüşten sonra da sağlıksız - elle bak." >&2
-  exit 1
-fi
-```
-
-**`.github/workflows/deploy.yml`**
-```yaml
-name: Deploy
-
-on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      sha:
-        description: "Deploy edilecek commit (40 karakter). Boş = main'in son hali. Geri almak için eski bir commit ver."
-        required: false
-
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
-
-jobs:
-  deploy:
-    # CI PR'larda da koşuyor; yalnızca main'e yapılan push'un yeşil CI'ı deploy eder.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment:
-      name: production
-      url: https://panel.okulum.com
-    steps:
-      - name: Hedef commit
-        id: target
-        env:
-          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
-          INPUT_SHA: ${{ inputs.sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          SHA="${RUN_SHA:-$INPUT_SHA}"
-          [ -n "$SHA" ] || SHA="$(git ls-remote "https://github.com/$REPO.git" refs/heads/main | cut -f1)"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Sunucuda deploy
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          HOST: ${{ secrets.DEPLOY_HOST }}
-          SHA: ${{ steps.target.outputs.sha }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy "deploy@$HOST" "$SHA"
-
-      - name: Canlı kontrol
-        run: |
-          curl -fsS --retry 5 --retry-delay 5 https://panel.okulum.com/health
-          curl -fsS -o /dev/null https://panel.okulum.com/login
-```
+- `deploy/hetzner/abdera-deploy`: sunucuda `/usr/local/bin/abdera-deploy` olarak kurulan
+  betik (zorlanmış komut).
+- `.github/workflows/deploy.yml`: CI yeşil → SSH → betik → canlı kontrol. Repo değişkeni
+  `DEPLOY_ENABLED=true` olmadan hiçbir şey yapmaz; sunucu hazır olmadan merge edilmesi
+  güvenli.
+- `docker-compose.yml` içindeki `backup-gw` servisi (§7).
 
 ### 13.3 Bir kerelik kurulum
 
@@ -647,9 +522,13 @@ jobs:
      - `DEPLOY_SSH_KEY` = `abdera-actions` (private key) dosyasının tamamı
      - `DEPLOY_KNOWN_HOSTS` = `ssh-keyscan -t ed25519 <SUNUCU_IP>` çıktısı. Sunucunun kimliği
        sabitlenir, araya giren biri anahtarı kullanamaz.
-4. **Deneme:** *Actions → Deploy → Run workflow* (sha boş). Yeşil bitmeli. Sunucuda
+4. **Aç:** repo *Settings → Secrets and variables → Actions → Variables* →
+   `DEPLOY_ENABLED` = `true` ve `DEPLOY_URL` = `https://panel.<alanadin.com>`. Environment
+   değil **repo** değişkeni olmalı: iş koşulu (`if`) environment yüklenmeden değerlendirilir.
+   `DEPLOY_ENABLED` yokken workflow hiç çalışmaz.
+5. **Deneme:** *Actions → Deploy → Run workflow* (sha boş). Yeşil bitmeli. Sunucuda
    `ls ~/predeploy` ile yeni bir döküm görülmeli.
-5. Yerel `abdera-actions` private key dosyasını sil (kopyası yalnızca GitHub secret'ında).
+6. Yerel `abdera-actions` private key dosyasını sil (kopyası yalnızca GitHub secret'ında).
 
 ### 13.4 Kullanım
 

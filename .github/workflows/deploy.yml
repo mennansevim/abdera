@@ -1,0 +1,73 @@
+name: Deploy
+
+# Hetzner sunucusuna otomatik deploy (docs/19-hetzner-runbook.md §13).
+# main'e yapılan push'un CI'ı yeşil bitince çalışır; sunucudaki abdera-deploy betiği
+# deploy öncesi döküm alır, o commit'e geçer, /health bekler, başarısızsa önceki commit'e döner.
+#
+# Repo değişkeni DEPLOY_ENABLED=true yapılmadıkça hiçbir şey yapmaz. Sunucu ve secret'lar
+# hazır olmadan merge edilirse her CI koşusundan sonra kırmızı bir deploy üretmesin diye.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Deploy edilecek commit (40 karakter). Boş = main'in son hali. Geri almak için eski bir commit ver."
+        required: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    # CI PR'larda da koşuyor; yalnızca main'e yapılan push'un yeşil CI'ı deploy eder.
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: ${{ vars.DEPLOY_URL }}
+    steps:
+      - name: Hedef commit
+        id: target
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          SHA="${RUN_SHA:-$INPUT_SHA}"
+          [ -n "$SHA" ] || SHA="$(git ls-remote "https://github.com/$REPO.git" refs/heads/main | cut -f1)"
+          echo "Hedef: $SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Sunucuda deploy
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Sunucudaki authorized_keys bu anahtarı yalnızca abdera-deploy'a bağlar;
+          # gönderilen komut, betiğe SSH_ORIGINAL_COMMAND olarak ulaşan commit sha'sıdır.
+          ssh -i ~/.ssh/deploy -o BatchMode=yes "deploy@$HOST" "$SHA"
+
+      - name: Canlı kontrol
+        env:
+          URL: ${{ vars.DEPLOY_URL }}
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 "$URL/health"
+          curl -fsS -o /dev/null "$URL/login"

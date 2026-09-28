@@ -126,6 +126,41 @@ services:
       api:
         condition: service_healthy
 
+  # --- Yedek köprüsü: SFTP -> Cloudflare R2 ---
+  # Yalnizca "prod" profilinde. Uygulamanin BackupService'i yalnizca SFTP'ye yazabiliyor;
+  # rclone bu SFTP ucunu sunup gelen dosyayi dogrudan R2 bucket'ina yazar
+  # (docs/19-hetzner-runbook.md §7). Port publish EDILMEZ - yalnizca compose ic agindan
+  # "backup-gw:2022" ile erisilir. api bu servise baglanamazsa yedek "Failed" olur ve
+  # Ops__AlertRecipients'a e-posta gider.
+  #
+  # ${VAR:?} KULLANILMAZ: caddy servisindeki gerekceyle ayni - compose degiskenleri
+  # profilden bagimsiz cozer, :? gelistirmedeki `docker compose up`'i kirardi.
+  backup-gw:
+    # Surum bilincli yukseltilir; "latest" kullanilmaz.
+    image: rclone/rclone:1.75.1
+    restart: unless-stopped
+    profiles: [prod]
+    command:
+      - serve
+      - sftp
+      - r2:${R2_BUCKET:-abdera-backups}
+      - --addr=:2022
+      - --user=abdera
+      - --pass=${BACKUP_GW_PASSWORD:-}
+      # Cache kapali: SFTP istemcisi dosyayi kapattiginda R2'ye yukleme BITMIS olur ve
+      # hata BackupService'e doner. Cache acik olsaydi yukleme arka planda surer, R2 hatasi
+      # uygulamaya hic ulasmaz ve yedek "Succeeded" gorunurdu.
+      - --vfs-cache-mode=off
+    environment:
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-}.r2.cloudflarestorage.com
+      # Token yalnizca nesne okuma/yazma yetkisine sahip; bucket'i olusturmaya/kontrol
+      # etmeye calismasin.
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+
 volumes:
   abdera_pgdata:
   abdera_dpkeys:
