@@ -37,6 +37,27 @@ public interface IStaffNotifier
         string referenceType,
         Guid referenceId);
 
+    // Tekrarlayan hatırlatma (olay değil, süren bir eksik): aynı referans için satır yoksa
+    // açar, varsa metnini günceller - böylece zil "3 dersin notu eksik" yerine her ders için
+    // ayrı bir satır göstermez. resurfaceIfUpdatedBefore verilir ve satır o andan önce
+    // güncellenmişse hatırlatma okunmamışa döner (günde bir kez dürtmek için çağıran okulun
+    // yerel gün başlangıcını geçirir).
+    /// <returns>Hatırlatma gerçekten düştüyse (yeni açıldı veya okunmamışa döndü) true.</returns>
+    Task<bool> RemindTeacherAsync(
+        Guid teacherId,
+        StaffNotificationType type,
+        string title,
+        string body,
+        string referenceType,
+        Guid referenceId,
+        DateTimeOffset? resurfaceIfUpdatedBefore = null);
+
+    // Hatırlatılacak bir şey kalmadığında (öğretmen eksikleri tamamladı) bekleyen hatırlatmayı
+    // okundu sayar - aksi hâlde zil rozeti bitmiş bir iş için saymaya devam ederdi.
+    /// <returns>Okunmamış bir hatırlatma kapatıldıysa true.</returns>
+    Task<bool> ClearTeacherReminderAsync(
+        Guid teacherId, StaffNotificationType type, string referenceType, Guid referenceId);
+
     // Kuyruktaki e-postaları gönderir. Hata isteği düşürmez: değişiklik zaten kaydedildi ve
     // ekran içi bildirim yerinde; e-posta en iyi çabadır, başarısızlık loglanır.
     Task FlushEmailsAsync(CancellationToken cancellationToken = default);
@@ -55,13 +76,7 @@ public class StaffNotifier(
         string referenceType,
         Guid referenceId)
     {
-        // Öğretmenin giriş hesabı olmayabilir (Teacher.UserId nullable - yalnızca yönetici
-        // tarafından yönetilen öğretmen). Bildirimi görecek bir ekran yoksa satır da açılmaz.
-        var userId = await db.Teachers
-            .Where(teacher => teacher.Id == teacherId)
-            .Select(teacher => teacher.UserId)
-            .SingleOrDefaultAsync();
-        if (userId is not { } recipientId) return false;
+        if (await ResolveTeacherUserIdAsync(teacherId) is not { } recipientId) return false;
 
         // Aynı olayın ikinci kez düşmesini veritabanı kısıtı da engelliyor; buradaki kontrol
         // istisnayı hiç doğurmadan sessizce geçmek için (örn. bir isteğin yeniden denenmesi).
@@ -116,6 +131,59 @@ public class StaffNotifier(
 
         return added;
     }
+
+    public async Task<bool> RemindTeacherAsync(
+        Guid teacherId,
+        StaffNotificationType type,
+        string title,
+        string body,
+        string referenceType,
+        Guid referenceId,
+        DateTimeOffset? resurfaceIfUpdatedBefore = null)
+    {
+        if (await ResolveTeacherUserIdAsync(teacherId) is not { } recipientId) return false;
+
+        var existing = await db.StaffNotifications.SingleOrDefaultAsync(notification =>
+            notification.UserId == recipientId &&
+            notification.Type == type &&
+            notification.ReferenceType == referenceType &&
+            notification.ReferenceId == referenceId);
+
+        if (existing is null)
+        {
+            db.StaffNotifications.Add(StaffNotification.Create(
+                recipientId, type, title, body, referenceType, referenceId, clock.UtcNow));
+            return true;
+        }
+
+        var resurface = resurfaceIfUpdatedBefore is { } threshold && existing.UpdatedAt < threshold;
+        existing.RefreshReminder(title, body, clock.UtcNow, resurface);
+        return resurface;
+    }
+
+    public async Task<bool> ClearTeacherReminderAsync(
+        Guid teacherId, StaffNotificationType type, string referenceType, Guid referenceId)
+    {
+        if (await ResolveTeacherUserIdAsync(teacherId) is not { } recipientId) return false;
+
+        var existing = await db.StaffNotifications.SingleOrDefaultAsync(notification =>
+            notification.UserId == recipientId &&
+            notification.Type == type &&
+            notification.ReferenceType == referenceType &&
+            notification.ReferenceId == referenceId);
+        if (existing is null || existing.ReadAt is not null) return false;
+
+        existing.MarkRead(clock.UtcNow);
+        return true;
+    }
+
+    // Öğretmenin giriş hesabı olmayabilir (Teacher.UserId nullable - yalnızca yönetici
+    // tarafından yönetilen öğretmen). Bildirimi görecek bir ekran yoksa satır da açılmaz.
+    private async Task<Guid?> ResolveTeacherUserIdAsync(Guid teacherId) =>
+        await db.Teachers
+            .Where(teacher => teacher.Id == teacherId)
+            .Select(teacher => teacher.UserId)
+            .SingleOrDefaultAsync();
 
     public async Task FlushEmailsAsync(CancellationToken cancellationToken = default)
     {

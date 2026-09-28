@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Progress.Domain;
+using Abdera.Api.Modules.Progress.Infrastructure;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -69,7 +71,8 @@ public static class LessonNotes
         return Results.Ok(noteRows.Select(ToResponse));
     }
 
-    private static async Task<IResult> CreateAsync(Guid lessonId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> CreateAsync(
+        Guid lessonId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IStaffNotifier notifier)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -130,6 +133,11 @@ public static class LessonNotes
                 note.PieceDifficulty,
             })));
         await db.SaveChangesAsync();
+
+        // Yorum bekleyen son ders de yazıldıysa zildeki hatırlatma hemen kapanır (not önce
+        // kaydedilmeli ki "bekleyen ders kaldı mı" sorgusu onu görsün).
+        if (await LessonNoteReminderJob.ClearIfDoneAsync(db, clock, notifier, lesson.TeacherId))
+            await db.SaveChangesAsync();
 
         return Results.Created($"/api/lessons/{lessonId}/notes/{note.Id}",
             ToResponse(note));

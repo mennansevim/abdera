@@ -14,6 +14,7 @@ import { useAttentionNeededStudents, useStudents, useTeachers } from "@/lib/peop
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
+import { PendingLessonNotes } from "./pending-lesson-notes";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 
 const HOUR_HEIGHT_REM = 3.6;
@@ -513,6 +514,7 @@ function TeacherDashboard({ email }: { email: string }) {
         <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">{selectedIsToday ? "Bugün" : selectedDate.toLocaleDateString("tr-TR", { weekday: "long" })}</h1><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(selectedDate)}</p></div>
         <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
       </header>
+      <PendingLessonNotes />
       {/* Gün şeridi: gizli kaydırma çubuklu yatay şerit 360/390px'te son günleri ekran dışına
           itiyor ve kaydırılabildiği fark edilmiyordu. Hücreler min-w-0 ile daralabilen 7 sütunlu
           ızgarada ~328px'e sığar (hücre başı ~43px, kısa gün adı + tarih). */}

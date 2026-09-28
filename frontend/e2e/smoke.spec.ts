@@ -41,6 +41,7 @@ const ADMIN_PAGES: Array<{ path: string; heading: RegExp }> = [
   { path: "/dashboard", heading: /Merhaba/ },
   { path: "/dashboard/students", heading: /^Öğrenciler$/ },
   { path: "/dashboard/progress", heading: /Gelişim günlüğü/ },
+  { path: "/dashboard/attendance", heading: /^Yoklama$/ },
   { path: "/dashboard/teachers", heading: /^Öğretmenler$/ },
   { path: "/dashboard/benchmark", heading: /Performans/ },
   { path: "/dashboard/calendar", heading: /Ders Programı/ },
@@ -94,6 +95,7 @@ test.describe.serial("Abdera duman testleri (smoke)", () => {
       { path: "/dashboard", heading: /Bugün|[A-ZÇĞİÖŞÜ][a-zçğıöşü]+ /i },
       { path: "/dashboard/calendar", heading: /Ders Programı/ },
       { path: "/dashboard/progress", heading: /Gelişim günlüğü/ },
+      { path: "/dashboard/attendance", heading: /^Yoklama$/ },
       { path: "/dashboard/settings", heading: /^Ayarlar$/ },
     ]) {
       await test.step(path, async () => {

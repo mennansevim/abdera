@@ -124,6 +124,7 @@ var enableHostedServices = !builder.Configuration.GetValue("Runtime:Serverless",
 builder.Services.AddBillingModule(enableHostedServices);
 builder.Services.AddMessagingModule(enableHostedServices);
 builder.Services.AddOpsModule(enableHostedServices);
+builder.Services.AddProgressModule(enableHostedServices);
 
 // --- Data Protection anahtarları kalıcı bir dizine yazılır ---
 // Aksi halde anahtarlar yalnızca bellekte tutulur ve her container yeniden başlatmasında
