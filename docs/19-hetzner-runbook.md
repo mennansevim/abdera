@@ -233,6 +233,22 @@ aynı yerde durmamalı.
 5. `docs/16-backup-restore.md` provasını bu dosyayla en az bir kez yap. Yedeğin geri
    yüklenebildiği görülmeden kurulum tamamlanmış sayılmaz.
 
+6. Storage Box → **Snapshots → Automatic snapshots**: günlük, 10 adet (BX11'e dahil). Sunucu
+   ele geçirilip Storage Box'taki yedekler silinse bile bu anlık görüntüler yalnızca Hetzner
+   Console'dan yönetilir, sunucudaki SSH anahtarıyla silinemez.
+
+**Yedek katmanları (özet):**
+
+| Katman | Ne | Sıklık / saklama | Neye karşı |
+|---|---|---|---|
+| 1. Uygulama yedeği | `pg_dump` → AES-256 → Storage Box (SFTP) | Günlük 03:00, 30 gün | Veri silme/bozulma; hata olursa e-posta + audit |
+| 2. Hetzner Backups | Sunucu disk imajı | Günlük, 7 adet | Sunucunun tamamen kaybı (DB için tek başına güvenilmez: çalışan Postgres'in anlık kopyası) |
+| 3. Storage Box snapshot | Yedek klasörünün anlık görüntüsü | Günlük, 10 adet | Sunucu ele geçirilip yedeklerin silinmesi |
+
+Veri kaybı penceresi en fazla ~24 saat (son gece yedeğinden bu yana girilen kayıtlar). Bu
+kabul edilemezse sonraki adım `pgBackRest` ile sürekli WAL arşivi (Storage Box'a SFTP,
+dakika hassasiyetinde geri dönüş) - özel Postgres imajı ve ayrı izleme gerektirir, ayrı karar.
+
 `Backup__EncryptionKey` değerini ayrıca bir parola yöneticisinde sakla. Sunucu kaybolursa
 yedekler bu anahtar olmadan açılamaz.
 
