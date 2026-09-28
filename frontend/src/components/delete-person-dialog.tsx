@@ -177,7 +177,16 @@ export function DeleteTeacherDialog({
               { label: "İzin kaydı", count: impact.timeOffs },
               { label: "Ders notu", count: impact.lessonNotes },
               { label: "Yetenek değerlendirmesi", count: impact.assessments },
+              { label: "Haftalık ödeme kaydı", count: impact.weeklyPayouts },
             ]} />
+
+            {impact.weeklyPayouts > 0 && (
+              <p className="text-meta">
+                Bu öğretmene yapılmış {impact.weeklyPayouts} haftalık ödeme kaydı da silinir; gider defterindeki
+                karşılıkları (toplam {impact.paidToTeacher.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} {impact.currency})
+                okulun kaydı olarak kalır.
+              </p>
+            )}
 
             {hasStudents && (
               <label className="form-label block">
