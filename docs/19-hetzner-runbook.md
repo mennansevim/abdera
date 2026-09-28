@@ -4,13 +4,36 @@ Durum: **Runbook — henüz uygulanmadı.** Abdera'yı tek bir Hetzner Cloud sun
 hazır `docker compose --profile prod` kurulumuyla (db + api + web + Caddy) yayına alır ve bugünkü
 Vercel + Supabase yayınından veriyi taşır. Railway alternatifi: `docs/18-railway-migration.md`.
 
-Uygulama kodunda değişiklik gerekmez. Tüm komutlar sırayla, kopyala-yapıştır çalıştırılabilir;
-`<...>` ile işaretli yerler doldurulur.
+Uygulama kodunda değişiklik gerekmez. Altyapı dosyaları (deploy betiği, deploy workflow'u,
+`backup-gw` servisi) tek bir PR ile eklenir (§13.2, §7.2). Tüm komutlar sırayla,
+kopyala-yapıştır çalıştırılabilir; `<...>` ile işaretli yerler doldurulur.
+
+## Genel sıra
+
+| # | Adım | Kim | Nerede | Süre | Bölüm |
+|---|---|---|---|---|---|
+| 1 | Alan adını al, DNS'i Cloudflare'e bağla | Okul | Tarayıcı | 30 dk | §0 |
+| 2 | Hetzner hesabı aç (kimlik onayı saatler sürebilir, ilk bu başlasın) | Okul | Tarayıcı | 15 dk + bekleme | §0 |
+| 3 | R2 bucket + Bucket Lock + lifecycle + API token | Okul | Cloudflare | 15 dk | §7.1 |
+| 4 | Sırları topla: Vercel ortam değişkenleri, Supabase doğrudan bağlantı dizesi, e-posta SMTP bilgisi → parola yöneticisi | Okul | Tarayıcı | 20 dk | §0 |
+| 5 | Altyapı PR'ı: deploy betiği, `deploy.yml`, `backup-gw`, karar kaydı → merge | Claude | Repo | — | §13.2, §7.2 |
+| 6 | Sunucu: oluştur, sertleştir, Docker, kod, `.env` | Okul (+ Claude destek) | Hetzner + SSH | 1–2 saat | §1–§5 |
+| 7 | DNS kaydı + boş DB ile ilk açılış + giriş testi | Okul | SSH | 20 dk | §6 |
+| 8 | Yedek testi: şimdi yedekle, kilit, hata alarmı, geri yükleme provası | Okul | Uygulama + SSH | 45 dk | §7.3 |
+| 9 | GitHub `production` environment + secret'lar + deneme deploy | Okul | GitHub | 20 dk | §13.3 |
+| 10 | Veri taşıma provası (Supabase → Hetzner) + sayım karşılaştırması | Okul | SSH | 1 saat | §8 |
+| 11 | **Geçiş günü**: dondur, son taşıma, DNS, WhatsApp webhook, duman testi | Okul | Hepsi | 30–60 dk | §9 |
+| 12 | 2 hafta izleme → Vercel/Supabase kapatma, skill ve dokümanları güncelleme | Okul + Claude | — | — | §12 |
+
+1–4 birbirinden bağımsız ve paralel yapılabilir. 6'dan sonrası sırayla ilerler. Geçiş günü
+(11), 8 ve 10 başarıyla bitmeden planlanmaz.
 
 ## 0. Önkoşullar
 
 - Hetzner Cloud hesabı ve bir proje (`abdera`).
-- Alan adı ve DNS yönetimi (Cloudflare veya kayıt firması). Örneklerde `panel.okulum.com`.
+- Alan adı; DNS'i Cloudflare'de (yedek için R2 zaten Cloudflare'de). Örneklerde `panel.okulum.com`.
+- Cloudflare hesabı, R2 etkin (§7.1).
+- E-posta alarmı için SMTP bilgisi: alan adının posta hesabı ya da Gmail uygulama şifresi (port 587).
 - Yerel makinede bir SSH anahtarı (`ssh-keygen -t ed25519`).
 - Bugünkü Vercel projesinin ortam değişkenleri (WhatsApp, e-posta, yedek anahtarı vb.).
 - Supabase'in **doğrudan** bağlantı dizesi (pooler değil, port 5432).
@@ -160,15 +183,10 @@ WhatsApp__PayloadSigningKey=...         # DEĞİŞTİRME: eski RSVP butonları g
 # --- Banka ---
 Banking__Provider=Manual
 
-# --- Yedek (§7'de Storage Box kurulduktan sonra) ---
+# --- Yedek (Cloudflare R2, ayrıntı §7.3) ---
 Backup__Provider=Sftp
 Backup__EncryptionKey=...               # Vercel'deki MEVCUT anahtar - yoksa: openssl rand -base64 32
-Backup__Sftp__Host=<uXXXXXX>.your-storagebox.de
-Backup__Sftp__Port=23
-Backup__Sftp__Username=<uXXXXXX>
-Backup__Sftp__PrivateKeyPath=/app/keys/backup_ed25519
-Backup__Sftp__Password=
-Backup__Sftp__RemoteDirectory=/abdera
+# R2_*, BACKUP_GW_PASSWORD ve Backup__Sftp__* satırları §7.3'te
 
 # --- E-posta alarmı (Hetzner 25 ve 465'i kapatır, 587 açıktır) ---
 Email__Provider=Smtp
@@ -206,94 +224,128 @@ değişkenin eksik olduğunu yazar (§6'daki `docker compose logs api`).
 
 Veri taşınacaksa (§8), bu prova veritabanı orada silinip yeniden oluşturulacak.
 
-## 7. Yedekleme hedefi: Hetzner Storage Box
+## 7. Yedekleme hedefi: Cloudflare R2
 
-Uygulamanın şifreli günlük yedeği sunucunun **dışında** durmalı. Sunucu imajı yedeği (§1) ile
-aynı yerde durmamalı.
+Karar: uygulamanın şifreli günlük yedeği **Cloudflare R2**'ye gider. 10 GB'a kadar ücretsiz.
+Bucket Lock sayesinde sunucu ya da erişim anahtarı ele geçirilse bile yedekler 30 gün boyunca
+silinemez. Uygulama kodu değişmez. Uygulama yalnızca SFTP'ye yazabildiği için araya sunucuda,
+yalnızca Docker iç ağında çalışan bir `rclone serve sftp` servisi (`backup-gw`) girer:
 
-1. Hetzner Console → **Storage Boxes** → BX11 (1 TB), aynı bölge. **SSH support** ve
-   **External reachability** açık olsun. Mümkünse ana hesap yerine yalnızca `abdera/`
-   klasörünü gören bir **alt hesap (sub-account)** aç ve aşağıda onu kullan: sunucudaki anahtar
-   sızarsa Storage Box'un geri kalanına erişilemez.
-2. Yedek anahtarını sunucuda üret ve Storage Box'a yükle (Storage Box ilk kurulumda parola
-   ister):
-   ```bash
-   ssh-keygen -t ed25519 -N "" -f ~/backup_ed25519 -C abdera-backup
-   ssh-copy-id -p 23 -s -i ~/backup_ed25519.pub <uXXXXXX>@<uXXXXXX>.your-storagebox.de
-   sftp -P 23 -i ~/backup_ed25519 <uXXXXXX>@<uXXXXXX>.your-storagebox.de <<< "ls"   # parolasız girmeli
+```
+api ──SFTP (iç ağ, :2022)──► backup-gw (rclone) ──HTTPS──► R2 bucket "abdera-backups"
+                                                             ├─ Bucket Lock: 30 gün silinemez
+                                                             └─ Lifecycle: 35. günde silinir
+```
+
+(Hetzner Storage Box alternatifi bu belgenin git geçmişinde duruyor: `git log -p docs/19-hetzner-runbook.md`.)
+
+### 7.1 Cloudflare tarafı (tarayıcı)
+
+1. Cloudflare Dashboard → **R2 Object Storage** → planı etkinleştir. Kart ister; 10 GB altında
+   ücret çıkmaz.
+2. **Create bucket** → `abdera-backups`, konum ipucu **Eastern Europe (EEUR)**.
+3. Bucket → **Settings**:
+   - **Bucket lock rules → Add rule**: prefix `abdera/`, **30 gün**. Kilitli dosyayı kimse
+     silemez, Cloudflare hesabına giren biri bile kural süresi bitmeden silemez.
+   - **Object lifecycle rules → Add rule**: prefix `abdera/`, **35 gün sonra sil**. Kilit
+     lifecycle'dan önce gelir, silme 30 günden önce olmaz.
+4. R2 → **Manage API tokens → Create API token**:
+   - İzin: **Object Read & Write**, yalnızca `abdera-backups` bucket'ı
+   - Çıkan **Access Key ID**, **Secret Access Key** ve hesap sayfasındaki **Account ID**'yi
+     parola yöneticisine kaydet. Secret bir daha gösterilmez.
+
+### 7.2 Repo değişikliği: `backup-gw` servisi
+
+§13.2'deki PR'a eklenir. `docker-compose.yml`, `prod` profili:
+
+```yaml
+  # Uygulamanın SFTP yedeğini Cloudflare R2'ye yazan köprü (docs/19 §7). Port publish
+  # EDİLMEZ - yalnızca compose iç ağından "backup-gw:2022" ile erişilir.
+  backup-gw:
+    image: rclone/rclone:<sabit sürüm>   # "latest" kullanma; sürüm bilinçli yükseltilir
+    restart: unless-stopped
+    profiles: [prod]
+    command:
+      - serve
+      - sftp
+      - r2:${R2_BUCKET:-abdera-backups}
+      - --addr=:2022
+      - --user=abdera
+      - --pass=${BACKUP_GW_PASSWORD:-}
+      # cache kapalı: dosya kapanırken R2'ye yükleme BİTMİŞ olur, hata SFTP istemcisine
+      # (BackupService) döner ve yedek "Failed" + e-posta alarmı üretir. Cache açık olsaydı
+      # yükleme arka planda sürer, R2 hatası uygulamaya hiç ulaşmazdı.
+      - --vfs-cache-mode=off
+    environment:
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+```
+
+`${VAR:?}` yerine `${VAR:-}` kullanılıyor, Caddy servisindeki gerekçeyle aynı: compose
+değişkenleri profilden bağımsız çözdüğü için `:?` geliştirme ortamında
+`docker compose up`'ı kırardı. Kurulum ayrıca `docs/10-decisions.md`'ye bir satırla
+kaydedilir: yeni sunucu bileşeni; uygulama bağımlılığı değil.
+
+### 7.3 Sunucu tarafı
+
+1. `.env`'e ekle (§5'teki yedek bloğu buna göre):
+   ```ini
+   R2_ACCOUNT_ID=<account id>
+   R2_ACCESS_KEY_ID=<access key id>
+   R2_SECRET_ACCESS_KEY=<secret>
+   R2_BUCKET=abdera-backups
+   BACKUP_GW_PASSWORD=<openssl rand -hex 24>
+
+   Backup__Provider=Sftp
+   Backup__Sftp__Host=backup-gw
+   Backup__Sftp__Port=2022
+   Backup__Sftp__Username=abdera
+   Backup__Sftp__Password=<BACKUP_GW_PASSWORD ile aynı>
+   Backup__Sftp__PrivateKeyPath=
+   Backup__Sftp__RemoteDirectory=/abdera
+   # Eski yedekleri R2 lifecycle siler. Uygulama kilitli bir dosyayı silmeye çalışırsa
+   # her gece "yedek başarısız" alarmı üretirdi; uygulamanın kendi silmesi kapatılır.
+   Backup__RetentionDays=36500
    ```
-3. Anahtarı API container'ının okuyabileceği kalıcı volume'e koy (`app` kullanıcısı = 1654):
-   ```bash
-   cd /opt/abdera
-   docker compose cp ~/backup_ed25519 api:/app/keys/backup_ed25519
-   docker compose exec -u root api sh -c 'chown app:app /app/keys/backup_ed25519 && chmod 600 /app/keys/backup_ed25519'
-   rm ~/backup_ed25519      # kopyası volume'de; .pub kalabilir
-   docker compose restart api
-   ```
-4. Uygulamada **Yedekler** ekranından (`/dashboard/backups`) "şimdi yedekle"yi çalıştır. Kayıt
-   `Succeeded` olmalı ve dosya Storage Box'ta `/abdera` altında görünmeli.
-5. `docs/16-backup-restore.md` provasını bu dosyayla en az bir kez yap. Yedeğin geri
-   yüklenebildiği görülmeden kurulum tamamlanmış sayılmaz.
-
-6. Storage Box → **Snapshots → Automatic snapshots**: günlük, 10 adet (BX11'e dahil). Sunucu
-   ele geçirilip Storage Box'taki yedekler silinse bile bu anlık görüntüler yalnızca Hetzner
-   Console'dan yönetilir, sunucudaki SSH anahtarıyla silinemez.
+2. `docker compose --profile prod up -d` → `docker compose ps` içinde `backup-gw` running.
+3. Uygulamada **Yedekler** ekranı (`/dashboard/backups`) → **Şimdi yedekle**. Kayıt
+   `Succeeded` olmalı. R2 → `abdera-backups` → `abdera/` altında `abdera-YYYYMMDD-HHmmss.sql.enc`
+   görünmeli.
+4. **Kilit testi:** R2 panelinden bu dosyayı silmeyi dene. Reddedilmeli.
+5. **Hata testi:** `docker compose stop backup-gw` → Şimdi yedekle → kayıt `Failed` olmalı ve
+   `Ops__AlertRecipients`'a e-posta gelmeli. Sonra `docker compose start backup-gw`.
+6. **Geri yükleme provası** (`docs/16-backup-restore.md`): dosyayı R2 panelinden indir, şifresini
+   çöz, boş bir veritabanına yükle, sayıları karşılaştır. Bu prova yapılmadan yedek kurulumu
+   tamamlanmış sayılmaz.
 
 **Yedek katmanları (özet):**
 
 | Katman | Ne | Sıklık / saklama | Neye karşı |
 |---|---|---|---|
-| 1. Uygulama yedeği | `pg_dump` → AES-256 → Storage Box (SFTP) | Günlük 03:00, 30 gün | Veri silme/bozulma; hata olursa e-posta + audit |
-| 2. Hetzner Backups | Sunucu disk imajı | Günlük, 7 adet | Sunucunun tamamen kaybı (DB için tek başına güvenilmez: çalışan Postgres'in anlık kopyası) |
-| 3. Storage Box snapshot | Yedek klasörünün anlık görüntüsü | Günlük, 10 adet | Sunucu ele geçirilip yedeklerin silinmesi |
+| 1. Uygulama yedeği → R2 | `pg_dump` → AES-256 → R2 (Bucket Lock) | Günlük 03:00, 30 gün kilitli, 35. gün silinir | Veri silme/bozulma, sunucu ele geçirilmesi; hata olursa e-posta + audit |
+| 2. Hetzner Backups | Sunucu disk imajı | Günlük, 7 adet | Sunucunun tamamen kaybı (`.env`, anahtarlar). DB için tek başına güvenilmez, çalışan Postgres'in anlık kopyası |
+| 3. Deploy öncesi döküm | `pg_dump` (§13) | Her deploy'da, son 5 | Hatalı bir sürümün veriyi bozması |
 
 Veri kaybı penceresi en fazla ~24 saat (son gece yedeğinden bu yana girilen kayıtlar). Bu
-kabul edilemezse sonraki adım `pgBackRest` ile sürekli WAL arşivi (Storage Box'a SFTP,
-dakika hassasiyetinde geri dönüş) - özel Postgres imajı ve ayrı izleme gerektirir, ayrı karar.
+kabul edilemezse sonraki adım `pgBackRest` ile sürekli WAL arşivi (R2'ye S3 olarak) olur.
+Ayrı bir karar gerektirir.
 
-### 7.1 Google Drive: Storage Box'ın yerine değil, yanına
+**Otomatik izleme:** Ayrı bir cron gerekmez. Yedek başarısız olursa (R2'ye yazılamaması dahil)
+uygulama `Ops__AlertRecipients`'a e-posta atar ve `audit_log`'a `backup.failed` yazar. Hiç
+yedek alınmazsa (ör. API kapalıysa) `SystemHealthMonitor` son başarılı yedek 30 saati geçince
+uyarır, 48 saatte "unhealthy" der. API tamamen düşmüşse bu alarm da gidemez; onu §10'daki dış
+`/health` kontrolü yakalar.
 
-Uygulama bugün yalnızca SFTP'ye yedek gönderebiliyor (`Backup__Provider=Sftp`). Drive'ı
-**tek hedef** yapmak için iki yol var, ikisi de önerilmiyor:
+**Veritabanı dökümünde OLMAYANLAR:** `/opt/abdera/.env` ve `abdera_dpkeys` volume'ü (oturum
+anahtarları). `.env`'in bir kopyası parola yöneticisinde dursun. Oturum anahtarı kaybolursa
+herkes bir kez yeniden giriş yapar.
 
-- Yeni bir `IBackupStorage` (Google Drive API) yazmak. Kod + test işi. Ayrıca kişisel Gmail
-  hesabında service account'ların kendi depolama kotası yok; kullanıcı OAuth token'ı gerekiyor.
-  Token süresi dolarsa ya da iptal edilirse yedek sessizce durur.
-- Sunucuda `rclone serve sftp` ile Drive'ı SFTP gibi göstermek. Kod gerekmez, ama yedeğin
-  çalışması sunucudaki ek bir servise ve yine bir OAuth token'ına bağlı kalır.
-
-Her iki durumda sunucu Drive'da silme yetkisine sahip olur. Storage Box snapshot'larının
-(katman 3) verdiği "sunucu ele geçirilse bile silinemez" korumasının Drive'da tam karşılığı
-yok; çöp kutusu ve sürüm geçmişi kısmi koruma sağlıyor.
-
-**Önerilen:** Storage Box birincil hedef kalsın (~4 €/ay, kod yok). Drive istenirse
-**ikinci, bağımsız kopya** olsun. Sunucuda günde bir kez `rclone`, Storage Box'taki şifreli
-dosyaları Drive'a kopyalar:
-
-```bash
-sudo apt -y install rclone
-rclone config          # "sb": sftp (Storage Box alt hesabı, port 23), "gdrive": drive
-# Günlük 04:30 (uygulama yedeği 03:00'te biter):
-( crontab -l 2>/dev/null; echo '30 4 * * * rclone copy sb:abdera gdrive:abdera-yedek --max-age 48h >> /var/log/abdera-rclone.log 2>&1' ) | crontab -
-```
-
-Dosyalar zaten AES-256 ile şifreli, Google içeriği okuyamaz. Veri yine de yurt dışında durur;
-KVKK değerlendirmesine dahil edilmeli. `rclone` yeni bir sunucu aracı (uygulama bağımlılığı
-değil). Drive kopyası kırılırsa uygulama bunu fark etmez; log'a ayda bir bakılmalı.
-
-**Otomatik izleme:** Ayrı bir cron gerekmez. Yedek başarısız olursa uygulama
-`Ops__AlertRecipients`'a e-posta atar ve `audit_log`'a `backup.failed` yazar. Hiç yedek
-alınmazsa (ör. API kapalıysa) `SystemHealthMonitor` son başarılı yedek 30 saati geçince
-uyarır, 48 saatte "unhealthy" der (`Ops__BackupStaleAfterHours` / `...UnhealthyAfterHours`).
-API tamamen düşmüşse bu alarm da gidemez; onu §10'daki dış `/health` kontrolü yakalar.
-
-**Veritabanı dökümünde OLMAYANLAR** (Hetzner Backups dışında ayrıca sakla):
-`/opt/abdera/.env` ve `abdera_dpkeys` volume'ü (oturum anahtarları + SFTP anahtarı). `.env`'in
-bir kopyası parola yöneticisinde dursun. SFTP anahtarı kaybolursa yenisi üretilir, oturum
-anahtarı kaybolursa herkes bir kez yeniden giriş yapar.
-
-`Backup__EncryptionKey` değerini ayrıca bir parola yöneticisinde sakla. Sunucu kaybolursa
-yedekler bu anahtar olmadan açılamaz.
+`Backup__EncryptionKey` ve R2 anahtarlarını parola yöneticisinde sakla. Sunucu kaybolursa
+yedekler şifreleme anahtarı olmadan açılamaz.
 
 ## 8. Veri taşıma (Supabase → Hetzner)
 
@@ -357,7 +409,7 @@ Okulun en sakin saatini seç (ör. pazar sabahı). Hedef kesinti 15–30 dk.
    - [ ] Admin, öğretmen ve veli girişi
    - [ ] Aidat ve takvim ekranları açılıyor, kayıt sayıları beklenen gibi
    - [ ] `docker compose logs api | grep -i notification`: dağıtıcı çalışıyor
-   - [ ] "Şimdi yedekle" → Storage Box'ta yeni dosya
+   - [ ] "Şimdi yedekle" → R2'de yeni dosya
    - [ ] Sistem sağlığı ekranı yeşil; bir test alarm e-postası gidiyor
 
 ## 10. Günlük işletim
@@ -456,7 +508,7 @@ push main ──► CI (test + build + e2e) ──yeşil──► Deploy workflo
   eklenirse her deploy telefondan tek tıkla onaylanmadan başlamaz. Başlangıçta açık tutmak
   iyi olur; alışınca kapatılabilir.
 
-### 13.2 Repoya eklenecek dosyalar (tek PR)
+### 13.2 Repoya eklenecek dosyalar (tek PR; §7.2'deki `backup-gw` servisi de bu PR'da)
 
 **`deploy/hetzner/abdera-deploy`**
 ```bash
