@@ -1,6 +1,6 @@
 # Hetzner Cloud Kurulum Runbook'u
 
-Durum: **Runbook — henüz uygulanmadı.** Abdera'yı tek bir Hetzner Cloud sunucusunda, repodaki
+Durum: **Uygulandı (2026-09-29)**: `panel.abderasanat.com`, veri taşındı. Yedek (R2), e-posta, WhatsApp ve otomatik deploy açık iş (§ Genel sıra, `docs/11-progress-log.md`). Abdera'yı tek bir Hetzner Cloud sunucusunda, repodaki
 hazır `docker compose --profile prod` kurulumuyla (db + api + web + Caddy) yayına alır ve bugünkü
 Vercel + Supabase yayınından veriyi taşır. Railway alternatifi: `docs/18-railway-migration.md`.
 
@@ -49,7 +49,7 @@ Hetzner Console → **Add Server**:
 | Type | **CX23** (2 vCPU / 4 GB / 40 GB, Cost-Optimized, x86). Uygulama ~1–2 GB kullanır. İmaj derlemesi için §2'de 4 GB swap eklenir. Yetmezse *Rescale* ile CX33'e büyütülür (disk büyütülmezse geri küçültülebilir). |
 | Networking | IPv4 + IPv6 |
 | SSH keys | Yerel public key'ini ekle (parola ile girişi hiç açma) |
-| Backups | **Aç** (+%20; 7 günlük otomatik sunucu imajı) |
+| Backups | **Kapalı** (bilinçli). Veri R2'de, kod GitHub'da, `.env` parola yöneticisinde. Bu imaj yalnızca yeniden kurulumu (~2 saat) ~10 dakikaya indirirdi. Riskli işlemden önce elle *Snapshot* alınır. |
 | Firewall | Aşağıdaki kuralla yeni bir firewall: `abdera-fw` |
 | Name | `abdera-prod` |
 
@@ -210,7 +210,10 @@ değişkenin eksik olduğunu yazar (§6'daki `docker compose logs api`).
 
 ## 6. DNS ve ilk açılış (boş veritabanıyla prova)
 
-1. DNS'e `A panel.okulum.com → <SUNUCU_IP>` (ve varsa `AAAA` → IPv6) ekle. Cloudflare
+1. DNS'e `A panel.okulum.com → <SUNUCU_IP>` (ve varsa `AAAA` → IPv6) ekle. Canlıda DNS
+   kayıt firması İHS'de: önce **DNS Zone Servisi** açılmalı (kapalıyken girilen kayıt
+   yayınlanmaz). Kayıt "Yeni A Kaydı Ekle" ile girilir. **DNS Zone Sihirbazı kullanılmaz**:
+   `www`, `ftp` ve **MX**'i de sunucuya yönlendirir ve alan adının e-postasını bozar. Cloudflare
    kullanıyorsan kayıt **DNS only (gri bulut)** olsun; proxy açılacaksa §11'e bak.
    `dig +short panel.okulum.com` sunucu IP'sini döndürene kadar bekle.
 2. Derle ve başlat (ilk derleme ~5–10 dk):
@@ -316,7 +319,7 @@ SSH.NET istemcisiyle doğrulama §7.3'teki testlerle yapılır.
 | Katman | Ne | Sıklık / saklama | Neye karşı |
 |---|---|---|---|
 | 1. Uygulama yedeği → R2 | `pg_dump` → AES-256 → R2 (Bucket Lock) | Günlük 03:00, 60 gün kilitli, 65. gün silinir | Veri silme/bozulma, sunucu ele geçirilmesi; hata olursa e-posta + audit |
-| 2. Hetzner Backups | Sunucu disk imajı | Günlük, 7 adet | Sunucunun tamamen kaybı (`.env`, anahtarlar). DB için tek başına güvenilmez, çalışan Postgres'in anlık kopyası |
+| 2. Elle Snapshot | Sunucu disk imajı | Riskli işlemden önce, iş bitince silinir | Hatalı bir sistem değişikliği. Hetzner Backups bilinçli olarak kapalı (§1) |
 | 3. Deploy öncesi döküm | `pg_dump` (§13) | Her deploy'da, son 5 | Hatalı bir sürümün veriyi bozması |
 
 Veri kaybı penceresi en fazla ~24 saat (son gece yedeğinden bu yana girilen kayıtlar). Bu
@@ -338,45 +341,62 @@ yedekler şifreleme anahtarı olmadan açılamaz.
 
 ## 8. Veri taşıma (Supabase → Hetzner)
 
-Önce bir kez **prova** yap (akış aynı), sonra geçiş gününde (§9) tekrarla.
+2026-09-29 gecesi bu adımlarla yapıldı (57 tablo, satır sayıları birebir). Geçiş günü (§9)
+aynı akış tekrarlanır.
 
-1. **Supabase sürümünü öğren:**
-   ```bash
-   docker run --rm postgres:16-alpine psql "<SUPABASE_DIRECT_URL>" -Atc "show server_version;"
-   ```
-2. **Dump al**. `pg_dump` sürümü, Supabase sunucusuyla aynı veya daha yeni olmalı. Etiketi
-   buna göre seç: 15 → `postgres:16`, 17 → `postgres:17`. Hedef sunucu 16 olduğu için
-   **düz SQL** formatı kullanılır (custom format yeni→eski sürüme geri yüklenemez).
-   ```bash
-   cd ~
-   docker run --rm -v "$PWD:/out" postgres:<SUPABASE_MAJOR>-alpine \
-     pg_dump "<SUPABASE_DIRECT_URL>" --schema=public --no-owner --no-privileges \
-     --format=plain --file=/out/supabase.sql
-   # Kaynak 17 ise PG16'nın tanımadığı ayarı temizle:
-   sed -i '/^SET transaction_timeout/d' supabase.sql
-   ```
-   Supabase'in kendi şemaları (`auth`, `storage`, `realtime`…) bilinçli olarak alınmaz.
-   Uygulamanın tüm tabloları ve `__EFMigrationsHistory` `public` içinde.
-3. **Hedefi sıfırla ve yükle.** API'yi durdur ki boş şemaya kendi migration'larını yazmasın:
-   ```bash
-   cd /opt/abdera
-   docker compose stop api web caddy
-   docker compose exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --force "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
-   docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ~/supabase.sql
-   ```
-   Hata verirse (genelde Supabase'e özgü bir `ALTER ... OWNER`, `GRANT` ya da extension
-   satırı) ilgili satırı dosyadan çıkarıp tekrar dene.
-4. **Doğrula:** `docs/16-backup-restore.md` §4'teki sayım ve tutarlılık sorgularını hem
-   Supabase'de hem burada çalıştır; sayılar birebir aynı olmalı.
-5. **Başlat:**
-   ```bash
-   docker compose --profile prod up -d
-   docker compose logs api | grep -i migrat    # eksik migration varsa uygulanır
-   ```
-6. `rm ~/supabase.sql` (kişisel veri içeriyor, sunucuda bırakma).
+**Bağlantı dizesi:** Supabase'in *Direct connection* adresi (`db.<ref>.supabase.co`) yalnızca
+IPv6'dır ve container içinden çözülemedi. **Session pooler** kullanılır (Connect → Direct →
+Connection Method: *Session pooler*, port 5432):
 
-**Oturumlar:** Supabase'deki oturum anahtarları veritabanında, burada ise dosya volume'ünde
-tutuluyor. Taşıma sonrası herkes **bir kez yeniden giriş yapar**; veri etkilenmez.
+- Kullanıcı adı `postgres` değil, **`postgres.<proje-ref>`**. Yalnızca `postgres` yazılırsa
+  pooler "password authentication failed" der; bu yanıltıcı, sorun şifrede değildir.
+- Proje ref'i uzun ve karışık. Elle yazma, panelden kopyala. Tek harf farkı
+  `tenant/user ... not found` verir.
+- Vercel'deki `ConnectionStrings__Default` **Sensitive** kayıtlıdır ve okunamaz. Şifre
+  bilinmiyorsa Supabase → *Project Settings → Database → Reset database password*. Yalnızca
+  harf ve rakam kullan, çünkü `@ # / ? :` URI'yi bozar. Sıfırlama Vercel yayınını keser.
+
+**Adımlar (sunucuda, `deploy` kullanıcısıyla):**
+
+```bash
+# 1. Bağlantı: kullanıcı panelden kopyalanır, şifre ekrana basılmaz
+read -rp  "Kullanici (panelden kopyala): " PGU
+read -rsp "Supabase sifresi: " PW && echo
+export SUPA="postgresql://${PGU}:${PW}@<pooler-host>:5432/postgres"; unset PW
+docker run --rm --network host postgres:17-alpine psql "$SUPA" -Atc "select count(*) from users;"
+
+# 2. Döküm (pg_dump 17: Supabase 15/17 için; hedef PG16 olduğu için düz SQL)
+cd ~
+docker run --rm --network host -v "$PWD:/out" postgres:17-alpine \
+  pg_dump "$SUPA" --schema=public --no-owner --no-privileges --format=plain --file=/out/supabase.sql
+sed -i '/^SET transaction_timeout/d' supabase.sql      # pg_dump 17 yazar, PG16 tanımaz
+sed -i '/^CREATE SCHEMA public;$/d' supabase.sql       # hedefte public zaten var
+
+# 3. Hedefi sıfırla ve yükle (api kapalı, yoksa boş şemaya kendi migration'larını yazar)
+cd /opt/abdera
+docker compose --profile prod stop api web caddy
+docker compose exec -T db sh -c 'dropdb -U "$POSTGRES_USER" --force "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ~/supabase.sql && echo YUKLENDI
+
+# 4. Tablo tablo satır sayısı karşılaştırması
+cat > ~/sayim.sql <<'EOF'
+SELECT table_name, (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from public.%I', table_name), false, true, '')))[1]::text::int
+FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY 1;
+EOF
+docker run --rm --network host -v ~/sayim.sql:/s.sql postgres:17-alpine psql "$SUPA" -At -f /s.sql > ~/kaynak.txt
+docker compose exec -T db sh -c 'psql -At -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < ~/sayim.sql > ~/hedef.txt
+diff ~/kaynak.txt ~/hedef.txt && echo "BIREBIR AYNI"
+
+# 5. Başlat ve kişisel veri içeren dosyaları sil
+docker compose --profile prod up -d
+rm ~/supabase.sql ~/kaynak.txt ~/hedef.txt; unset SUPA
+```
+
+`--network host` iki iş görür: container sunucunun DNS/IPv6'sını kullanır ve `psql`/`pg_dump`
+sürümü sunucuya kurulmadan seçilebilir. Eksik migration'lar API açılışında uygulanır.
+
+**Oturumlar:** Supabase'de Data Protection anahtarları veritabanındaydı, burada dosya
+volume'ünde. Taşıma sonrası herkes bir kez yeniden giriş yapar; veri etkilenmez.
 
 ## 9. Geçiş günü (cut-over)
 
