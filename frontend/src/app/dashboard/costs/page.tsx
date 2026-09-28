@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { MonthInput } from "@/components/month-input";
+import { TeacherPayoutForm } from "@/components/teacher-payout-form";
 import { AdminGate, FormActions, FormMessage, Modal, PageHeader, RowMenu, RowMenuItem, SearchInput, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
@@ -12,7 +14,8 @@ import {
 } from "@/lib/billing";
 
 export default function CostsPage() {
-  return <AdminGate><CostDashboard /></AdminGate>;
+  // useSearchParams App Router'da bir Suspense sınırı ister.
+  return <AdminGate><Suspense><CostDashboard /></Suspense></AdminGate>;
 }
 
 // Maliyet/maaş verisi tamamen Admin'e özel (docs/04-permissions.md): AdminGate ekranı, sunucu
@@ -84,7 +87,18 @@ function CostDashboard() {
   const [period, setPeriod] = useState<Period>({ scope: "month", year: today.getFullYear(), month: today.getMonth(), day: null });
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [search, setSearch] = useState("");
-  const [showCreate, setShowCreate] = useState(false);
+  // Öğretmenler listesindeki "Ödeme yap" buraya `?odeme=<öğretmen>&hafta=<gün>` ile gelir:
+  // "Gider ekle" formu Haftalık sekmesi, öğretmen ve hafta seçili açılır.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const payTeacherId = searchParams.get("odeme");
+  const payWeek = searchParams.get("hafta");
+  const [showCreate, setShowCreate] = useState(payTeacherId !== null);
+  function closeCreate() {
+    setShowCreate(false);
+    if (payTeacherId !== null) router.replace(pathname, { scroll: false });
+  }
   const { data: expenses, isLoading: expensesLoading } = useExpenses();
   const { data: recurringData, isLoading: recurringLoading } = useRecurringExpenses();
   const { data: receivables, isLoading: receivablesLoading } = useReceivables();
@@ -228,12 +242,15 @@ function CostDashboard() {
         <ExpenseLedger oneOffs={listedOneOffs} recurring={listedRecurring} scope={period.scope} loading={loading} />
       </section>
 
-      <Modal open={showCreate} title="Gider ekle" onClose={() => setShowCreate(false)} size="sm">
+      <Modal open={showCreate} title="Gider ekle" onClose={closeCreate} size="sm">
         <CreateExpenseForm
+          initialKind={payTeacherId !== null ? "weekly" : "recurring"}
+          initialTeacherId={payTeacherId ?? undefined}
+          initialWeek={payWeek ?? undefined}
           initialDate={newExpenseDate}
           initialMonth={isCurrent || period.scope === "year" ? currentMonth : monthKey(period.year, period.month)}
           initialCategory={category === "all" ? "Rent" : category}
-          onClose={() => setShowCreate(false)}
+          onClose={closeCreate}
         />
       </Modal>
     </div>
@@ -597,12 +614,30 @@ function LedgerRow({ title, meta, amount }: { title: string; meta: string; amoun
   );
 }
 
-// Tek "Gider ekle" girişi, iki tür: her ay tekrar eden kalem (varsayılan - kullanıcı isteği:
-// "her ay girilmesin") ya da tarihli tek seferlik gider.
-function CreateExpenseForm({ initialDate, initialMonth, initialCategory, onClose }: { initialDate: string | null; initialMonth: string; initialCategory: ExpenseCategory; onClose: () => void }) {
+// Tek "Gider ekle" girişi, üç tür: her ay tekrar eden kalem (varsayılan - kullanıcı isteği:
+// "her ay girilmesin"), tarihli tek seferlik gider ya da öğretmenin haftalık ders ödemesi
+// (docs/10-decisions.md O1 - tutarı tamamlanan dersten sunucu hesaplar, ayrı form bileşeni).
+type ExpenseKind = "recurring" | "oneOff" | "weekly";
+const KIND_LABEL: [ExpenseKind, string][] = [["recurring", "Her ay tekrar eden"], ["oneOff", "Tek seferlik"], ["weekly", "Haftalık"]];
+
+function CreateExpenseForm({ initialKind, initialTeacherId, initialWeek, initialDate, initialMonth, initialCategory, onClose }: { initialKind: ExpenseKind; initialTeacherId?: string; initialWeek?: string; initialDate: string | null; initialMonth: string; initialCategory: ExpenseCategory; onClose: () => void }) {
+  const [kind, setKind] = useState<ExpenseKind>(initialKind);
+  const tabs = (
+    <div className="grid grid-cols-3 rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Gider türü">
+      {KIND_LABEL.map(([value, label]) => (
+        <button key={value} type="button" onClick={() => setKind(value)} aria-pressed={kind === value} className={`pressable min-h-10 rounded-lg px-2 text-xs font-bold ${kind === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
+      ))}
+    </div>
+  );
+  if (kind === "weekly") {
+    return <div className="space-y-3.5">{tabs}<TeacherPayoutForm initialTeacherId={initialTeacherId} initialWeek={initialWeek} onClose={onClose} /></div>;
+  }
+  return <SimpleExpenseForm kind={kind} tabs={tabs} initialDate={initialDate} initialMonth={initialMonth} initialCategory={initialCategory} onClose={onClose} />;
+}
+
+function SimpleExpenseForm({ kind, tabs, initialDate, initialMonth, initialCategory, onClose }: { kind: "recurring" | "oneOff"; tabs: React.ReactNode; initialDate: string | null; initialMonth: string; initialCategory: ExpenseCategory; onClose: () => void }) {
   const createExpense = useCreateExpense();
   const createRecurring = useCreateRecurringExpense();
-  const [kind, setKind] = useState<"recurring" | "oneOff">("recurring");
   const [category, setCategory] = useState<ExpenseCategory>(initialCategory);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState(0);
@@ -634,11 +669,7 @@ function CreateExpenseForm({ initialDate, initialMonth, initialCategory, onClose
 
   return (
     <form onSubmit={submit} className="space-y-3.5">
-      <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Gider türü">
-        {([["recurring", "Her ay tekrar eden"], ["oneOff", "Tek seferlik"]] as const).map(([value, label]) => (
-          <button key={value} type="button" onClick={() => setKind(value)} aria-pressed={kind === value} className={`pressable min-h-10 rounded-lg px-3 text-xs font-bold ${kind === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
-        ))}
-      </div>
+      {tabs}
       <label className="form-label">Kategori
         <select value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory)} className="field text-sm">
           {CATEGORIES.map((value) => <option key={value} value={value}>{CATEGORY_LABEL[value]}</option>)}
