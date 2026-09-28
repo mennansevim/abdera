@@ -26,6 +26,7 @@ import {
 } from "@/lib/people";
 import { useTeacherBenchmark, type TeacherBenchmarkRow } from "@/lib/benchmark";
 import { WeekPicker, mondayOf, toIsoDate } from "@/components/week-picker";
+import { payoutMoney, useTeacherPayoutWeek, type TeacherPayoutWeekRow } from "@/lib/teacher-payouts";
 
 export default function TeachersPage() {
   return <AdminGate><TeachersPageContent /></AdminGate>;
@@ -49,6 +50,14 @@ function TeachersPageContent() {
   const weekRowsByTeacher = useMemo(
     () => new Map((weekRows ?? []).map((row) => [row.teacherId, row])),
     [weekRows],
+  );
+  // Ödeme durumu: seçilen Pzt-Cmt haftasıyla AYNI cumartesi kapanan ödeme haftası (pazar →
+  // cumartesi, docs/10-decisions.md O1). Sunucu verilen günü içeren ödeme haftasına
+  // normalize eder; pazartesiyi göndermek önceki pazardan başlayan haftayı getirir.
+  const { data: payWeek } = useTeacherPayoutWeek(toIsoDate(weekMonday), { enabled: isAdmin });
+  const payRowsByTeacher = useMemo(
+    () => new Map((payWeek?.teachers ?? []).map((row) => [row.teacherId, row])),
+    [payWeek],
   );
   const weekTotals = useMemo(() => (weekRows ?? []).reduce(
     (sum, row) => ({ lessons: sum.lessons + row.weekLessons, completed: sum.completed + row.weekCompleted }),
@@ -159,12 +168,12 @@ function TeachersPageContent() {
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
           </label>
         </div>
-        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-center">Durum</span><span /></div>}
+        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-right">Ödeme</span><span className="text-center">Durum</span><span /></div>}
         {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
         {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!loading && !isError && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
         {!loading && !isError && <ul className="divide-y divide-[var(--line)]">
-          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
+          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} payRow={payRowsByTeacher.get(teacher.id) ?? null} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
         </ul>}
       </div>
 
@@ -181,7 +190,7 @@ function TeachersPageContent() {
   );
 }
 
-function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
+function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, payRow, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; payRow: TeacherPayoutWeekRow | null; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
   const router = useRouter();
   const [studentSearch, setStudentSearch] = useState("");
   const [detailTab, setDetailTab] = useState<"students" | "availability">("students");
@@ -213,14 +222,15 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
 
   return <li id={`teacher-${teacher.id}`} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
     <div className="grid min-h-14 grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 md:grid-cols-[minmax(0,1fr)_2.75rem]">
-      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_5.5rem]">
+      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem]">
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
-          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders tamamlandı` : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
+          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders tamamlandı` : ""}{payRow?.payout ? " (ödendi)" : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
         </span>
         <span className="text-meta hidden truncate md:block">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"}</span>
         <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{groupedStudents.length}</strong></span>
         <WeeklyLessonsCells weekRow={weekRow} />
+        <PayoutStatusCell payRow={payRow} />
         <span className={`hidden justify-self-center rounded-full px-2 py-1 text-[.75rem] font-bold md:block ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
       </button>
       {isAdmin && <RowMenu label={`${teacher.firstName} ${teacher.lastName} işlemleri`}>{(close) => <>
@@ -285,6 +295,26 @@ function WeeklyLessonsCells({ weekRow }: { weekRow: TeacherBenchmarkRow | null }
     <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{weekRow.weekLessons}</strong></span>
     <span className="text-meta hidden text-right tabular-nums md:block"><strong className={`text-sm ${allDone ? "text-[var(--success-strong)]" : "text-[var(--foreground)]"}`}>{weekRow.weekCompleted}</strong></span>
   </>;
+}
+
+// Listedeki "Ödeme" sütunu: seçilen haftanın cumartesi günü kapanan ödeme haftasının
+// (pazar → cumartesi) durumu. Tutar ödeme haftasının tamamlanan derslerinden hesaplanır, pazar
+// günü ders varsa soldaki Pzt-Cmt sayısından farklı olabilir. Ödemenin kendisi burada yapılmaz -
+// tek giriş noktası /dashboard/teachers/weekly-payouts (CLAUDE.md: aynı iş için ikinci giriş
+// noktası açma).
+function PayoutStatusCell({ payRow }: { payRow: TeacherPayoutWeekRow | null }) {
+  const paid = payRow?.payout;
+  return (
+    <span className="hidden text-right text-[.75rem] md:block">
+      {paid
+        ? <span className="font-bold text-[var(--success-strong)]">Ödendi · {payoutMoney(paid.amount, paid.currency)}</span>
+        : payRow && payRow.completedLessons > 0 && payRow.computedAmount !== null
+          ? <span className="font-semibold text-[var(--warning-strong)]">{payoutMoney(payRow.computedAmount, payRow.currency)} ödenecek</span>
+          : payRow && payRow.completedLessons > 0
+            ? <span className="text-[var(--muted)]">Ücret tanımsız</span>
+            : <span className="text-[var(--muted)]" aria-label="Ödeme yok">—</span>}
+    </span>
+  );
 }
 
 // "Öğretmen ayarlarında kaç enstrüman çalabileceği seçilmeli" - oluşturma sırasında zaten
