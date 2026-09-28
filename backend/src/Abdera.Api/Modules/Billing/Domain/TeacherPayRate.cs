@@ -1,6 +1,6 @@
 namespace Abdera.Api.Modules.Billing.Domain;
 
-// Öğretmenin ders başına ücreti (docs/10-decisions.md N1). Öğretmen başına TEK satır:
+// Öğretmenin ders başına ücreti (docs/10-decisions.md O1). Öğretmen başına TEK satır:
 // tuition_rates'teki gibi tarihli sürümleme yok, çünkü geçmişi koruyan şey haftalık ödemenin
 // kendi satırındaki snapshot (rate_per_lesson + lesson_count + computed_amount). Ücret
 // değiştiğinde yalnızca bundan sonraki ödemeler etkilenir; ödenmiş haftalar kendi tutarını

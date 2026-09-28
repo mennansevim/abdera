@@ -212,7 +212,7 @@ UNIQUE (recurring_expense_id) WHERE effective_until IS NULL AND superseded_at IS
 aynı ayda düzeltme eski satırı `superseded_at` ile işaretler. Kişiye referans vermediği için
 `PersonEraser` kapsamında değildir. `Down()` iki tabloyu düşürür.
 
-## teacher_pay_rates, teacher_weekly_payouts (öğretmen haftalık ders ödemesi, N1)
+## teacher_pay_rates, teacher_weekly_payouts (öğretmen haftalık ders ödemesi, O1)
 
 **AddTeacherWeeklyPayouts** (Billing modülü): öğretmenin ders başı ücreti ve bir ödeme
 haftasının (pazar → cumartesi) ödemesi. Ödeme aynı anda `expenses`'a Maaş kategorisiyle

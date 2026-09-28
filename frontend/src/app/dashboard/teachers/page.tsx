@@ -40,7 +40,7 @@ function TeachersPageContent() {
   const { data: overviews, isLoading: overviewsLoading, isError: overviewsError, refetch: refetchOverviews, isFetching: overviewsFetching } = useTeacherOverviews(isAdmin);
   const { data: instruments } = useInstruments();
   const { data: students } = useStudents();
-  // Bu haftanın ödeme tablosu (docs/10-decisions.md N1): listedeki "bu hafta" sütunu ve
+  // Bu haftanın ödeme tablosu (docs/10-decisions.md O1): listedeki "bu hafta" sütunu ve
   // "ödendi" işareti buradan gelir. Hafta sınırını sunucu belirler - ödeme haftası pazar
   // başlayıp cumartesi kapanır, tarayıcının saat dilimiyle hesaplanmaz.
   const { data: payWeek } = useTeacherPayoutWeek(null, { enabled: isAdmin });

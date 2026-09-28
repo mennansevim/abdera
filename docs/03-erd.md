@@ -531,7 +531,7 @@ bank_incoming_transactions
   CHECK (amount > 0)
 ```
 
-## Billing — öğretmen haftalık ders ödemesi (N1, 2026-09-28)
+## Billing — öğretmen haftalık ders ödemesi (O1, 2026-09-28)
 
 Öğretmenlere ders başına ödeme yapılır ve ödeme haftalıktır: ödeme haftası **pazar başlar,
 cumartesi kapanır**, ödeme o cumartesi yapılır (kullanıcı kuralı: "her cumartesi tamamlanan

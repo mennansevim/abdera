@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Tests.Integration;
 
-// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md N1). Kullanıcı kuralı: "her
+// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Kullanıcı kuralı: "her
 // cumartesi tamamlanan derslerin ödemesini yapıyorum".
 //
 // Uç noktalar gerçekten HTTP üzerinden çağrılır (CLAUDE.md: yalnızca DB'ye yazılan satırı

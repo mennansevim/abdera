@@ -2,7 +2,7 @@ using Abdera.Api.Modules.Billing.Domain;
 
 namespace Abdera.Tests.Unit;
 
-// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md N1). Hafta sınırı ve tutar
+// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Hafta sınırı ve tutar
 // hesabı saf birim testiyle korunur - gerçek veritabanı gerekmez (docs/09-testing.md).
 public class TeacherPayoutDomainTests
 {

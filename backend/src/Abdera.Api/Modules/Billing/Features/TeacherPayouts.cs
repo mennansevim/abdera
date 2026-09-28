@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Billing.Features;
 
-// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md N1). Kullanıcı kuralı:
+// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Kullanıcı kuralı:
 // "her cumartesi tamamlanan derslerin ödemesini yapıyorum".
 //
 // İş iki parçadır ve ikisi de burada: haftanın TABLOSUNU görmek (hangi öğretmenin kaç

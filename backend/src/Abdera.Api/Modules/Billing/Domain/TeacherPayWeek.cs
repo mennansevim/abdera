@@ -2,7 +2,7 @@ namespace Abdera.Api.Modules.Billing.Domain;
 
 // Öğretmen ödeme haftası. Kullanıcı kuralı: "her cumartesi tamamlanan derslerin ödemesini
 // yapıyorum" - bu yüzden hafta CUMARTESİ kapanır: Pazar 00:00'dan Cumartesi gece yarısına
-// kadar (okulun yerel saati, docs/10-decisions.md N1). Ödeme günü haftanın kapandığı
+// kadar (okulun yerel saati, docs/10-decisions.md O1). Ödeme günü haftanın kapandığı
 // Cumartesi'dir; gider de o tarihe yazılır, böylece hafta iki ayı bölse bile giderin hangi
 // aya düştüğü tek bir tarihle bellidir.
 //

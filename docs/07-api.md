@@ -128,7 +128,7 @@ GET    /api/recurring-expenses                   ✅ M9 - her ay tekrar eden gid
 POST   /api/recurring-expenses                   ✅ kalem + ilk aylık tutar (effectiveFrom ayından itibaren)
 POST   /api/recurring-expenses/{id}/amounts      ✅ seçilen aydan itibaren yeni tutar; eskisi kapanır, silinmez (geçmişe 409)
 POST   /api/recurring-expenses/{id}/end          ✅ kalemi lastMonth ayının sonunda bitirir
-GET    /api/teacher-payouts/week                 ✅ N1 - bir ödeme haftasının (pazar→cumartesi) öğretmen tablosu; ?weekStart= yoksa bu hafta
+GET    /api/teacher-payouts/week                 ✅ O1 - bir ödeme haftasının (pazar→cumartesi) öğretmen tablosu; ?weekStart= yoksa bu hafta
 POST   /api/teacher-payouts                      ✅ haftanın ödemesini Maaş gideri olarak yazar; (teacher_id, week_start) tekil, tutarı sunucu hesaplar
 PUT    /api/teacher-payouts/rates/{teacherId}    ✅ öğretmenin ders başı ücreti (öğretmen başına tek satır, eski değer audit'e)
 

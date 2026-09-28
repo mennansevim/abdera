@@ -281,7 +281,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         // Öğretmen kapsamlı AI yorum önbelleği FK ile öğretmene bağlı; silmeyi engellememeli.
         db.ProgressSummaries.Add(ProgressSummary.Create(
             seeded.StudentId, seeded.TeacherId, "Genel gelişim yorumu.", 1, DateTimeOffset.UtcNow, "test-model", DateTimeOffset.UtcNow));
-        // Haftalık ders ödemesi (N1): ücret ve ödeme satırı öğretmene bağlı, silinmeli; gider
+        // Haftalık ders ödemesi (O1): ücret ve ödeme satırı öğretmene bağlı, silinmeli; gider
         // defterindeki karşılığı okulun kaydıdır ve kalmalı.
         var now = DateTimeOffset.UtcNow;
         var payWeek = TeacherPayWeek.Containing(new DateOnly(2026, 9, 1));

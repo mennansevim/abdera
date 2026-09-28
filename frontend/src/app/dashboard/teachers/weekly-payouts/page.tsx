@@ -15,7 +15,7 @@ export default function TeacherWeeklyPayoutsPage() {
   return <AdminGate><WeeklyPayouts /></AdminGate>;
 }
 
-// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md N1). Kullanıcı kuralı: "her
+// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Kullanıcı kuralı: "her
 // cumartesi tamamlanan derslerin ödemesini yapıyorum" - bu yüzden ekranın ekseni bir ödeme
 // haftasıdır (Pazar → Cumartesi), ödeme günü de haftanın kapandığı cumartesidir.
 //

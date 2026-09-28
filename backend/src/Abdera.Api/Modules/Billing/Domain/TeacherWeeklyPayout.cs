@@ -1,6 +1,6 @@
 namespace Abdera.Api.Modules.Billing.Domain;
 
-// Bir öğretmene bir ödeme haftası için yapılan ödeme (docs/10-decisions.md N1).
+// Bir öğretmene bir ödeme haftası için yapılan ödeme (docs/10-decisions.md O1).
 //
 // Fiyat snapshot'ı kuralının (CLAUDE.md) öğretmen tarafındaki karşılığı: hesabın TAMAMI
 // satıra donar - kaç ders (`LessonCount`), ders başı kaç para (`RatePerLesson`), bunun

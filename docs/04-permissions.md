@@ -33,7 +33,7 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 | RSVP ayarlama (Geliyorum/Gelemiyorum) | ✅ (herhangi bir veli adına, WhatsApp'ın yerini tutan geçici kanal) | ❌ | ✅ yalnızca kendi adına, kendi öğrencisinin dersi için (`POST /api/guardian/me/lessons/{id}/rsvp`) |
 | Aidat / tahsilat / ödeme kaydı | ✅ | ❌ | ❌ (kapsam dışı - hâlâ WhatsApp/mock) |
 | Okul geneli mali özet | ✅ | ❌ | ❌ |
-| Öğretmen ders başı ücreti / haftalık ödeme (N1) | ✅ | ❌ (kendi ücretini de göremez) | ❌ |
+| Öğretmen ders başı ücreti / haftalık ödeme (O1) | ✅ | ❌ (kendi ücretini de göremez) | ❌ |
 | WhatsApp bildirim durumu / yeniden deneme | ✅ | ❌ | ❌ |
 | Dashboard (bugün / dikkat / yaklaşan) | ✅ okul geneli | ✅ yalnızca kendi dersleri özeti | ❌ (ayrı, basit bir veli özeti var - dashboard değil) |
 | Kullanıcı/rol yönetimi, geçici şifre atama | ✅ | ❌ (yalnızca kendi şifresini değiştirir) | ❌ (şifre kavramı yok, OTP her seferinde yeniden istenir) |
