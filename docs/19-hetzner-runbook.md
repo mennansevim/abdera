@@ -212,7 +212,9 @@ Uygulamanın şifreli günlük yedeği sunucunun **dışında** durmalı. Sunucu
 aynı yerde durmamalı.
 
 1. Hetzner Console → **Storage Boxes** → BX11 (1 TB), aynı bölge. **SSH support** ve
-   **External reachability** açık olsun.
+   **External reachability** açık olsun. Mümkünse ana hesap yerine yalnızca `abdera/`
+   klasörünü gören bir **alt hesap (sub-account)** aç ve aşağıda onu kullan: sunucudaki anahtar
+   sızarsa Storage Box'un geri kalanına erişilemez.
 2. Yedek anahtarını sunucuda üret ve Storage Box'a yükle (Storage Box ilk kurulumda parola
    ister):
    ```bash
@@ -248,6 +250,17 @@ aynı yerde durmamalı.
 Veri kaybı penceresi en fazla ~24 saat (son gece yedeğinden bu yana girilen kayıtlar). Bu
 kabul edilemezse sonraki adım `pgBackRest` ile sürekli WAL arşivi (Storage Box'a SFTP,
 dakika hassasiyetinde geri dönüş) - özel Postgres imajı ve ayrı izleme gerektirir, ayrı karar.
+
+**Otomatik izleme:** Ayrı bir cron gerekmez. Yedek başarısız olursa uygulama
+`Ops__AlertRecipients`'a e-posta atar ve `audit_log`'a `backup.failed` yazar. Hiç yedek
+alınmazsa (ör. API kapalıysa) `SystemHealthMonitor` son başarılı yedek 30 saati geçince
+uyarır, 48 saatte "unhealthy" der (`Ops__BackupStaleAfterHours` / `...UnhealthyAfterHours`).
+API tamamen düşmüşse bu alarm da gidemez; onu §10'daki dış `/health` kontrolü yakalar.
+
+**Veritabanı dökümünde OLMAYANLAR** (Hetzner Backups dışında ayrıca sakla):
+`/opt/abdera/.env` ve `abdera_dpkeys` volume'ü (oturum anahtarları + SFTP anahtarı). `.env`'in
+bir kopyası parola yöneticisinde dursun. SFTP anahtarı kaybolursa yenisi üretilir, oturum
+anahtarı kaybolursa herkes bir kez yeniden giriş yapar.
 
 `Backup__EncryptionKey` değerini ayrıca bir parola yöneticisinde sakla. Sunucu kaybolursa
 yedekler bu anahtar olmadan açılamaz.
