@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
+import type { PagedResponse } from "./messaging";
 
 export type AttendanceStatus = "Present" | "Absent" | "Excused";
 
@@ -121,5 +122,72 @@ export function useCancelLesson() {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
     },
+  });
+}
+
+// "Yoklama" ekranı (/dashboard/attendance): geçmişe dönük yoklama dökümü + öğretmen kırılımı.
+// Backend: Modules/Attendance/Features/AttendanceHistory.cs.
+export type AttendanceFilter = AttendanceStatus | "NotMarked";
+
+export interface AttendanceHistoryItem {
+  lessonId: string;
+  startAt: string;
+  endAt: string;
+  lessonStatus: "Normal" | "Rescheduled" | "Cancelled" | "Completed" | "Makeup";
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentId: string;
+  instrumentName: string;
+  // Yoklaması hiç girilmemiş geçmiş dersler de listeye girer - o satırlarda null.
+  attendanceStatus: AttendanceStatus | null;
+  markedAt: string | null;
+  note: string | null;
+}
+
+export interface AttendanceTeacherBreakdown {
+  teacherId: string;
+  teacherName: string;
+  lessonCount: number;
+  presentCount: number;
+  absentCount: number;
+  excusedCount: number;
+  notMarkedCount: number;
+  lastLessonAt: string | null;
+}
+
+export interface AttendanceHistory {
+  lessons: PagedResponse<AttendanceHistoryItem>;
+  teachers: AttendanceTeacherBreakdown[];
+  totalLessonCount: number;
+  presentCount: number;
+  absentCount: number;
+  excusedCount: number;
+  notMarkedCount: number;
+}
+
+export interface AttendanceHistoryQuery {
+  from: string;
+  to: string;
+  teacherId?: string;
+  studentId?: string;
+  status?: AttendanceFilter;
+  page?: number;
+  pageSize?: number;
+}
+
+export function useAttendanceHistory(query: AttendanceHistoryQuery) {
+  const params = new URLSearchParams({ from: query.from, to: query.to });
+  if (query.teacherId) params.set("teacherId", query.teacherId);
+  if (query.studentId) params.set("studentId", query.studentId);
+  if (query.status) params.set("status", query.status);
+  params.set("page", String(query.page ?? 1));
+  params.set("pageSize", String(query.pageSize ?? 50));
+
+  return useQuery({
+    queryKey: ["attendance-history", params.toString()],
+    queryFn: () => api.get<AttendanceHistory>(`/api/attendance/history?${params.toString()}`),
+    placeholderData: (previous) => previous,
   });
 }

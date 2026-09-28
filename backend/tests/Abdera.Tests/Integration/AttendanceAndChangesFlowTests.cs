@@ -652,6 +652,90 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(HttpStatusCode.BadRequest, badResponse.StatusCode);
     }
 
+    // "Yoklama" ekranının (frontend /dashboard/attendance) veri kaynağı. Handler joins +
+    // LEFT JOIN + OrderBy içerdiği için CLAUDE.md kuralı gereği gerçekten HTTP üzerinden
+    // çağrılıyor: EF çeviri hataları yalnızca sorgu çalıştığında ortaya çıkıyor.
+    [Fact]
+    public async Task Attendance_history_lists_past_lessons_with_teacher_breakdown()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        var marked = await SeedLessonAsync(admin, "hist1");
+        var unmarked = await SeedLessonAsync(admin, "hist2");
+
+        // Üretilen dersler ileri tarihli; ekran geriye dönük olduğu için ikisini de geçmişe alıyoruz.
+        var markedStart = DateTimeOffset.UtcNow.AddDays(-2);
+        var unmarkedStart = DateTimeOffset.UtcNow.AddDays(-3);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE lessons SET start_at = {markedStart}, end_at = {markedStart.AddMinutes(45)} WHERE id = {marked.LessonId}");
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE lessons SET start_at = {unmarkedStart}, end_at = {unmarkedStart.AddMinutes(45)} WHERE id = {unmarked.LessonId}");
+
+        using var teacherClient = _factory.CreateClient();
+        await teacherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(marked.TeacherEmail, marked.TeacherTempPassword));
+        var markResponse = await teacherClient.PostAsJsonAsync($"/api/lessons/{marked.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Present, "derse geldi"));
+        Assert.Equal(HttpStatusCode.Created, markResponse.StatusCode);
+
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-10).ToString("O"));
+        var to = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
+
+        var historyResponse = await admin.GetAsync($"/api/attendance/history?from={from}&to={to}&pageSize=200");
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        var history = (await historyResponse.Content.ReadFromJsonAsync<AttendanceHistory.HistoryResponse>(TestJson.Options))!;
+
+        var markedRow = history.Lessons.Items.Single(item => item.LessonId == marked.LessonId);
+        Assert.Equal(AttendanceStatus.Present, markedRow.AttendanceStatus);
+        Assert.Equal("derse geldi", markedRow.Note);
+
+        // Yoklaması hiç girilmemiş geçmiş ders de listede - yöneticinin göreceği boşluk bu.
+        var unmarkedRow = history.Lessons.Items.Single(item => item.LessonId == unmarked.LessonId);
+        Assert.Null(unmarkedRow.AttendanceStatus);
+
+        var markedTeacher = history.Teachers.Single(item => item.TeacherId == marked.TeacherId);
+        Assert.Equal(1, markedTeacher.PresentCount);
+        var unmarkedTeacher = history.Teachers.Single(item => item.TeacherId == unmarked.TeacherId);
+        // >= 1: seri, testin çalıştığı saate göre bugüne de bir ders üretmiş olabilir.
+        Assert.True(unmarkedTeacher.NotMarkedCount >= 1);
+        Assert.Equal(0, unmarkedTeacher.PresentCount);
+
+        var notMarkedOnly = (await (await admin.GetAsync($"/api/attendance/history?from={from}&to={to}&pageSize=200&status=NotMarked"))
+            .Content.ReadFromJsonAsync<AttendanceHistory.HistoryResponse>(TestJson.Options))!;
+        Assert.DoesNotContain(notMarkedOnly.Lessons.Items, item => item.LessonId == marked.LessonId);
+        Assert.Contains(notMarkedOnly.Lessons.Items, item => item.LessonId == unmarked.LessonId);
+    }
+
+    // docs/04-permissions.md: Teacher yalnızca kendi derslerini görür - teacherId parametresi
+    // gönderse bile kapsam oturumdan çözümlenir, URL'deki id'ye güvenilmez.
+    [Fact]
+    public async Task Attendance_history_is_scoped_to_the_signed_in_teachers_own_lessons()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+
+        var own = await SeedLessonAsync(admin, "hist3");
+        var other = await SeedLessonAsync(admin, "hist4");
+
+        var pastStart = DateTimeOffset.UtcNow.AddDays(-4);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE lessons SET start_at = {pastStart}, end_at = {pastStart.AddMinutes(45)} WHERE id IN ({own.LessonId}, {other.LessonId})");
+
+        using var teacherClient = _factory.CreateClient();
+        await teacherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(own.TeacherEmail, own.TeacherTempPassword));
+
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-10).ToString("O"));
+        var to = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
+
+        var response = await teacherClient.GetAsync($"/api/attendance/history?from={from}&to={to}&pageSize=200&teacherId={other.TeacherId}");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var history = (await response.Content.ReadFromJsonAsync<AttendanceHistory.HistoryResponse>(TestJson.Options))!;
+
+        Assert.Contains(history.Lessons.Items, item => item.LessonId == own.LessonId);
+        Assert.DoesNotContain(history.Lessons.Items, item => item.LessonId == other.LessonId);
+        Assert.All(history.Teachers, item => Assert.Equal(own.TeacherId, item.TeacherId));
+    }
+
     private static async Task<Guid> GetPianoIdAsync(HttpClient admin)
     {
         var instruments = await (await admin.GetAsync("/api/instruments"))
