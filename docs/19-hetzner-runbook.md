@@ -46,7 +46,7 @@ Hetzner Console → **Add Server**:
 |---|---|
 | Location | **Nuremberg** veya **Falkenstein** (Türkiye'ye Helsinki'den yakın) |
 | Image | **Ubuntu 24.04** |
-| Type | **CX33** (4 vCPU / 8 GB / 80 GB). İmajlar sunucuda derleneceği için CX23 yerine CX33. |
+| Type | **CX23** (2 vCPU / 4 GB / 40 GB, Cost-Optimized, x86). Uygulama ~1–2 GB kullanır. İmaj derlemesi için §2'de 4 GB swap eklenir. Yetmezse *Rescale* ile CX33'e büyütülür (disk büyütülmezse geri küçültülebilir). |
 | Networking | IPv4 + IPv6 |
 | SSH keys | Yerel public key'ini ekle (parola ile girişi hiç açma) |
 | Backups | **Aç** (+%20; 7 günlük otomatik sunucu imajı) |
@@ -77,6 +77,12 @@ ssh root@<SUNUCU_IP>
 apt update && apt -y full-upgrade
 apt -y install unattended-upgrades fail2ban git
 dpkg-reconfigure -plow unattended-upgrades   # "Yes"
+
+# 4 GB swap: CX23'te (4 GB RAM) imaj derlemesi (.NET publish + Next.js build, uygulama
+# çalışırken) belleği aşabilir; swap OOM yerine yavaşlamaya çevirir.
+fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+sysctl -w vm.swappiness=10 && echo 'vm.swappiness=10' > /etc/sysctl.d/99-swap.conf
 
 # Saat dilimi (loglar okunur olsun; uygulama zaten SCHOOL_TIMEZONE kullanıyor, DB UTC)
 timedatectl set-timezone Europe/Istanbul
@@ -469,7 +475,7 @@ push main ──► CI (test + build + e2e) ──yeşil──► Deploy workflo
 
 ### 13.1 Tasarım kararları
 
-- **İmajlar sunucuda derlenir** (bugünkü compose akışı, kod değişikliği yok). CX33'te derleme
+- **İmajlar sunucuda derlenir** (bugünkü compose akışı, kod değişikliği yok). CX23'te derleme (swap ile)
   birkaç dakika sürer. İleride imajlar Actions'ta derlenip GHCR'ye itilebilir, sunucu yalnızca
   çeker. Daha hızlı olur ve test edilen imajın aynısı canlıya çıkar, ama compose'da `image:`
   değişikliği gerektirir. Ayrı iş.
