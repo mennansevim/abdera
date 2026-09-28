@@ -227,14 +227,14 @@ Veri taşınacaksa (§8), bu prova veritabanı orada silinip yeniden oluşturula
 ## 7. Yedekleme hedefi: Cloudflare R2
 
 Karar: uygulamanın şifreli günlük yedeği **Cloudflare R2**'ye gider. 10 GB'a kadar ücretsiz.
-Bucket Lock sayesinde sunucu ya da erişim anahtarı ele geçirilse bile yedekler 30 gün boyunca
+Bucket Lock sayesinde sunucu ya da erişim anahtarı ele geçirilse bile yedekler 60 gün boyunca
 silinemez. Uygulama kodu değişmez. Uygulama yalnızca SFTP'ye yazabildiği için araya sunucuda,
 yalnızca Docker iç ağında çalışan bir `rclone serve sftp` servisi (`backup-gw`) girer:
 
 ```
 api ──SFTP (iç ağ, :2022)──► backup-gw (rclone) ──HTTPS──► R2 bucket "abdera-backups"
-                                                             ├─ Bucket Lock: 30 gün silinemez
-                                                             └─ Lifecycle: 35. günde silinir
+                                                             ├─ Bucket Lock: 60 gün silinemez
+                                                             └─ Lifecycle: 65. günde silinir
 ```
 
 (Hetzner Storage Box alternatifi bu belgenin git geçmişinde duruyor: `git log -p docs/19-hetzner-runbook.md`.)
@@ -245,10 +245,15 @@ api ──SFTP (iç ağ, :2022)──► backup-gw (rclone) ──HTTPS──►
    ücret çıkmaz.
 2. **Create bucket** → `abdera-backups`, konum ipucu **Eastern Europe (EEUR)**.
 3. Bucket → **Settings**:
-   - **Bucket lock rules → Add rule**: prefix `abdera/`, **30 gün**. Kilitli dosyayı kimse
-     silemez, Cloudflare hesabına giren biri bile kural süresi bitmeden silemez.
-   - **Object lifecycle rules → Add rule**: prefix `abdera/`, **35 gün sonra sil**. Kilit
-     lifecycle'dan önce gelir, silme 30 günden önce olmaz.
+   - **Bucket lock rules → Add rule**: prefix `abdera/`, **60 gün**. Kilitli dosya API
+     anahtarıyla (sunucudaki anahtar dahil) silinemez. Kural bucket ayarı olduğu için
+     yalnızca Cloudflare hesabından kaldırılabilir. Bu yüzden Cloudflare hesabında
+     **iki adımlı doğrulama açık olmalı**; korumanın son halkası hesabın kendisi.
+   - **Object lifecycle rules → Add rule**: prefix `abdera/`, **65 gün sonra sil**. Kilit
+     lifecycle'dan önce gelir, silme 60 günden önce olmaz.
+   - Saklama süresi KVKK açısından da bir karardır: kalıcı silinen bir öğrencinin verisi
+     (`PersonEraser`) şifreli yedeklerde en fazla 65 gün daha durur. Aydınlatma metninde
+     yedek saklama süresi belirtilmeli.
 4. R2 → **Manage API tokens → Create API token**:
    - İzin: **Object Read & Write**, yalnızca `abdera-backups` bucket'ı
    - Çıkan **Access Key ID**, **Secret Access Key** ve hesap sayfasındaki **Account ID**'yi
@@ -326,7 +331,7 @@ kaydedilir: yeni sunucu bileşeni; uygulama bağımlılığı değil.
 
 | Katman | Ne | Sıklık / saklama | Neye karşı |
 |---|---|---|---|
-| 1. Uygulama yedeği → R2 | `pg_dump` → AES-256 → R2 (Bucket Lock) | Günlük 03:00, 30 gün kilitli, 35. gün silinir | Veri silme/bozulma, sunucu ele geçirilmesi; hata olursa e-posta + audit |
+| 1. Uygulama yedeği → R2 | `pg_dump` → AES-256 → R2 (Bucket Lock) | Günlük 03:00, 60 gün kilitli, 65. gün silinir | Veri silme/bozulma, sunucu ele geçirilmesi; hata olursa e-posta + audit |
 | 2. Hetzner Backups | Sunucu disk imajı | Günlük, 7 adet | Sunucunun tamamen kaybı (`.env`, anahtarlar). DB için tek başına güvenilmez, çalışan Postgres'in anlık kopyası |
 | 3. Deploy öncesi döküm | `pg_dump` (§13) | Her deploy'da, son 5 | Hatalı bir sürümün veriyi bozması |
 
