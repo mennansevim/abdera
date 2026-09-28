@@ -20,14 +20,24 @@ export function useMarkAttendance(lessonId: string) {
   return useMutation({
     mutationFn: (body: { status: AttendanceStatus; note?: string }) =>
       api.post<Attendance>(`/api/lessons/${lessonId}/attendance`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["calendar"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      // Geçmiş bir derse "geldi" girilirse ders yorum bekleyenler listesine düşer.
+      queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+    },
   });
 }
 
 export function useCreateLessonNote(lessonId: string) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { practiced?: string; note?: string; homework?: string; nextGoal?: string; pieceTitle?: string; pieceDifficulty?: number }) =>
       api.post(`/api/lessons/${lessonId}/notes`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+      // Son eksik not yazılınca sunucu zildeki hatırlatmayı kapatır.
+      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+    },
   });
 }
 

@@ -84,6 +84,32 @@ export function useProgressSummary(studentId: string) {
   });
 }
 
+// Yoklaması "geldi" girilmiş ama notu yazılmamış, bitmiş dersler (son 14 gün) - öğretmenin
+// ana ekranındaki hatırlatma kartı ve zildeki "n dersin yorumu bekliyor" aynı listeden beslenir
+// (backend PendingLessonNotes.cs). Yalnızca öğretmen hesabında vardır; yönetici için 403 döner.
+export interface PendingLessonNote {
+  lessonId: string;
+  startAt: string;
+  endAt: string;
+  studentId: string;
+  studentName: string;
+  instrumentId: string;
+  instrumentName: string;
+}
+
+export interface PendingLessonNoteList {
+  items: PendingLessonNote[];
+  lookbackDays: number;
+}
+
+export function usePendingLessonNotes(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["pending-lesson-notes"],
+    queryFn: () => api.get<PendingLessonNoteList>("/api/me/pending-lesson-notes"),
+    enabled: options?.enabled ?? true,
+  });
+}
+
 export function useCreateProgressNote(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -108,6 +134,8 @@ export function useCreateProgressNote(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["student-progress", studentId] });
       queryClient.invalidateQueries({ queryKey: ["student-progress-summary", studentId] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
     },
   });
 }

@@ -111,11 +111,14 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showChangeForm, setShowChangeForm] = useState(false);
-  const disabled = lesson.status === "Cancelled" || lesson.status === "Completed";
+  const disabled = lesson.status === "Cancelled";
+  // Yoklaması girilmiş (tamamlanmış) derse yalnızca not eklenir - notu sonradan yazmak
+  // "Yorum bekleyen dersler" hatırlatmasının istediği şey, bu yüzden kart kilitlenmez.
+  const attendanceTaken = lesson.status === "Completed";
 
   async function handleSave() {
     if (!status && !practiced && !note && !homework && !nextGoal && !pieceTitle) {
-      setError(initialMode === "attendance" ? "Yoklama durumu seçmelisin." : "Kaydetmek için kısa bir not eklemelisin.");
+      setError(initialMode === "attendance" && !attendanceTaken ? "Yoklama durumu seçmelisin." : "Kaydetmek için kısa bir not eklemelisin.");
       return;
     }
     setError(null);
@@ -129,13 +132,15 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
     }
   }
 
-  if (disabled) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 text-xs text-[var(--muted)]">Bu ders {lesson.status === "Completed" ? "tamamlandı" : "iptal edildi"}; yeni işlem yapılamaz.</div>;
+  if (disabled) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 text-xs text-[var(--muted)]">Bu ders iptal edildi; yeni işlem yapılamaz.</div>;
 
   return (
     <div className="space-y-4 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:p-5">
       {saved ? <p className="flex items-center gap-2 rounded-xl bg-[var(--success-soft)] p-3 text-xs font-bold text-[var(--success-strong)]"><Icon name="check" className="h-4 w-4" /> Ders bilgileri kaydedildi.</p> : (
         <>
-          <div>
+          {attendanceTaken ? (
+            <p className="flex items-center gap-2 rounded-xl bg-white p-3 text-xs font-semibold text-[var(--muted)]"><Icon name="check" className="h-4 w-4 text-[var(--success-strong)]" /> Yoklama alındı; bu derse not ekleyebilirsin.</p>
+          ) : <div>
             <p className="mb-2 text-[.75rem] font-bold text-[var(--muted)]">Yoklama</p>
             <div className="grid grid-cols-3 gap-2">
               {(["Present","Absent","Excused"] as const).map((item) => {
@@ -144,7 +149,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
                 return <button key={item} type="button" aria-pressed={active} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.75rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{labels[item]}</button>;
               })}
             </div>
-          </div>
+          </div>}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Öğretmen notu <span className="font-medium">· yalnızca ekip görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
@@ -156,7 +161,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
           {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] p-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={handleSave} disabled={markAttendance.isPending || createNote.isPending} className="btn btn-primary">{markAttendance.isPending || createNote.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
-            <button type="button" onClick={() => setShowChangeForm((value) => !value)} className="btn btn-quiet">Ders değişikliği iste</button>
+            {!attendanceTaken && <button type="button" onClick={() => setShowChangeForm((value) => !value)} className="btn btn-quiet">Ders değişikliği iste</button>}
           </div>
           {showChangeForm && <ChangeRequestForm onSubmit={async (proposedStartAt, proposedEndAt, reason) => { await createChangeRequest.mutateAsync({ proposedStartAt, proposedEndAt, reason }); setShowChangeForm(false); }} />}
         </>

@@ -10,6 +10,9 @@ public enum StaffNotificationType
     LessonCancelled,
     // Telafi hakkından yeni bir telafi dersi planlandı.
     MakeupScheduled,
+    // Tamamlanan dersin ders notu (yorumu) hâlâ girilmemiş - tek bir olayı değil, süren bir
+    // eksiği anlatan HATIRLATMA: öğretmen başına tek satır, iş bitene kadar tazelenir.
+    LessonNoteMissing,
 }
 
 // docs/03-erd.md - Messaging > staff_notifications. WhatsApp tarafındaki NotificationJob
@@ -62,7 +65,29 @@ public class StaffNotification
         };
     }
 
+    // Hatırlatma satırının (LessonNoteMissing gibi) metnini tazeler. Olay bildirimlerinden
+    // farkı: aynı referans için ikinci satır açılmaz, var olan satır güncellenir. resurface
+    // verildiğinde satır okunmamışa döner ve CreatedAt "hatırlatmanın tazelendiği an" olur -
+    // liste/zil bu alana göre sıraladığı için hatırlatma yeniden öne çıkar. Çağıran günde en
+    // fazla bir kez resurface eder (LessonNoteReminderJob), yoksa aynı gün içindeki her tur
+    // okunmuş bir hatırlatmayı tekrar okunmamış yapardı.
+    public void RefreshReminder(string title, string body, DateTimeOffset now, bool resurface)
+    {
+        if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("Bildirim başlığı boş olamaz.", nameof(title));
+        if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("Bildirim metni boş olamaz.", nameof(body));
+
+        Title = title.Trim();
+        Body = body.Trim();
+        if (resurface)
+        {
+            ReadAt = null;
+            CreatedAt = now;
+        }
+        UpdatedAt = now;
+    }
+
     // Tekrar çağrılırsa ilk okunma zamanı korunur - "okundu" geri alınabilir bir durum değil.
+    // (Hatırlatmalar bunun istisnası: RefreshReminder bilerek okunmamışa döndürebilir.)
     public void MarkRead(DateTimeOffset now)
     {
         if (ReadAt is not null) return;

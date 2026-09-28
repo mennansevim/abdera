@@ -100,6 +100,8 @@ POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar
 GET    /api/me/notifications                     ✅ oturumdaki personelin ekran içi bildirimleri {items,unreadCount}
 POST   /api/me/notifications/{id}/read            ✅ yalnızca kendi bildirimi - başkasınınki 404
 POST   /api/me/notifications/read-all             ✅ zili sıfırlar
+GET    /api/me/pending-lesson-notes               ✅ yalnızca Teacher (Admin 403) - yoklaması GELDİ girilmiş, bitmiş, notu yazılmamış dersler (son 14 gün) {items,lookbackDays} - N1
+GET    /api/internal/cron/lesson-note-reminders   ✅ Vercel Cron, CRON_SECRET (yoksa 404) - zildeki LessonNoteMissing hatırlatmasını tazeler/kapatır - N1
 
 GET    /api/notifications                        ✅ ?status=&page=&pageSize= (varsayılan 50, en fazla 200) - yanıt {items,totalCount,page,pageSize} zarfında (ARC-3)
 POST   /api/notifications/{notificationId}/retry ✅ yalnızca FAILED durumundan

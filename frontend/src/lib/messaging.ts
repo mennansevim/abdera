@@ -50,7 +50,7 @@ export interface PagedResponse<T> {
 
 // Ekran içi personel bildirimi (staff_notifications) - WhatsApp job'larından ayrı bir akış:
 // bunlar dışarı gönderilmez, oturumdaki kullanıcının kendi zilinde görünür.
-export type StaffNotificationType = "LessonMoved" | "LessonCancelled" | "MakeupScheduled" | "StudentDeletionRequested";
+export type StaffNotificationType = "LessonMoved" | "LessonCancelled" | "MakeupScheduled" | "StudentDeletionRequested" | "LessonNoteMissing";
 
 export type StaffNotification = {
   id: string;
