@@ -31,6 +31,7 @@ public static class PersonEraser
         int Enrollments, int AffectedStudents, int Lessons, int Receivables,
         int Payments, decimal CollectedAmount, string Currency,
         int Availabilities, int TimeOffs, int Assessments, int LessonNotes, int ShowItems,
+        int WeeklyPayouts, decimal PaidToTeacher,
         bool HasUserAccount);
 
     public static async Task<StudentImpact> DescribeStudentAsync(Guid studentId, AbderaDbContext db)
@@ -93,6 +94,8 @@ public static class PersonEraser
             .Select(r => new { r.Id, r.Currency }).ToListAsync();
         var receivableIds = receivables.Select(r => r.Id).ToList();
         var payments = await db.Payments.Where(p => receivableIds.Contains(p.ReceivableId)).ToListAsync();
+        var payouts = await db.TeacherWeeklyPayouts.Where(p => p.TeacherId == teacherId)
+            .Select(p => new { p.Amount }).ToListAsync();
 
         return new TeacherImpact(
             teacherId, $"{teacher.FirstName} {teacher.LastName}",
@@ -108,6 +111,8 @@ public static class PersonEraser
             await db.SkillAssessments.CountAsync(a => a.TeacherId == teacherId),
             await db.LessonNotes.CountAsync(n => n.TeacherId == teacherId),
             await db.ShowItems.CountAsync(i => i.TeacherId == teacherId),
+            payouts.Count,
+            payouts.Sum(p => p.Amount),
             teacher.UserId is not null);
     }
 
@@ -299,6 +304,11 @@ public static class PersonEraser
         -- Öneri öğrencinin repertuvarıdır ve kalır, eklenen eser okulun kütüphanesidir ve kalır;
         -- yalnızca silinen öğretmene/hesabına işaret eden alan boşalır.
         UPDATE library_suggestions SET teacher_id = NULL WHERE teacher_id = @teacher_id;
+        -- Haftalık ders ödemesi ve ders başı ücret öğretmene bağlıdır, devirde YENİ öğretmene
+        -- geçmez: ödenen para ayrılan kişinin geçmişidir. Gider defterindeki karşılıkları
+        -- (expenses) okulun kaydıdır ve kalır - o satırların teacher_id'si yoktur, yetim kalmaz.
+        DELETE FROM teacher_weekly_payouts WHERE teacher_id = @teacher_id;
+        DELETE FROM teacher_pay_rates WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_availability WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_time_off WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_instruments WHERE teacher_id = @teacher_id;

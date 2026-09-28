@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { AddButton, AdminGate, FormActions, FormMessage, Modal, Notice, PageHeader, RowMenu, RowMenuItem, SearchInput } from "@/components/ui";
@@ -22,6 +24,7 @@ import {
   type TeacherStatus,
   type TeacherStudentEnrollment,
 } from "@/lib/people";
+import { payoutMoney, useTeacherPayoutWeek, type TeacherPayoutWeekRow } from "@/lib/teacher-payouts";
 
 export default function TeachersPage() {
   return <AdminGate><TeachersPageContent /></AdminGate>;
@@ -37,6 +40,14 @@ function TeachersPageContent() {
   const { data: overviews, isLoading: overviewsLoading, isError: overviewsError, refetch: refetchOverviews, isFetching: overviewsFetching } = useTeacherOverviews(isAdmin);
   const { data: instruments } = useInstruments();
   const { data: students } = useStudents();
+  // Bu haftanın ödeme tablosu (docs/10-decisions.md N1): listedeki "bu hafta" sütunu ve
+  // "ödendi" işareti buradan gelir. Hafta sınırını sunucu belirler - ödeme haftası pazar
+  // başlayıp cumartesi kapanır, tarayıcının saat dilimiyle hesaplanmaz.
+  const { data: payWeek } = useTeacherPayoutWeek(null, { enabled: isAdmin });
+  const payRowsByTeacher = useMemo(
+    () => new Map((payWeek?.teachers ?? []).map((row) => [row.teacherId, row])),
+    [payWeek],
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
@@ -99,9 +110,12 @@ function TeachersPageContent() {
     <div className="space-y-4">
       <PageHeader
         title="Öğretmenler"
-        description={loading ? "Öğretmenler ve öğrenci dağılımları." : `${activeTeacherCount} aktif öğretmen · ${studentCount} öğrenci`}
+        description={loading
+          ? "Öğretmenler ve öğrenci dağılımları."
+          : `${activeTeacherCount} aktif öğretmen · ${studentCount} öğrenci${payWeek ? ` · bu hafta ${payWeek.totalCompletedLessons} tamamlanan ders` : ""}`}
         actions={<>
           <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Ad veya enstrüman ara…" />
+          {isAdmin && <Link href="/dashboard/teachers/weekly-payouts" className="btn btn-quiet">Haftalık ödeme</Link>}
           {isAdmin && <AddButton label="Öğretmen ekle" onClick={() => setShowCreate(true)} />}
         </>}
       />
@@ -138,12 +152,12 @@ function TeachersPageContent() {
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
           </label>
         </div>
-        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_7rem_6rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-center">Durum</span><span /></div>}
+        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_8rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Bu hafta</span><span className="text-center">Durum</span><span /></div>}
         {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
         {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!loading && !isError && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
         {!loading && !isError && <ul className="divide-y divide-[var(--line)]">
-          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
+          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} payRow={payRowsByTeacher.get(teacher.id) ?? null} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
         </ul>}
       </div>
 
@@ -160,7 +174,8 @@ function TeachersPageContent() {
   );
 }
 
-function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
+function TeacherRow({ teacher, instruments, students, teacherStudents, payRow, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; payRow: TeacherPayoutWeekRow | null; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
+  const router = useRouter();
   const [studentSearch, setStudentSearch] = useState("");
   const [detailTab, setDetailTab] = useState<"students" | "availability">("students");
   const [showAddForm, setShowAddForm] = useState(false);
@@ -191,17 +206,19 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin, 
 
   return <li id={`teacher-${teacher.id}`} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
     <div className="grid min-h-14 grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 md:grid-cols-[minmax(0,1fr)_2.75rem]">
-      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)_7rem_6rem]">
+      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_8rem_5.5rem]">
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
-          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
+          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{payRow ? ` · bu hafta ${payRow.completedLessons} ders${payRow.payout ? " (ödendi)" : ""}` : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
         </span>
         <span className="text-meta hidden truncate md:block">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"}</span>
         <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{groupedStudents.length}</strong></span>
+        <WeeklyLessonsCell payRow={payRow} />
         <span className={`hidden justify-self-center rounded-full px-2 py-1 text-[.75rem] font-bold md:block ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
       </button>
       {isAdmin && <RowMenu label={`${teacher.firstName} ${teacher.lastName} işlemleri`}>{(close) => <>
         {teacher.status === "Active" && <RowMenuItem icon="plus" onClick={() => { close(); setShowAddForm(true); }}>Öğrenci ekle</RowMenuItem>}
+        <RowMenuItem icon="wallet" onClick={() => { close(); router.push("/dashboard/teachers/weekly-payouts"); }}>Haftalık ödeme</RowMenuItem>
         <RowMenuItem icon="pencil" onClick={() => { close(); setShowEditForm(true); }}>Bilgileri düzenle</RowMenuItem>
         <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil</RowMenuItem>
       </>}</RowMenu>}
@@ -249,6 +266,25 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, isAdmin, 
       <EditTeacherForm teacher={teacher} instruments={instruments} onClose={() => setShowEditForm(false)} />
     </Modal>
   </li>;
+}
+
+// Listedeki "Bu hafta" sütunu: içinde bulunulan ÖDEME haftasında (pazar → cumartesi)
+// tamamlanmış ders sayısı ve o haftanın ödemesinin yapılıp yapılmadığı. Ödemenin kendisi
+// burada yapılmaz - tek giriş noktası /dashboard/teachers/weekly-payouts (CLAUDE.md: aynı
+// iş için ikinci bir giriş noktası açma).
+function WeeklyLessonsCell({ payRow }: { payRow: TeacherPayoutWeekRow | null }) {
+  if (!payRow) return <span className="hidden text-right md:block" aria-hidden="true" />;
+  const paid = payRow.payout;
+  return (
+    <span className="text-meta hidden text-right md:block">
+      <strong className="text-sm tabular-nums text-[var(--foreground)]">{payRow.completedLessons}</strong> ders
+      {paid
+        ? <span className="mt-0.5 block text-[.75rem] font-bold text-[var(--success-strong)]">Ödendi · {payoutMoney(paid.amount, paid.currency)}</span>
+        : payRow.completedLessons > 0 && payRow.computedAmount !== null
+          ? <span className="mt-0.5 block text-[.75rem] font-semibold text-[var(--warning-strong)]">{payoutMoney(payRow.computedAmount, payRow.currency)} ödenecek</span>
+          : null}
+    </span>
+  );
 }
 
 // "Öğretmen ayarlarında kaç enstrüman çalabileceği seçilmeli" - oluşturma sırasında zaten

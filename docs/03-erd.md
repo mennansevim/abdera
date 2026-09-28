@@ -531,6 +531,56 @@ bank_incoming_transactions
   CHECK (amount > 0)
 ```
 
+## Billing — öğretmen haftalık ders ödemesi (N1, 2026-09-28)
+
+Öğretmenlere ders başına ödeme yapılır ve ödeme haftalıktır: ödeme haftası **pazar başlar,
+cumartesi kapanır**, ödeme o cumartesi yapılır (kullanıcı kuralı: "her cumartesi tamamlanan
+derslerin ödemesini yapıyorum"). Uygulamanın geri kalanındaki pazartesi-başlangıçlı hafta
+(`StudentWeeklyLessonPolicy`, takvim) gösterim/kota içindir; buradaki hafta paranın sınırıdır
+ve bilerek ayrı tutulmuştur.
+
+```
+teacher_pay_rates
+  id                 uuid pk
+  teacher_id         uuid            -- öğretmen başına TEK satır (sürümleme yok)
+  amount_per_lesson  numeric(12,2)
+  currency           text default 'TRY'
+  updated_by         uuid null
+  created_at         timestamptz
+  updated_at         timestamptz
+
+  UNIQUE (teacher_id)
+  CHECK (amount_per_lesson > 0)
+
+teacher_weekly_payouts
+  id               uuid pk
+  teacher_id       uuid
+  week_start       date            -- her zaman pazar (uygulama katmanı normalize eder)
+  week_end         date            -- cumartesi
+  lesson_count     int             -- o hafta COMPLETED olan ders sayısı (snapshot)
+  rate_per_lesson  numeric(12,2)   -- ödeme anındaki ücret (snapshot)
+  computed_amount  numeric(12,2)   -- lesson_count × rate_per_lesson
+  amount           numeric(12,2)   -- gerçekte ödenen (yönetici yuvarlamışsa farklı olabilir)
+  currency         text default 'TRY'
+  paid_on          date            -- varsayılan week_end; gider bu tarihe yazılır
+  note             text null
+  expense_id       uuid            -- expenses(id) - Maaş kategorisiyle açılan gider satırı
+  created_by       uuid null
+  created_at       timestamptz
+
+  UNIQUE (teacher_id, week_start)  -- çift ödemenin tek gerçek engeli
+  CHECK (amount > 0)
+  CHECK (lesson_count > 0)
+  CHECK (week_end > week_start)
+```
+
+Ücret sürümlenmez çünkü geçmişi koruyan şey ödeme satırının kendi snapshot'ıdır
+(`lesson_count` + `rate_per_lesson` + `computed_amount` + `amount`) - aidattaki fiyat
+snapshot'ı kuralının (A1) öğretmen tarafındaki karşılığı. Zam yalnızca sonraki ödemeleri
+etkiler. Ödeme kaydı ayrıca `expenses`'a Maaş kategorisiyle düşer, böylece Giderler
+ekranındaki her toplam onu kendiliğinden sayar; ayrı bir öğretmen gideri defteri yoktur.
+Her iki tablo da `PersonEraser`'ın öğretmen silme kapsamındadır.
+
 ## Kritik kısıtlar — özet
 
 ```
@@ -543,9 +593,11 @@ UNIQUE (lesson_id) ON lesson_attendances
 UNIQUE (iban) ON virtual_ibans
 UNIQUE (provider, provider_transaction_id) ON bank_incoming_transactions
 UNIQUE (student_id, teacher_id, instrument_id) WHERE status='Active' ON enrollments
+UNIQUE (teacher_id) ON teacher_pay_rates
+UNIQUE (teacher_id, week_start) ON teacher_weekly_payouts
 CHECK (end_at > start_at) ON lessons
 CHECK (amount >= 0) ON receivables, tuition_rates
-CHECK (amount > 0) ON payments, payment_corrections, bank_incoming_transactions
+CHECK (amount > 0) ON payments, payment_corrections, bank_incoming_transactions, teacher_weekly_payouts
 CHECK (score BETWEEN 1 AND 5) ON skill_assessments
 CHECK (duration_minutes BETWEEN 1 AND 600) ON practice_journal_entries
 ```

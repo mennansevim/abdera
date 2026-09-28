@@ -553,6 +553,8 @@ export interface TeacherDeletionImpact {
   assessments: number;
   lessonNotes: number;
   showItems: number;
+  weeklyPayouts: number;
+  paidToTeacher: number;
   hasUserAccount: boolean;
 }
 

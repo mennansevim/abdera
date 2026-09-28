@@ -211,3 +211,30 @@ UNIQUE (recurring_expense_id) WHERE effective_until IS NULL AND superseded_at IS
 `effective_from` her zaman ayın ilk günü, `effective_until` ayın son günüdür. Satır silinmez;
 aynı ayda düzeltme eski satırı `superseded_at` ile işaretler. Kişiye referans vermediği için
 `PersonEraser` kapsamında değildir. `Down()` iki tabloyu düşürür.
+
+## teacher_pay_rates, teacher_weekly_payouts (öğretmen haftalık ders ödemesi, N1)
+
+**AddTeacherWeeklyPayouts** (Billing modülü): öğretmenin ders başı ücreti ve bir ödeme
+haftasının (pazar → cumartesi) ödemesi. Ödeme aynı anda `expenses`'a Maaş kategorisiyle
+yazılır - payout satırı `expense_id` ile ona bağlanır, ayrı bir gider defteri açılmaz.
+
+```
+teacher_pay_rates(id, teacher_id, amount_per_lesson numeric(12,2), currency,
+                  updated_by, created_at, updated_at)
+UNIQUE (teacher_id)
+CHECK (amount_per_lesson > 0)
+
+teacher_weekly_payouts(id, teacher_id, week_start, week_end, lesson_count,
+                       rate_per_lesson numeric(12,2), computed_amount numeric(12,2),
+                       amount numeric(12,2), currency, paid_on, note, expense_id,
+                       created_by, created_at)
+UNIQUE (teacher_id, week_start)   -- çift ödeme engeli
+CHECK (amount > 0)
+CHECK (lesson_count > 0)
+CHECK (week_end > week_start)
+```
+
+`week_start` her zaman pazardır (uygulama katmanı normalize eder), `week_end` cumartesi.
+Hesabın tamamı satıra donar, bu yüzden ücret tablosu sürümlenmez. İki tablo da öğretmene
+referans verdiği için `PersonEraser`'ın öğretmen silme betiğindedir. `Down()` iki tabloyu
+düşürür; oluşmuş `expenses` satırlarına dokunmaz (finansal kayıt silinmez).

@@ -281,7 +281,21 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         // Öğretmen kapsamlı AI yorum önbelleği FK ile öğretmene bağlı; silmeyi engellememeli.
         db.ProgressSummaries.Add(ProgressSummary.Create(
             seeded.StudentId, seeded.TeacherId, "Genel gelişim yorumu.", 1, DateTimeOffset.UtcNow, "test-model", DateTimeOffset.UtcNow));
+        // Haftalık ders ödemesi (N1): ücret ve ödeme satırı öğretmene bağlı, silinmeli; gider
+        // defterindeki karşılığı okulun kaydıdır ve kalmalı.
+        var now = DateTimeOffset.UtcNow;
+        var payWeek = TeacherPayWeek.Containing(new DateOnly(2026, 9, 1));
+        var payoutExpense = Expense.Create(ExpenseCategory.Salary, "Haftalık ders ödemesi", 900m, "TRY", payWeek.End, null, null, now);
+        db.Expenses.Add(payoutExpense);
+        db.TeacherPayRates.Add(TeacherPayRate.Create(seeded.TeacherId, 300m, "TRY", null, now));
+        db.TeacherWeeklyPayouts.Add(TeacherWeeklyPayout.Create(
+            seeded.TeacherId, payWeek, 3, 300m, 900m, 900m, "TRY", payWeek.End, null, payoutExpense.Id, null, now));
         await db.SaveChangesAsync();
+
+        var impact = await ReadAsync<PersonEraser.TeacherImpact>(
+            await admin.GetAsync($"/api/teachers/{seeded.TeacherId}/deletion-impact"));
+        Assert.Equal(1, impact.WeeklyPayouts);
+        Assert.Equal(900m, impact.PaidToTeacher);
 
         var blocked = await admin.DeleteAsync($"/api/teachers/{seeded.TeacherId}");
         Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
@@ -297,6 +311,9 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.Enrollments.AnyAsync(e => e.TeacherId == seeded.TeacherId));
         Assert.False(await db.Receivables.AnyAsync(r => r.Id == seeded.ReceivableId));
         Assert.False(await db.ProgressSummaries.AnyAsync(s => s.TeacherId == seeded.TeacherId));
+        Assert.False(await db.TeacherPayRates.AnyAsync(r => r.TeacherId == seeded.TeacherId));
+        Assert.False(await db.TeacherWeeklyPayouts.AnyAsync(p => p.TeacherId == seeded.TeacherId));
+        Assert.True(await db.Expenses.AnyAsync(e => e.Id == payoutExpense.Id));
         // Öğrencinin kendisi durur - silinen öğretmendi.
         Assert.True(await db.Students.AnyAsync(s => s.Id == seeded.StudentId));
     }
