@@ -2,8 +2,7 @@
 
 // Pazartesi-Cumartesi hafta seçici - öğretmen listesi ve benchmark ekranı ortak kullanır
 // (backend Benchmark.cs haftayı Pazartesi'ye normalize eder). Öğretmen ÖDEME haftası
-// (pazar → cumartesi, TeacherPayWeek) bu değildir; onun seçicisi
-// Giderler > Gider ekle > Haftalık sekmesinde (teacher-payout-form.tsx).
+// (TeacherPayWeek) da aynı Pzt-Cmt penceresidir; ödeme formu teacher-payout-form.tsx.
 import { Icon } from "@/components/icons";
 
 export function mondayOf(date: Date): Date {
@@ -24,6 +23,19 @@ export function toIsoDate(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+// Yakın haftalar için tarih yerine ad (kullanıcı isteği: "Bu hafta, Geçen hafta gibi isimler
+// kullan"); uzak haftalarda null döner, yalnızca tarih aralığı gösterilir.
+export function relativeWeekName(monday: Date, today = new Date()): string | null {
+  const weeks = Math.round((mondayOf(monday).getTime() - mondayOf(today).getTime()) / (7 * 24 * 60 * 60 * 1000));
+  return ({ [-2]: "İki hafta önce", [-1]: "Geçen hafta", 0: "Bu hafta", 1: "Gelecek hafta" } as Record<number, string>)[weeks] ?? null;
+}
+
+// "YYYY-MM-DD" → yerel gece yarısı (saat dilimine takılmadan).
+export function fromIsoDate(iso: string): Date {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function WeekPicker({ monday, onChange }: { monday: Date; onChange: (monday: Date) => void }) {
   const isCurrentWeek = monday.getTime() === mondayOf(new Date()).getTime();
   const fmt = (d: Date) => d.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
@@ -33,9 +45,10 @@ export function WeekPicker({ monday, onChange }: { monday: Date; onChange: (mond
         <button type="button" onClick={() => onChange(addDays(monday, -7))} className="icon-btn icon-btn-quiet" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
         <button type="button" onClick={() => onChange(addDays(monday, 7))} className="icon-btn icon-btn-quiet" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
       </div>
-      <button type="button" onClick={() => onChange(mondayOf(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="btn btn-quiet px-3 text-[.75rem] font-semibold disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bu hafta</button>
-      <span aria-live="polite" className="inline-flex min-h-11 items-center rounded-xl bg-[var(--surface-muted)] px-3 text-xs font-bold tabular-nums text-[#5c4d3f]">
-        {fmt(monday)} – {fmt(addDays(monday, 5))} (Pzt–Cmt)
+      {!isCurrentWeek && <button type="button" onClick={() => onChange(mondayOf(new Date()))} className="btn btn-quiet px-3 text-[.75rem] font-semibold">Bu haftaya dön</button>}
+      <span aria-live="polite" className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--surface-muted)] px-3 text-xs font-bold tabular-nums text-[#5c4d3f]">
+        {relativeWeekName(monday) && <span className="text-[var(--foreground)]">{relativeWeekName(monday)} ·</span>}
+        <span>{fmt(monday)} – {fmt(addDays(monday, 5))}</span>
       </span>
     </div>
   );

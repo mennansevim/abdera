@@ -215,7 +215,7 @@ aynı ayda düzeltme eski satırı `superseded_at` ile işaretler. Kişiye refer
 ## teacher_pay_rates, teacher_weekly_payouts (öğretmen haftalık ders ödemesi, O1)
 
 **AddTeacherWeeklyPayouts** (Billing modülü): öğretmenin ders başı ücreti ve bir ödeme
-haftasının (pazar → cumartesi) ödemesi. Ödeme aynı anda `expenses`'a Maaş kategorisiyle
+haftasının (pazartesi → cumartesi dahil) ödemesi. Ödeme aynı anda `expenses`'a Maaş kategorisiyle
 yazılır - payout satırı `expense_id` ile ona bağlanır, ayrı bir gider defteri açılmaz.
 
 ```
@@ -234,7 +234,11 @@ CHECK (lesson_count > 0)
 CHECK (week_end > week_start)
 ```
 
-`week_start` her zaman pazardır (uygulama katmanı normalize eder), `week_end` cumartesi.
+`week_start` her zaman pazartesidir (uygulama katmanı normalize eder), `week_end` cumartesi.
+
+**ShiftTeacherPayWeeksToMonday** (Billing, veri migration'ı - şema değişmez): ödeme haftası pazar
+başlangıcından pazartesiye geçince (O1) pazar başlangıçlı eski satırların `week_start`'ı bir gün
+ileri kaydırılır; `week_end`, ders sayısı ve tutar snapshot olarak kalır. `Down()` geri kaydırır.
 Hesabın tamamı satıra donar, bu yüzden ücret tablosu sürümlenmez. İki tablo da öğretmene
 referans verdiği için `PersonEraser`'ın öğretmen silme betiğindedir. `Down()` iki tabloyu
 düşürür; oluşmuş `expenses` satırlarına dokunmaz (finansal kayıt silinmez).

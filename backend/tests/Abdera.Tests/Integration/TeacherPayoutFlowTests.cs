@@ -71,7 +71,7 @@ public class TeacherPayoutFlowTests : IClassFixture<AbderaWebApplicationFactory>
         db.Lessons.Add(CompletedLesson(teacher.Id, week.End, 21, now));
         // Aynı haftada yoklaması girilmemiş bir ders - sayılmamalı.
         db.Lessons.Add(PlannedLesson(teacher.Id, week.Start.AddDays(2), 15, now));
-        // Sonraki haftanın pazar günü tamamlanmış ders - bu haftaya sayılmamalı.
+        // Haftanın bitimindeki pazar günü tamamlanmış ders - ödeme haftası Pzt-Cmt, sayılmamalı.
         db.Lessons.Add(CompletedLesson(teacher.Id, week.ExclusiveEnd, 10, now));
 
         await db.SaveChangesAsync();
@@ -149,7 +149,7 @@ public class TeacherPayoutFlowTests : IClassFixture<AbderaWebApplicationFactory>
             teacherId, week.Start, 3, 900m, null, null, null));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
 
-        // Aynı haftanın ortasındaki bir gün gönderilse bile hafta pazara normalize edilir,
+        // Aynı haftanın ortasındaki bir gün gönderilse bile hafta pazartesiye normalize edilir,
         // yani ikinci ödeme yine aynı haftaya denk gelir ve reddedilir.
         var second = await admin.PostAsJsonAsync("/api/teacher-payouts", new TeacherPayouts.CreateRequest(
             teacherId, week.Start.AddDays(3), 3, 900m, null, null, null));

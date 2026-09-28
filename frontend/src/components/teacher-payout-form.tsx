@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { fromIsoDate, relativeWeekName } from "@/components/week-picker";
 import { FormActions, FormMessage } from "@/components/ui";
 import { errorMessage } from "@/lib/library";
 import {
@@ -10,8 +11,8 @@ import {
   type TeacherPayoutWeekRow,
 } from "@/lib/teacher-payouts";
 
-// "Gider ekle" formunun "Haftalık" sekmesi: bir öğretmene bir ödeme haftasının (pazar →
-// cumartesi, docs/10-decisions.md O1) tamamlanan dersleri için ödeme. Öğretmen haftalık
+// "Gider ekle" formunun "Haftalık" sekmesi: bir öğretmene bir ödeme haftasının (pazartesi →
+// cumartesi dahil, docs/10-decisions.md O1) tamamlanan dersleri için ödeme. Öğretmen haftalık
 // ödemesinin TEK giriş noktası budur; Öğretmenler listesindeki "Ödeme yap" da Giderler
 // ekranını bu sekme, öğretmen ve hafta seçili olarak açar - ayrı bir form değildir.
 //
@@ -52,11 +53,11 @@ export function TeacherPayoutForm({ initialTeacherId, initialWeek, onClose }: { 
         </select>
       </label>
 
-      <div className="form-label">Ödeme haftası (Paz–Cmt)
+      <div className="form-label">Ödeme haftası (Pzt–Cmt)
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={() => payWeek && setWeek(shiftWeekStart(payWeek.weekStart, -1))} disabled={!payWeek} className="icon-btn icon-btn-quiet" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
           <span aria-live="polite" className="field flex flex-1 items-center justify-center text-sm font-semibold tabular-nums">
-            {payWeek ? formatPayWeek(payWeek.weekStart, payWeek.weekEnd) : "Yükleniyor…"}
+            {payWeek ? <>{relativeWeekName(fromIsoDate(payWeek.weekStart)) && <strong className="mr-1.5">{relativeWeekName(fromIsoDate(payWeek.weekStart))} ·</strong>}{formatPayWeek(payWeek.weekStart, payWeek.weekEnd)}</> : "Yükleniyor…"}
           </span>
           <button type="button" onClick={() => payWeek && setWeek(shiftWeekStart(payWeek.weekStart, 1))} disabled={!payWeek} className="icon-btn icon-btn-quiet" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
         </div>

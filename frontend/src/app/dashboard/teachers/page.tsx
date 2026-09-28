@@ -42,17 +42,16 @@ function TeachersPageContent() {
   const { data: instruments } = useInstruments();
   const { data: students } = useStudents();
   // Seçilen haftanın (Pazartesi-Cumartesi) ders ve tamamlanan ders sayısı - benchmark
-  // endpoint'i hesaplar (Benchmark.cs). Bu, ödeme haftası (pazar → cumartesi, O1) DEĞİL;
-  // ödeme Giderler > Gider ekle > Haftalık sekmesinden yapılır.
+  // endpoint'i hesaplar (Benchmark.cs). Ödeme haftası (O1) da aynı Pzt-Cmt
+  // penceresidir; ödeme Giderler > Gider ekle > Haftalık sekmesinden yapılır.
   const [weekMonday, setWeekMonday] = useState(() => mondayOf(new Date()));
   const { data: weekRows } = useTeacherBenchmark(toIsoDate(weekMonday), { enabled: isAdmin });
   const weekRowsByTeacher = useMemo(
     () => new Map((weekRows ?? []).map((row) => [row.teacherId, row])),
     [weekRows],
   );
-  // Ödeme durumu: seçilen Pzt-Cmt haftasıyla AYNI cumartesi kapanan ödeme haftası (pazar →
-  // cumartesi, docs/10-decisions.md O1). Sunucu verilen günü içeren ödeme haftasına
-  // normalize eder; pazartesiyi göndermek önceki pazardan başlayan haftayı getirir.
+  // Ödeme durumu: seçilen Pzt-Cmt haftasının ödemesi (docs/10-decisions.md O1 - ödeme haftası
+  // da pazartesi başlar, cumartesi kapanır).
   const { data: payWeek } = useTeacherPayoutWeek(toIsoDate(weekMonday), { enabled: isAdmin });
   const payRowsByTeacher = useMemo(
     () => new Map((payWeek?.teachers ?? []).map((row) => [row.teacherId, row])),
@@ -297,8 +296,7 @@ function WeeklyLessonsCells({ weekRow }: { weekRow: TeacherBenchmarkRow | null }
   </>;
 }
 
-// Listedeki "Ödeme" sütunu: seçilen haftanın cumartesi günü kapanan ödeme haftasının
-// (pazar → cumartesi, docs/10-decisions.md O1) durumu - Ödendi ya da Ödenmedi. O hafta
+// Listedeki "Ödeme" sütunu: seçilen Pzt-Cmt haftanın ödeme durumu (docs/10-decisions.md O1) - Ödendi ya da Ödenmedi. O hafta
 // tamamlanmış dersi olmayan öğretmende ödenecek bir şey yok, "—" gösterilir.
 function PayoutStatusCell({ payRow }: { payRow: TeacherPayoutWeekRow | null }) {
   const paid = payRow?.payout;

@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type { TeacherStatus } from "./people";
 
-// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Ödeme haftası PAZAR başlar,
-// CUMARTESİ kapanır ve ödeme o cumartesi yapılır - kullanıcı kuralı: "her cumartesi
-// tamamlanan derslerin ödemesini yapıyorum". Haftanın sınırını sunucu belirler; istemci
+// Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Ödeme haftası PAZARTESİ
+// dahil başlar, CUMARTESİ dahil kapanır ve ödeme o cumartesi yapılır - kullanıcı kuralı: "her
+// cumartesi tamamlanan derslerin ödemesini yapıyorum", "pazartesi dahil cumartesi dahil". Haftanın sınırını sunucu belirler; istemci
 // yalnızca dönüp gelen `weekStart`'ı ±7 gün kaydırır, böylece tarayıcının saat dilimi
 // okulunkinden farklı olduğunda bile yanlış haftaya bakılmaz.
 

@@ -8,33 +8,36 @@ public class TeacherPayoutDomainTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 28, 10, 0, 0, TimeSpan.Zero);
 
-    // Kullanıcı kuralı: "her cumartesi tamamlanan derslerin ödemesini yapıyorum" - hafta
-    // cumartesi kapanır, dolayısıyla pazar başlar. Haftanın HER günü aynı haftaya düşmeli.
+    // Kullanıcı kuralı: "pazartesi dahil cumartesi dahil" - ödeme haftası pazartesi başlar,
+    // cumartesi kapanır. Haftanın HER günü aynı haftaya düşmeli; pazar az önce kapanan haftaya
+    // bağlanır (hiçbir haftanın ders aralığına girmez, aşağıdaki test).
     [Theory]
-    [InlineData(2026, 9, 20)] // Pazar - haftanın ilk günü
-    [InlineData(2026, 9, 21)] // Pazartesi
+    [InlineData(2026, 9, 21)] // Pazartesi - haftanın ilk günü
     [InlineData(2026, 9, 24)] // Perşembe
     [InlineData(2026, 9, 26)] // Cumartesi - haftanın son günü
-    public void Containing_maps_every_day_to_the_sunday_to_saturday_week(int year, int month, int day)
+    [InlineData(2026, 9, 27)] // Pazar - kapanan haftaya
+    public void Containing_maps_every_day_to_the_monday_to_saturday_week(int year, int month, int day)
     {
         var week = TeacherPayWeek.Containing(new DateOnly(year, month, day));
 
-        Assert.Equal(new DateOnly(2026, 9, 20), week.Start);
+        Assert.Equal(new DateOnly(2026, 9, 21), week.Start);
         Assert.Equal(new DateOnly(2026, 9, 26), week.End);
-        Assert.Equal(DayOfWeek.Sunday, week.Start.DayOfWeek);
+        Assert.Equal(DayOfWeek.Monday, week.Start.DayOfWeek);
         Assert.Equal(DayOfWeek.Saturday, week.End.DayOfWeek);
     }
 
-    // Cumartesi biten hafta ile pazar başlayan sonraki hafta arasında boşluk/çakışma olmamalı -
-    // aksi halde bir cumartesi dersi hiçbir ödemeye ya da iki ödemeye birden düşerdi.
+    // Ders aralığı [Start, ExclusiveEnd) = pazartesi 00:00 - pazar 00:00: cumartesi gecesi dahil,
+    // pazar hiçbir haftada değil. Haftalar arasında çakışma olmamalı - aksi halde bir ders iki
+    // ödemeye birden düşerdi.
     [Fact]
-    public void Weeks_are_contiguous_and_the_exclusive_end_is_the_next_start()
+    public void Lesson_window_ends_before_sunday_and_weeks_never_overlap()
     {
         var week = TeacherPayWeek.Containing(new DateOnly(2026, 9, 24));
 
-        Assert.Equal(week.ExclusiveEnd, week.Next().Start);
-        Assert.Equal(week.Start, week.Previous().ExclusiveEnd);
-        Assert.Equal(7, week.ExclusiveEnd.DayNumber - week.Start.DayNumber);
+        Assert.Equal(DayOfWeek.Sunday, week.ExclusiveEnd.DayOfWeek);
+        Assert.Equal(6, week.ExclusiveEnd.DayNumber - week.Start.DayNumber);
+        Assert.Equal(week.ExclusiveEnd.AddDays(1), week.Next().Start);
+        Assert.Equal(week.Start, week.Previous().ExclusiveEnd.AddDays(1));
     }
 
     [Fact]
