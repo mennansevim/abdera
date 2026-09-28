@@ -251,6 +251,36 @@ Veri kaybı penceresi en fazla ~24 saat (son gece yedeğinden bu yana girilen ka
 kabul edilemezse sonraki adım `pgBackRest` ile sürekli WAL arşivi (Storage Box'a SFTP,
 dakika hassasiyetinde geri dönüş) - özel Postgres imajı ve ayrı izleme gerektirir, ayrı karar.
 
+### 7.1 Google Drive: Storage Box'ın yerine değil, yanına
+
+Uygulama bugün yalnızca SFTP'ye yedek gönderebiliyor (`Backup__Provider=Sftp`). Drive'ı
+**tek hedef** yapmak için iki yol var, ikisi de önerilmiyor:
+
+- Yeni bir `IBackupStorage` (Google Drive API) yazmak. Kod + test işi. Ayrıca kişisel Gmail
+  hesabında service account'ların kendi depolama kotası yok; kullanıcı OAuth token'ı gerekiyor.
+  Token süresi dolarsa ya da iptal edilirse yedek sessizce durur.
+- Sunucuda `rclone serve sftp` ile Drive'ı SFTP gibi göstermek. Kod gerekmez, ama yedeğin
+  çalışması sunucudaki ek bir servise ve yine bir OAuth token'ına bağlı kalır.
+
+Her iki durumda sunucu Drive'da silme yetkisine sahip olur. Storage Box snapshot'larının
+(katman 3) verdiği "sunucu ele geçirilse bile silinemez" korumasının Drive'da tam karşılığı
+yok; çöp kutusu ve sürüm geçmişi kısmi koruma sağlıyor.
+
+**Önerilen:** Storage Box birincil hedef kalsın (~4 €/ay, kod yok). Drive istenirse
+**ikinci, bağımsız kopya** olsun. Sunucuda günde bir kez `rclone`, Storage Box'taki şifreli
+dosyaları Drive'a kopyalar:
+
+```bash
+sudo apt -y install rclone
+rclone config          # "sb": sftp (Storage Box alt hesabı, port 23), "gdrive": drive
+# Günlük 04:30 (uygulama yedeği 03:00'te biter):
+( crontab -l 2>/dev/null; echo '30 4 * * * rclone copy sb:abdera gdrive:abdera-yedek --max-age 48h >> /var/log/abdera-rclone.log 2>&1' ) | crontab -
+```
+
+Dosyalar zaten AES-256 ile şifreli, Google içeriği okuyamaz. Veri yine de yurt dışında durur;
+KVKK değerlendirmesine dahil edilmeli. `rclone` yeni bir sunucu aracı (uygulama bağımlılığı
+değil). Drive kopyası kırılırsa uygulama bunu fark etmez; log'a ayda bir bakılmalı.
+
 **Otomatik izleme:** Ayrı bir cron gerekmez. Yedek başarısız olursa uygulama
 `Ops__AlertRecipients`'a e-posta atar ve `audit_log`'a `backup.failed` yazar. Hiç yedek
 alınmazsa (ör. API kapalıysa) `SystemHealthMonitor` son başarılı yedek 30 saati geçince
@@ -332,16 +362,16 @@ Okulun en sakin saatini seç (ör. pazar sabahı). Hedef kesinti 15–30 dk.
 
 ## 10. Günlük işletim
 
-**Güncelleme (deploy):**
+**Güncelleme (deploy):** Normal yol §13'teki GitHub Actions akışı. Actions çalışmıyorsa
+aynı betik sunucuda elle çağrılır. Betik deploy öncesi dökümü ve sağlık kontrolünü kendisi
+yapar:
 ```bash
-cd /opt/abdera
-git pull --ff-only origin main
-docker compose --profile prod up -d --build     # migration'lar api açılışında uygulanır
-docker image prune -f                           # eski imaj katmanları diski doldurmasın
+abdera-deploy "$(git ls-remote https://github.com/mennansevim/abdera.git refs/heads/main | cut -f1)"
 ```
-Şema değiştiren bir sürümden önce elle bir döküm al:
+§13 kurulmadan önceki ilk deploy'larda:
 ```bash
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > ~/pre-deploy-$(date +%F).sql.gz
+cd /opt/abdera && git pull --ff-only origin main
+docker compose --profile prod up -d --build && docker image prune -f
 ```
 
 **Kod geri alma:** `git checkout <önceki-commit> && docker compose --profile prod up -d --build`.
@@ -380,6 +410,195 @@ kullanılır (`docs/16-backup-restore.md`).
   Supabase'de yoktur; geri dönmeden önce buradan alınan döküm oraya yüklenmelidir.
 - 2 hafta sorunsuz geçince:
   - Supabase'den son bir arşiv dökümü alınıp proje silinir, Vercel projesi kapatılır.
-  - `.claude/skills/abdera-deploy` Vercel yerine bu runbook'un §10 akışına güncellenir.
+  - `.claude/skills/abdera-deploy` Vercel yerine §13'teki "Deploy" workflow'unu takip edecek
+    şekilde güncellenir.
+  - Vercel'in GitHub entegrasyonu kaldırılır. Aksi halde `main`'e her push Vercel'e de deploy
+    eder.
   - `docs/17-technical-architecture.md` §7 güncellenir ve `docs/10-decisions.md`'ye barındırma
     kararı yazılır.
+
+## 13. GitHub Actions ile otomatik deploy
+
+Hedef: `main`'e push → CI (`.github/workflows/ci.yml`) yeşil → sunucu o commit'e otomatik
+güncellenir → canlı kontrol. CI kırmızıysa deploy **hiç başlamaz**. Aynı anda iki deploy
+koşmaz. Sağlık kontrolü geçmezse sunucu önceki commit'e kendiliğinden döner.
+
+```
+push main ──► CI (test + build + e2e) ──yeşil──► Deploy workflow ──SSH──► abdera-deploy <sha>
+                                                                            ├─ deploy öncesi pg_dump
+                                                                            ├─ git checkout <sha>
+                                                                            ├─ compose up --build
+                                                                            ├─ /health bekle (3 dk)
+                                                                            └─ başarısızsa önceki commit
+```
+
+### 13.1 Tasarım kararları
+
+- **İmajlar sunucuda derlenir** (bugünkü compose akışı, kod değişikliği yok). CX33'te derleme
+  birkaç dakika sürer. İleride imajlar Actions'ta derlenip GHCR'ye itilebilir, sunucu yalnızca
+  çeker. Daha hızlı olur ve test edilen imajın aynısı canlıya çıkar, ama compose'da `image:`
+  değişikliği gerektirir. Ayrı iş.
+- **SSH anahtarı yalnızca tek bir komutu çalıştırabilir.** `authorized_keys`'te
+  `command=` + `restrict` ile zorlanır. Anahtar sızsa bile kabuk açılamaz; yalnızca `main`'de
+  zaten var olan bir commit deploy edilebilir.
+- **Betik repodan değil `/usr/local/bin`'den çalışır.** Betik repodaki kopyasından çalışsaydı,
+  `git checkout` onu koşarken değiştirebilirdi (bash betikleri satır satır okur).
+- **Deploy öncesi döküm zorunlu.** `pg_dump` başarısız olursa deploy durur. Son 5 döküm
+  `~/predeploy/` altında tutulur.
+- **Geri dönüş yalnızca kodu kapsar.** Yeni sürüm bir migration uyguladıysa şema geri gelmez.
+  Eklemeli migration'larda (yeni kolon/tablo) eski kod çalışmaya devam eder. Yıkıcı bir
+  migration'da `~/predeploy/` dökümünden elle geri yükleme gerekir (`abdera-migration`
+  skill'inin geri alınabilirlik kontrolü bu yüzden önemli).
+- **Port 22 herkese açık kalmalı.** GitHub runner'larının IP aralığı çok geniş, §1'deki
+  "yalnızca kendi IP'n" kısıtı bu akışla uyumsuz. Koruma: yalnızca anahtarla giriş (§2),
+  fail2ban ve zorlanmış komut.
+- **Onay adımı (opsiyonel).** GitHub Environment `production`'a "Required reviewers"
+  eklenirse her deploy telefondan tek tıkla onaylanmadan başlamaz. Başlangıçta açık tutmak
+  iyi olur; alışınca kapatılabilir.
+
+### 13.2 Repoya eklenecek dosyalar (tek PR)
+
+**`deploy/hetzner/abdera-deploy`**
+```bash
+#!/usr/bin/env bash
+# GitHub Actions'ın SSH ile çalıştırabildiği TEK komut (authorized_keys "command=").
+# Elle de çağrılabilir: abdera-deploy <40 karakterlik commit sha>
+set -euo pipefail
+
+SHA="${1:-${SSH_ORIGINAL_COMMAND:-}}"
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Geçersiz commit: '$SHA'" >&2; exit 2; }
+
+exec 9>/tmp/abdera-deploy.lock
+flock -n 9 || { echo "Başka bir deploy sürüyor." >&2; exit 3; }
+
+cd /opt/abdera
+git fetch --quiet origin main
+git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA main'de değil." >&2; exit 4; }
+
+PREV="$(git rev-parse HEAD)"
+if [ "$PREV" = "$SHA" ]; then echo "Zaten $SHA'da."; exit 0; fi
+
+# Deploy öncesi döküm - alınamazsa deploy yapılmaz (set -e + pipefail).
+mkdir -p ~/predeploy
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  | gzip > ~/predeploy/"$(date +%F-%H%M)-${PREV:0:7}.sql.gz"
+ls -1t ~/predeploy/*.sql.gz | tail -n +6 | xargs -r rm --
+
+deploy() {
+  git checkout --quiet --force --detach "$1"
+  docker compose --profile prod up -d --build --remove-orphans
+}
+healthy() {
+  for _ in $(seq 1 36); do
+    curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && return 0
+    sleep 5
+  done
+  return 1
+}
+
+deploy "$SHA"
+if healthy; then
+  docker image prune -f >/dev/null
+  echo "OK: ${PREV:0:7} -> ${SHA:0:7}"
+else
+  echo "Sağlık kontrolü geçmedi, ${PREV:0:7}'e geri dönülüyor." >&2
+  deploy "$PREV"
+  healthy || echo "UYARI: geri dönüşten sonra da sağlıksız - elle bak." >&2
+  exit 1
+fi
+```
+
+**`.github/workflows/deploy.yml`**
+```yaml
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Deploy edilecek commit (40 karakter). Boş = main'in son hali. Geri almak için eski bir commit ver."
+        required: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # CI PR'larda da koşuyor; yalnızca main'e yapılan push'un yeşil CI'ı deploy eder.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://panel.okulum.com
+    steps:
+      - name: Hedef commit
+        id: target
+        env:
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          SHA="${RUN_SHA:-$INPUT_SHA}"
+          [ -n "$SHA" ] || SHA="$(git ls-remote "https://github.com/$REPO.git" refs/heads/main | cut -f1)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Sunucuda deploy
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy "deploy@$HOST" "$SHA"
+
+      - name: Canlı kontrol
+        run: |
+          curl -fsS --retry 5 --retry-delay 5 https://panel.okulum.com/health
+          curl -fsS -o /dev/null https://panel.okulum.com/login
+```
+
+### 13.3 Bir kerelik kurulum
+
+1. **Deploy anahtarı** (kendi bilgisayarında; sunucuda bırakma):
+   ```bash
+   ssh-keygen -t ed25519 -N "" -f abdera-actions -C github-actions-deploy
+   ```
+2. **Sunucuda** (PR merge edildikten, `/opt/abdera` güncellendikten sonra):
+   ```bash
+   sudo install -m 755 /opt/abdera/deploy/hetzner/abdera-deploy /usr/local/bin/abdera-deploy
+   # abdera-actions.pub içeriğini zorlanmış komutla ekle:
+   echo 'command="/usr/local/bin/abdera-deploy",restrict <abdera-actions.pub içeriği>' >> ~/.ssh/authorized_keys
+   ```
+   Betik repoda değişirse bu `install` satırı yeniden çalıştırılır. Betik kendini
+   güncellemez; bu bilinçli bir tercih.
+3. **GitHub** → repo *Settings → Environments → New environment* → `production`:
+   - *Deployment branches*: yalnızca `main`
+   - *Required reviewers*: kendin (opsiyonel, §13.1)
+   - *Environment secrets*:
+     - `DEPLOY_HOST` = sunucu IP'si
+     - `DEPLOY_SSH_KEY` = `abdera-actions` (private key) dosyasının tamamı
+     - `DEPLOY_KNOWN_HOSTS` = `ssh-keyscan -t ed25519 <SUNUCU_IP>` çıktısı. Sunucunun kimliği
+       sabitlenir, araya giren biri anahtarı kullanamaz.
+4. **Deneme:** *Actions → Deploy → Run workflow* (sha boş). Yeşil bitmeli. Sunucuda
+   `ls ~/predeploy` ile yeni bir döküm görülmeli.
+5. Yerel `abdera-actions` private key dosyasını sil (kopyası yalnızca GitHub secret'ında).
+
+### 13.4 Kullanım
+
+- **Normal:** `main`'e merge/push → ~10–15 dk sonra canlıda. CI süresi dahil; takip Actions
+  sekmesinde.
+- **Geri alma:** *Actions → Deploy → Run workflow* → `sha` = önceki iyi commit. Betik yalnızca
+  `main` geçmişindeki commit'leri kabul eder.
+- **Başarısız deploy:** Workflow kırmızı olur, GitHub e-posta gönderir. Sunucu zaten önceki
+  sürüme dönmüştür. Log: Actions çıktısı + sunucuda `docker compose logs api`.
