@@ -2,6 +2,55 @@
 
 Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma günlüğü. Her faz tamamlandığında buraya bir bölüm eklenir; bir sonraki oturum en üstteki "Devam noktası" bölümünü okuyarak başlar. Tasarım kararları için `10-decisions.md`, API yüzeyi için `07-api.md`, migration sırası için `08-migrations.md` — burada yalnızca "ne yapıldı, ne kaldı, nasıl doğrulandı" tutulur.
 
+## "Yoklama" sekmesi — geriye dönük döküm ve öğretmen kırılımı (2026-09-28)
+
+Kullanıcı isteği: tamamlanan dersleri tarih tarih, geriye dönük görebilmek; öğretmen bazında
+kırılım almak; öğrencinin derse gelip gelmediğini görebilmek. Yoklama verisi zaten vardı
+(`lesson_attendances`, `MarkAttendance.cs`) ama yalnızca tek bir dersin içinden okunabiliyordu —
+okul geneli bir geçmiş görünümü yoktu.
+
+**Backend** `Modules/Attendance/Features/AttendanceHistory.cs` — tek uç nokta
+`GET /api/attendance/history`. Filtreler: `from`/`to` (verilmezse son 30 gün), `teacherId`,
+`studentId`, `status`, `page`/`pageSize`. Yanıt üç parçadan oluşur: sayfalanmış ders dökümü
+(`PagedResponse<HistoryItem>`), öğretmen kırılımı ve aralığın tamamı için özet sayaçlar.
+
+Üç tasarım kararı:
+- **Yoklaması girilmemiş geçmiş dersler de listelenir** (LEFT JOIN, `attendanceStatus: null`).
+  "Hangi ders işlendi ama yoklaması hiç girilmedi" boşluğunu görmek bu ekranın asıl faydası;
+  bu yüzden filtre enum'ı `LessonAttendance.Status` değil, `NotMarked`'ı da kapsayan
+  `AttendanceFilter`.
+- **Henüz başlamamış dersler dökümde yer almaz** (`StartAt < now`), aksi halde gelecek haftanın
+  dersleri "yoklama girilmedi" olarak sayılıp o sayacı anlamsızlaştırıyordu. Öğretmen dersi
+  erkenden işaretlediyse (yoklama kaydı varsa) satır yine görünür. `CANCELLED` ve `RESCHEDULED`
+  satırlar da elenir — biri hiç yapılmadı, diğeri yeni saatiyle zaten ayrı bir satır.
+- **Kırılım sayfalanmaz**: aralığın tamamı üzerinden gruplanır, böylece sayfa değiştirilince
+  öğretmen özeti sabit kalır.
+
+Kapsam `AuthContext.ResolveTeacherScopeAsync` ile: Admin okul genelini, Teacher yalnızca kendi
+derslerini görür — URL'de `teacherId` gönderse bile oturumdan çözümlenen kapsam kazanır.
+`OrderBy`, record projeksiyonundan önce ham/anonim tip üzerinde (CLAUDE.md kuralı); gruplama da
+anonim ara tipe projekte edilip record'a bellekte çevriliyor.
+
+**Frontend** `/dashboard/attendance` (kenar çubuğunda "Eğitim" bölümünde "Yoklama", her iki
+role de açık). Tarih aralığı + hızlı aralık düğmeleri (son 7/30 gün, bu ay, son 3 ay), öğretmen
+(yalnızca Admin) ve öğrenci seçimi, durum çipleri; üstte beş özet kutusu, altında tıklanabilir
+öğretmen kırılım kartları (Admin'de karta basınca liste o öğretmene daralır), en altta ders
+dökümü **güne göre kümelenmiş** olarak. Ekran salt okunur — yoklama GİRME işi dersin
+öğretmeninin "Bugün" ekranındaki akışında kalır, ikinci bir giriş noktası açılmadı.
+Durum etiketleri `teacher-today-lessons.tsx` ile birebir aynı (Geldi / Gelmedi / Mazeretli).
+
+### Doğrulama
+
+- Frontend: `npm run build` (28 sayfa) ve `npx eslint` değişen dosyalarda temiz;
+  `npx tsc --noEmit` yalnızca iki **önceden var olan** `LayoutProps` hatasını veriyor
+  (bunlar `next build` sırasında üretilen tiplerden geliyor, benim dosyalarımla ilgisi yok).
+- Backend: **bu oturumda derlenmedi/koşulmadı** — konteynerde .NET SDK yok ve
+  `builds.dotnet.microsoft.com` ağ politikasıyla kapalı. İki entegrasyon testi yazıldı
+  (`AttendanceAndChangesFlowTests.Attendance_history_lists_past_lessons_with_teacher_breakdown`
+  ve `..._is_scoped_to_the_signed_in_teachers_own_lessons`); handler joins + LEFT JOIN + OrderBy
+  içerdiği için CLAUDE.md kuralı gereği gerçek HTTP üzerinden çağrılıyorlar. **Bir sonraki
+  oturumda `dotnet test` ile koşulmalı.**
+
 ## Ana ekranda "Yaklaşan Doğum Günleri" bölümü (2026-09-12)
 
 Kullanıcı isteği: `GET /api/dashboard/today`'in `upcomingBirthdays` alanı önceden yalnızca bir

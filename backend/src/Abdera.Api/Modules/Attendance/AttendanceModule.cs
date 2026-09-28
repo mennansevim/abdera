@@ -8,5 +8,6 @@ public static class AttendanceModule
     {
         app.MapRsvp();
         app.MapMarkAttendance();
+        app.MapAttendanceHistory();
     }
 }
