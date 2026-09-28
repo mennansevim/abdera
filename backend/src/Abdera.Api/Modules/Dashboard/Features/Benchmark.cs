@@ -17,7 +17,8 @@ public static class Benchmark
     public record TeacherRow(
         Guid TeacherId, string TeacherName, int ActiveStudents, int ActiveEnrollments,
         int Lessons, int Notes, int ApprovedComments, int Present, int Absent, int Excused,
-        double AttendanceRate, double Score);
+        double AttendanceRate, double Score,
+        int WeekLessons, int WeekCompleted, double WeekAttendanceRate);
 
     public record StudentRow(
         Guid StudentId, string StudentName, int ActiveEnrollments, int Lessons,
@@ -33,8 +34,15 @@ public static class Benchmark
     private static double Ratio(int part, int whole) => whole == 0 ? 0 : (double)part / whole;
     private static double Norm(int value, int max) => max == 0 ? 0 : (double)value / max;
 
-    private static async Task<IResult> TeachersAsync(AbderaDbContext db)
+    private static async Task<IResult> TeachersAsync(AbderaDbContext db, IClock clock)
     {
+        // Bu haftanın Pazartesi 00:00 - Pazar 00:00 (okul saat dilimi) aralığı: Pazar'ı dışarıda
+        // bırakır, yani Pazartesi-Cumartesi dersleri.
+        var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var mondayLocal = todayLocal.AddDays(-(((int)todayLocal.DayOfWeek + 6) % 7));
+        var weekStartUtc = LessonGenerator.ToUtcInstant(mondayLocal, TimeOnly.MinValue, clock.SchoolTimeZone);
+        var weekEndUtc = LessonGenerator.ToUtcInstant(mondayLocal.AddDays(6), TimeOnly.MinValue, clock.SchoolTimeZone);
+
         var teachers = await db.Teachers
             .Where(t => t.Status == TeacherStatus.Active)
             .Select(t => new { t.Id, t.FirstName, t.LastName })
@@ -73,8 +81,31 @@ public static class Benchmark
             })
             .ToListAsync()).ToDictionary(x => x.TeacherId, x => x);
 
+        // bu haftanın dersleri: toplam (iptal/ertelenen hariç) + tamamlanan
+        var weekLessonsByTeacher = (await db.Lessons
+            .Where(l => l.StartAt >= weekStartUtc && l.StartAt < weekEndUtc
+                && l.Status != LessonStatus.Cancelled && l.Status != LessonStatus.Rescheduled)
+            .GroupBy(l => l.TeacherId)
+            .Select(g => new { TeacherId = g.Key, Total = g.Count(), Completed = g.Count(l => l.Status == LessonStatus.Completed) })
+            .ToListAsync()).ToDictionary(x => x.TeacherId, x => x);
+
+        // bu haftanın yoklaması: dersin öğretmeni bazında
+        var weekAttByTeacher = (await (
+            from a in db.LessonAttendances
+            join l in db.Lessons on a.LessonId equals l.Id
+            where l.StartAt >= weekStartUtc && l.StartAt < weekEndUtc
+            group a by l.TeacherId into g
+            select new
+            {
+                TeacherId = g.Key,
+                Present = g.Count(a => a.Status == AttendanceStatus.Present),
+                Total = g.Count(),
+            }).ToListAsync()).ToDictionary(x => x.TeacherId, x => x);
+
         var rows = teachers.Select(t =>
         {
+            weekLessonsByTeacher.TryGetValue(t.Id, out var week);
+            weekAttByTeacher.TryGetValue(t.Id, out var weekAtt);
             studentsByTeacher.TryGetValue(t.Id, out var se);
             lessonsByTeacher.TryGetValue(t.Id, out var lessons);
             notesByTeacher.TryGetValue(t.Id, out var notes);
@@ -87,6 +118,8 @@ public static class Benchmark
                 Lessons = lessons, Notes = notes?.Notes ?? 0, Approved = notes?.Approved ?? 0,
                 Present = present, Absent = absent, Excused = excused,
                 AttendanceRate = Ratio(present, present + absent + excused),
+                WeekLessons = week?.Total ?? 0, WeekCompleted = week?.Completed ?? 0,
+                WeekAttendanceRate = Ratio(weekAtt?.Present ?? 0, weekAtt?.Total ?? 0),
             };
         }).ToList();
 
@@ -104,7 +137,8 @@ public static class Benchmark
                 0.15 * Norm(x.Approved, maxApproved) +
                 0.15 * x.AttendanceRate);
             return new TeacherRow(x.Id, x.Name, x.Students, x.Enrollments, x.Lessons, x.Notes, x.Approved,
-                x.Present, x.Absent, x.Excused, Math.Round(x.AttendanceRate, 3), Math.Round(score, 1));
+                x.Present, x.Absent, x.Excused, Math.Round(x.AttendanceRate, 3), Math.Round(score, 1),
+                x.WeekLessons, x.WeekCompleted, Math.Round(x.WeekAttendanceRate, 3));
         }).OrderByDescending(r => r.Score).ThenBy(r => r.TeacherName).ToList();
 
         return Results.Ok(result);

@@ -17,6 +17,9 @@ export interface TeacherBenchmarkRow {
   excused: number;
   attendanceRate: number; // 0..1
   score: number; // 0..100
+  weekLessons: number; // bu hafta Pzt-Cmt, iptal/ertelenen hariç
+  weekCompleted: number; // bu hafta tamamlanan
+  weekAttendanceRate: number; // 0..1, bu haftanın yoklaması
 }
 
 export interface StudentBenchmarkRow {

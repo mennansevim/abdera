@@ -91,6 +91,7 @@ function TeachersTab() {
     <div className="space-y-3">
       <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Öğretmen ara…" />
       <div className="app-card divide-y divide-[var(--line)]">
+        <p className="px-4 pt-3 text-meta text-[var(--muted)]">Ders, tamamlanan ve katılım bu haftanın (Pazartesi–Cumartesi) verisidir.</p>
         {rows.map((r: TeacherBenchmarkRow) => (
           <div key={r.teacherId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
@@ -101,10 +102,9 @@ function TeachersTab() {
             <div className="min-w-0 flex-1"><ScoreBar score={r.score} /></div>
             <div className="flex flex-wrap gap-1.5">
               <Metric label="Öğrenci" value={r.activeStudents} />
-              <Metric label="Ders" value={r.lessons} />
-              <Metric label="Not" value={r.notes} />
-              <Metric label="Onaylı yorum" value={r.approvedComments} />
-              <Metric label="Katılım" value={`${Math.round(r.attendanceRate * 100)}%`} />
+              <Metric label="Hafta ders" value={r.weekLessons} />
+              <Metric label="Tamamlanan" value={r.weekCompleted} />
+              <Metric label="Hafta katılım" value={`${Math.round(r.weekAttendanceRate * 100)}%`} />
             </div>
           </div>
         ))}
