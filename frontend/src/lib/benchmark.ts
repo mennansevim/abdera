@@ -1,7 +1,7 @@
 // Benchmark modülü hook'ları - docs/13 Pillar F. GET /api/benchmark/{teachers,students} (Admin).
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 
 export interface TeacherBenchmarkRow {
@@ -17,9 +17,9 @@ export interface TeacherBenchmarkRow {
   excused: number;
   attendanceRate: number; // 0..1
   score: number; // 0..100
-  weekLessons: number; // bu hafta Pzt-Cmt, iptal/ertelenen hariç
-  weekCompleted: number; // bu hafta tamamlanan
-  weekAttendanceRate: number; // 0..1, bu haftanın yoklaması
+  weekLessons: number; // seçilen hafta Pzt-Cmt, iptal/ertelenen hariç
+  weekCompleted: number; // seçilen haftada tamamlanan
+  weekAttendanceRate: number; // 0..1, seçilen haftanın yoklaması
 }
 
 export interface StudentBenchmarkRow {
@@ -34,11 +34,14 @@ export interface StudentBenchmarkRow {
   score: number;
 }
 
-export function useTeacherBenchmark() {
+// weekStart: seçilen haftanın Pazartesi'si (yyyy-MM-dd). Haftalık metrikler bu haftaya göre.
+export function useTeacherBenchmark(weekStart: string) {
   return useQuery({
-    queryKey: ["benchmark", "teachers"],
-    queryFn: () => api.get<TeacherBenchmarkRow[]>("/api/benchmark/teachers"),
+    queryKey: ["benchmark", "teachers", weekStart],
+    queryFn: () => api.get<TeacherBenchmarkRow[]>(`/api/benchmark/teachers?weekStart=${weekStart}`),
     staleTime: 60_000,
+    // hafta değişirken liste (ve hafta seçici) iskelete düşmesin
+    placeholderData: keepPreviousData,
   });
 }
 

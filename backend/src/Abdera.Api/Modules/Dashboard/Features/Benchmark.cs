@@ -34,12 +34,13 @@ public static class Benchmark
     private static double Ratio(int part, int whole) => whole == 0 ? 0 : (double)part / whole;
     private static double Norm(int value, int max) => max == 0 ? 0 : (double)value / max;
 
-    private static async Task<IResult> TeachersAsync(AbderaDbContext db, IClock clock)
+    private static async Task<IResult> TeachersAsync(DateOnly? weekStart, AbderaDbContext db, IClock clock)
     {
-        // Bu haftanın Pazartesi 00:00 - Pazar 00:00 (okul saat dilimi) aralığı: Pazar'ı dışarıda
-        // bırakır, yani Pazartesi-Cumartesi dersleri.
-        var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
-        var mondayLocal = todayLocal.AddDays(-(((int)todayLocal.DayOfWeek + 6) % 7));
+        // Seçilen haftanın (varsayılan: bu hafta) Pazartesi 00:00 - Pazar 00:00 (okul saat dilimi)
+        // aralığı: Pazar'ı dışarıda bırakır, yani Pazartesi-Cumartesi dersleri. Verilen gün
+        // haftanın herhangi bir günü olabilir, Pazartesi'ye normalize edilir.
+        var anchor = weekStart ?? DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var mondayLocal = anchor.AddDays(-(((int)anchor.DayOfWeek + 6) % 7));
         var weekStartUtc = LessonGenerator.ToUtcInstant(mondayLocal, TimeOnly.MinValue, clock.SchoolTimeZone);
         var weekEndUtc = LessonGenerator.ToUtcInstant(mondayLocal.AddDays(6), TimeOnly.MinValue, clock.SchoolTimeZone);
 
