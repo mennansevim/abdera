@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
@@ -44,7 +43,7 @@ function TeachersPageContent() {
   const { data: students } = useStudents();
   // Seçilen haftanın (Pazartesi-Cumartesi) ders ve tamamlanan ders sayısı - benchmark
   // endpoint'i hesaplar (Benchmark.cs). Bu, ödeme haftası (pazar → cumartesi, O1) DEĞİL;
-  // ödeme yalnızca /dashboard/teachers/weekly-payouts ekranında.
+  // ödeme Giderler > Gider ekle > Haftalık sekmesinden yapılır.
   const [weekMonday, setWeekMonday] = useState(() => mondayOf(new Date()));
   const { data: weekRows } = useTeacherBenchmark(toIsoDate(weekMonday), { enabled: isAdmin });
   const weekRowsByTeacher = useMemo(
@@ -130,7 +129,6 @@ function TeachersPageContent() {
           : `${activeTeacherCount} aktif öğretmen · ${studentCount} öğrenci`}
         actions={<>
           <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Ad veya enstrüman ara…" />
-          {isAdmin && <Link href="/dashboard/teachers/weekly-payouts" className="btn btn-quiet">Haftalık ödeme</Link>}
           {isAdmin && <AddButton label="Öğretmen ekle" onClick={() => setShowCreate(true)} />}
         </>}
       />
@@ -173,7 +171,7 @@ function TeachersPageContent() {
         {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!loading && !isError && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
         {!loading && !isError && <ul className="divide-y divide-[var(--line)]">
-          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} payRow={payRowsByTeacher.get(teacher.id) ?? null} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
+          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} payRow={payRowsByTeacher.get(teacher.id) ?? null} weekMonday={weekMonday} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
         </ul>}
       </div>
 
@@ -190,7 +188,7 @@ function TeachersPageContent() {
   );
 }
 
-function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, payRow, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; payRow: TeacherPayoutWeekRow | null; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
+function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, payRow, weekMonday, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; payRow: TeacherPayoutWeekRow | null; weekMonday: Date; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
   const router = useRouter();
   const [studentSearch, setStudentSearch] = useState("");
   const [detailTab, setDetailTab] = useState<"students" | "availability">("students");
@@ -225,7 +223,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
       <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem]">
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
-          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders` : ""}{payRow?.payout ? " · ödendi" : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
+          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders` : ""}{payRow?.payout ? " · ödendi" : payRow && payRow.completedLessons > 0 ? " · ödenmedi" : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
         </span>
         <span className="text-meta hidden truncate md:block">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"}</span>
         <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{groupedStudents.length}</strong></span>
@@ -235,7 +233,9 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
       </button>
       {isAdmin && <RowMenu label={`${teacher.firstName} ${teacher.lastName} işlemleri`}>{(close) => <>
         {teacher.status === "Active" && <RowMenuItem icon="plus" onClick={() => { close(); setShowAddForm(true); }}>Öğrenci ekle</RowMenuItem>}
-        <RowMenuItem icon="wallet" onClick={() => { close(); router.push("/dashboard/teachers/weekly-payouts"); }}>Haftalık ödeme</RowMenuItem>
+        {/* Ödeme Giderler ekranındaki "Gider ekle > Haftalık" formunda yapılır; buradan o form
+            öğretmen ve seçili haftayla açılır (ikinci bir ödeme formu değil). */}
+        {!payRow?.payout && <RowMenuItem icon="wallet" onClick={() => { close(); router.push(`/dashboard/costs?odeme=${teacher.id}&hafta=${toIsoDate(weekMonday)}`); }}>Ödeme yap</RowMenuItem>}
         <RowMenuItem icon="pencil" onClick={() => { close(); setShowEditForm(true); }}>Bilgileri düzenle</RowMenuItem>
         <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil</RowMenuItem>
       </>}</RowMenu>}
@@ -298,21 +298,14 @@ function WeeklyLessonsCells({ weekRow }: { weekRow: TeacherBenchmarkRow | null }
 }
 
 // Listedeki "Ödeme" sütunu: seçilen haftanın cumartesi günü kapanan ödeme haftasının
-// (pazar → cumartesi) durumu. Tutar ödeme haftasının tamamlanan derslerinden hesaplanır, pazar
-// günü ders varsa soldaki Pzt-Cmt sayısından farklı olabilir. Ödemenin kendisi burada yapılmaz -
-// tek giriş noktası /dashboard/teachers/weekly-payouts (CLAUDE.md: aynı iş için ikinci giriş
-// noktası açma).
+// (pazar → cumartesi, docs/10-decisions.md O1) durumu - Ödendi ya da Ödenmedi. O hafta
+// tamamlanmış dersi olmayan öğretmende ödenecek bir şey yok, "—" gösterilir.
 function PayoutStatusCell({ payRow }: { payRow: TeacherPayoutWeekRow | null }) {
   const paid = payRow?.payout;
+  if (!paid && !(payRow && payRow.completedLessons > 0)) return <span className="hidden text-right text-[.75rem] text-[var(--muted)] md:block" aria-label="Ödeme yok">—</span>;
   return (
-    <span className="hidden text-right text-[.75rem] md:block">
-      {paid
-        ? <span className="font-bold text-[var(--success-strong)]">Ödendi · {payoutMoney(paid.amount, paid.currency)}</span>
-        : payRow && payRow.completedLessons > 0 && payRow.computedAmount !== null
-          ? <span className="font-semibold text-[var(--warning-strong)]">{payoutMoney(payRow.computedAmount, payRow.currency)} ödenecek</span>
-          : payRow && payRow.completedLessons > 0
-            ? <span className="text-[var(--muted)]">Ücret tanımsız</span>
-            : <span className="text-[var(--muted)]" aria-label="Ödeme yok">—</span>}
+    <span className="hidden text-right md:block" title={paid ? `${payoutMoney(paid.amount, paid.currency)} · ${paid.lessonCount} ders` : undefined}>
+      <span className={`inline-block rounded-full px-2 py-1 text-[.75rem] font-bold ${paid ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--warning-soft)] text-[var(--warning-strong)]"}`}>{paid ? "Ödendi" : "Ödenmedi"}</span>
     </span>
   );
 }

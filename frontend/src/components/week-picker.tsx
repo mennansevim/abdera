@@ -2,7 +2,8 @@
 
 // Pazartesi-Cumartesi hafta seçici - öğretmen listesi ve benchmark ekranı ortak kullanır
 // (backend Benchmark.cs haftayı Pazartesi'ye normalize eder). Öğretmen ÖDEME haftası
-// (pazar → cumartesi, TeacherPayWeek) bu değildir; onun seçicisi weekly-payouts'ta.
+// (pazar → cumartesi, TeacherPayWeek) bu değildir; onun seçicisi
+// Giderler > Gider ekle > Haftalık sekmesinde (teacher-payout-form.tsx).
 import { Icon } from "@/components/icons";
 
 export function mondayOf(date: Date): Date {
