@@ -29,6 +29,10 @@ test("quick-add dialog stays centered regardless of the double-click position", 
       await route.fulfill({ json: { items: [], totalCount: 0, page: 1, pageSize: 50 } });
       return;
     }
+    if (pathname === "/api/me/notifications") {
+      await route.fulfill({ json: { items: [], unreadCount: 0 } });
+      return;
+    }
     await route.fulfill({ json: [] });
   });
 

@@ -217,8 +217,13 @@ test.describe.serial("Abdera critical role flows", () => {
       response.request().method() === "POST");
     await paymentForm.getByRole("button", { name: "Ödemeyi kaydet" }).click();
     expect((await paymentSaved).ok()).toBeTruthy();
-    // Odeme sonrasi liste tazelenir ve ilgili satir kismi duruma duser.
-    await expect(page.getByText("Kısmi ödendi").first()).toBeVisible();
+    // Sunucuda aidat kısmi ödemeye düşer. Ekranda ayrı bir "Kısmi" rozeti yok (kullanıcı
+    // kuralı: yalnızca ödendi/ödenmedi) - kart kalan tutarı ve kaydedilen ödeme satırını gösterir.
+    const afterPayment = await (await page.request.get(`${apiUrl}/api/students/${student.id}/billing`)).json();
+    expect(afterPayment.flatMap((row: { receivables: { period: string; status: string }[] }) => row.receivables)
+      .some((receivable: { period: string; status: string }) => receivable.period === currentPeriod && receivable.status === "Partial")).toBeTruthy();
+    await expect(paymentForm).toHaveCount(0);
+    await expect(page.getByText(/ kaldı$/).first()).toBeVisible();
   });
 
   // Kullanıcı isteği: "takvimde ders taşındığında ilgili öğretmenin ekranına bildirim

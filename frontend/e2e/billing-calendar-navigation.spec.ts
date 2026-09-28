@@ -33,7 +33,7 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     expect(seed.ok()).toBeTruthy();
   });
 
-  test("ay seçimini temizlemek modalı çökertmez ve tahsilatı engeller", async ({ page }) => {
+  test("ilk dönem ay/yıl menüleriyle değişir, modal çökmez ve tahsilat açık kalır", async ({ page }) => {
     const browserErrors: Error[] = [];
     page.on("pageerror", (error) => browserErrors.push(error));
     await createBillingFixture(page);
@@ -52,13 +52,18 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     const coursePicker = dialog.getByLabel("Hangi kurs?");
     if (await coursePicker.isVisible()) await coursePicker.selectOption(due!.enrollmentId);
 
-    const monthPicker = dialog.getByLabel("İlk dönem");
+    // İlk dönem artık iki açılır menü (MonthInput: ay + yıl) - boş bırakılamaz, bu yüzden
+    // eski "alanı temizle" senaryosu yerine menülerden başka bir dönem seçilir.
+    const monthPicker = dialog.getByLabel("İlk dönem - ay");
+    const yearPicker = dialog.getByLabel("İlk dönem - yıl");
     await expect(monthPicker).toBeVisible();
-    await monthPicker.fill("");
+    await expect(yearPicker).toBeVisible();
+    await monthPicker.selectOption("1");
+    await yearPicker.selectOption(String(new Date().getFullYear()));
+    await expect(monthPicker).toHaveValue("1");
 
-    await expect(monthPicker).toHaveAttribute("aria-invalid", "true");
-    await expect(dialog.getByRole("button", { name: /Elden alındı|ayı nakit ödendi/ })).toBeDisabled();
-    await expect(dialog.getByRole("button", { name: /Havale geldi|aylık havale geldi/ })).toBeDisabled();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("İlk dönemi seçin")).toHaveCount(0);
     expect(browserErrors).toEqual([]);
   });
 
