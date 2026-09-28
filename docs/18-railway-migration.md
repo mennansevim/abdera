@@ -192,6 +192,14 @@ Seçenekler:
 - **(b) Hobby + HTTP API'li e-posta sağlayıcısı** (Resend/Postmark, 443 üzerinden) — yeni bir
   `IEmailSender` implementasyonu gerekir (yeni bağımlılık değil, düz `HttpClient`). CLAUDE.md
   gereği önce `docs/10-decisions.md`'de onaylanmalı.
+- **(b′) Hobby + Resend SMTP, port 2587** — kod değişmez. Resend, engellenen portlara alternatif
+  olarak 2587'yi (STARTTLS) yayınlıyor; `SmtpEmailSender` (`System.Net.Mail`, STARTTLS)
+  bununla çalışır. Gönderen adres alan adından olur (ör. `bildirim@okulum.com`, SPF/DKIM
+  kaydıyla). `Email__Smtp__Host=smtp.resend.com`, `Port=2587`, `Username=resend`,
+  `Password=<Resend API anahtarı>`, `UseSsl=true`. **Risk:** Railway resmi olarak Hobby'de
+  HTTPS API öneriyor; bu port ileride kapatılırsa (b)'ye geçilir. Kurulumda test e-postasıyla
+  doğrulanmalı. E-posta yalnızca alarm için değil, ders değişikliği personel bildirimleri
+  (`StaffNotifier`, M4) için de kullanılıyor.
 - **(c) Hobby + `Email__Provider=Fake`** — alarm e-postası yok; kabul edilebilir değil, çünkü
   yedek başarısızlığını haber veren tek kanal bu.
 
