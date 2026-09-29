@@ -104,6 +104,32 @@ export function useNotifications(status?: NotificationJobStatus, page: number = 
   });
 }
 
+// Gelen WhatsApp olayları (whatsapp_webhook_events): veliden gelen mesaj + bot cevabının
+// neden gitmediği, ve Meta'nın giden mesaj için bildirdiği teslim hatası.
+export type WebhookEventStatus = "Received" | "Processed" | "Failed";
+
+export interface WebhookEvent {
+  id: string;
+  receivedAt: string;
+  eventType: string;
+  status: WebhookEventStatus;
+  processingError: string | null;
+  fromPhoneNumber: string | null;
+  guardianName: string | null;
+  text: string | null;
+  deliveryStatus: string | null;
+  deliveryError: string | null;
+}
+
+export function useWebhookEvents(status?: WebhookEventStatus, page: number = 1, pageSize: number = 50) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (status) params.set("status", status);
+  return useQuery({
+    queryKey: ["webhook-events", status ?? "all", page, pageSize],
+    queryFn: () => api.get<PagedResponse<WebhookEvent>>(`/api/notifications/webhook-events?${params.toString()}`),
+  });
+}
+
 export function useRetryNotification() {
   const queryClient = useQueryClient();
   return useMutation({

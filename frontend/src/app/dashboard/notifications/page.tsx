@@ -11,9 +11,11 @@ import {
   useRetryNotification,
   useUpdateAutomationSettings,
   useUpdateMessageTemplate,
+  useWebhookEvents,
   type MessageTemplate,
   type NotificationJobStatus,
   type NotificationJobType,
+  type WebhookEventStatus,
 } from "@/lib/messaging";
 
 const STATUS_LABELS: Record<NotificationJobStatus, string> = {
@@ -109,7 +111,7 @@ export default function NotificationsPage() {
 
 // Mesaj şablonları/otomasyon ayarları tamamen Admin'e özel (docs/04-permissions.md).
 function NotificationsPageContent() {
-  const [activeTab, setActiveTab] = useState<"activity" | "templates">("activity");
+  const [activeTab, setActiveTab] = useState<"activity" | "inbound" | "templates">("activity");
 
   return (
     <div className="space-y-3">
@@ -119,14 +121,14 @@ function NotificationsPageContent() {
         actions={
           <Segmented
             label="Mesaj Merkezi görünümü"
-            options={[{ value: "activity", label: "Gönderim kayıtları" }, { value: "templates", label: "Şablonlar ve otomasyon" }]}
+            options={[{ value: "activity", label: "Gönderim kayıtları" }, { value: "inbound", label: "Gelen mesajlar" }, { value: "templates", label: "Şablonlar ve otomasyon" }]}
             value={activeTab}
             onChange={setActiveTab}
           />
         }
       />
 
-      {activeTab === "activity" ? <ActivityPanel /> : <TemplatesPanel />}
+      {activeTab === "activity" ? <ActivityPanel /> : activeTab === "inbound" ? <InboundPanel /> : <TemplatesPanel />}
     </div>
   );
 }
@@ -200,6 +202,94 @@ function ActivityPanel() {
                   <td className="sticky right-0 bg-[var(--surface)] px-3 py-2 shadow-[-1px_0_0_var(--line)]">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet min-h-8 pointer-coarse:min-h-11 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+const WEBHOOK_STATUS_LABELS: Record<WebhookEventStatus, string> = {
+  Received: "alındı",
+  Processed: "işlendi",
+  Failed: "başarısız",
+};
+
+const WEBHOOK_STATUS_COLORS: Record<WebhookEventStatus, string> = {
+  Received: "text-[var(--warning)]",
+  Processed: "text-[var(--success-strong)]",
+  Failed: "text-[var(--danger)]",
+};
+
+const DELIVERY_LABELS: Record<string, string> = {
+  sent: "gönderildi",
+  delivered: "teslim edildi",
+  read: "okundu",
+  failed: "teslim edilemedi",
+};
+
+// Veli yazdığında cevabın neden gitmediği (veli bulunamadı, onay kapalı, gönderim hatası) ve
+// Meta'nın giden mesaj için bildirdiği teslim durumu burada görünür.
+function InboundPanel() {
+  const [filter, setFilter] = useState<WebhookEventStatus | "all">("all");
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useWebhookEvents(filter === "all" ? undefined : filter, page, 50);
+  const events = data?.items;
+  const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
+
+  return (
+    <Panel
+      flush
+      title="Gelen WhatsApp olayları"
+      meta={data ? `${data.totalCount} kayıt` : undefined}
+      actions={
+        <Segmented
+          label="Duruma göre filtrele"
+          options={(["all", "Processed", "Failed"] as const).map((status) => ({ value: status, label: status === "all" ? "Tümü" : WEBHOOK_STATUS_LABELS[status] }))}
+          value={filter}
+          onChange={(status) => { setFilter(status); setPage(1); }}
+        />
+      }
+      footer={data && totalPages > 1 ? <Pager page={data.page} totalPages={totalPages} onChange={setPage} /> : undefined}
+    >
+      {isLoading && <div className="space-y-2 p-4">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
+      {!isLoading && events?.length === 0 && <EmptyState icon="bell" title="Bu filtrede olay yok." />}
+
+      {!isLoading && !!events?.length && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[56rem] text-sm">
+            <thead>
+              <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
+                <th className="px-4 py-2">Zaman</th>
+                <th className="px-3 py-2">Olay</th>
+                <th className="px-3 py-2">Gönderen</th>
+                <th className="px-3 py-2">Mesaj</th>
+                <th className="px-3 py-2">Durum</th>
+                <th className="px-3 py-2">Hata</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => {
+                const isDelivery = !!event.deliveryStatus;
+                const error = event.processingError ?? event.deliveryError;
+                return (
+                  <tr key={event.id} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--surface-muted)]/50">
+                    <td className="text-meta px-4 py-2 whitespace-nowrap">{new Date(event.receivedAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" })}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{isDelivery ? "Teslim bilgisi" : event.fromPhoneNumber ? "Gelen mesaj" : event.eventType}</td>
+                    <td className="px-3 py-2">{event.guardianName ?? event.fromPhoneNumber ?? "—"}</td>
+                    <td className="max-w-xs px-3 py-2 break-words">{event.text || (isDelivery ? DELIVERY_LABELS[event.deliveryStatus!] ?? event.deliveryStatus : "—")}</td>
+                    <td className={`px-3 py-2 font-bold whitespace-nowrap ${event.deliveryStatus === "failed" ? "text-[var(--danger)]" : WEBHOOK_STATUS_COLORS[event.status]}`}>
+                      {event.deliveryStatus === "failed" ? "teslim edilemedi" : WEBHOOK_STATUS_LABELS[event.status]}
+                    </td>
+                    <td className="text-meta max-w-xs px-3 py-2">
+                      {error
+                        ? <details className="group"><summary className="line-clamp-1 cursor-pointer break-words group-open:line-clamp-none">{error}</summary></details>
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

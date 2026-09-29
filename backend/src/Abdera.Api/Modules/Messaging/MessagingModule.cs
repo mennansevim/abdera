@@ -19,6 +19,7 @@ public static class MessagingModule
     {
         app.MapWebhooks();
         app.MapNotifications();
+        app.MapWebhookEventLog();
         app.MapStaffNotifications();
         app.MapMessageTemplates();
         app.MapAutomationSettings();

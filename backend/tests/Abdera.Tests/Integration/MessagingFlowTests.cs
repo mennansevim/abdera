@@ -794,6 +794,56 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(reEnabledLessonIds.Count, reEnabledJobCount);
     }
 
+    [Fact]
+    public async Task Webhook_event_log_shows_sender_text_and_failure_reason()
+    {
+        var admin = await CreateAdminClientAsync();
+        var messageId = $"wamid.log-{Guid.NewGuid():N}";
+        (await PostSignedWebhookAsync(BuildTextWebhook(messageId, "905559999997", "test"))).EnsureSuccessStatusCode();
+
+        var page = await admin.GetFromJsonAsync<PagedResponse<WebhookEventLog.WebhookEventResponse>>(
+            "/api/notifications/webhook-events?status=Failed&pageSize=100", TestJson.Options);
+
+        var item = page!.Items.Single(e => e.Text == "test" && e.FromPhoneNumber == "+905559999997");
+        Assert.Equal(WebhookEventStatus.Failed, item.Status);
+        Assert.Contains("veli bulunamadı", item.ProcessingError, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(item.GuardianName);
+    }
+
+    [Fact]
+    public async Task Webhook_event_log_surfaces_meta_delivery_error()
+    {
+        var admin = await CreateAdminClientAsync();
+        var outboundId = $"wamid.status-{Guid.NewGuid():N}";
+        var body = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            entry = new[] { new { changes = new[] { new { value = new
+            {
+                statuses = new[] { new
+                {
+                    id = outboundId,
+                    status = "failed",
+                    recipient_id = "905559999996",
+                    errors = new[] { new { code = 131047, title = "Re-engagement message", error_data = new { details = "24h window closed" } } },
+                } },
+            } } } } },
+        });
+        (await PostSignedWebhookAsync(body)).EnsureSuccessStatusCode();
+
+        var page = await admin.GetFromJsonAsync<PagedResponse<WebhookEventLog.WebhookEventResponse>>(
+            "/api/notifications/webhook-events?pageSize=100", TestJson.Options);
+
+        Assert.Contains(page!.Items, e => e.DeliveryStatus == "failed" && e.DeliveryError == "131047 - Re-engagement message - 24h window closed");
+    }
+
+    [Fact]
+    public async Task Webhook_event_log_is_admin_only()
+    {
+        var anonymous = _factory.CreateClient();
+        var response = await anonymous.GetAsync("/api/notifications/webhook-events");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     private async Task<HttpResponseMessage> PostSignedWebhookAsync(string body, HttpClient? client = null)
     {
         var signature = "sha256=" + Convert.ToHexStringLower(
