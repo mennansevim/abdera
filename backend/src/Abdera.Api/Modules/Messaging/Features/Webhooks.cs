@@ -231,11 +231,28 @@ public static class Webhooks
                 body = "";
             }
 
-            return new InboundMessage(messageId, PhoneNumberNormalizer.Normalize(from), type, body, buttonPayload);
+            return new InboundMessage(messageId, NormalizeSender(from), type, body, buttonPayload);
         }
         catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException)
         {
             return null;
+        }
+    }
+
+    // Normalizer yalnızca Türkiye numaralarını tanır ve diğerlerinde ArgumentException fırlatır;
+    // bu istisna GlobalExceptionHandler'da 400'e dönüşür ve Meta olayı tekrar tekrar gönderir.
+    // Gerçek bir prod bug'ı: Meta panelindeki "Test" webhook'u ABD numarasıyla (16315551181)
+    // geliyor ve 400 alıyordu. Tanınmayan numara ham haliyle bırakılır; hiçbir veliyle
+    // eşleşmeyeceği için olay "veli bulunamadı" olarak FAILED kaydedilir ve 200 döner.
+    private static string NormalizeSender(string from)
+    {
+        try
+        {
+            return PhoneNumberNormalizer.Normalize(from);
+        }
+        catch (ArgumentException)
+        {
+            return from;
         }
     }
 

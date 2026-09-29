@@ -473,6 +473,23 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Validly_signed_webhook_from_non_turkish_number_returns_ok_and_is_recorded_as_failed()
+    {
+        // Meta panelindeki "Test" butonu örnek mesajı bir ABD numarasından gönderir.
+        await using var db = await _factory.CreateDbContextAsync();
+        var messageId = $"wamid.foreign-{Guid.NewGuid():N}";
+        var body = BuildTextWebhook(messageId, "16315551181", "this is a text message");
+
+        var response = await PostSignedWebhookAsync(body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var webhookEvent = await db.WhatsAppWebhookEvents.AsNoTracking()
+            .SingleAsync(item => item.ProviderEventId == messageId);
+        Assert.Equal(WebhookEventStatus.Failed, webhookEvent.Status);
+        Assert.Contains("veli bulunamadı", webhookEvent.ProcessingError, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Tampered_RSVP_payload_is_failed_closed_and_does_not_create_response()
     {
         await using var db = await _factory.CreateDbContextAsync();
