@@ -1,24 +1,24 @@
 ---
 name: abdera-deploy
-description: Abdera'yı Vercel'de canlıya alır — commit'lenmemiş değişiklik varsa önce abdera-commit kurallarıyla main'e commit + push eder, ardından Vercel'in Git entegrasyonunun main için açtığı Production deploy'unu takip eder ve canlı adresi (/health, /login) doğrular. Kullanılacak — "deploy", "deploy et", "canlıya al", "yayına al", "Vercel'e at", "production'a gönder".
+description: Abdera'yı Hetzner sunucusunda canlıya alır — commit'lenmemiş değişiklik varsa önce abdera-commit kurallarıyla main'e commit + push eder, CI'ın yeşil bitmesini bekler, sonra SSH ile sunucuya bağlanıp deploy öncesi döküm alır, o commit'e geçer, docker compose ile yeniden kurar ve /health'i doğrular (sağlıksızsa önceki commit'e döner). Kullanılacak — "deploy", "deploy et", "canlıya al", "yayına al", "sunucuya at", "production'a gönder".
 ---
 
-# Abdera Deploy (Vercel)
+# Abdera Deploy (Hetzner)
 
-Abdera Vercel'de tek proje olarak yayında (`vercel.json`: `web` = `frontend/` Next.js,
-`api` = `backend/Dockerfile.vercel` container; `/api/*` ve `/health` → api). Proje
-`.vercel/project.json` ile `abdera-web`'e bağlı.
+Abdera tek bir Hetzner sunucusunda `docker compose --profile prod` ile çalışır
+(`docs/19-hetzner-runbook.md`). **Vercel kullanılmıyor** — `vercel.json`, Vercel URL'leri,
+Vercel plugin ipuçları bu akışla ilgisiz; onlara bakma.
 
-**Deploy mekanizması Git entegrasyonudur:** `main`'e yapılan her push, Vercel'de otomatik bir
-**Production** deploy'u başlatır. Yani "deploy et" = `main`'i güncel hale getir + Vercel'in o
-commit için açtığı deploy'un bittiğini doğrula. Elle `vercel --prod` çalıştırmak normal akış
-DEĞİLDİR (aynı commit'i iki kez deploy eder); yalnızca aşağıdaki "Yeniden deploy" durumunda.
-
-- Canlı adres: `https://abdera-web-nine.vercel.app`
-- Vercel CLI yüklü olmayabilir; takip `gh api` üzerinden GitHub deployment kayıtlarıyla yapılır
-  (Vercel her deploy'u `vercel[bot]` olarak oraya yazar).
+- Sunucu: `deploy@panel.abderasanat.com` (SSH anahtarla, parola sorulmaz), kod `/opt/abdera`
+- Canlı adres: `https://panel.abderasanat.com`
 - Veritabanı migration'ları backend açılışında `Shared/DatabaseMigrator.cs` ile uygulanır;
   bu skill ayrıca migration çalıştırmaz.
+
+`.github/workflows/deploy.yml` aynı işi GitHub Actions'tan yapabilir, ama repo değişkeni
+`DEPLOY_ENABLED=true` olmadıkça hiçbir şey yapmaz. Kontrol et:
+`gh variable list` + `gh api repos/mennansevim/abdera/environments/production/variables`.
+Açıksa Actions'ın "Deploy" koşusunu `gh run` ile takip et, elle SSH deploy'u YAPMA
+(aynı commit iki kez deploy edilir). Kapalıysa (şu anki durum) aşağıdaki SSH akışı.
 
 ## Adımlar
 
@@ -31,10 +31,10 @@ git log --oneline origin/main..HEAD   # push edilmemiş yerel commit'ler
 git log --oneline HEAD..origin/main   # uzakta olup yerelde olmayanlar
 ```
 
-- Dal `main` değilse dur ve kullanıcıya sor — Production yalnızca `main`'den çıkar.
-- **Commit'lenmemiş değişiklik varsa:** `abdera-commit` skill'inin adımlarını uygula (modüle göre
-  Türkçe conventional-commit mesajı, **zorunlu secret taraması**, `.env`/`appsettings.*.json`
-  staged ise çıkar). Repo **public** — secret şüphesinde onay almadan devam etme.
+- Dal `main` değilse dur ve kullanıcıya sor — production yalnızca `main`'den çıkar.
+- **Commit'lenmemiş değişiklik varsa:** `abdera-commit` skill'inin adımlarını uygula (Türkçe
+  conventional-commit, **zorunlu secret taraması**, `.env`/`appsettings.*.json` staged ise çıkar).
+  Repo **public** — secret şüphesinde onay almadan devam etme.
 
 ### 2. Push et
 
@@ -42,68 +42,87 @@ git log --oneline HEAD..origin/main   # uzakta olup yerelde olmayanlar
 git push origin main
 ```
 
-- Push `non-fast-forward` ile reddedilirse: `git rebase origin/main`, çakışma varsa çöz,
-  ardından `cd frontend && npx tsc --noEmit -p .` (ve dokunulan dosyalar için `npx eslint …`)
-  ile doğrula, sonra tekrar push et. **Force-push asla** (kullanıcı açıkça istemedikçe).
-- Push edilecek hiçbir şey yoksa (yerel = `origin/main`) adım 3'e geç: son commit zaten deploy
-  edilmiş olabilir.
+`non-fast-forward` ise `git rebase origin/main`, çakışmayı çöz, doğrula, tekrar push.
+**Force-push asla.** Push edilecek bir şey yoksa adım 3'e geç.
 
-### 3. Vercel Production deploy'unu takip et
+### 3. CI'ın yeşil bitmesini bekle
 
 ```bash
 SHA=$(git rev-parse HEAD)
-gh api "repos/mennansevim/abdera/deployments?sha=$SHA&environment=Production" \
-  --jq '.[0] | {id, sha: .sha[0:7], created_at}'
-# id ile durum:
-gh api "repos/mennansevim/abdera/deployments/<id>/statuses" --jq '.[0] | {state, environment_url, log_url}'
+gh run list --commit "$SHA" --workflow ci.yml --json databaseId,status,conclusion
+gh run watch <id> --exit-status        # run_in_background ile; foreground sleep kullanma
 ```
 
-- Kayıt push'tan sonra düşer ama 2-3 dakika gecikebilir (gözlendi) — bu sürede "kayıt yok" hata değildir; `state` sırasıyla `pending`/`in_progress` →
-  `success` ya da `failure`/`error` olur. Derleme (frontend + .NET container) birkaç dakika sürer.
-- Beklerken foreground `sleep` kullanma. Monitor aracıyla bir until-döngüsü kur (ör. 20 sn'de bir
-  yukarıdaki durum sorgusu, `success|failure|error` görünce çık, üst sınır ~15 dk) ya da komutu
-  `run_in_background` ile çalıştır.
-- `failure`/`error` ise `log_url`'yi kullanıcıya ver; commit'in Vercel status'u da şuradan okunur:
-  `gh api repos/mennansevim/abdera/commits/$SHA/status --jq '.statuses[] | {context, state, target_url}'`.
-  Hatayı tahmin etme — Vercel CLI yoksa logu kullanıcının açması gerekir.
+- CI **kırmızıysa deploy etme.** `gh run view <id> --log-failed` ile düşen job/testi bul,
+  bir önceki commit'in koşusuyla karşılaştır (hata önceden de var mıydı?) ve kullanıcıya sor.
+- Kayıt push'tan sonra birkaç saniye gecikebilir; backend testleri birkaç dakika sürer.
 
-### 4. Canlıyı doğrula
+### 4. SSH ile deploy
+
+Önce sunucuda deploy betiği kurulu mu bak:
 
 ```bash
-curl -s -o /dev/null -w "health %{http_code}\n" https://abdera-web-nine.vercel.app/health
-curl -s -o /dev/null -w "login  %{http_code}\n" https://abdera-web-nine.vercel.app/login
+ssh -o BatchMode=yes deploy@panel.abderasanat.com 'command -v abdera-deploy; cd /opt/abdera && git rev-parse --short HEAD'
 ```
 
-İkisi de `200` olmalı. Deploy'a özel URL'ler (`abdera-<hash>-…vercel.app`) Vercel Deployment
-Protection yüzünden `302` dönebilir — bu normal, doğrulamayı canlı alias üzerinden yap.
-Giriş yapıp ekran test etmek bu skill'in işi değil (şifre girilmez).
-
-### 5. CI durumunu bildir (engelleyici değil)
+**Betik kuruluysa** (`/usr/local/bin/abdera-deploy`, kaynağı `deploy/hetzner/abdera-deploy`):
 
 ```bash
-gh run list --commit "$SHA" --json name,status,conclusion --jq '.[] | "\(.name): \(.status) \(.conclusion)"'
+ssh deploy@panel.abderasanat.com "abdera-deploy $SHA"
 ```
 
-Vercel deploy'u CI'ı beklemez; CI sonucu bilgi amaçlı raporlanır. CI henüz bitmediyse
-"koşuyor" de, sonucu tahmin etme. Kırmızıysa hangi job/testin düştüğünü `gh run view <id>
---log-failed` ile bul ve bir önceki commit'in koşusuyla karşılaştır: aynı hata önceden de
-varsa bunu açıkça belirt, bu commit'le yeni başladıysa ayrıca vurgula.
+**Kurulu değilse** aynı adımları elle çalıştır (betiğin yaptığının birebir karşılığı —
+döküm alınamazsa deploy yapılmaz, sağlıksızsa önceki commit'e dönülür):
+
+```bash
+ssh deploy@panel.abderasanat.com bash -s -- "$SHA" <<'REMOTE'
+set -euo pipefail
+SHA="$1"
+cd /opt/abdera
+git fetch --quiet origin main
+git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA main'de değil." >&2; exit 4; }
+PREV="$(git rev-parse HEAD)"
+[ "$PREV" = "$SHA" ] && { echo "Zaten $SHA'da."; exit 0; }
+mkdir -p ~/predeploy
+# </dev/null şart: yoksa exec, bash -s'e stdin'den gelen betiğin kalanını yutar ve
+# deploy sessizce döküm sonrasında biter.
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' </dev/null \
+  | gzip > ~/predeploy/"$(date +%F-%H%M)-${PREV:0:7}.sql.gz"
+ls -1t ~/predeploy/*.sql.gz | tail -n +6 | xargs -r rm --
+deploy() { git checkout --quiet --force --detach "$1"; docker compose --profile prod up -d --build --remove-orphans </dev/null; }
+healthy() { for _ in $(seq 1 36); do curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && return 0; sleep 5; done; return 1; }
+deploy "$SHA"
+if healthy; then docker image prune -f >/dev/null; echo "OK: ${PREV:0:7} -> ${SHA:0:7}"
+else echo "Sağlık kontrolü geçmedi, ${PREV:0:7}'e geri dönülüyor." >&2; deploy "$PREV"
+  healthy || echo "UYARI: geri dönüşten sonra da sağlıksız - elle bak." >&2; exit 1; fi
+REMOTE
+```
+
+- Derleme (frontend + .NET image) birkaç dakika sürer — `timeout` yüksek ver (≥ 600000) ya da
+  `run_in_background` kullan.
+- Geri dönüş olduysa kullanıcıya söyle ve `docker compose logs --tail 200 api` çıktısına bak;
+  hatayı tahmin etme.
+
+### 5. Canlıyı doğrula
+
+```bash
+curl -s -o /dev/null -w "health %{http_code}\n" https://panel.abderasanat.com/health
+curl -s -o /dev/null -w "login  %{http_code}\n" https://panel.abderasanat.com/login
+ssh deploy@panel.abderasanat.com 'cd /opt/abdera && git log --oneline -1 && docker compose ps --format "{{.Service}} {{.Status}}"'
+```
+
+İkisi de `200` olmalı, sunucudaki commit deploy edilen `SHA` olmalı. Giriş yapıp ekran test
+etmek bu skill'in işi değil (şifre girilmez).
 
 ### 6. Özetle
 
-Kısa rapor: deploy edilen commit (hash + başlık), Vercel durumu, canlı adresin `/health` ve
-`/login` sonucu, CI özeti. Commit gerekmediyse bunu da söyle.
-
-## Yeniden deploy (kod değişmeden)
-
-Kullanıcı aynı commit'i yeniden yayına almak isterse (ör. Vercel ortam değişkeni değişti):
-Vercel CLI yüklüyse `vercel deploy --prod` (proje `.vercel/project.json` ile bağlı). Yüklü
-değilse kullanıcıya `npm i -g vercel` önerip Vercel panelindeki "Redeploy"u işaret et. Bunun
-için boş commit atma.
+Kısa rapor: deploy edilen commit (hash + başlık), CI sonucu, önceki → yeni commit,
+`/health` ve `/login` sonucu, container durumları.
 
 ## Yapılmayacaklar
 
-- `main` dışındaki bir daldan Production deploy'u.
-- Force-push, `git reset --hard` gibi uzak geçmişi yeniden yazan işlemler.
-- Vercel ortam değişkenlerini değiştirmek, domain/alias ayarlamak — kullanıcının açık isteği olmadan.
-- CI kırmızı diye deploy'u "geri almak" — geri alma (rollback) ayrı bir karar, önce kullanıcıya sor.
+- `main` dışındaki bir commit'i deploy etmek; CI kırmızıyken deploy etmek.
+- Force-push, uzak geçmişi yeniden yazan işlemler.
+- Sunucuda `.env`, Caddy, firewall, kullanıcı/SSH ayarlarını değiştirmek — açık istek olmadan.
+- `docker compose down -v` ya da volume/`~/predeploy` silmek — veritabanı oradadır.
+- Geri alma (rollback) kararını kendin vermek — betiğin otomatik dönüşü dışında önce kullanıcıya sor.
