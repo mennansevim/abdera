@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Icon, instrumentBadgeStyle } from "@/components/icons";
+import { Icon, InstrumentSilhouette, instrumentBadgeStyle } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/attendance";
 import { useMakeupCredits } from "@/lib/billing";
@@ -939,12 +939,11 @@ function GridDayColumn({
             {/* Kart düzeni: önce kim (öğrenci, kalın), altında ne zaman. Hangi ders olduğunu sol
                 şerit + zemin rengi söyler, anahtarı başlıktaki renk açıklamasıdır. Yan yana iki
                 kartta yalnızca başlangıç saati yazılır, isim kesilmesin diye. */}
-            {/* Enstrüman fligranı (çizgi çizim): hangi ders olduğunu renge ek olarak şekille de
+            {/* Enstrüman fligranı (dolgulu silüet, kenardan taşar): hangi ders olduğunu renge ek olarak şekille de
                 söyler - renk ayrımı zor görenler ve dar kartlar için. Yazının arkasında kalır. */}
-            <Icon
-              name={instrumentBadgeStyle(lesson.instrumentName).icon}
-              strokeWidth={0.7}
-              className="pointer-events-none absolute -bottom-2.5 -right-1.5 h-[3.4rem] w-[3.4rem] opacity-35"
+            <InstrumentSilhouette
+              instrumentName={lesson.instrumentName}
+              className="pointer-events-none absolute -bottom-4 -right-3 h-[4.1rem] w-[4.1rem] opacity-15"
               style={{ color: tone.border }}
             />
             <span className="relative flex min-w-0 items-center gap-1.5">
@@ -1080,11 +1079,10 @@ function LessonGroupDialog({ lessons, colors, isAdmin, now, onOpenLesson, onClos
                 style={{ background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
               >
                 {/* Izgaradaki ders kartıyla aynı dil: önce öğrenci, altında saat; enstrümanı sağdaki
-                    çizgi fligran ve alt satırdaki ad söyler. */}
-                <Icon
-                  name={instrumentBadgeStyle(lesson.instrumentName).icon}
-                  strokeWidth={0.7}
-                  className="pointer-events-none absolute -bottom-3 right-2 h-[4.2rem] w-[4.2rem] opacity-35"
+                    silüet fligran ve alt satırdaki ad söyler. */}
+                <InstrumentSilhouette
+                  instrumentName={lesson.instrumentName}
+                  className="pointer-events-none absolute -bottom-4 -right-2 h-[4.6rem] w-[4.6rem] opacity-15"
                   style={{ color: tone.border }}
                 />
                 <span className="relative min-w-0 flex-1">
