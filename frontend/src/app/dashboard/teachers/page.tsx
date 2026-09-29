@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { AddButton, AdminGate, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, RowMenu, RowMenuItem, SearchInput, Segmented } from "@/components/ui";
+import { AddButton, AdminGate, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, RowMenu, RowMenuItem, RowMenuSeparator, SearchInput, Segmented } from "@/components/ui";
 import { DeleteTeacherDialog } from "@/components/delete-person-dialog";
 import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
 import { ApiError } from "@/lib/api";
@@ -192,6 +192,10 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const updateTeacher = useUpdateTeacher(teacher.id);
+  // Pasife almak silmenin geri alınabilir karşılığı: kayıtlar kalır, giriş hesabı kapanır.
+  const setTeacherStatus = (status: TeacherStatus) =>
+    updateTeacher.mutateAsync({ firstName: teacher.firstName, lastName: teacher.lastName, status, instrumentIds: teacher.instrumentIds });
   const teacherInstruments = instruments.filter((instrument) => teacher.instrumentIds.includes(instrument.id));
   const groupedStudents = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string; courses: string[] }>();
@@ -234,7 +238,11 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
             öğretmen ve seçili haftayla açılır (ikinci bir ödeme formu değil). */}
         {!payRow?.payout && <RowMenuItem icon="wallet" onClick={() => { close(); router.push(`/dashboard/costs?odeme=${teacher.id}&hafta=${toIsoDate(weekMonday)}`); }}>Ödeme yap</RowMenuItem>}
         <RowMenuItem icon="pencil" onClick={() => { close(); setShowEditForm(true); }}>Bilgileri düzenle</RowMenuItem>
-        <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil</RowMenuItem>
+        {teacher.status === "Active"
+          ? <RowMenuItem icon="x" onClick={() => { close(); void setTeacherStatus("Inactive"); }}>Pasife al</RowMenuItem>
+          : <RowMenuItem icon="check" onClick={() => { close(); void setTeacherStatus("Active"); }}>Yeniden aktif et</RowMenuItem>}
+        <RowMenuSeparator />
+        <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil…</RowMenuItem>
       </>}</RowMenu>}
     </div>
 
@@ -243,6 +251,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
         teacherId={teacher.id}
         teacherName={`${teacher.firstName} ${teacher.lastName}`}
         onClose={() => setShowDeleteDialog(false)}
+        onDeactivate={teacher.status === "Active" ? () => setTeacherStatus("Inactive") : undefined}
       />
     )}
 

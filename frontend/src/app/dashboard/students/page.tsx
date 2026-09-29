@@ -7,7 +7,7 @@ import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHea
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
-import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, type Student, type StudentStatus } from "@/lib/people";
+import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, useUpdateStudent, type Student, type StudentStatus } from "@/lib/people";
 import { DeleteStudentDialog, RequestStudentDeletionDialog } from "@/components/delete-person-dialog";
 import { StudentDetail } from "./student-detail";
 
@@ -24,7 +24,8 @@ export default function StudentsPage() {
   // "İçine girmeden anlayabilelim" - liste her satırda kurs adlarını da taşıyan tek bir
   // toplu istekten (overview) besleniyor, N+1 sorgu açmadan.
   const { data: overviews, isLoading, isError, isFetching, refetch } = useStudentOverviews();
-  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState<Student | null>(null);
+  const updateStudent = useUpdateStudent();
   const [expandedId, setExpandedId] = useSessionState<string | null>("abdera:students:expanded", null);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useSessionState("abdera:students:search", "");
@@ -132,7 +133,7 @@ export default function StudentsPage() {
                 <span className={`hidden justify-self-center rounded-full px-2 py-0.5 text-[.72rem] font-bold md:block ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{student.status === "Active" ? "Aktif" : "Pasif"}</span>
               </button>
               </div>
-              {expandedId === student.id && <StudentDetail student={student} isAdmin={isAdmin} canManage={canManage} onDelete={() => setDeleting({ id: student.id, name: `${student.firstName} ${student.lastName}` })} />}
+              {expandedId === student.id && <StudentDetail student={student} isAdmin={isAdmin} canManage={canManage} onDelete={() => setDeleting(student)} />}
             </li>
           ))}
         </ul>}
@@ -141,14 +142,17 @@ export default function StudentsPage() {
       {deleting && (isAdmin ? (
         <DeleteStudentDialog
           studentId={deleting.id}
-          studentName={deleting.name}
+          studentName={`${deleting.firstName} ${deleting.lastName}`}
           onClose={() => setDeleting(null)}
           onDeleted={() => setExpandedId(null)}
+          onDeactivate={deleting.status === "Active"
+            ? () => updateStudent.mutateAsync({ studentId: deleting.id, firstName: deleting.firstName, lastName: deleting.lastName, birthDate: deleting.birthDate, status: "Inactive" })
+            : undefined}
         />
       ) : (
         <RequestStudentDeletionDialog
           studentId={deleting.id}
-          studentName={deleting.name}
+          studentName={`${deleting.firstName} ${deleting.lastName}`}
           onClose={() => setDeleting(null)}
         />
       ))}

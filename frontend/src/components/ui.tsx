@@ -295,6 +295,11 @@ export function RowMenu({ label, children }: { label: string; children: (close: 
   );
 }
 
+// RowMenu içinde yıkıcı eylemi (kalıcı silme) diğerlerinden ayıran çizgi.
+export function RowMenuSeparator() {
+  return <div role="separator" className="my-1 border-t border-[var(--line)]" />;
+}
+
 // RowMenu içindeki tek bir eylem satırı.
 export function RowMenuItem({ onClick, icon, tone = "default", children }: { onClick: () => void; icon?: IconName; tone?: "default" | "danger"; children: ReactNode }) {
   return (
