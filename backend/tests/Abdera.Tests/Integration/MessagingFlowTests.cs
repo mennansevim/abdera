@@ -346,6 +346,8 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     [Theory]
     [InlineData("ders", "sonraki")]
     [InlineData("okula yaz", "yönetimine iletildi")]
+    [InlineData("Ders?", "sonraki")]
+    [InlineData("Test", "Hızlı bilgi için")]
     public async Task Deterministic_intent_reply_is_sent_as_outbound_free_text(string incomingText, string expectedSubstring)
     {
         await using var db = await _factory.CreateDbContextAsync();

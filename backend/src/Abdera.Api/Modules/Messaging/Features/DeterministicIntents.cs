@@ -12,15 +12,28 @@ namespace Abdera.Api.Modules.Messaging.Features;
 // MVP'de öğrenci seçtirme akışı yok (over-engineering'den kaçınma).
 public static class DeterministicIntents
 {
-    public static async Task<string?> ResolveAsync(string normalizedText, Guardian guardian, AbderaDbContext db, IClock clock)
+    // Tanınmayan mesaja (selam, "test", soru) sessiz kalmak veliye "sistem çalışmıyor" dedirtiyordu
+    // (gerçek bir canlı test: "Test"/"Q" yazılan mesajlar işlendi ama cevapsız kaldı). Artık
+    // mesajın alındığı teyit edilir ve kullanılabilecek komutlar listelenir.
+    public const string HelpText =
+        "Mesajınızı aldık, okul yönetimi görecek.\n" +
+        "Hızlı bilgi için şunlardan birini yazabilirsiniz:\n" +
+        "• ders - sonraki dersiniz\n" +
+        "• aidat - aidat durumunuz\n" +
+        "• telafi - telafi haklarınız\n" +
+        "• dur - WhatsApp bildirimlerini kapatır";
+
+    public static async Task<string> ResolveAsync(string normalizedText, Guardian guardian, AbderaDbContext db, IClock clock)
     {
-        return normalizedText switch
+        // "Ders?", "aidat." gibi noktalamalı yazımlar da komut sayılır.
+        var command = normalizedText.Trim().TrimEnd('.', '!', '?', ',');
+        return command switch
         {
             "ders" => await ResolveNextLessonAsync(guardian, db, clock),
             "aidat" => await ResolveDuesAsync(guardian, db, clock),
             "telafi" => await ResolveMakeupCreditsAsync(guardian, db),
             "okula yaz" => "Mesajınızı aldık, okul yönetimine iletildi.",
-            _ => null,
+            _ => HelpText,
         };
     }
 

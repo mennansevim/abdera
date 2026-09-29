@@ -167,7 +167,6 @@ public static class Webhooks
         // A7: veli az önce yazdığı için pencere zaten açık (RefreshConversationWindow bu
         // mesajda çağrıldı) - serbest metin gönderimi burada güvenli.
         var responseText = await DeterministicIntents.ResolveAsync(normalized, guardian, db, clock);
-        if (responseText is null) return;
 
         var result = await whatsAppClient.SendFreeTextAsync(guardian.PhoneNumber, responseText);
         if (!result.Success)
