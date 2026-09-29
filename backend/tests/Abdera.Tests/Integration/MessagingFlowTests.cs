@@ -6,10 +6,14 @@ using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.Messaging.Infrastructure;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Scheduling.Features;
 using Abdera.Api.Shared;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Abdera.Tests.Integration;
 
@@ -67,6 +71,10 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         await admin.PostAsJsonAsync($"/api/students/{student.Id}/guardians",
             new LinkGuardianToStudent.Request(guardian.Id, "anne", true));
+        // Bildirim onayı varsayılan kapalı (docs/10-decisions.md R1) - bu dosyanın akışları açık veli ister.
+        (await admin.PatchAsJsonAsync($"/api/guardians/{guardian.Id}",
+            new Guardians.UpdateRequest(guardian.FirstName, guardian.LastName, guardianPhone, NotificationConsent: true)))
+            .EnsureSuccessStatusCode();
 
         var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
                 new Enrollments.CreateRequest(teacher.Id, piano.Id, new DateOnly(2026, 8, 1))))
@@ -155,11 +163,9 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         await admin.PostAsJsonAsync($"/api/students/{student.Id}/guardians",
             new LinkGuardianToStudent.Request(guardian.Id, "anne", true));
 
-        // Rızayı kapat - bugün itibarıyla bunu yapmanın tek yolu opt-out akışı (A8), admin
-        // panelinde elle bir "rızayı kapat" uç noktası yok (bilinçli - opt-out yalnızca veli
-        // kendi isteğiyle "dur" yazınca tetiklenir). Test burada invariant'ı doğrudan kuruyor.
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE guardians SET notification_consent = false WHERE id = {guardian.Id}");
+        // docs/10-decisions.md R1: yeni velinin bildirim onayı varsayılan kapalı - yönetici
+        // künyedeki kutuyu işaretlemedikçe hiçbir job açılmaz.
+        Assert.False(guardian.NotificationConsent);
 
         var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
                 new Enrollments.CreateRequest(teacher.Id, guitar.Id, new DateOnly(2026, 8, 1))))
@@ -490,6 +496,96 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Intent_reply_that_cannot_be_sent_marks_webhook_event_failed_with_reason()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "intent-send-fail");
+        var messageId = $"wamid.sendfail-{Guid.NewGuid():N}";
+        var body = BuildTextWebhook(messageId, "90" + seeded.GuardianPhone[1..], "ders");
+        var disabledFactory = _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IWhatsAppClient>();
+            services.AddSingleton<IWhatsAppClient, DisabledWhatsAppClient>();
+        }));
+
+        var response = await PostSignedWebhookAsync(body, disabledFactory.CreateClient());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var webhookEvent = await db.WhatsAppWebhookEvents.AsNoTracking()
+            .SingleAsync(item => item.ProviderEventId == messageId);
+        Assert.Equal(WebhookEventStatus.Failed, webhookEvent.Status);
+        Assert.Contains("devre dışı", webhookEvent.ProcessingError, StringComparison.OrdinalIgnoreCase);
+        Assert.True(await db.WhatsAppMessages.AnyAsync(item =>
+            item.ProviderMessageId == messageId && item.Direction == MessageDirection.Inbound));
+        Assert.False(await db.WhatsAppMessages.AnyAsync(item =>
+            item.GuardianId == seeded.GuardianId && item.Direction == MessageDirection.Outbound &&
+            item.BodySnapshot.Contains("dersi")));
+    }
+
+    [Fact]
+    public async Task Turning_consent_off_cancels_pending_jobs_and_turning_it_on_restores_lesson_reminders()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "consent-toggle");
+        var phone = "+90" + seeded.GuardianPhone[1..];
+        Assert.True(await db.NotificationJobs.AnyAsync(j => j.RecipientPhoneNumber == phone && j.Status == NotificationJobStatus.Pending));
+
+        var off = await admin.PatchAsJsonAsync($"/api/guardians/{seeded.GuardianId}",
+            new Guardians.UpdateRequest($"Veliconsent-toggle", "Soyad", seeded.GuardianPhone, NotificationConsent: false));
+        Assert.Equal(HttpStatusCode.OK, off.StatusCode);
+        Assert.False((await off.Content.ReadFromJsonAsync<Guardians.GuardianResponse>(TestJson.Options))!.NotificationConsent);
+        Assert.False(await db.NotificationJobs.AnyAsync(j => j.RecipientPhoneNumber == phone && j.Status == NotificationJobStatus.Pending));
+        Assert.True(await db.AuditLogs.AnyAsync(a =>
+            a.Action == "guardian.notification_consent_changed" && a.EntityId == seeded.GuardianId));
+
+        // Aynı ders için iptal edilmiş hatırlatma UNIQUE kısıtına takılmadan geri kuyruğa alınır.
+        var on = await admin.PatchAsJsonAsync($"/api/guardians/{seeded.GuardianId}",
+            new Guardians.UpdateRequest($"Veliconsent-toggle", "Soyad", seeded.GuardianPhone, NotificationConsent: true));
+        Assert.Equal(HttpStatusCode.OK, on.StatusCode);
+        var reminder = await db.NotificationJobs.AsNoTracking().SingleAsync(j =>
+            j.Type == NotificationJobType.LessonReminder && j.ReferenceId == seeded.LessonId);
+        Assert.Equal(NotificationJobStatus.Pending, reminder.Status);
+    }
+
+    [Fact]
+    public async Task Guardian_update_without_consent_field_leaves_consent_unchanged()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "consent-untouched");
+
+        // Öğretmenin iletişim düzenlemesi alanı hiç göndermez; onay açık kalmalı.
+        var response = await admin.PatchAsJsonAsync($"/api/guardians/{seeded.GuardianId}",
+            new { firstName = "Yeni", lastName = "Ad", phoneNumber = seeded.GuardianPhone });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True((await db.Guardians.AsNoTracking().SingleAsync(g => g.Id == seeded.GuardianId)).NotificationConsent);
+    }
+
+    [Fact]
+    public async Task Guardian_without_consent_gets_no_intent_reply_and_event_records_why()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "consent-reply");
+        (await admin.PatchAsJsonAsync($"/api/guardians/{seeded.GuardianId}",
+            new Guardians.UpdateRequest("Veliconsent-reply", "Soyad", seeded.GuardianPhone, NotificationConsent: false)))
+            .EnsureSuccessStatusCode();
+        var messageId = $"wamid.noconsent-{Guid.NewGuid():N}";
+
+        var response = await PostSignedWebhookAsync(BuildTextWebhook(messageId, "90" + seeded.GuardianPhone[1..], "ders"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var webhookEvent = await db.WhatsAppWebhookEvents.AsNoTracking().SingleAsync(e => e.ProviderEventId == messageId);
+        Assert.Equal(WebhookEventStatus.Failed, webhookEvent.Status);
+        Assert.Contains("onayı kapalı", webhookEvent.ProcessingError, StringComparison.OrdinalIgnoreCase);
+        Assert.False(await db.WhatsAppMessages.AnyAsync(m =>
+            m.GuardianId == seeded.GuardianId && m.Direction == MessageDirection.Outbound));
+    }
+
+    [Fact]
     public async Task Tampered_RSVP_payload_is_failed_closed_and_does_not_create_response()
     {
         await using var db = await _factory.CreateDbContextAsync();
@@ -698,7 +794,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(reEnabledLessonIds.Count, reEnabledJobCount);
     }
 
-    private async Task<HttpResponseMessage> PostSignedWebhookAsync(string body)
+    private async Task<HttpResponseMessage> PostSignedWebhookAsync(string body, HttpClient? client = null)
     {
         var signature = "sha256=" + Convert.ToHexStringLower(
             HMACSHA256.HashData(
@@ -709,7 +805,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             Content = new StringContent(body, Encoding.UTF8, "application/json"),
         };
         request.Headers.Add("X-Hub-Signature-256", signature);
-        return await _factory.CreateClient().SendAsync(request);
+        return await (client ?? _factory.CreateClient()).SendAsync(request);
     }
 
     private static async Task<Calendar.LessonResponse> GetCalendarLessonAsync(HttpClient admin, Guid lessonId)

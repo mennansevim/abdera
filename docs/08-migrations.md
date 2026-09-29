@@ -242,3 +242,9 @@ ileri kaydırılır; `week_end`, ders sayısı ve tutar snapshot olarak kalır. 
 Hesabın tamamı satıra donar, bu yüzden ücret tablosu sürümlenmez. İki tablo da öğretmene
 referans verdiği için `PersonEraser`'ın öğretmen silme betiğindedir. `Down()` iki tabloyu
 düşürür; oluşmuş `expenses` satırlarına dokunmaz (finansal kayıt silinmez).
+
+**GuardianNotificationConsentDefaultOff** (People, veri + varsayılan değişikliği): WhatsApp bildirimi
+veli künyesindeki "WhatsApp bildirimi alsın" kutusuyla açılan açık bir seçim oldu (varsayılan kapalı).
+`guardians.notification_consent` varsayılanı `false`; mevcut tüm veliler kapalıya çekilir (her biri için
+`audit_log` satırı, actor null) ve bekleyen/işlenen `notification_jobs` `Cancelled` olur. `Down()`
+yalnızca kolon varsayılanını geri alır - kapatılan onaylar ve iptal edilen job'lar geri açılmaz.

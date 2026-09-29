@@ -15,7 +15,7 @@ public class GuardianConfiguration : IEntityTypeConfiguration<Guardian>
         builder.Property(g => g.LastName).HasColumnName("last_name").HasMaxLength(100).IsRequired();
         builder.Property(g => g.PhoneNumber).HasColumnName("phone_number").HasMaxLength(20).IsRequired();
         builder.Property(g => g.WhatsappEnabled).HasColumnName("whatsapp_enabled").HasDefaultValue(true);
-        builder.Property(g => g.NotificationConsent).HasColumnName("notification_consent").HasDefaultValue(true);
+        builder.Property(g => g.NotificationConsent).HasColumnName("notification_consent").HasDefaultValue(false);
         builder.Property(g => g.ConsentUpdatedAt).HasColumnName("consent_updated_at");
         builder.Property(g => g.ConversationWindowExpiresAt).HasColumnName("conversation_window_expires_at");
         builder.Property(g => g.SecurityStamp).HasColumnName("security_stamp").HasDefaultValueSql("gen_random_uuid()");

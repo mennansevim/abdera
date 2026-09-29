@@ -131,6 +131,14 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
             return;
         }
 
+        if (!guardian.NotificationConsent)
+        {
+            // Onay kapalıyken bekleyen job'lar zaten iptal edilir (Guardians.UpdateAsync, opt-out);
+            // buraya düşen bir job'ı yeniden denemek anlamsız - retry'ları tüketmeden iptal et.
+            job.Cancel(now);
+            return;
+        }
+
         var template = await db.MessageTemplates.SingleOrDefaultAsync(t => t.Name == message.TemplateName && t.IsActive, cancellationToken);
         if (template is null)
         {

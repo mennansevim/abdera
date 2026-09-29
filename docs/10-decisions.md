@@ -285,6 +285,14 @@ Kullanıcı isteği: "Veli yorumunu yapıcı metne çeviren yapay zekâ kısmın
 | Q1 | Veli şifre değiştirme | `POST /api/guardian/change-password` (mevcut + yeni şifre, en az 6 karakter, varsayılanın aynısı olamaz). Güvenlik damgası yenilenir, değiştiren velinin oturumu tazelenir, `audit_log`'a `guardian.password_changed` düşer. `GET /api/guardian/me` `usesDefaultPassword` döner; portal bu durumda şifre değiştirme hatırlatması gösterir. |
 | Q1 | Güvenlik notu | Varsayılan şifre kamuya açık bilgiden (ad soyad) türer ve kullanıcı adı telefon numarası - ikisini bilen biri o veli olarak girebilir. Önceki desen de aynı sınıftaydı (telefonun son 4 hanesi kullanıcı adında zaten var). Kabul edilen risk; azaltma: portal değiştirme hatırlatması, giriş uç noktasında IP başına hız sınırı (`guardian-otp`). Desen giriş ekranında **yazılmaz**, veliye yönetici iletir. "İlk girişte zorunlu değiştir" hâlâ açık bir seçenek. |
 
+## R — WhatsApp bildirimi veli başına açık seçim, varsayılan kapalı (2026-09-29)
+
+| # | Konu | Karar |
+|---|---|---|
+| R1 | Veli onay kutusu | Kullanıcı isteği: "velilere mesaj gitmesin; veliler WhatsApp bildirimi almak istiyorum checkbox'ına sahip olsun, default false olsun, istediğim zaman açabilirim". Mevcut `guardians.notification_consent` bu kutu oldu: varsayılan `false`, künyeden yalnızca Admin değiştirir (`Guardians.UpdateRequest.NotificationConsent`, `bool?` - `SiblingDiscount` ile aynı sözleşme), her değişim `audit_log`'a yazılır, kapatınca bekleyen job'lar iptal edilir. Veli "dur" yazınca yine kapanır (A8). Mevcut tüm veliler migration ile kapalıya çekildi. |
+| R1 | Tek zorlama noktası | Kutu kapalıysa **hiçbir** mesaj gitmez: hatırlatma job'ları, bot yanıtı, OTP giriş kodu, şifre sıfırlama. Kural çağıran yerlerde değil `ConsentGatedWhatsAppClient`'ta (her `IWhatsAppClient` çözümlemesini saran dekoratör) zorlanır; numarası bir veliye ait olmayan alıcıya da gönderilmez. Bilinen sonuç: onayı kapalı veli OTP ile giremez, şifreyle girer. Dispatcher onayı kapalı veliye ait job'ı retry tüketmeden iptal eder. |
+| R1 | Açınca hatırlatmalar | Kutu açıldığında velinin birincil velisi olduğu öğrencilerin gelecekteki dersleri için ders hatırlatmaları kurulur (`INotificationScheduler.ScheduleUpcomingLessonRemindersAsync`); daha önce iptal edilmiş hatırlatma UNIQUE kısıtı yüzünden yeni satır açılmadan `NotificationJob.Reactivate` ile geri kuyruğa alınır. Hatırlatma anı geçmiş dersler ve otomasyon kapalıysa kurulmaz. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

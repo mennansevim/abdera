@@ -51,7 +51,7 @@ public static class LinkGuardianToStudent
         var guardians = await db.StudentGuardians
             .Where(sg => sg.StudentId == studentId)
             .Join(db.Guardians, sg => sg.GuardianId, g => g.Id, (sg, g) =>
-                new { g.Id, g.FirstName, g.LastName, g.PhoneNumber, sg.Relationship, sg.IsPrimary })
+                new { g.Id, g.FirstName, g.LastName, g.PhoneNumber, sg.Relationship, sg.IsPrimary, g.NotificationConsent })
             .ToListAsync();
 
         return Results.Ok(guardians);

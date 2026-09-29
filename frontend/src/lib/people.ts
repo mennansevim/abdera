@@ -211,7 +211,7 @@ export function useUpdateStudent() {
 export function useUpdateGuardian(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ guardianId, ...body }: { guardianId: string; firstName: string; lastName: string; phoneNumber: string }) =>
+    mutationFn: ({ guardianId, ...body }: { guardianId: string; firstName: string; lastName: string; phoneNumber: string; notificationConsent?: boolean }) =>
       api.patch<Guardian>(`/api/guardians/${guardianId}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-guardians", studentId] });
@@ -249,6 +249,7 @@ export interface StudentGuardianLink {
   phoneNumber: string;
   relationship: string | null;
   isPrimary: boolean;
+  notificationConsent: boolean;
 }
 
 export function useStudentGuardians(studentId: string) {

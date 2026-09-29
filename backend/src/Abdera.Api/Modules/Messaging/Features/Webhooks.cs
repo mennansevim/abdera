@@ -170,6 +170,14 @@ public static class Webhooks
         if (responseText is null) return;
 
         var result = await whatsAppClient.SendFreeTextAsync(guardian.PhoneNumber, responseText);
+        if (!result.Success)
+        {
+            // Gönderim başarısızken olay PROCESSED sayılıyordu; cevabın gitmediği yalnızca
+            // (Provider=Disabled'da hiç) loglardan anlaşılabiliyordu. Çağıran catch olayı
+            // FAILED + sebebiyle kaydeder; gelen mesaj ve pencere yenilemesi yine yazılır.
+            throw new InvalidOperationException($"Yanıt gönderilemedi: {result.Error}");
+        }
+
         db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(
             null, guardian.Id, null, responseText, result.ProviderMessageId, clock.UtcNow));
     }

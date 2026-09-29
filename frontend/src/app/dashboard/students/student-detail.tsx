@@ -55,7 +55,7 @@ export function StudentDetail({
     setGuardianCredential(null);
     try {
       const result = await resetGuardianPassword.mutateAsync(guardian.id);
-      setGuardianCredential({ ok: true, text: `${guardian.firstName} ${guardian.lastName} · kullanıcı adı ${result.phoneNumber} · şifre ${result.password} (WhatsApp'tan da gönderildi)` });
+      setGuardianCredential({ ok: true, text: `${guardian.firstName} ${guardian.lastName} · kullanıcı adı ${result.phoneNumber} · şifre ${result.password} · ${result.message}` });
     } catch (err) {
       setGuardianCredential({ ok: false, text: err instanceof ApiError ? (err.detail ?? err.title) : "Şifre sıfırlanamadı." });
     }
@@ -116,6 +116,7 @@ export function StudentDetail({
                     <span className="block truncate text-sm font-bold">{guardian.firstName} {guardian.lastName}</span>
                     <span className="text-meta mt-0.5 block truncate">
                       {guardian.phoneNumber}{guardian.relationship && ` · ${guardian.relationship}`}
+                      {isAdmin && ` · WhatsApp bildirimi ${guardian.notificationConsent ? "açık" : "kapalı"}`}
                     </span>
                   </span>
                   {guardian.isPrimary && (
@@ -189,7 +190,7 @@ export function StudentDetail({
           </Modal>
           {editingGuardian && (
             <Modal open title="Veliyi düzenle" onClose={() => setEditingGuardian(null)} size="sm">
-              <EditGuardianForm studentId={studentId} guardian={editingGuardian} onClose={() => setEditingGuardian(null)} />
+              <EditGuardianForm studentId={studentId} guardian={editingGuardian} isAdmin={isAdmin} onClose={() => setEditingGuardian(null)} />
             </Modal>
           )}
           {programEnrollmentId && (
@@ -300,18 +301,22 @@ function EditStudentForm({ student, isAdmin, onClose }: { student: Student; isAd
   );
 }
 
-function EditGuardianForm({ studentId, guardian, onClose }: { studentId: string; guardian: StudentGuardianLink; onClose: () => void }) {
+function EditGuardianForm({ studentId, guardian, isAdmin, onClose }: { studentId: string; guardian: StudentGuardianLink; isAdmin: boolean; onClose: () => void }) {
   const updateGuardian = useUpdateGuardian(studentId);
   const [firstName, setFirstName] = useState(guardian.firstName);
   const [lastName, setLastName] = useState(guardian.lastName);
   const [phoneNumber, setPhoneNumber] = useState(guardian.phoneNumber);
+  const [notificationConsent, setNotificationConsent] = useState(guardian.notificationConsent);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      await updateGuardian.mutateAsync({ guardianId: guardian.id, firstName, lastName, phoneNumber });
+      await updateGuardian.mutateAsync({
+        guardianId: guardian.id, firstName, lastName, phoneNumber,
+        ...(isAdmin ? { notificationConsent } : {}),
+      });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Veli güncellenemedi.");
@@ -325,6 +330,26 @@ function EditGuardianForm({ studentId, guardian, onClose }: { studentId: string;
         <label className="form-label">Soyad<input value={lastName} onChange={(event) => setLastName(event.target.value)} required className="field text-sm" /></label>
       </div>
       <label className="form-label">Telefon<input type="tel" inputMode="tel" autoComplete="tel" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} required className="field text-sm" /></label>
+
+      {/* Varsayılan kapalı (docs/10-decisions.md R1): işaretlenmedikçe veliye hiçbir WhatsApp
+          mesajı gitmez. Veli "dur" yazarsa kendiliğinden kapanır. */}
+      {isAdmin && (
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-[var(--line)] bg-white p-3">
+          <input
+            type="checkbox"
+            checked={notificationConsent}
+            onChange={(event) => setNotificationConsent(event.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand)]"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-bold">WhatsApp bildirimi alsın</span>
+            <span className="text-meta mt-0.5 block leading-snug">
+              İşaretliyken veliye ders hatırlatması, ders değişikliği ve aidat bildirimleri WhatsApp&apos;tan
+              gider. İşaretli değilse hiçbir mesaj gönderilmez; giriş kodu ve şifre de WhatsApp&apos;tan iletilmez.
+            </span>
+          </span>
+        </label>
+      )}
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Değişiklikleri kaydet" pending={updateGuardian.isPending} />
     </form>

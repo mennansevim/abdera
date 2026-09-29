@@ -160,18 +160,26 @@ if (!WhatsAppProviderModes.IsSupported(whatsAppProvider))
 {
     throw new InvalidOperationException($"Bilinmeyen WhatsApp:Provider değeri: '{whatsAppProvider}'. Desteklenen değerler: Cloud, Disabled ve yalnızca geliştirme/test için Fake.");
 }
+Func<IServiceProvider, IWhatsAppClient> resolveProviderClient;
 if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Cloud, StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddHttpClient<IWhatsAppClient, CloudApiWhatsAppClient>();
+    builder.Services.AddHttpClient<CloudApiWhatsAppClient>();
+    resolveProviderClient = sp => sp.GetRequiredService<CloudApiWhatsAppClient>();
 }
 else if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddSingleton<IWhatsAppClient, DisabledWhatsAppClient>();
+    builder.Services.AddSingleton<DisabledWhatsAppClient>();
+    resolveProviderClient = sp => sp.GetRequiredService<DisabledWhatsAppClient>();
 }
 else
 {
-    builder.Services.AddSingleton<IWhatsAppClient, FakeWhatsAppClient>();
+    builder.Services.AddSingleton<FakeWhatsAppClient>();
+    resolveProviderClient = sp => sp.GetRequiredService<FakeWhatsAppClient>();
 }
+// Her gönderim velinin bildirim onayından geçer (ConsentGatedWhatsAppClient) - sağlayıcı ne olursa olsun.
+builder.Services.AddScoped<IWhatsAppClient>(sp => new ConsentGatedWhatsAppClient(
+    resolveProviderClient(sp), sp.GetRequiredService<AbderaDbContext>(),
+    sp.GetRequiredService<ILogger<ConsentGatedWhatsAppClient>>()));
 
 // --- Banka entegrasyonu sağlayıcısı: docs/10-decisions.md E1 - WhatsApp'takiyle aynı
 // yapısal DI kararı, gerçek sağlayıcı (PayTR/Papara İşletme/vb.) henüz seçilmedi.

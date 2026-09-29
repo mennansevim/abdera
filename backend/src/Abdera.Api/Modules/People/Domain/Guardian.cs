@@ -19,7 +19,9 @@ public class Guardian
     public string LastName { get; private set; } = null!;
     public string PhoneNumber { get; private set; } = null!;
     public bool WhatsappEnabled { get; private set; } = true;
-    public bool NotificationConsent { get; private set; } = true;
+    // Varsayılan KAPALI: yönetici veli künyesindeki "WhatsApp bildirimi alsın" kutusunu
+    // işaretleyene kadar veliye hiçbir mesaj gitmez (ConsentGatedWhatsAppClient).
+    public bool NotificationConsent { get; private set; }
     public DateTimeOffset ConsentUpdatedAt { get; private set; }
     public DateTimeOffset? ConversationWindowExpiresAt { get; private set; }
     // Cookie oturumu doğrulanırken (Program.cs OnValidatePrincipal) karşılaştırılır -
@@ -46,7 +48,7 @@ public class Guardian
             LastName = lastName.Trim(),
             PhoneNumber = PhoneNumberNormalizer.Normalize(rawPhoneNumber),
             WhatsappEnabled = true,
-            NotificationConsent = true,
+            NotificationConsent = false,
             ConsentUpdatedAt = now,
             SecurityStamp = Guid.NewGuid(),
             CreatedAt = now,
@@ -91,7 +93,7 @@ public class Guardian
         if (lastName.Trim().Length > MaxNameLength) throw new ArgumentException($"Soyad en fazla {MaxNameLength} karakter olabilir.", nameof(lastName));
     }
 
-    // docs/06-whatsapp.md A8 - "dur/iptal/stop" akışı bu metodu Phase 5'te çağıracak.
+    // docs/06-whatsapp.md A8 - "dur/iptal/stop" akışı ve yöneticinin künyedeki onay kutusu.
     public void SetNotificationConsent(bool consent, DateTimeOffset now)
     {
         NotificationConsent = consent;

@@ -297,6 +297,13 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
     {
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "maintenance");
+        // Bildirim onayı varsayılan kapalı (docs/10-decisions.md R1); bakım hatırlatması yalnızca onaylı veliye.
+        await using (var consentDb = await _factory.CreateDbContextAsync())
+        {
+            var guardian = await consentDb.Guardians.SingleAsync(item => item.Id == seeded.GuardianId);
+            guardian.SetNotificationConsent(true, DateTimeOffset.UtcNow);
+            await consentDb.SaveChangesAsync();
+        }
         var instruments = await admin.GetFromJsonAsync<List<Instruments.InstrumentResponse>>("/api/instruments", TestJson.Options);
         var piano = instruments!.Single(item => item.Code == "PIANO");
 

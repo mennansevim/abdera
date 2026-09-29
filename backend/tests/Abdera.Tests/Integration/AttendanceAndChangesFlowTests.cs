@@ -65,6 +65,10 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
 
         await admin.PostAsJsonAsync($"/api/students/{student.Id}/guardians",
             new LinkGuardianToStudent.Request(guardian.Id, "anne", true));
+        // Bildirim onayı varsayılan kapalı (docs/10-decisions.md R1) - hatırlatma akışları açık veli ister.
+        (await admin.PatchAsJsonAsync($"/api/guardians/{guardian.Id}",
+            new Guardians.UpdateRequest(guardian.FirstName, guardian.LastName, $"0555{phoneDigits}", NotificationConsent: true)))
+            .EnsureSuccessStatusCode();
 
         var enrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",
                 new Enrollments.CreateRequest(teacherCreate.Teacher.Id, piano.Id, new DateOnly(2026, 8, 1))))

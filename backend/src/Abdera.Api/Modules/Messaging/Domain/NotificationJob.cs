@@ -87,6 +87,21 @@ public class NotificationJob
         UpdatedAt = now;
     }
 
+    // UNIQUE (type, reference_type, reference_id) iptal edilmiş job'ın yerine yenisini
+    // eklemeye izin vermez; veli bildirim onayını yeniden açınca aynı satır geri kuyruğa alınır.
+    public void Reactivate(string recipientPhoneNumber, DateTimeOffset scheduledAt, DateTimeOffset now)
+    {
+        if (Status != NotificationJobStatus.Cancelled)
+            throw new ConflictException($"Yalnızca '{NotificationJobStatus.Cancelled}' durumundaki bir job yeniden kurulabilir.");
+
+        RecipientPhoneNumber = recipientPhoneNumber;
+        ScheduledAt = scheduledAt;
+        Status = NotificationJobStatus.Pending;
+        AttemptCount = 0;
+        LastError = null;
+        UpdatedAt = now;
+    }
+
     // Master prompt: "failed jobs must remain visible" - Admin, deneme limitine bakmaksızın
     // elle yeniden kuyruğa alabilir.
     public void RetryManually(DateTimeOffset now)

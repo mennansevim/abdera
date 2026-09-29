@@ -1,4 +1,6 @@
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +17,15 @@ public interface INotificationScheduler
 
     /// <summary>docs/10-decisions.md A4: ders değişince/iptal olunca bekleyen job iptal edilir.</summary>
     Task CancelPendingAsync(string referenceType, Guid referenceId);
+
+    /// <summary>A8: velinin bildirim onayı kapanınca ona giden bekleyen tüm job'lar iptal edilir.</summary>
+    Task CancelPendingForRecipientAsync(string phoneNumber);
+
+    /// <summary>
+    /// Velinin bildirim onayı açılınca, birincil velisi olduğu öğrencilerin gelecekteki dersleri
+    /// için ders hatırlatmalarını kurar (onay kapalıyken hiç kurulmamış ya da iptal edilmişlerdi).
+    /// </summary>
+    Task ScheduleUpcomingLessonRemindersAsync(Guid guardianId);
 }
 
 public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotificationScheduler
@@ -60,6 +71,69 @@ public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotifica
         foreach (var job in pendingJobs)
         {
             job.Cancel(clock.UtcNow);
+        }
+    }
+
+    public async Task CancelPendingForRecipientAsync(string phoneNumber)
+    {
+        var pendingJobs = await db.NotificationJobs
+            .Where(j => j.RecipientPhoneNumber == phoneNumber &&
+                        (j.Status == NotificationJobStatus.Pending || j.Status == NotificationJobStatus.Processing))
+            .ToListAsync();
+
+        foreach (var job in pendingJobs)
+        {
+            job.Cancel(clock.UtcNow);
+        }
+    }
+
+    public async Task ScheduleUpcomingLessonRemindersAsync(Guid guardianId)
+    {
+        var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId);
+        if (guardian is null || !guardian.NotificationConsent) return;
+
+        var settings = await NotificationAutomationSettings.GetCurrentAsync(db);
+        if (!settings.IsEnabled) return;
+
+        var studentIds = await db.StudentGuardians
+            .Where(sg => sg.GuardianId == guardianId)
+            .Select(sg => sg.StudentId)
+            .ToListAsync();
+
+        var now = clock.UtcNow;
+        foreach (var studentId in studentIds)
+        {
+            // Ders hatırlatması yalnızca birincil veliye gider (LessonSeriesFeatures ile aynı kural).
+            if (await PrimaryGuardianResolver.ResolveAsync(db, studentId) != guardianId) continue;
+
+            var lessons = await db.Lessons
+                .Where(l => l.StudentId == studentId && l.StartAt > now &&
+                            (l.Status == LessonStatus.Normal || l.Status == LessonStatus.Makeup))
+                .Select(l => new { l.Id, l.StartAt })
+                .ToListAsync();
+            var lessonIds = lessons.Select(l => l.Id).ToList();
+            var existingJobs = await db.NotificationJobs
+                .Where(j => j.Type == NotificationJobType.LessonReminder && j.ReferenceType == "lesson" &&
+                            lessonIds.Contains(j.ReferenceId))
+                .ToDictionaryAsync(j => j.ReferenceId);
+
+            foreach (var lesson in lessons)
+            {
+                var remindAt = lesson.StartAt.AddMinutes(-settings.LessonReminderMinutesBefore);
+                // Hatırlatma anı geçmişse geç kalmış hatırlatma gönderme.
+                if (remindAt <= now) continue;
+
+                if (existingJobs.TryGetValue(lesson.Id, out var job))
+                {
+                    // Ders hâlâ geçerli olduğuna göre iptal onay/otomasyon kapanmasından geldi.
+                    if (job.Status == NotificationJobStatus.Cancelled)
+                        job.Reactivate(guardian.PhoneNumber, remindAt, now);
+                    continue;
+                }
+
+                db.NotificationJobs.Add(NotificationJob.Create(
+                    NotificationJobType.LessonReminder, guardian.PhoneNumber, "lesson", lesson.Id, remindAt, now));
+            }
         }
     }
 }

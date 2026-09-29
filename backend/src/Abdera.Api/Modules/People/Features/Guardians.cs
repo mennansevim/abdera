@@ -1,5 +1,8 @@
 using System.Security.Claims;
+using System.Text.Json;
+using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.AspNetCore.Identity;
@@ -12,7 +15,10 @@ namespace Abdera.Api.Modules.People.Features;
 public static class Guardians
 {
     public record CreateRequest(string FirstName, string LastName, string PhoneNumber);
-    public record UpdateRequest(string FirstName, string LastName, string PhoneNumber);
+    // NotificationConsent: künyedeki "WhatsApp bildirimi alsın" kutusu (varsayılan kapalı).
+    // Students.UpdateRequest.SiblingDiscount ile aynı sözleşme: gönderilmezse alana dokunulmaz,
+    // Admin değilse yok sayılır - öğretmenin iletişim bilgisi düzenlemesi onayı değiştirmesin.
+    public record UpdateRequest(string FirstName, string LastName, string PhoneNumber, bool? NotificationConsent = null);
     public record GuardianResponse(Guid Id, string FirstName, string LastName, string PhoneNumber, bool NotificationConsent);
     public record PhoneLookupResponse(Guid Id, string FirstName, string LastName, string PhoneNumber, List<string> StudentNames);
     // Şifre düz metni yalnızca bu yanıtta bir kez döner (öğretmen TemporaryPassword desenيyle
@@ -108,7 +114,8 @@ public static class Guardians
         new(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, guardian.NotificationConsent);
 
     private static async Task<IResult> UpdateAsync(
-        Guid guardianId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid guardianId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        INotificationScheduler scheduler)
     {
         // Öğretmen yalnızca kendi öğrencisine bağlı veliyi düzenleyebilir (J1).
         await PeopleAuthorization.EnsureGuardianAccessAsync(guardianId, principal, db);
@@ -122,10 +129,35 @@ public static class Guardians
             throw new ConflictException("Bu telefon numarasıyla kayıtlı başka bir veli var.");
         }
 
+        var previousPhone = guardian.PhoneNumber;
         guardian.Update(request.FirstName, request.LastName, request.PhoneNumber, clock.UtcNow);
+
+        if (request.NotificationConsent is { } consent && consent != guardian.NotificationConsent &&
+            AuthContext.IsAdmin(principal))
+        {
+            var now = clock.UtcNow;
+            guardian.SetNotificationConsent(consent, now);
+            if (consent)
+            {
+                await scheduler.ScheduleUpcomingLessonRemindersAsync(guardian.Id);
+            }
+            else
+            {
+                // Bekleyen job'lar eski numaraya kurulmuş olabilir (numara aynı istekte değiştiyse).
+                await scheduler.CancelPendingForRecipientAsync(previousPhone);
+                await scheduler.CancelPendingForRecipientAsync(guardian.PhoneNumber);
+            }
+
+            // CLAUDE.md: rıza (consent) değiştiren her use-case audit_log'a yazar.
+            db.AuditLogs.Add(AuditLog.Record(
+                AuthContext.GetUserId(principal), "guardian.notification_consent_changed", nameof(Guardian), guardian.Id, now,
+                beforeJson: JsonSerializer.Serialize(new { notificationConsent = !consent }),
+                afterJson: JsonSerializer.Serialize(new { notificationConsent = consent })));
+        }
+
         await db.SaveChangesAsync();
 
-        return Results.Ok(new GuardianResponse(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, guardian.NotificationConsent));
+        return Results.Ok(ToResponse(guardian));
     }
 
     // Veli şifresini ad soyaddan türeyen varsayılana döndürür (docs/10-decisions.md Q1,
@@ -143,12 +175,16 @@ public static class Guardians
         guardian.SetPassword(passwordHasher.HashPassword(guardian, password), clock.UtcNow);
         await db.SaveChangesAsync();
 
-        await whatsAppClient.SendTemplateAsync(
+        var sendResult = await whatsAppClient.SendTemplateAsync(
             guardian.PhoneNumber, PasswordTemplateName,
             new Dictionary<string, string> { ["password"] = password });
 
+        // Gönderim başarısızsa (ör. bildirim onayı kapalı) "gönderildi" deme - yönetici şifreyi
+        // bu yanıttan görüp veliye kendisi iletir.
         return Results.Ok(new ResetPasswordResponse(
             guardian.Id, guardian.PhoneNumber, password,
-            "Şifre üretildi ve WhatsApp'tan gönderildi."));
+            sendResult.Success
+                ? "Şifre üretildi ve WhatsApp'tan gönderildi."
+                : $"Şifre üretildi ama WhatsApp'tan gönderilemedi ({sendResult.Error}). Veliye kendin ilet."));
     }
 }
