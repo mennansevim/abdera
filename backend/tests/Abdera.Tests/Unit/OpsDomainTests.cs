@@ -109,6 +109,59 @@ public class OpsDomainTests
     }
 
     [Fact]
+    public void SystemHealthMonitor_Evaluate_is_healthy_while_a_run_is_in_progress_after_a_fresh_success()
+    {
+        // Canlıda görülen hata: API açılışında yedek ile ilk kontrol aynı saniyede çalıştı,
+        // en son koşu "Running" olduğu için dünkü sağlam yedek yok sayılıp kart
+        // "hâlâ sürüyor veya sonucu belirsiz" uyarısında kaldı.
+        var running = BackupRun.Start(triggeredManually: false, Now);
+
+        var (level, _) = SystemHealthMonitor.Evaluate(
+            dbHealthy: true, latestBackup: running, lastSuccessAge: TimeSpan.FromHours(20),
+            staleAfterHours: 30, unhealthyAfterHours: 48);
+
+        Assert.Equal(SystemHealthLevel.Healthy, level);
+    }
+
+    [Fact]
+    public void SystemHealthMonitor_Evaluate_is_degraded_while_the_very_first_run_is_in_progress()
+    {
+        var running = BackupRun.Start(triggeredManually: true, Now);
+
+        var (level, _) = SystemHealthMonitor.Evaluate(
+            dbHealthy: true, latestBackup: running, lastSuccessAge: null, staleAfterHours: 30, unhealthyAfterHours: 48);
+
+        Assert.Equal(SystemHealthLevel.Degraded, level);
+    }
+
+    [Fact]
+    public void SystemHealthMonitor_Evaluate_reports_a_failed_run_as_degraded_when_a_fresh_backup_exists()
+    {
+        var failed = BackupRun.Start(triggeredManually: true, Now);
+        failed.MarkFailed("S3: ListObjectsV2 failed", Now);
+
+        var (level, detail) = SystemHealthMonitor.Evaluate(
+            dbHealthy: true, latestBackup: failed, lastSuccessAge: TimeSpan.FromHours(5),
+            staleAfterHours: 30, unhealthyAfterHours: 48);
+
+        Assert.Equal(SystemHealthLevel.Degraded, level);
+        Assert.Contains("S3: ListObjectsV2 failed", detail);
+    }
+
+    [Fact]
+    public void SystemHealthMonitor_Evaluate_reports_a_failed_run_as_unhealthy_when_the_last_success_is_too_old()
+    {
+        var failed = BackupRun.Start(triggeredManually: false, Now);
+        failed.MarkFailed("pg_dump başarısız", Now);
+
+        var (level, _) = SystemHealthMonitor.Evaluate(
+            dbHealthy: true, latestBackup: failed, lastSuccessAge: TimeSpan.FromHours(50),
+            staleAfterHours: 30, unhealthyAfterHours: 48);
+
+        Assert.Equal(SystemHealthLevel.Unhealthy, level);
+    }
+
+    [Fact]
     public void SystemHealthStatus_ShouldSendAlert_respects_cooldown()
     {
         var status = SystemHealthStatus.CreateDefault(Now);
