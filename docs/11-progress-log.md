@@ -58,8 +58,9 @@ Düzeltme:
   koşularını bekler, yoksa koşu bitince yapılan tazeleme onun yazdığı durumu ezebilirdi.
 
 **Açık işler (sırayla, öğretmenler yeni adrese geçmeden önce):**
-1. ~~Yedek~~ açıldı. Kalan: R2 panelinde kilit testi (dosya silinememeli) ve geri yükleme
-   provası (`docs/16-backup-restore.md`).
+1. ~~Yedek~~ açıldı. ~~Geri yükleme provası~~ yapıldı (2026-09-29): R2'den indirilen
+   yedek çözüldü, ayrı veritabanında 56/57 tablo birebir (`docs/16-backup-restore.md`).
+   Kalan: R2 panelinde kilit testi (dosya silinememeli).
 2. E-posta `Fake` → SMTP bilgileri (`Email__Provider=Smtp`).
 3. WhatsApp `Disabled` → Meta bilgileri + Meta'da webhook adresi `panel.abderasanat.com`.
 4. Otomatik deploy: GitHub `production` environment secret'ları, `DEPLOY_ENABLED` /
