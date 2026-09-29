@@ -943,7 +943,10 @@ function GridDayColumn({
                 söyler - renk ayrımı zor görenler ve dar kartlar için. Yazının arkasında kalır. */}
             <InstrumentSilhouette
               instrumentName={lesson.instrumentName}
-              className="pointer-events-none absolute -bottom-4 -right-3 h-[4.1rem] w-[4.1rem] opacity-15"
+              // Boyut kart genişliğine bağlı: yan yana bölünmüş dar kartta silüet aynı oranda
+              // küçülür, geniş kartta 4.1rem'de durur. Taşma payı da silüetin kendi boyutunun
+              // yüzdesi (translate) olduğu için onunla birlikte ölçeklenir.
+              className="pointer-events-none absolute bottom-0 right-0 aspect-square h-auto w-[min(4.1rem,55%)] translate-x-[18%] translate-y-[24%] opacity-15"
               style={{ color: tone.border }}
             />
             <span className="relative flex min-w-0 items-center gap-1.5">
