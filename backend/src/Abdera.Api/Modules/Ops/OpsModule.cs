@@ -15,10 +15,12 @@ public static class OpsModule
         // enjekte ettiği bir singleton - ikisinin AYNI örneği paylaşması gerekiyor
         // (LastRunDate/_runLock durumu), bu yüzden AddSingleton + AddHostedService(sp=>...) .
         services.AddSingleton<BackupService>();
+        // Aynı gerekçe: BackupService koşu bitince CheckNowAsync'i aynı örnek üzerinden çağırır.
+        services.AddSingleton<SystemHealthMonitor>();
         if (enableHostedServices)
         {
             services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
-            services.AddHostedService<SystemHealthMonitor>();
+            services.AddHostedService(sp => sp.GetRequiredService<SystemHealthMonitor>());
         }
     }
 

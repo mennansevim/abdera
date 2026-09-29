@@ -38,11 +38,28 @@ kurulum `docs/19-hetzner-runbook.md`). Uygulama kodu değişmedi; repodaki
 - Hetzner Backups kapalı (P1).
 - Yedek hedefi Cloudflare R2 (P2): 60 gün Bucket Lock, 65. günde lifecycle silme.
 
+**Yedek açıldı (2026-09-29 sabahı):** `backup-gw` + R2 çalışıyor. İlk otomatik yedek başarılı
+(567 KB `.sql.enc`). İlk denemede `R2_ACCOUNT_ID`'ye hesap numarası yerine API token değeri
+(`cfat_...`) girilmişti: rclone geçersiz uç noktaya bağlanamadı, koşu `Failed` oldu ve hata
+ekrana yansıdı. Hata yolu da böylece canlıda doğrulandı. Token yenilendi.
+
+**Sağlık kartı düzeltmesi:** Yedek başarılı olduğu halde kart "Son yedekleme hâlâ sürüyor veya
+sonucu belirsiz" diyordu. İki sebebi vardı:
+- `SystemHealthMonitor` tazeliği yalnızca **en son** koşudan ölçüyordu. API açılışında yedek ile
+  ilk kontrol aynı saniyede çalışınca en son koşu `Running` göründü, önceki başarı yok sayıldı.
+- Durum yalnızca 10 dakikalık tik'te yenileniyordu.
+
+Düzeltme:
+- Tazelik artık son **başarılı** koşudan ölçülür. Süren koşu tek başına uyarı üretmez. Taze
+  yedek varken başarısız koşu `Degraded` + hata mesajı, eski yedekle birlikte `Unhealthy`.
+- `BackupService` her koşudan sonra `SystemHealthMonitor.CheckNowAsync` çağırır (ikisi de
+  singleton, `OpsModule`).
+- Birim testleri `OpsDomainTests` içinde. `OpsFlowTests`'teki kalıcı durum testi süren yedek
+  koşularını bekler, yoksa koşu bitince yapılan tazeleme onun yazdığı durumu ezebilirdi.
+
 **Açık işler (sırayla, öğretmenler yeni adrese geçmeden önce):**
-1. **Yedek şu an KAPALI** (`Backup__Provider=Disabled`). Bu PR'ın `main`'e girmesi →
-   sunucuda `git pull` → R2 API anahtarı (sunucu IP'siyle kısıtlı) → `.env`'de `R2_*` +
-   `Backup__Provider=Sftp` → "şimdi yedekle" + kilit + hata alarmı testi + geri yükleme
-   provası (runbook §7.3).
+1. ~~Yedek~~ açıldı. Kalan: R2 panelinde kilit testi (dosya silinememeli) ve geri yükleme
+   provası (`docs/16-backup-restore.md`).
 2. E-posta `Fake` → SMTP bilgileri (`Email__Provider=Smtp`).
 3. WhatsApp `Disabled` → Meta bilgileri + Meta'da webhook adresi `panel.abderasanat.com`.
 4. Otomatik deploy: GitHub `production` environment secret'ları, `DEPLOY_ENABLED` /
