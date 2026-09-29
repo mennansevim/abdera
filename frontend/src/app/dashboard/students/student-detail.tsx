@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
-import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem } from "@/components/ui";
+import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem, RowMenuSeparator } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   formatWeeklySchedule,
@@ -96,8 +96,8 @@ export function StudentDetail({
           <RowMenuItem icon="pencil" onClick={() => { close(); setEditingStudent(true); }}>Bilgileri düzenle</RowMenuItem>
           <RowMenuItem icon="plus" onClick={() => { close(); setShowEnrollmentForm(true); }}>Kurs ekle</RowMenuItem>
           <RowMenuItem icon="students" onClick={() => { close(); setShowGuardianForm(true); }}>Veli ekle</RowMenuItem>
-          <RowMenuItem icon={student.status === "Active" ? "x" : "check"} tone={student.status === "Active" ? "danger" : "default"} onClick={() => { close(); toggleStatus(); }}>{student.status === "Active" ? "Pasife al" : "Yeniden aktif et"}</RowMenuItem>
-          {onDelete && <RowMenuItem icon="x" tone="danger" onClick={() => { close(); onDelete(); }}>{isAdmin ? "Kalıcı olarak sil" : "Silme talebi oluştur"}</RowMenuItem>}
+          <RowMenuItem icon={student.status === "Active" ? "x" : "check"} onClick={() => { close(); toggleStatus(); }}>{student.status === "Active" ? "Pasife al" : "Yeniden aktif et"}</RowMenuItem>
+          {onDelete && <><RowMenuSeparator /><RowMenuItem icon="x" tone="danger" onClick={() => { close(); onDelete(); }}>{isAdmin ? "Kalıcı olarak sil…" : "Silme talebi oluştur…"}</RowMenuItem></>}
         </>}</RowMenu>}
       </div>
 

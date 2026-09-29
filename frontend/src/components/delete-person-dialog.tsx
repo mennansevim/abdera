@@ -21,6 +21,10 @@ import {
 //
 // Öğretmende üçüncü bir yol var: öğrencileri başka bir öğretmene devretmek. Gerçek hayatta
 // olan budur ve öğrencilerin ders/aidat geçmişine hiç dokunmadan öğretmeni kaldırır.
+//
+// Silme soft delete DEĞİLDİR (PersonEraser satırları gerçekten kaldırır), bu yüzden iki ek
+// fren var: kişi aktifse önce geri alınabilir "Pasife al" önerilir, ve silme düğmesi ancak
+// kişinin adı elle yazılınca açılır - menüde yanlış satıra tıklamak tek başına yetmesin.
 
 function money(value: number, currency: string) {
   return new Intl.NumberFormat("tr-TR", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
@@ -42,21 +46,80 @@ function ImpactList({ rows }: { rows: Array<{ label: string; count: number }> })
   );
 }
 
+// Ad karşılaştırması büyük/küçük harf ve fazla boşluğa takılmaz ("orhan  konur" geçer).
+function normalizeName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("tr-TR");
+}
+
+// Silmenin geri alınabilir alternatifi. Yalnızca kişi aktifken gösterilir.
+function DeactivateInstead({ description, onDeactivate, onDone }: {
+  description: string;
+  onDeactivate: () => Promise<unknown>;
+  onDone: () => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    setError(null);
+    setPending(true);
+    try {
+      await onDeactivate();
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Pasife alınamadı.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3">
+      <p className="text-xs font-bold">Silmek yerine pasife al (önerilir)</p>
+      <p className="text-meta mt-1">{description} Tüm geçmiş korunur, istediğin an yeniden aktif edebilirsin.</p>
+      {error && <div className="mt-2"><FormMessage tone="error">{error}</FormMessage></div>}
+      <button type="button" onClick={run} disabled={pending} className="btn btn-quiet mt-2 text-xs disabled:opacity-50">
+        {pending ? "Pasife alınıyor…" : "Pasife al"}
+      </button>
+    </div>
+  );
+}
+
+function TypeNameToConfirm({ name, value, onChange }: { name: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="form-label block">
+      <span>Onaylamak için <strong className="select-all">{name}</strong> yaz</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={name}
+        className="field text-sm"
+      />
+    </label>
+  );
+}
+
 export function DeleteStudentDialog({
-  studentId, studentName, onClose, onDeleted,
+  studentId, studentName, onClose, onDeleted, onDeactivate,
 }: {
   studentId: string;
   studentName: string;
   onClose: () => void;
   onDeleted?: () => void;
+  // Verilirse (öğrenci aktifken) silmenin yerine geri alınabilir "Pasife al" önerilir.
+  onDeactivate?: () => Promise<unknown>;
 }) {
   const { data: impact, isLoading } = useStudentDeletionImpact(studentId);
   const deleteStudent = useDeleteStudent();
   const [acceptsMoneyLoss, setAcceptsMoneyLoss] = useState(false);
+  const [typedName, setTypedName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const hasPayments = (impact?.payments ?? 0) > 0;
-  const blocked = hasPayments && !acceptsMoneyLoss;
+  const nameConfirmed = normalizeName(typedName) === normalizeName(studentName);
+  const blocked = (hasPayments && !acceptsMoneyLoss) || !nameConfirmed;
 
   async function confirm() {
     setError(null);
@@ -73,6 +136,14 @@ export function DeleteStudentDialog({
     <Modal open title={`${studentName} kalıcı olarak silinsin mi?`} description="Bu işlem geri alınamaz." onClose={onClose}>
       <div className="space-y-3.5">
         {isLoading && <div className="skeleton h-24 rounded-xl" />}
+
+        {onDeactivate && (
+          <DeactivateInstead
+            description="Öğrenci aktif listeden çıkar; dersleri, yoklamaları, aidat ve ödeme geçmişi olduğu gibi kalır."
+            onDeactivate={onDeactivate}
+            onDone={onClose}
+          />
+        )}
 
         {impact && (
           <>
@@ -108,6 +179,8 @@ export function DeleteStudentDialog({
           </>
         )}
 
+        {impact && <TypeNameToConfirm name={studentName} value={typedName} onChange={setTypedName} />}
+
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
         <div className="flex justify-end gap-2 border-t border-[var(--line)] pt-4">
@@ -127,25 +200,28 @@ export function DeleteStudentDialog({
 }
 
 export function DeleteTeacherDialog({
-  teacherId, teacherName, onClose, onDeleted,
+  teacherId, teacherName, onClose, onDeleted, onDeactivate,
 }: {
   teacherId: string;
   teacherName: string;
   onClose: () => void;
   onDeleted?: () => void;
+  onDeactivate?: () => Promise<unknown>;
 }) {
   const { data: impact, isLoading } = useTeacherDeletionImpact(teacherId);
   const { data: teachers } = useTeachers();
   const deleteTeacher = useDeleteTeacher();
   const [reassignTo, setReassignTo] = useState("");
   const [acceptsMoneyLoss, setAcceptsMoneyLoss] = useState(false);
+  const [typedName, setTypedName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const successors = (teachers ?? []).filter((teacher) => teacher.id !== teacherId && teacher.status === "Active");
   const hasStudents = (impact?.enrollments ?? 0) > 0;
   const hasPayments = (impact?.payments ?? 0) > 0;
   const willDestroyMoney = hasPayments && !reassignTo;
-  const blocked = willDestroyMoney && !acceptsMoneyLoss;
+  const nameConfirmed = normalizeName(typedName) === normalizeName(teacherName);
+  const blocked = (willDestroyMoney && !acceptsMoneyLoss) || !nameConfirmed;
 
   async function confirm() {
     setError(null);
@@ -166,6 +242,14 @@ export function DeleteTeacherDialog({
     <Modal open title={`${teacherName} kalıcı olarak silinsin mi?`} description="Bu işlem geri alınamaz." onClose={onClose}>
       <div className="space-y-3.5">
         {isLoading && <div className="skeleton h-24 rounded-xl" />}
+
+        {onDeactivate && (
+          <DeactivateInstead
+            description="Öğretmen aktif listeden çıkar ve giriş hesabı kapanır; öğrencileri, dersleri ve ödeme kayıtları olduğu gibi kalır."
+            onDeactivate={onDeactivate}
+            onDone={onClose}
+          />
+        )}
 
         {impact && (
           <>
@@ -226,6 +310,8 @@ export function DeleteTeacherDialog({
             )}
           </>
         )}
+
+        {impact && <TypeNameToConfirm name={teacherName} value={typedName} onChange={setTypedName} />}
 
         {error && <FormMessage tone="error">{error}</FormMessage>}
 
