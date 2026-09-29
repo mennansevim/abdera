@@ -96,6 +96,60 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
         return client;
     }
 
+    // docs/10-decisions.md Q1: şifresi hiç atanmamış veli ad soyaddan türeyen varsayılanla
+    // (soyad + adın ilk harfi) girer, sonra kendi şifresini değiştirir; eski varsayılan artık
+    // geçmez. Yönetici sıfırlaması veliyi yeniden varsayılana döndürür.
+    [Fact]
+    public async Task Guardian_logs_in_with_name_derived_password_and_can_change_it()
+    {
+        var admin = await CreateAdminClientAsync();
+        const string rawPhone = "05557771234";
+        var guardian = (await (await admin.PostAsJsonAsync("/api/guardians",
+                new Guardians.CreateRequest("Mennan", "Sevim", rawPhone)))
+            .Content.ReadFromJsonAsync<Guardians.GuardianResponse>(TestJson.Options))!;
+
+        using var client = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "yanlis"))).StatusCode);
+        // Telefon klavyesinin büyüttüğü ilk harf ve sondaki boşluk sorun olmamalı.
+        Assert.Equal(HttpStatusCode.OK,
+            (await client.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "Sevimm "))).StatusCode);
+
+        var me = (await (await client.GetAsync("/api/guardian/me"))
+            .Content.ReadFromJsonAsync<GuardianAuth.GuardianMeResponse>(TestJson.Options))!;
+        Assert.True(me.UsesDefaultPassword);
+
+        // Mevcut şifre hatalıysa, yeni şifre kısaysa ya da varsayılanın aynısıysa reddedilir.
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/guardian/change-password",
+            new GuardianAuth.ChangePasswordRequest("yanlis", "YeniSifre1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/guardian/change-password",
+            new GuardianAuth.ChangePasswordRequest("sevimm", "kisa"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/guardian/change-password",
+            new GuardianAuth.ChangePasswordRequest("sevimm", "SEVIMM"))).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync("/api/guardian/change-password",
+            new GuardianAuth.ChangePasswordRequest("sevimm", "YeniSifre1"))).StatusCode);
+
+        // Oturum şifre değişikliğinden sonra da geçerli kalır (güvenlik damgası tazelendi).
+        var afterChange = await client.GetAsync("/api/guardian/me");
+        Assert.Equal(HttpStatusCode.OK, afterChange.StatusCode);
+        Assert.False((await afterChange.Content.ReadFromJsonAsync<GuardianAuth.GuardianMeResponse>(TestJson.Options))!.UsesDefaultPassword);
+
+        using var fresh = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await fresh.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "sevimm"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,
+            (await fresh.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "YeniSifre1"))).StatusCode);
+
+        var reset = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
+            .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
+        Assert.Equal("sevimm", reset.Password);
+
+        using var afterReset = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.OK,
+            (await afterReset.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "sevimm"))).StatusCode);
+    }
+
     [Fact]
     public async Task Guardian_can_otp_login_see_own_student_and_set_rsvp()
     {

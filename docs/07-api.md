@@ -144,7 +144,8 @@ POST   /api/dev/bank/simulate-transaction        ✅ yalnızca Development - eş
 
 POST   /api/guardian/otp/request                 ✅ yalnızca kayıtlı veli telefonu için WhatsApp OTP
 POST   /api/guardian/otp/verify                  ✅ GuardianOnly cookie oturumu açar
-GET    /api/guardian/me                          ✅ oturumdaki veliyi döner
+GET    /api/guardian/me                          ✅ oturumdaki veliyi döner (+ usesDefaultPassword, docs/10-decisions.md Q1)
+POST   /api/guardian/change-password             ✅ veli kendi şifresini değiştirir (mevcut + yeni, en az 6 karakter) - Q1
 GET    /api/guardian/me/students                 ✅ yalnızca bağlı öğrenciler
 GET    /api/guardian/me/students/{studentId}/calendar ✅ yalnızca bağlı öğrencinin takvimi
 POST   /api/guardian/me/lessons/{lessonId}/rsvp  ✅ yalnızca bağlı ders için veli RSVP'si

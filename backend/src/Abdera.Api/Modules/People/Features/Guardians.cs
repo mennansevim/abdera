@@ -128,10 +128,10 @@ public static class Guardians
         return Results.Ok(new GuardianResponse(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber, guardian.NotificationConsent));
     }
 
-    // Karar F (ikinci) reversal: veliye telefon+şifre girişi için mnemonik bir ilk şifre üretir,
-    // hash'ler ve WhatsApp'tan gönderir. Şifre deseni birincil bağlı öğrencinin adı + veli adı +
-    // telefon son 4 hanesinden türer (GuardianPasswordGenerator). Düz metin yalnızca yanıtta
-    // bir kez döner - loglanmaz.
+    // Veli şifresini ad soyaddan türeyen varsayılana döndürür (docs/10-decisions.md Q1,
+    // GuardianPasswordGenerator), hash'ler ve WhatsApp'tan gönderir. Veli kendi şifresini
+    // değiştirip unuttuğunda yöneticinin geri dönüş yolu. Düz metin yalnızca yanıtta bir kez
+    // döner - loglanmaz.
     private static async Task<IResult> ResetPasswordAsync(
         Guid guardianId, AbderaDbContext db, IClock clock,
         IPasswordHasher<Guardian> passwordHasher, IWhatsAppClient whatsAppClient)
@@ -139,16 +139,7 @@ public static class Guardians
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId)
             ?? throw new NotFoundException("Veli bulunamadı.");
 
-        // Birincil bağlı öğrencinin adını al; yoksa herhangi bir bağlı öğrenci, o da yoksa veli
-        // adının kendisi. OrderBy anonim ara tip üzerinde, skaler projeksiyondan önce (CLAUDE.md).
-        var childFirstName = await db.StudentGuardians
-            .Where(sg => sg.GuardianId == guardianId)
-            .Join(db.Students, sg => sg.StudentId, s => s.Id, (sg, s) => new { sg.IsPrimary, s.FirstName })
-            .OrderByDescending(x => x.IsPrimary)
-            .Select(x => x.FirstName)
-            .FirstOrDefaultAsync() ?? guardian.FirstName;
-
-        var password = GuardianPasswordGenerator.Generate(childFirstName, guardian.FirstName, guardian.PhoneNumber);
+        var password = GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName);
         guardian.SetPassword(passwordHasher.HashPassword(guardian, password), clock.UtcNow);
         await db.SaveChangesAsync();
 

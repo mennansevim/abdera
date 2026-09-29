@@ -15,6 +15,8 @@ export interface GuardianMe {
   firstName: string;
   lastName: string;
   phoneNumber: string;
+  // Veli hâlâ ad soyaddan türeyen ilk şifreyle mi giriyor (docs/10-decisions.md Q1).
+  usesDefaultPassword: boolean;
 }
 
 export function useGuardianMe() {
@@ -111,5 +113,15 @@ export function useGuardianLogout() {
     // kopyası dahi çıkıştan sonra yeniden kullanılamaz.
     mutationFn: () => api.post<void>("/api/auth/logout"),
     onSuccess: () => clearSessionData(queryClient),
+  });
+}
+
+// docs/10-decisions.md Q1: veli kendi şifresini değiştirir. Sunucu oturumu yeni güvenlik
+// damgasıyla tazeler; "varsayılan şifre" hatırlatması için /me yeniden çekilir.
+export function useChangeGuardianPassword() {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, { currentPassword: string; newPassword: string }>({
+    mutationFn: (body) => api.post<void>("/api/guardian/change-password", body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: GUARDIAN_ME_QUERY_KEY }),
   });
 }

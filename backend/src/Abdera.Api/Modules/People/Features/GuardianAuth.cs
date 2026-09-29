@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
@@ -23,7 +25,10 @@ public static class GuardianAuth
     public record RequestOtpResponse(string Message, string? DebugCode);
     public record VerifyOtpRequest(string PhoneNumber, string Code);
     public record VerifyOtpResponse(Guid Id, string FirstName, string LastName);
-    public record GuardianMeResponse(Guid Id, string FirstName, string LastName, string PhoneNumber);
+    // UsesDefaultPassword: veli hâlâ ad soyaddan türeyen varsayılan şifreyle giriyor mu
+    // (docs/10-decisions.md Q1) - portal bu durumda şifre değiştirme hatırlatması gösterir.
+    public record GuardianMeResponse(Guid Id, string FirstName, string LastName, string PhoneNumber, bool UsesDefaultPassword);
+    public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
     // Karar F (ikinci) reversal: telefon + şifre ile giriş (docs/13-...). Yanıt gövdesi OTP
     // doğrulamasıyla aynı (VerifyOtpResponse) - frontend tek bir başarı şeklini işler.
     public record LoginRequest(string PhoneNumber, string Password);
@@ -46,6 +51,9 @@ public static class GuardianAuth
         app.MapPost("/api/guardian/otp/request", RequestOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapPost("/api/guardian/otp/verify", VerifyOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
         app.MapGet("/api/guardian/me", MeAsync).RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+        app.MapPost("/api/guardian/change-password", ChangePasswordAsync)
+            .RequireAuthorization(AuthorizationPolicies.GuardianOnly)
+            .RequireRateLimiting("guardian-otp");
         app.MapPost("/api/guardian/logout", GuardianLogoutAsync)
             .AllowAnonymous();
 
@@ -77,14 +85,13 @@ public static class GuardianAuth
         }
 
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.PhoneNumber == normalizedPhone);
-        if (guardian?.PasswordHash is null)
+        if (guardian is null)
         {
             passwordHasher.VerifyHashedPassword(DummyGuardian, DummyPasswordHash, request.Password ?? "");
             return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: GenericFailureDetail);
         }
 
-        var verifyResult = passwordHasher.VerifyHashedPassword(guardian, guardian.PasswordHash, request.Password ?? "");
-        if (verifyResult == PasswordVerificationResult.Failed)
+        if (!PasswordMatches(guardian, request.Password, passwordHasher))
         {
             return Results.Problem(statusCode: 401, title: "Giriş başarısız", detail: GenericFailureDetail);
         }
@@ -231,12 +238,88 @@ public static class GuardianAuth
             properties);
     }
 
-    private static async Task<IResult> MeAsync(ClaimsPrincipal principal, AbderaDbContext db)
+    private static async Task<IResult> MeAsync(ClaimsPrincipal principal, AbderaDbContext db, IPasswordHasher<Guardian> passwordHasher)
     {
         var id = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var guardian = await db.Guardians.AsNoTracking().SingleOrDefaultAsync(g => g.Id == id)
             ?? throw new ForbiddenException("Veli kaydı artık mevcut değil.");
 
-        return Results.Ok(new GuardianMeResponse(guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber));
+        return Results.Ok(new GuardianMeResponse(
+            guardian.Id, guardian.FirstName, guardian.LastName, guardian.PhoneNumber,
+            UsesDefaultPassword(guardian, passwordHasher)));
+    }
+
+    // docs/10-decisions.md Q1: veli şifresini kendisi değiştirir. Mevcut şifre (henüz hiç
+    // değiştirmediyse ad soyaddan türeyen varsayılan) doğrulanmadan yeni şifre yazılmaz.
+    private static async Task<IResult> ChangePasswordAsync(
+        ChangePasswordRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        IPasswordHasher<Guardian> passwordHasher, HttpContext httpContext)
+    {
+        var id = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == id)
+            ?? throw new ForbiddenException("Veli kaydı artık mevcut değil.");
+
+        var newPassword = request.NewPassword ?? "";
+        if (newPassword.Length < MinPasswordLength)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["newPassword"] = [$"Yeni şifre en az {MinPasswordLength} karakter olmalı."],
+            });
+        }
+
+        if (string.Equals(newPassword.Trim(), GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["newPassword"] = ["Yeni şifre ad soyaddan türeyen ilk şifreyle aynı olamaz."],
+            });
+        }
+
+        if (!PasswordMatches(guardian, request.CurrentPassword, passwordHasher))
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["currentPassword"] = ["Mevcut şifre hatalı."],
+            });
+        }
+
+        guardian.SetPassword(passwordHasher.HashPassword(guardian, newPassword), clock.UtcNow);
+        db.AuditLogs.Add(AuditLog.Record(null, "guardian.password_changed", nameof(Guardian), guardian.Id, clock.UtcNow));
+        await db.SaveChangesAsync();
+
+        // SetPassword güvenlik damgasını yeniledi; mevcut oturum yeni damgayla tazelenmezse
+        // veli şifresini değiştirdiği anda kendi oturumundan da atılırdı.
+        await SignInGuardianAsync(guardian, httpContext);
+        return Results.NoContent();
+    }
+
+    private const int MinPasswordLength = 6;
+
+    // Şifre kontrolünün tek yeri. Hiç şifre atanmamış veli (PasswordHash null) ad soyaddan
+    // türeyen varsayılan şifreyle girer - büyük/küçük harf ve baştaki/sondaki boşluk
+    // önemsenmez (telefon klavyesi ilk harfi büyütüyor). Atanmış hash varsa yalnızca o geçerli.
+    private static bool PasswordMatches(Guardian guardian, string? password, IPasswordHasher<Guardian> passwordHasher)
+    {
+        if (guardian.PasswordHash is null)
+        {
+            // Zamanlama güvenliği: hash'li veliyle aynı maliyet.
+            passwordHasher.VerifyHashedPassword(DummyGuardian, DummyPasswordHash, password ?? "");
+            var expected = GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName);
+            var candidate = (password ?? "").Trim().ToLowerInvariant();
+            return expected.Length > 0 && CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(candidate), Encoding.UTF8.GetBytes(expected));
+        }
+
+        return passwordHasher.VerifyHashedPassword(guardian, guardian.PasswordHash, password ?? "")
+            != PasswordVerificationResult.Failed;
+    }
+
+    private static bool UsesDefaultPassword(Guardian guardian, IPasswordHasher<Guardian> passwordHasher)
+    {
+        if (guardian.PasswordHash is null) return true;
+        var defaultPassword = GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName);
+        return passwordHasher.VerifyHashedPassword(guardian, guardian.PasswordHash, defaultPassword)
+            != PasswordVerificationResult.Failed;
     }
 }

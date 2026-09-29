@@ -21,7 +21,7 @@ ile giriş; geçmiş aidatlar dahil.
   dokunulmaz.
 - **Şifre deseni:** `{ÇocukAdıİlk3}{VeliAdıİlk2}{TelefonSon4}` — Türkçe karakterler ASCII'ye
   çevrilir, çocuk adı Baş Harf Büyük, veli adı küçük. Örn: çocuk "Zeynep", veli "Ayşe",
-  telefon `+90 532 123 45 67` → `Zeyay4567`. Güvenlik notu: kamuya açık bilgiden türediği için
+  telefon `+90 532 123 45 67` → `Zeyay4567` (**2026-09-29'dan beri geçersiz:** desen soyad + adın ilk harfi, ör. Mennan Sevim → `sevimm` - `docs/10-decisions.md` Q1). Güvenlik notu: kamuya açık bilgiden türediği için
   yalnızca **ilk şifre**dir; ileride "ilk girişte değiştir" akışı önerilir (FIX-BACKLOG'a bkz).
 
 ## Faz planı
