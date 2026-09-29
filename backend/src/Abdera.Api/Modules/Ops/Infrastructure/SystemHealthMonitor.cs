@@ -9,12 +9,22 @@ namespace Abdera.Api.Modules.Ops.Infrastructure;
 // olarak veritabanı bağlantısını ve son başarılı yedeklemenin ne kadar eski olduğunu
 // kontrol eder, SystemHealthStatus'u (tek satırlık, NotificationAutomationSettings ile
 // aynı singleton desen) günceller. Aynı BackgroundService + PeriodicTimer deseni.
+//
+// Singleton olarak kaydedilir (OpsModule): BackupService bir koşuyu bitirince CheckNowAsync
+// ile durumu hemen tazeler. Aksi halde ekrandaki kart bir sonraki tik'e kadar (varsayılan
+// 10 dk) eski sonucu gösteriyordu - API açılışında yedek ile ilk kontrol aynı saniyede
+// çalışınca "hâlâ sürüyor" uyarısı yedek başarıyla bittikten sonra da ekranda kalıyordu.
 public class SystemHealthMonitor(
     IServiceScopeFactory scopeFactory,
     HealthCheckService healthCheckService,
     IConfiguration config,
     ILogger<SystemHealthMonitor> logger) : BackgroundService
 {
+    // Tik ile yedek sonrası tazeleme aynı tek satırlık durumu yazar; sırayla çalışsınlar.
+    private readonly SemaphoreSlim _checkLock = new(1, 1);
+
+    public Task CheckNowAsync(CancellationToken cancellationToken = default) => CheckOnceAsync(cancellationToken);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var intervalMinutes = config.GetValue("Ops:HealthCheckIntervalMinutes", 10);
@@ -28,6 +38,7 @@ public class SystemHealthMonitor(
 
     private async Task CheckOnceAsync(CancellationToken cancellationToken)
     {
+        await _checkLock.WaitAsync(cancellationToken);
         try
         {
             using var scope = scopeFactory.CreateScope();
@@ -42,9 +53,15 @@ public class SystemHealthMonitor(
             var latestBackup = await db.BackupRuns.OrderByDescending(r => r.StartedAt).FirstOrDefaultAsync(cancellationToken);
             var staleAfterHours = config.GetValue("Ops:BackupStaleAfterHours", 30);
             var unhealthyAfterHours = config.GetValue("Ops:BackupUnhealthyAfterHours", 48);
-            var lastSuccessAge = latestBackup?.Status == BackupRunStatus.Succeeded
-                ? now - (latestBackup.CompletedAt ?? latestBackup.StartedAt)
-                : (TimeSpan?)null;
+            // Tazelik son BAŞARILI koşudan ölçülür, en son koşudan değil: o an süren ya da
+            // tek seferlik başarısız bir koşu, dünkü sağlam yedeği yok saymamalı.
+            var lastSuccess = await db.BackupRuns
+                .Where(r => r.Status == BackupRunStatus.Succeeded)
+                .OrderByDescending(r => r.StartedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            var lastSuccessAge = lastSuccess is null
+                ? (TimeSpan?)null
+                : now - (lastSuccess.CompletedAt ?? lastSuccess.StartedAt);
 
             var (level, detail) = Evaluate(dbHealthy, latestBackup, lastSuccessAge, staleAfterHours, unhealthyAfterHours);
 
@@ -75,10 +92,15 @@ public class SystemHealthMonitor(
             // tik'te tekrar dener (OverdueReceivableSweeper ile aynı savunma deseni).
             logger.LogError(ex, "Sistem sağlık kontrolü başarısız oldu.");
         }
+        finally
+        {
+            _checkLock.Release();
+        }
     }
 
     // public - Unit/OpsDomainTests.cs saf bir fonksiyon olarak doğrudan test ediyor
     // (PaymentMatcher.Match ile aynı desen: DB'ye dokunmayan karar mantığı ayrı test edilir).
+    // lastSuccessAge: en son BAŞARILI koşunun yaşı (en son koşunun değil); hiç yoksa null.
     public static (SystemHealthLevel Level, string Detail) Evaluate(
         bool dbHealthy, BackupRun? latestBackup, TimeSpan? lastSuccessAge, int staleAfterHours, int unhealthyAfterHours)
     {
@@ -90,22 +112,30 @@ public class SystemHealthMonitor(
         {
             return (SystemHealthLevel.Degraded, "Henüz hiç yedekleme çalışmadı.");
         }
-        if (latestBackup.Status == BackupRunStatus.Failed && lastSuccessAge is null)
-        {
-            return (SystemHealthLevel.Unhealthy, $"Son yedekleme başarısız oldu: {latestBackup.ErrorMessage}");
-        }
         if (lastSuccessAge is null)
         {
-            return (SystemHealthLevel.Degraded, "Son yedekleme hâlâ sürüyor veya sonucu belirsiz.");
+            return latestBackup.Status == BackupRunStatus.Failed
+                ? (SystemHealthLevel.Unhealthy, $"Son yedekleme başarısız oldu: {latestBackup.ErrorMessage}")
+                : (SystemHealthLevel.Degraded, "İlk yedekleme sürüyor, henüz başarılı bir yedek yok.");
         }
-        if (lastSuccessAge.Value.TotalHours >= unhealthyAfterHours)
+
+        var hours = lastSuccessAge.Value.TotalHours;
+        if (hours >= unhealthyAfterHours)
         {
-            return (SystemHealthLevel.Unhealthy, $"Son başarılı yedekleme {lastSuccessAge.Value.TotalHours:0} saat önce - çok eski.");
+            return (SystemHealthLevel.Unhealthy, $"Son başarılı yedekleme {hours:0} saat önce - çok eski.");
         }
-        if (lastSuccessAge.Value.TotalHours >= staleAfterHours)
+        // Önceki yedek sağlam olsa da son koşunun düşmesi görmezden gelinmez: yönetici
+        // hatayı görmeli, ama elde taze bir yedek varken durum "sağlıksız" değil.
+        if (latestBackup.Status == BackupRunStatus.Failed)
         {
-            return (SystemHealthLevel.Degraded, $"Son başarılı yedekleme {lastSuccessAge.Value.TotalHours:0} saat önce.");
+            return (SystemHealthLevel.Degraded,
+                $"Son yedekleme başarısız oldu: {latestBackup.ErrorMessage} (son başarılı yedek {hours:0} saat önce).");
         }
+        if (hours >= staleAfterHours)
+        {
+            return (SystemHealthLevel.Degraded, $"Son başarılı yedekleme {hours:0} saat önce.");
+        }
+        // Süren bir koşu tek başına dikkat gerektirmez; takılı kalırsa yaş eşikleri yakalar.
         return (SystemHealthLevel.Healthy, "Sistem sağlıklı.");
     }
 

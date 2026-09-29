@@ -95,6 +95,16 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         await using var db = await _factory.CreateDbContextAsync();
         var admin = await CreateAdminClientAsync();
 
+        // Biten her yedek koşusu sağlık durumunu hemen yeniden yazıyor (BackupService →
+        // SystemHealthMonitor.CheckNowAsync). Sınıftaki manuel yedek testi ya da açılıştaki
+        // otomatik yedek hâlâ sürüyorsa, bittiğinde aşağıda yazdığımız durumu ezer; önce
+        // süren koşuların bitmesini ve ardından gelen tazelemeyi bekle.
+        for (var attempt = 0; attempt < 120 && await db.BackupRuns.AnyAsync(r => r.Status == BackupRunStatus.Running); attempt++)
+        {
+            await Task.Delay(500);
+        }
+        await Task.Delay(1000);
+
         var existing = await db.SystemHealthStatuses.SingleOrDefaultAsync(s => s.Id == SystemHealthStatus.SingletonId);
         if (existing is null)
         {

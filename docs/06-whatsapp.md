@@ -76,6 +76,15 @@ Hızlı yanıtlar (quick-reply buton, index 0/1/2):
 2: ❌ Gelemiyorum
 ```
 
+**Değişken sırası:** Meta şablonları konumsaldır (`{{1}}`, `{{2}}`...) ve değişken sayısı
+onaylı şablonla birebir tutmalıdır. Gönderimde değerler, uygulamadaki şablon gövdesindeki
+`{{ad}}` yer tutucularının **ilk geçiş sırasıyla** dizilir; gövdede olmayan değer gönderilmez
+(`MessageTemplate.OrderParameters`). Meta'ya şablon yazarken panelde görünen gövdedeki
+değişkenleri soldan sağa `{{1}}`, `{{2}}`... diye numarala. Yukarıdaki gövde için sıra:
+`{{1}}` veli adı, `{{2}}` öğrenci, `{{3}}` enstrüman, `{{4}}` ders saati, `{{5}}` öğretmen.
+Gövdede geçip bildirimin üretmediği bir ad varsa job gönderilmeden `FAILED` olur ve hata
+metni hangi adın eksik olduğunu söyler.
+
 Meta kısıtı: quick-reply buton metni ≤20 karakter, en fazla 3 buton — üçü de sınırın altında
 ("Geç kalacağım" 14 karakter). Üçüncü buton admin panelden (Mesaj Merkezi > Şablonlar ve
 otomasyon) kapatılabilir (`NotificationAutomationSettings.AllowAttendingLateResponse`) - kapalıyken

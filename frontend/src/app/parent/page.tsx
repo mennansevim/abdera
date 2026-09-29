@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { AppLoader } from "@/components/app-loader";
 import { Icon, type IconName } from "@/components/icons";
+import { Modal, Notice } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { GuardianChangePasswordForm } from "./change-password-form";
 import { useGuardianLogout, useRequireGuardianAuth } from "@/lib/guardian-auth";
 import {
   useGuardianBilling,
@@ -44,6 +46,8 @@ export default function ParentPage() {
   const [selectedDay, setSelectedDay] = useState(1);
   const [studentIndex, setStudentIndex] = useState(0);
   const [today] = useState(() => new Date());
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [passwordChanged, setPasswordChanged] = useState(false);
 
   const selectedStudent = students?.[studentIndex % Math.max(students.length, 1)];
   const from = useMemo(() => today.toISOString(), [today]);
@@ -75,9 +79,9 @@ export default function ParentPage() {
           bir yüksekliğe çözülmüyordu ve kaydırma içteki kutuda değil sayfada oluyordu - alttaki
           sekme menüsü içeriğin sonuna itilip ekrandan çıkıyordu (390x844'te y=1036'da ölçüldü).
           Geniş ekrandaki "telefon" kartı da ekran yüksekliğini aşmasın diye sınırlandı. */}
-      <section className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden border-[#dfd9d0] bg-[#fbf9f5] shadow-[0_12px_40px_rgba(44,35,28,.1)] sm:h-[min(760px,calc(100dvh-3rem))] sm:rounded-[1.4rem] sm:border">
-        <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain px-4 pb-24 pt-4">
-          <header className="mb-4 flex items-center gap-3">
+      <section className="relative mx-auto h-dvh w-full max-w-[390px] overflow-hidden border-[#dfd9d0] bg-[#fbf9f5] shadow-[0_12px_40px_rgba(44,35,28,.1)] sm:h-[min(760px,calc(100dvh-3rem))] sm:rounded-[1.4rem] sm:border md:h-[min(880px,calc(100dvh-3rem))] md:max-w-3xl">
+        <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain px-3.5 pb-20 pt-3 md:px-5">
+          <header className="mb-3 flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-[linear-gradient(145deg,#d99a22,#a96606)] text-xs font-bold text-white">{initials}</span>
             {selectedStudent ? (
               <span className="min-w-0 flex-1">
@@ -94,10 +98,20 @@ export default function ParentPage() {
               studentIndex={studentIndex}
               onSelectStudent={setStudentIndex}
               onOpenMain={() => router.push("/login?chooseRole=1")}
+              onChangePassword={() => setShowPasswordForm(true)}
               onLogout={handleLogout}
               loggingOut={logout.isPending}
             />
           </header>
+
+          {passwordChanged && <div className="mb-3"><Notice onDismiss={() => setPasswordChanged(false)}>Şifren değiştirildi.</Notice></div>}
+          {guardian.usesDefaultPassword && !passwordChanged && (
+            <div role="status" className="mb-3 flex items-center gap-2 rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-[.75rem] font-semibold text-[var(--warning-strong)]">
+              <Icon name="shield" className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">İlk şifreni kullanıyorsun. Güvenliğin için kendine özel bir şifre belirle.</span>
+              <button type="button" onClick={() => setShowPasswordForm(true)} className="btn btn-quiet min-h-8 shrink-0 px-2.5 text-[.75rem] pointer-coarse:min-h-10">Değiştir</button>
+            </div>
+          )}
 
           {tab === "home" && <HomeView lessons={lessons} lessonsLoading={lessonsLoading} lessonsError={lessonsError} refetchLessons={refetchLessons} messagesError={messagesError} today={today} studentId={selectedStudent?.studentId} billing={billing} messages={messages} />}
           {tab === "calendar" && <CalendarView lessons={lessons} loading={lessonsLoading} error={lessonsError} refetch={refetchLessons} today={today} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />}
@@ -107,17 +121,21 @@ export default function ParentPage() {
         </div>
         <ParentNavigation tab={tab} setTab={setTab} />
       </section>
+      <Modal open={showPasswordForm} title="Şifremi değiştir" description="Giriş yaparken telefon numaranla birlikte bu şifreyi kullanacaksın." onClose={() => setShowPasswordForm(false)} size="sm">
+        <GuardianChangePasswordForm onClose={() => setShowPasswordForm(false)} onDone={() => { setShowPasswordForm(false); setPasswordChanged(true); }} />
+      </Modal>
     </main>
   );
 }
 
 // Önceden ayrı bir "+N öğrenci" butonu ve ayrı bir çıkış butonu vardı; mockup'ta ikisi tek bir
 // "…" menüsünde toplanıyor (docs/14-ui-design-prompt.md D).
-function HeaderMenu({ students, studentIndex, onSelectStudent, onOpenMain, onLogout, loggingOut }: {
+function HeaderMenu({ students, studentIndex, onSelectStudent, onOpenMain, onChangePassword, onLogout, loggingOut }: {
   students: GuardianStudent[] | undefined;
   studentIndex: number;
   onSelectStudent: (index: number) => void;
   onOpenMain: () => void;
+  onChangePassword: () => void;
   onLogout: () => void;
   loggingOut: boolean;
 }) {
@@ -132,7 +150,7 @@ function HeaderMenu({ students, studentIndex, onSelectStudent, onOpenMain, onLog
 
   return (
     <div className="relative shrink-0">
-      <button onClick={() => setOpen((value) => !value)} className="pressable grid h-11 w-11 place-items-center rounded-xl border border-[var(--line)] bg-white text-[#756f7a]" aria-label="Menüyü aç" aria-expanded={open}>
+      <button onClick={() => setOpen((value) => !value)} className="icon-btn icon-btn-quiet text-[#756f7a]" aria-label="Menüyü aç" aria-expanded={open}>
         <Icon name="more" className="h-4 w-4" />
       </button>
       {open && (
@@ -159,6 +177,9 @@ function HeaderMenu({ students, studentIndex, onSelectStudent, onOpenMain, onLog
             )}
             <button onClick={() => { onOpenMain(); setOpen(false); }} className="pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-[#756f7a] hover:bg-black/[.035]">
               <Icon name="home" className="h-4 w-4" /> Ana giriş ekranı
+            </button>
+            <button onClick={() => { onChangePassword(); setOpen(false); }} className="pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-[#756f7a] hover:bg-black/[.035]">
+              <Icon name="shield" className="h-4 w-4" /> Şifremi değiştir
             </button>
             <div className="my-1 border-t border-[var(--line)]" />
             <button onClick={onLogout} disabled={loggingOut} className="pressable flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-[#756f7a] hover:bg-black/[.035] disabled:opacity-50">
@@ -215,8 +236,8 @@ function HomeView({ lessons, lessonsLoading, lessonsError, refetchLessons, messa
   const availableMakeups = billing?.makeupCredits.filter((credit) => credit.studentId === studentId) ?? [];
 
   return (
-    <div className="space-y-3">
-      <section className="rounded-2xl bg-[linear-gradient(145deg,#fff0d9,#fff8ed)] p-4 shadow-[0_8px_20px_rgba(113,76,28,.08)]">
+    <div className="grid gap-2.5 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] md:items-start">
+      <section className="rounded-2xl bg-[linear-gradient(145deg,#fff0d9,#fff8ed)] p-3.5 shadow-[0_8px_20px_rgba(113,76,28,.08)]">
         <p className="text-[.75rem] font-bold uppercase tracking-[.08em] text-[#b07816]">Sıradaki Ders</p>
         {lessonsLoading ? (
           <div className="mt-2 space-y-2" aria-busy="true"><div className="skeleton h-7 w-40 rounded-lg" /><div className="skeleton h-4 w-56 rounded" /></div>
@@ -228,14 +249,14 @@ function HomeView({ lessons, lessonsLoading, lessonsError, refetchLessons, messa
             <p className="mt-1 text-[.75rem] text-[#776c60]">{formatLessonWhen(nextLesson.startAt, nextLesson.endAt, today)}</p>
             <p className="mt-0.5 text-[.75rem] text-[#776c60]">{nextLesson.teacherName} ile</p>
             {showButtons ? (
-              <div className="mt-4 grid grid-cols-3 gap-1.5" role="group" aria-label="Derse katılım yanıtı">
+              <div className="mt-3 grid grid-cols-3 gap-1.5" role="group" aria-label="Derse katılım yanıtı">
                 <button onClick={() => respond("Attending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#23804a] px-1 text-[.75rem] font-bold text-white disabled:opacity-60"><Icon name="check" className="h-4 w-4" /> Geliyorum</button>
                 <button onClick={() => respond("AttendingLate")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl bg-[#a86d0c] px-1 text-[.75rem] font-bold text-white disabled:opacity-60"><Icon name="clock" className="h-4 w-4" /> Geç kalacağım</button>
                 <button onClick={() => respond("NotAttending")} disabled={respondRsvp.isPending} className="pressable flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl border border-[var(--line)] bg-white px-1 text-[.75rem] font-bold text-[#b84c4c] disabled:opacity-60"><Icon name="x" className="h-4 w-4" /> Gelemiyorum</button>
               </div>
             ) : (
               <>
-                <p className={`mt-4 flex min-h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold ${rsvp === "Attending" ? "bg-[#dcf3e4] text-[#227a49]" : rsvp === "AttendingLate" ? "bg-[#fbead0] text-[#9a6a1a]" : "bg-[#ffe2df] text-[#b3403c]"}`}>
+                <p className={`mt-3 flex min-h-11 items-center justify-center gap-2 rounded-xl text-xs font-bold ${rsvp === "Attending" ? "bg-[#dcf3e4] text-[#227a49]" : rsvp === "AttendingLate" ? "bg-[#fbead0] text-[#9a6a1a]" : "bg-[#ffe2df] text-[#b3403c]"}`}>
                   <Icon name={rsvp === "Attending" ? "check" : rsvp === "AttendingLate" ? "clock" : "x"} className="h-4 w-4" />
                   {rsvp === "Attending" ? "Geliyorum olarak işaretlendi" : rsvp === "AttendingLate" ? "Geç kalacağım olarak işaretlendi" : "Gelemiyorum olarak işaretlendi"}
                 </p>
@@ -248,7 +269,7 @@ function HomeView({ lessons, lessonsLoading, lessonsError, refetchLessons, messa
         )}
         {error && <p role="alert" className="mt-3 rounded-xl bg-[#ffe8e5] p-3 text-xs font-semibold text-[#af4545]">{error}</p>}
       </section>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-1">
         <InfoCard
           icon="wallet"
           label="Açık Aidat"
@@ -266,9 +287,9 @@ function HomeView({ lessons, lessonsLoading, lessonsError, refetchLessons, messa
           detail={availableMakeups[0] ? `Son kullanım: ${formatDateTime(availableMakeups[0].expiresAt)}` : "Kullanılabilir telafi yok"}
         />
       </div>
-      <section>
-        <h2 className="mb-2 text-xs font-bold">Son Bildirimler</h2>
-        <div className="space-y-2">
+      <section className="md:col-span-2">
+        <h2 className="mb-1.5 text-xs font-bold">Son Bildirimler</h2>
+        <div className="space-y-1.5">
           {messages?.slice(0, 3).map((message) => <MessageCard key={message.id} message={message} compact />)}
           {messagesError
             ? <p role="alert" className="app-card p-4 text-xs text-[var(--danger-strong)]">Bildirimler yüklenemedi.</p>
@@ -312,9 +333,9 @@ function CalendarView({ lessons, loading, error, refetch, today, selectedDay, se
 
   return (
     <div>
-      <h1 className="text-xl font-bold">Takvim</h1>
-      <p className="mt-1 text-xs text-[var(--muted)]">Yaklaşan derslerin</p>
-      <div className="my-4 grid grid-cols-7 gap-1">
+      <h1 className="text-lg font-bold">Takvim</h1>
+      <p className="text-xs text-[var(--muted)]">Yaklaşan derslerin</p>
+      <div className="my-3 grid grid-cols-7 gap-1">
         {weekDays.map((day, index) => (
           <button key={day.toISOString()} onClick={() => setSelectedDay(index)} aria-pressed={selectedDay === index} className={`pressable flex min-h-12 flex-col items-center justify-center rounded-xl text-[.75rem] font-semibold ${selectedDay === index ? "bg-[var(--brand-strong)] text-white" : "border border-[var(--line)] bg-white text-[#746d79]"}`}>
             <span>{day.toLocaleDateString("tr-TR", { weekday: "short" }).replace(".", "") || WEEKDAY_SHORT_FALLBACK[index]}</span>
@@ -322,17 +343,16 @@ function CalendarView({ lessons, loading, error, refetch, today, selectedDay, se
           </button>
         ))}
       </div>
-      <div className="space-y-3">
-        {loading ? <div className="skeleton h-24 rounded-2xl" aria-busy="true" /> : error ? <div className="app-card p-4"><LoadError message="Takvim yüklenemedi" onRetry={refetch} /></div> : dayLessons.length ? dayLessons.map((lesson) => (
-          <article key={lesson.id} className="app-card p-4">
-            <p className="text-[.75rem] font-bold text-[var(--brand)]">{selected.toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" })}</p>
-            <h2 className="mt-1 text-sm font-bold">{lesson.instrumentName} Dersi</h2>
-            <p className="mt-1 text-xs text-[var(--muted)]">
+      <div className="space-y-2">
+        {loading ? <div className="skeleton h-16 rounded-2xl" aria-busy="true" /> : error ? <div className="app-card p-4"><LoadError message="Takvim yüklenemedi" onRetry={refetch} /></div> : dayLessons.length ? dayLessons.map((lesson) => (
+          <article key={lesson.id} className="app-card px-3.5 py-2.5">
+            <h2 className="text-sm font-bold">{lesson.instrumentName} Dersi</h2>
+            <p className="text-xs text-[var(--muted)]">
               {new Date(lesson.startAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{new Date(lesson.endAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} · {lesson.teacherName}
             </p>
           </article>
         )) : (
-          <p className="app-card p-6 text-center text-xs text-[var(--muted)]">Bu gün için planlanmış ders yok.</p>
+          <p className="app-card p-4 text-center text-xs text-[var(--muted)]">Bu gün için planlanmış ders yok.</p>
         )}
       </div>
     </div>
@@ -402,11 +422,11 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
 
   return (
     <div>
-      <h1 className="text-xl font-bold">Aidat</h1>
-      <p className="mt-1 text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p>
+      <h1 className="text-lg font-bold">Aidat</h1>
+      <p className="text-xs text-[var(--muted)]">Ödemeler ve dönem bilgisi</p>
 
-      <div className="mt-4 space-y-3">
-        <section className={`rounded-2xl p-4 ${openReceivables.length ? "bg-[#fff0ed] text-[#883e39]" : hasReceivables ? "bg-[#e7f5ea] text-[#286c42]" : "bg-[var(--surface-muted)] text-[var(--foreground)]"}`}>
+      <div className="mt-3 grid gap-2.5 md:grid-cols-2 md:items-start">
+        <section className={`rounded-2xl p-3.5 md:col-span-2 ${openReceivables.length ? "bg-[#fff0ed] text-[#883e39]" : hasReceivables ? "bg-[#e7f5ea] text-[#286c42]" : "bg-[var(--surface-muted)] text-[var(--foreground)]"}`}>
           <div className="flex items-start justify-between gap-3">
             <div><p className="text-[.75rem] font-bold uppercase tracking-[.07em] opacity-70">Güncel durum</p><p className="mt-1 text-xl font-bold tabular-nums">{openReceivables.length ? formatMoney(outstandingTotal, openReceivables[0]!.currency) : hasReceivables ? "Borç yok" : "Aidat oluşturulmadı"}</p></div>
             <span className="rounded-full bg-white/70 px-2.5 py-1 text-[.75rem] font-bold">{openReceivables.length ? `${openReceivables.length} açık dönem` : hasReceivables ? "Ödemeler güncel" : "Henüz kayıt yok"}</span>
@@ -415,12 +435,12 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
         </section>
 
         {enrollments.map((enrollment) => (
-          <section key={enrollment.enrollmentId} className="app-card p-4">
+          <section key={enrollment.enrollmentId} className="app-card p-3.5 md:col-span-2">
             <div className="flex items-start justify-between gap-3">
               <div><h2 className="text-sm font-bold">{enrollment.instrumentName}</h2><p className="mt-1 text-[.75rem] text-[var(--muted)]">{enrollment.teacherName}</p></div>
               <span className="rounded-full bg-[var(--brand-soft)] px-2 py-1 text-[.75rem] font-bold text-[var(--brand)]">{enrollment.studentName}</span>
             </div>
-            <div className="mt-3 space-y-2">
+            <div className="mt-2 grid gap-1.5 md:grid-cols-2">
               {[...enrollment.receivables].sort((a, b) => {
                 const aOpen = a.status !== "Paid" && a.status !== "Cancelled";
                 const bOpen = b.status !== "Paid" && b.status !== "Cancelled";
@@ -428,7 +448,7 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
               }).map((receivable) => {
                 const remaining = Math.max(0, receivable.amount - receivable.totalPaid);
                 const paid = receivable.status === "Paid";
-                return <div key={receivable.id} className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white p-3">
+                return <div key={receivable.id} className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-3 py-2">
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${paid ? "bg-[#ddf2e2] text-[#2e7d49]" : "bg-[#ffe0de] text-[#c94b4b]"}`}><Icon name={paid ? "check" : "wallet"} className="h-3.5 w-3.5" /></span>
                   <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-1.5 text-xs font-bold capitalize">{new Date(`${receivable.period}-01T00:00:00`).toLocaleDateString("tr-TR", { month: "long", year: "numeric" })}{receivable.prepayPlanMonths && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.75rem] font-bold normal-case text-[var(--brand-strong)]">Peşin ödeme · {receivable.prepayPlanMonths} ay</span>}</span><span className="block text-[.75rem] text-[var(--muted)]">Vade: {formatDate(receivable.dueDate)} · {paid ? "Ödendi" : receivable.status === "Partial" ? "Kısmi ödeme" : receivable.status === "Overdue" ? "Vadesi geçti" : "Açık"}</span></span>
                   <span className={`shrink-0 text-right text-xs font-bold ${paid ? "text-[#297a45]" : "text-[#b3403c]"}`}><span className="block">{formatMoney(paid ? receivable.totalPaid : remaining, receivable.currency)}</span><span className="mt-0.5 block text-[.75rem] font-semibold opacity-70">{paid ? "ödendi" : "kalan"}</span></span>
@@ -439,9 +459,9 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
           </section>
         ))}
 
-        {!enrollments.length && <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Bu öğrenci için henüz bir aidat kaydı yok.</p>}
+        {!enrollments.length && <p className="app-card p-4 text-center md:col-span-2 text-xs text-[var(--muted)]">Bu öğrenci için henüz bir aidat kaydı yok.</p>}
 
-        <article className="app-card p-4">
+        <article className="app-card p-3.5">
           <p className="text-xs font-bold">Ödeme bilgisi</p>
           {billing?.virtualIban ? (
             <>
@@ -456,7 +476,7 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
           ) : <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">Okul henüz sana özel bir sanal IBAN tanımlamamış.</p>}
         </article>
 
-        <article className="app-card p-4">
+        <article className="app-card p-3.5">
           <p className="text-xs font-bold">Telafi hakları</p>
           <p className="mt-1 text-[.75rem] text-[var(--muted)]">Kullanılabilir telafi: {availableMakeups.length}</p>
           {availableMakeups.map((credit) => <p key={credit.id} className="mt-2 rounded-xl bg-[#eaf8ed] px-3 py-2 text-[.75rem] font-semibold text-[#287747]">Son kullanım: {formatDateTime(credit.expiresAt)}</p>)}
@@ -467,7 +487,7 @@ function BillingView({ billing, loading, error, refetch, fetching, studentId }: 
 }
 
 function MessagesView({ messages, loading, error, refetch }: { messages: GuardianMessage[] | undefined; loading: boolean; error: boolean; refetch: () => unknown }) {
-  return <div><h1 className="text-xl font-bold">Mesajlar</h1><p className="mt-1 text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-4 space-y-2">{loading ? <div className="skeleton h-24 rounded-2xl" /> : error ? <div className="app-card p-4"><LoadError message="Mesajlar yüklenemedi" onRetry={refetch} /></div> : messages?.length ? messages.map((message) => <MessageCard key={message.id} message={message} />) : <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}</div></div>;
+  return <div><h1 className="text-lg font-bold">Mesajlar</h1><p className="text-xs text-[var(--muted)]">Okuldan gelen son bildirimler</p><div className="mt-3 space-y-1.5">{loading ? <div className="skeleton h-24 rounded-2xl" /> : error ? <div className="app-card p-4"><LoadError message="Mesajlar yüklenemedi" onRetry={refetch} /></div> : messages?.length ? messages.map((message) => <MessageCard key={message.id} message={message} />) : <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz bir bildirim yok.</p>}</div></div>;
 }
 
 function ProgressView({ studentId, progress, practiceJournal, loading }: { studentId: string | undefined; progress: GuardianProgress | undefined; practiceJournal: PracticeJournal | undefined; loading: boolean }) {
@@ -475,8 +495,8 @@ function ProgressView({ studentId, progress, practiceJournal, loading }: { stude
   const attendanceRate = total ? Math.round(((progress?.presentCount ?? 0) / total) * 100) : 0;
   const pieces = Array.from(new Set(progress?.entries.map((entry) => entry.pieceTitle).filter((piece): piece is string => !!piece) ?? []));
   if (loading) return <div className="space-y-3"><div className="skeleton h-8 w-32 rounded-lg" /><div className="skeleton h-28 rounded-2xl" /><div className="skeleton h-44 rounded-2xl" /></div>;
-  return <div><h1 className="text-xl font-bold">Gelişim</h1><p className="mt-1 text-xs text-[var(--muted)]">Öğretmen notları, devamlılık, repertuvar ve çalışma günlüğü</p>
-    <div className="mt-4 grid grid-cols-3 gap-2"><ParentMetric label="Katılım" value={`%${attendanceRate}`} tone="green" /><ParentMetric label="Devamsız" value={String(progress?.absentCount ?? 0)} tone={(progress?.absentCount ?? 0) > 1 ? "red" : "neutral"} /><ParentMetric label="Repertuvar" value={String(pieces.length)} tone="brand" /></div>
+  return <div><h1 className="text-lg font-bold">Gelişim</h1><p className="text-xs text-[var(--muted)]">Öğretmen notları, devamlılık, repertuvar ve çalışma günlüğü</p>
+    <div className="mt-3 grid grid-cols-3 gap-2"><ParentMetric label="Katılım" value={`%${attendanceRate}`} tone="green" /><ParentMetric label="Devamsız" value={String(progress?.absentCount ?? 0)} tone={(progress?.absentCount ?? 0) > 1 ? "red" : "neutral"} /><ParentMetric label="Repertuvar" value={String(pieces.length)} tone="brand" /></div>
     {pieces.length > 0 && <section className="app-card mt-3 p-4"><p className="text-[.75rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">Çalışılan eserler</p><div className="mt-2 flex flex-wrap gap-1.5">{pieces.map((piece) => <span key={piece} className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1.5 text-[.75rem] font-bold text-[var(--brand-strong)]">{piece}</span>)}</div></section>}
     <PracticeJournalPanel studentId={studentId} journal={practiceJournal} />
     <section className="mt-3 space-y-2"><h2 className="text-xs font-bold">Öğretmen değerlendirmeleri</h2>{progress?.entries.map((entry) => <article key={entry.id} className="app-card p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold">{entry.instrumentName}</p><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{entry.teacherName} · {new Date(entry.lessonStartAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p></div>{entry.pieceDifficulty && <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.75rem] font-bold text-[var(--muted)]">Seviye {entry.pieceDifficulty}/5</span>}</div>{entry.parentComment && <p className="mt-3 text-xs leading-relaxed text-[#554e59]">{entry.parentComment}</p>}{entry.pieceTitle && <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-[.75rem]"><strong>{entry.pieceTitle}</strong>{entry.pieceComposer ? ` · ${entry.pieceComposer}` : ""}{entry.pieceResourceUrl && <a href={entry.pieceResourceUrl} target="_blank" rel="noreferrer" className="ml-2 font-bold text-[var(--brand)] underline">Nota / bağlantı</a>}</div>}{entry.practiced && <p className="mt-2 rounded-xl bg-[var(--surface-muted)] px-3 py-2 text-[.75rem] text-[var(--muted)]"><strong className="text-[var(--foreground)]">Çalışıldı:</strong> {entry.practiced}</p>}{entry.homework && <p className="mt-2 rounded-xl bg-[#fff3dd] px-3 py-2 text-[.75rem] text-[#7b5b20]"><strong>Ev çalışması:</strong> {entry.homework}</p>}{entry.nextGoal && <p className="mt-2 text-[.75rem] text-[var(--brand-strong)]"><strong>Sonraki hedef:</strong> {entry.nextGoal}</p>}</article>)}{!progress?.entries.length && <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz paylaşılmış gelişim değerlendirmesi yok.</p>}</section>
@@ -511,12 +531,12 @@ function PracticeJournalPanel({ studentId, journal }: { studentId: string | unde
 
 function ParentMetric({ label, value, tone }: { label: string; value: string; tone: "green" | "red" | "brand" | "neutral" }) {
   const color = { green: "text-[#287747] bg-[#eaf8ed]", red: "text-[#b3403c] bg-[#ffe8e5]", brand: "text-[var(--brand-strong)] bg-[var(--brand-soft)]", neutral: "text-[var(--muted)] bg-[var(--surface-muted)]" }[tone];
-  return <article className={`rounded-2xl p-3 text-center ${color}`}><p className="text-lg font-bold tabular-nums">{value}</p><p className="mt-1 text-[.75rem] font-bold">{label}</p></article>;
+  return <article className={`rounded-2xl px-3 py-2 text-center ${color}`}><p className="text-lg font-bold tabular-nums">{value}</p><p className="text-[.75rem] font-bold">{label}</p></article>;
 }
 
 function InfoCard({ icon, label, value, badge, badgeTone, detail }: { icon: IconName; label: string; value: string; badge: string; badgeTone: "red"|"green"|"neutral"; detail: string }) {
   const badgeClass = badgeTone === "green" ? "bg-[#ddf2e2] text-[#2e7d49]" : badgeTone === "red" ? "bg-[#ffe0de] text-[#c94b4b]" : "bg-[var(--surface-muted)] text-[var(--muted)]";
-  return <article className="app-card min-h-[7.4rem] p-3"><p className="flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><Icon name={icon} className="h-3.5 w-3.5" />{label}</p><p className={`mt-2 text-base font-bold ${badgeTone === "green" ? "text-[#297a45]" : "text-[#302b35]"}`}>{value}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[.75rem] font-bold ${badgeClass}`}>{badge}</span><p className="mt-1.5 text-[.75rem] text-[var(--muted)]">{detail}</p></article>;
+  return <article className="app-card p-3"><p className="flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><Icon name={icon} className="h-3.5 w-3.5" />{label}</p><p className={`mt-2 text-base font-bold ${badgeTone === "green" ? "text-[#297a45]" : "text-[#302b35]"}`}>{value}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[.75rem] font-bold ${badgeClass}`}>{badge}</span><p className="mt-1.5 text-[.75rem] text-[var(--muted)]">{detail}</p></article>;
 }
 
 // "2 saat önce" gibi göreli zaman - Son Bildirimler'de (Ana Sayfa) taramayı hızlandırır;
@@ -535,7 +555,7 @@ function formatRelativeTime(value: string): string {
 
 function MessageCard({ message, compact }: { message: GuardianMessage; compact?: boolean }) {
   return (
-    <article className="flex gap-2.5 rounded-xl border border-[var(--line)] bg-white p-3 shadow-sm">
+    <article className="flex gap-2.5 rounded-xl border border-[var(--line)] bg-white px-3 py-2">
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="note" className="h-3.5 w-3.5" /></span>
       <span className="min-w-0">
         <span className={`block text-[.75rem] leading-relaxed text-[#554e59] ${compact ? "line-clamp-2" : ""}`}>{message.body}</span>
@@ -558,7 +578,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => unkno
   return (
     <div role="alert" className="mt-2 flex flex-wrap items-center justify-between gap-2">
       <p className="text-xs font-semibold text-[var(--danger-strong)]">{message}</p>
-      <button type="button" onClick={() => void onRetry()} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-xs font-bold text-[var(--foreground)]">Tekrar dene</button>
+      <button type="button" onClick={() => void onRetry()} className="btn btn-quiet text-xs">Tekrar dene</button>
     </div>
   );
 }

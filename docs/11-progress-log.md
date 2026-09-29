@@ -2,6 +2,73 @@
 
 Oturumlar arası kaldığı yerden devam edebilmek için tutulan çalışma günlüğü. Her faz tamamlandığında buraya bir bölüm eklenir; bir sonraki oturum en üstteki "Devam noktası" bölümünü okuyarak başlar. Tasarım kararları için `10-decisions.md`, API yüzeyi için `07-api.md`, migration sırası için `08-migrations.md` — burada yalnızca "ne yapıldı, ne kaldı, nasıl doğrulandı" tutulur.
 
+## Hetzner'e taşıma: sunucu, HTTPS, veri (2026-09-29)
+
+Vercel + Supabase yayını tek bir Hetzner Cloud sunucusuna taşındı (`docs/10-decisions.md` P1–P3,
+kurulum `docs/19-hetzner-runbook.md`). Uygulama kodu değişmedi; repodaki
+`docker compose --profile prod` (db + api + web + Caddy) aynen kullanıldı.
+
+**Yapılan ve doğrulanan:**
+- Sunucu: Hetzner CX23 (2 vCPU / 4 GB / 40 GB), Nuremberg, Ubuntu 24.04. Firewall yalnızca
+  22/80/443. `deploy` kullanıcısı, root ve şifreyle SSH kapalı, 4 GB swap, otomatik güvenlik
+  güncellemeleri, fail2ban, Docker (resmi depo, log boyutu sınırlı). İmaj derlemesi CX23'te
+  swap ile ~2,5 dakika sürdü.
+- Alan adı: `abderasanat.com` (İHS). `panel.abderasanat.com` A kaydı İHS DNS Zone'da. Caddy
+  Let's Encrypt sertifikasını aldı, `https://panel.abderasanat.com` giriş ekranı açılıyor.
+- İlk açılış: Production secret guard geçti, boş veritabanına migration'lar uygulandı,
+  `/health` Healthy.
+- Veri: Supabase (`public` şeması) `pg_dump` 17 ile döküldü, PG16'ya yüklendi. 57 tablonun
+  hepsinde satır sayıları birebir (`diff` boş). Mevcut hesaplarla giriş doğrulandı.
+- Vercel fiilen donmuş: Supabase şifresi sıfırlandığı için eski yayın veritabanına bağlanamıyor.
+  İki sistem ayrı veri toplamasın diye bilinçli olarak güncellenmedi. Supabase 2 hafta
+  silinmeden geri dönüş için tutulur.
+
+**Taşımada karşılaşılanlar (runbook §8'e işlendi):**
+- Supabase Direct connection yalnızca IPv6, container içinden çözülemedi → Session pooler.
+- Pooler kullanıcı adı `postgres.<ref>` olmalı. Düz `postgres` "password authentication failed"
+  der ve yanıltır.
+- Vercel'de değişken Sensitive, okunamadı → Supabase şifresi sıfırlandı.
+- Döküm `CREATE SCHEMA public;` içeriyor → hedefte satır silindi. `SET transaction_timeout`
+  (pg_dump 17) → silindi.
+- İHS'de DNS Zone Servisi kapalıydı, girilen kayıt yayınlanmıyordu. Sihirbaz MX'i de
+  değiştireceği için kullanılmadı.
+
+**Bilinçli kararlar:**
+- CX33 yerine CX23 + swap (bu ölçekte yeterli; gerekirse *Rescale*).
+- Hetzner Backups kapalı (P1).
+- Yedek hedefi Cloudflare R2 (P2): 60 gün Bucket Lock, 65. günde lifecycle silme.
+
+**Yedek açıldı (2026-09-29 sabahı):** `backup-gw` + R2 çalışıyor. İlk otomatik yedek başarılı
+(567 KB `.sql.enc`). İlk denemede `R2_ACCOUNT_ID`'ye hesap numarası yerine API token değeri
+(`cfat_...`) girilmişti: rclone geçersiz uç noktaya bağlanamadı, koşu `Failed` oldu ve hata
+ekrana yansıdı. Hata yolu da böylece canlıda doğrulandı. Token yenilendi.
+
+**Sağlık kartı düzeltmesi:** Yedek başarılı olduğu halde kart "Son yedekleme hâlâ sürüyor veya
+sonucu belirsiz" diyordu. İki sebebi vardı:
+- `SystemHealthMonitor` tazeliği yalnızca **en son** koşudan ölçüyordu. API açılışında yedek ile
+  ilk kontrol aynı saniyede çalışınca en son koşu `Running` göründü, önceki başarı yok sayıldı.
+- Durum yalnızca 10 dakikalık tik'te yenileniyordu.
+
+Düzeltme:
+- Tazelik artık son **başarılı** koşudan ölçülür. Süren koşu tek başına uyarı üretmez. Taze
+  yedek varken başarısız koşu `Degraded` + hata mesajı, eski yedekle birlikte `Unhealthy`.
+- `BackupService` her koşudan sonra `SystemHealthMonitor.CheckNowAsync` çağırır (ikisi de
+  singleton, `OpsModule`).
+- Birim testleri `OpsDomainTests` içinde. `OpsFlowTests`'teki kalıcı durum testi süren yedek
+  koşularını bekler, yoksa koşu bitince yapılan tazeleme onun yazdığı durumu ezebilirdi.
+
+**Açık işler (sırayla, öğretmenler yeni adrese geçmeden önce):**
+1. ~~Yedek~~ açıldı. ~~Geri yükleme provası~~ yapıldı (2026-09-29): R2'den indirilen
+   yedek çözüldü, ayrı veritabanında 56/57 tablo birebir (`docs/16-backup-restore.md`).
+   Kalan: R2 panelinde kilit testi (dosya silinememeli).
+2. E-posta `Fake` → SMTP bilgileri (`Email__Provider=Smtp`).
+3. WhatsApp `Disabled` → Meta bilgileri + Meta'da webhook adresi `panel.abderasanat.com`.
+4. Otomatik deploy: GitHub `production` environment secret'ları, `DEPLOY_ENABLED` /
+   `DEPLOY_URL` repo değişkenleri, sunucuda `abdera-deploy` kurulumu (runbook §13.3).
+5. Öğretmen/velilere yeni adresin duyurulması. Vercel GitHub entegrasyonu ve projenin
+   kapatılması, `abdera-deploy` skill'inin güncellenmesi, 2 hafta sonra Supabase'in silinmesi
+   (runbook §12).
+
 ## "Yoklama" sekmesi — geriye dönük döküm ve öğretmen kırılımı (2026-09-28)
 
 Kullanıcı isteği: tamamlanan dersleri tarih tarih, geriye dönük görebilmek; öğretmen bazında

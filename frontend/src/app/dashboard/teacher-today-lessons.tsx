@@ -135,7 +135,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   if (disabled) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 text-xs text-[var(--muted)]">Bu ders iptal edildi; yeni işlem yapılamaz.</div>;
 
   return (
-    <div className="space-y-4 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 sm:p-5">
+    <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
       {saved ? <p className="flex items-center gap-2 rounded-xl bg-[var(--success-soft)] p-3 text-xs font-bold text-[var(--success-strong)]"><Icon name="check" className="h-4 w-4" /> Ders bilgileri kaydedildi.</p> : (
         <>
           {attendanceTaken ? (

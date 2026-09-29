@@ -233,6 +233,15 @@ export function useCreateGuardian() {
   });
 }
 
+// docs/10-decisions.md Q1: veli giriş şifresini ad soyaddan türeyen varsayılana döndürür
+// (ör. Mennan Sevim → sevimm) ve WhatsApp'tan gönderir. Yalnızca Admin; düz metin bir kez döner.
+export function useResetGuardianPassword() {
+  return useMutation({
+    mutationFn: (guardianId: string) =>
+      api.post<{ id: string; phoneNumber: string; password: string; message: string }>(`/api/guardians/${guardianId}/reset-password`, {}),
+  });
+}
+
 export interface StudentGuardianLink {
   id: string;
   firstName: string;

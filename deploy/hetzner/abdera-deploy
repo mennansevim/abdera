@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# GitHub Actions'ın SSH ile çalıştırabildiği TEK komut (authorized_keys "command=").
+# Elle de çağrılabilir: abdera-deploy <40 karakterlik commit sha>
+set -euo pipefail
+
+SHA="${1:-${SSH_ORIGINAL_COMMAND:-}}"
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Geçersiz commit: '$SHA'" >&2; exit 2; }
+
+exec 9>/tmp/abdera-deploy.lock
+flock -n 9 || { echo "Başka bir deploy sürüyor." >&2; exit 3; }
+
+cd /opt/abdera
+git fetch --quiet origin main
+git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA main'de değil." >&2; exit 4; }
+
+PREV="$(git rev-parse HEAD)"
+if [ "$PREV" = "$SHA" ]; then echo "Zaten $SHA'da."; exit 0; fi
+
+# Deploy öncesi döküm - alınamazsa deploy yapılmaz (set -e + pipefail).
+mkdir -p ~/predeploy
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' \
+  | gzip > ~/predeploy/"$(date +%F-%H%M)-${PREV:0:7}.sql.gz"
+ls -1t ~/predeploy/*.sql.gz | tail -n +6 | xargs -r rm --
+
+deploy() {
+  git checkout --quiet --force --detach "$1"
+  docker compose --profile prod up -d --build --remove-orphans
+}
+healthy() {
+  for _ in $(seq 1 36); do
+    curl -fsS http://127.0.0.1:8080/health >/dev/null 2>&1 && return 0
+    sleep 5
+  done
+  return 1
+}
+
+deploy "$SHA"
+if healthy; then
+  docker image prune -f >/dev/null
+  echo "OK: ${PREV:0:7} -> ${SHA:0:7}"
+else
+  echo "Sağlık kontrolü geçmedi, ${PREV:0:7}'e geri dönülüyor." >&2
+  deploy "$PREV"
+  healthy || echo "UYARI: geri dönüşten sonra da sağlıksız - elle bak." >&2
+  exit 1
+fi

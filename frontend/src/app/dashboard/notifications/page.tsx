@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { AdminGate, PageHeader } from "@/components/ui";
+import { AdminGate, EmptyState, PageHeader, Pager, Panel, Segmented } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import {
@@ -112,17 +112,19 @@ function NotificationsPageContent() {
   const [activeTab, setActiveTab] = useState<"activity" | "templates">("activity");
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Mesaj Merkezi" description="Hazır WhatsApp mesajlarını düzenle, önizle ve gönderimleri takip et." />
-
-      <div className="flex flex-wrap gap-2 border-b border-[var(--line)] pb-1">
-        <button type="button" onClick={() => setActiveTab("activity")} className={`pressable min-h-11 rounded-t-xl px-4 text-sm font-bold ${activeTab === "activity" ? "border-b-2 border-[var(--brand)] text-[var(--brand-strong)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}>
-          Gönderim kayıtları
-        </button>
-        <button type="button" onClick={() => setActiveTab("templates")} className={`pressable min-h-11 rounded-t-xl px-4 text-sm font-bold ${activeTab === "templates" ? "border-b-2 border-[var(--brand)] text-[var(--brand-strong)]" : "text-[var(--muted)] hover:bg-[var(--surface-muted)]"}`}>
-          Şablonlar ve otomasyon
-        </button>
-      </div>
+    <div className="space-y-3">
+      <PageHeader
+        title="Mesaj Merkezi"
+        description="Hazır WhatsApp mesajlarını düzenle, önizle ve gönderimleri takip et."
+        actions={
+          <Segmented
+            label="Mesaj Merkezi görünümü"
+            options={[{ value: "activity", label: "Gönderim kayıtları" }, { value: "templates", label: "Şablonlar ve otomasyon" }]}
+            value={activeTab}
+            onChange={setActiveTab}
+          />
+        }
+      />
 
       {activeTab === "activity" ? <ActivityPanel /> : <TemplatesPanel />}
     </div>
@@ -148,64 +150,61 @@ function ActivityPanel() {
   }
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {(["all", "Pending", "Sent", "Failed", "Cancelled"] as const).map((status) => (
-          <button key={status} type="button" onClick={() => { setFilter(status); setPage(1); }} className={`pressable min-h-11 rounded-full px-4 text-xs font-bold ${filter === status ? "bg-[var(--brand)] text-white" : "border border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"}`}>
-            {status === "all" ? "Tümü" : STATUS_LABELS[status]}
-          </button>
-        ))}
-      </div>
+    <Panel
+      flush
+      title="Gönderimler"
+      meta={data ? `${data.totalCount} kayıt` : undefined}
+      actions={
+        <Segmented
+          label="Duruma göre filtrele"
+          options={(["all", "Pending", "Sent", "Failed", "Cancelled"] as const).map((status) => ({ value: status, label: status === "all" ? "Tümü" : STATUS_LABELS[status] }))}
+          value={filter}
+          onChange={(status) => { setFilter(status); setPage(1); }}
+        />
+      }
+      footer={data && totalPages > 1 ? <Pager page={data.page} totalPages={totalPages} onChange={setPage} /> : undefined}
+    >
+      {retryError && <p role="alert" className="m-3 rounded-xl bg-[var(--danger-soft)] px-3 py-2 text-xs font-medium text-[var(--danger-strong)]">{retryError}</p>}
+      {isLoading && <div className="space-y-2 p-4">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
+      {!isLoading && jobs?.length === 0 && <EmptyState icon="bell" title="Bu filtrede gönderim yok." />}
 
-      {retryError && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{retryError}</p>}
-      {isLoading && <div className="space-y-2">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-14 rounded-xl" />)}</div>}
-
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[68rem] text-sm">
-          <thead>
-            <tr className="text-micro border-b border-[var(--line)] text-left">
-              <th className="px-3 py-3">Mesaj tipi</th>
-              <th className="px-3 py-3">Ders türü</th>
-              <th className="px-3 py-3">Veli</th>
-              <th className="px-3 py-3">Öğrenci</th>
-              <th className="px-3 py-3">Planlanan zaman</th>
-              <th className="px-3 py-3">Durum</th>
-              <th className="px-3 py-3">Hata</th>
-              <th className="sticky right-0 bg-[var(--surface)] px-3 py-3 shadow-[-1px_0_0_var(--line)]"><span className="sr-only">İşlem</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs?.map((job) => (
-              <tr key={job.id} className="border-b border-[var(--line)] last:border-0">
-                <td className="px-3 py-3 font-semibold">{TYPE_LABELS[job.type] ?? job.type}</td>
-                <td className="px-3 py-3">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")}</td>
-                <td className="px-3 py-3">{job.guardianName ?? job.recipientPhoneNumber}</td>
-                <td className="px-3 py-3">{job.studentName ?? "—"}</td>
-                <td className="text-meta px-3 py-3">{new Date(job.scheduledAt).toLocaleString("tr-TR")}</td>
-                <td className={`px-3 py-3 font-bold ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</td>
-                <td className="text-meta max-w-xs px-3 py-3">
-                  {job.lastError
-                    ? <details className="group"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>
-                    : "—"}
-                </td>
-                <td className="sticky right-0 bg-[var(--surface)] px-3 py-3 shadow-[-1px_0_0_var(--line)]">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="pressable min-h-11 rounded-lg border border-[var(--line)] bg-white px-2.5 text-xs font-bold text-[var(--brand)] disabled:opacity-50">Yeniden dene</button>}</td>
+      {!isLoading && !!jobs?.length && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[60rem] text-sm">
+            <thead>
+              <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
+                <th className="px-4 py-2">Mesaj tipi</th>
+                <th className="px-3 py-2">Ders türü</th>
+                <th className="px-3 py-2">Veli</th>
+                <th className="px-3 py-2">Öğrenci</th>
+                <th className="px-3 py-2">Planlanan</th>
+                <th className="px-3 py-2">Durum</th>
+                <th className="px-3 py-2">Hata</th>
+                <th className="sticky right-0 bg-[var(--surface)] px-3 py-2 shadow-[-1px_0_0_var(--line)]"><span className="sr-only">İşlem</span></th>
               </tr>
-            ))}
-            {jobs?.length === 0 && !isLoading && <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-[var(--muted)]">Bu filtrede gönderim yok.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-
-      {data && data.totalCount > 0 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-meta">Toplam {data.totalCount} kayıt · sayfa {data.page} / {totalPages}</span>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Önceki</button>
-            <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Sonraki</button>
-          </div>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.id} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--surface-muted)]/50">
+                  <td className="px-4 py-2 font-semibold whitespace-nowrap">{TYPE_LABELS[job.type] ?? job.type}</td>
+                  <td className="px-3 py-2">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")}</td>
+                  <td className="px-3 py-2">{job.guardianName ?? job.recipientPhoneNumber}</td>
+                  <td className="px-3 py-2">{job.studentName ?? "—"}</td>
+                  <td className="text-meta px-3 py-2 whitespace-nowrap">{new Date(job.scheduledAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                  <td className={`px-3 py-2 font-bold whitespace-nowrap ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</td>
+                  <td className="text-meta max-w-xs px-3 py-2">
+                    {job.lastError
+                      ? <details className="group"><summary className="line-clamp-1 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>
+                      : "—"}
+                  </td>
+                  <td className="sticky right-0 bg-[var(--surface)] px-3 py-2 shadow-[-1px_0_0_var(--line)]">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet min-h-8 pointer-coarse:min-h-11 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -215,12 +214,12 @@ function TemplatesPanel() {
   const selected = templates?.find((template) => template.id === selectedId) ?? templates?.[0];
 
   return (
-    <section className="space-y-5">
-      <div className="grid gap-4 xl:grid-cols-[15rem_minmax(0,1fr)]">
-        <div className="app-card h-fit p-2">
-          <p className="text-micro px-3 py-2 text-[var(--muted)]">Hazır şablonlar</p>
+    <section className="space-y-3">
+      <div className="grid gap-3 xl:grid-cols-[15rem_minmax(0,1fr)]">
+        <div className="app-card h-fit p-1.5">
+          <p className="text-micro px-2.5 py-1.5 text-[var(--muted)]">Hazır şablonlar</p>
           {isLoading && <div className="space-y-2 p-2">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>}
-          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{templateLabel(template.name)}</span><span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /><span className="sr-only">{template.isActive ? "açık" : "kapalı"}</span></button>)}
+          {templates?.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`pressable flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-2.5 text-left text-sm font-semibold ${selected?.id === template.id ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "hover:bg-[var(--surface-muted)]"}`}><span className="truncate">{templateLabel(template.name)}</span><span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${template.isActive ? "bg-[var(--success)]" : "bg-[var(--muted)]"}`} /><span className="sr-only">{template.isActive ? "açık" : "kapalı"}</span></button>)}
         </div>
 
         {selected && <TemplateEditor key={selected.id} template={selected} />}
@@ -288,22 +287,22 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
   }
 
   return (
-    <form onSubmit={saveTemplate} className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(20rem,.92fr)]">
-      <div className="app-card space-y-5 p-4 sm:p-5">
+    <form onSubmit={saveTemplate} className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.08fr)_minmax(20rem,.92fr)]">
+      <div className="app-card space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-title">{templateLabel(name)}</h2><p className="text-meta mt-1">Metni düzenle; öğrenci bilgilerini aşağıdaki kartlarla yerleştir.</p></div>
-          <label className="pressable inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--muted)]">
+          <label className="pressable inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--muted)]">
             <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--brand)]" checked={isActive} onChange={(event) => { setIsActive(event.target.checked); setSaved(false); }} />
             {isActive ? "Gönderime açık" : "Gönderim kapalı"}
           </label>
         </div>
 
-        <section aria-labelledby={`fields-${template.id}`} className="rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-4">
+        <section aria-labelledby={`fields-${template.id}`} className="rounded-2xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-3">
           <div className="flex items-start gap-3">
             <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-[var(--brand-strong)] shadow-sm"><Icon name="plus" className="h-4 w-4" /></span>
             <div><h3 id={`fields-${template.id}`} className="text-xs font-bold">Otomatik bilgi ekle</h3><p className="text-meta mt-0.5">Kartı mesaja sürükle. Telefonda veya klavyeyle dokunman yeterli.</p></div>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
             {availablePlaceholders.map((placeholder) => {
               const used = usedPlaceholders.has(placeholder.key);
               return (
@@ -318,7 +317,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
                   }}
                   onDragEnd={() => { setDraggingKey(null); setDropActive(false); }}
                   onClick={() => insertPlaceholder(placeholder.key)}
-                  className={`pressable flex min-h-12 cursor-grab items-center gap-2.5 rounded-xl border bg-white px-3 text-left transition-[transform,border-color,box-shadow,opacity] duration-150 active:cursor-grabbing motion-reduce:transition-none ${draggingKey === placeholder.key ? "scale-[.98] border-[var(--brand)] opacity-60 shadow-inner" : "border-[var(--line)] hover:-translate-y-0.5 hover:border-[var(--brand)] hover:shadow-sm"}`}
+                  className={`pressable flex min-h-10 cursor-grab items-center gap-2 rounded-lg border bg-white px-3 text-left transition-[transform,border-color,box-shadow,opacity] duration-150 active:cursor-grabbing motion-reduce:transition-none ${draggingKey === placeholder.key ? "scale-[.98] border-[var(--brand)] opacity-60 shadow-inner" : "border-[var(--line)] hover:-translate-y-0.5 hover:border-[var(--brand)] hover:shadow-sm"}`}
                   aria-label={`${placeholder.label} alanını mesaja ekle${used ? " · mesajda kullanılıyor" : ""}`}
                 >
                   <Icon name="more" className="h-4 w-4 shrink-0 rotate-90 text-[var(--muted)]" />
@@ -344,7 +343,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
               insertPlaceholder(event.dataTransfer.getData("text/plain"), textareaRef.current?.selectionStart ?? body.length);
             }}
           >
-            <textarea ref={textareaRef} value={body} onChange={(event) => { setBody(event.target.value); setSaved(false); }} rows={15} className="field min-h-72 resize-y rounded-xl bg-white px-4 py-3 font-sans text-sm leading-relaxed" aria-describedby={`drop-help-${template.id}`} />
+            <textarea ref={textareaRef} value={body} onChange={(event) => { setBody(event.target.value); setSaved(false); }} rows={10} className="field min-h-56 resize-y rounded-xl bg-white px-4 py-3 font-sans text-sm leading-relaxed" aria-describedby={`drop-help-${template.id}`} />
             {dropActive && <span className="pointer-events-none absolute inset-x-3 bottom-3 rounded-xl bg-[var(--brand)] px-3 py-2 text-center text-xs font-bold text-white shadow-lg">Bilgiyi buraya bırak</span>}
           </span>
         </label>
@@ -359,7 +358,7 @@ function TemplateEditor({ template }: { template: MessageTemplate }) {
           </div>
         </div>
       </div>
-      <div className="app-card h-fit overflow-hidden p-4 sm:sticky sm:top-5 sm:p-5">
+      <div className="app-card h-fit overflow-hidden p-4 sm:sticky sm:top-5">
         <div className="mb-4 flex items-center justify-between"><div><h2 className="text-title">Veli ne görecek?</h2><p className="text-meta mt-0.5">Yazdıkların anında burada görünür.</p></div><span className="rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-[.75rem] font-bold text-[var(--success-strong)]">WhatsApp</span></div>
         <div className="rounded-[1.6rem] bg-[#e7e1d7] p-3 shadow-inner">
           <div className="ml-auto max-w-[95%] rounded-2xl rounded-tr-md bg-[#dcf8c6] p-4 text-sm leading-relaxed text-[#243522] shadow-sm">
@@ -411,9 +410,9 @@ function AutomationSettings() {
   }
 
   return (
-    <section className="app-card space-y-4 p-4 sm:p-5">
+    <section className="app-card space-y-3 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-title">Otomatik gönderim ayarları</h2><p className="text-meta mt-1">Ders saatinden önce veliye hangi mesajın ne zaman gideceğini belirle.</p></div><label className="flex min-h-11 items-center gap-2 text-xs font-semibold text-[var(--muted)]"><input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--brand)]" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} disabled={isLoading} /> Otomatik gönder</label></div>
-      <div className="grid gap-4 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
+      <div className="grid gap-3 lg:grid-cols-[12rem_1fr_auto] lg:items-end">
         <label className="space-y-1.5 text-xs font-semibold text-[var(--muted)]">Dersten ne kadar önce?<select value={minutes} onChange={(event) => setMinutes(event.target.value)} disabled={isLoading} className="field text-sm"><option value="15">15 dakika önce</option><option value="30">30 dakika önce</option><option value="45">45 dakika önce</option><option value="60">60 dakika önce</option></select></label>
         <div className="space-y-2">
           <p className="text-xs font-semibold text-[var(--muted)]">Çoktan seçmeli cevaplar</p>

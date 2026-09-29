@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { AddButton, AdminGate, FormActions, FormMessage, Modal, Notice, PageHeader, RowMenu, RowMenuItem, SearchInput } from "@/components/ui";
+import { AddButton, AdminGate, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, RowMenu, RowMenuItem, RowMenuSeparator, SearchInput, Segmented } from "@/components/ui";
 import { DeleteTeacherDialog } from "@/components/delete-person-dialog";
 import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
 import { ApiError } from "@/lib/api";
@@ -120,7 +120,7 @@ function TeachersPageContent() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Öğretmenler"
         description={loading
@@ -144,31 +144,28 @@ function TeachersPageContent() {
       )}
 
       <div className="app-card relative">
-        <div className="flex flex-wrap items-center gap-2 rounded-t-[1.3rem] border-b border-[var(--line)] bg-[var(--surface-muted)]/30 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2">
           <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{teacherRows.length}</strong> öğretmen gösteriliyor{weekRows ? <> · seçilen hafta <strong className="text-[var(--foreground)] tabular-nums">{weekTotals.completed}</strong>/<span className="tabular-nums">{weekTotals.lessons}</span> ders tamamlandı</> : null}</p>
           {isAdmin && <WeekPicker monday={weekMonday} onChange={setWeekMonday} />}
           <label className="relative min-w-44 flex-1 sm:flex-none">
             <span className="sr-only">Enstrümana göre filtrele</span>
-            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
+            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field appearance-none pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
               <option value="">Tüm enstrümanlar</option>
               {(instruments ?? []).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
           </label>
-          <label className="relative min-w-28 flex-1 sm:flex-none">
-            <span className="sr-only">Duruma göre filtrele</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | TeacherStatus)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
-              <option value="Active">Aktif</option>
-              <option value="Inactive">Pasif</option>
-              <option value="all">Tümü</option>
-            </select>
-            <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
-          </label>
+          <Segmented
+            label="Duruma göre filtrele"
+            options={[{ value: "Active", label: "Aktif" }, { value: "Inactive", label: "Pasif" }, { value: "all", label: "Tümü" }]}
+            value={status}
+            onChange={(value) => setStatus(value as "all" | TeacherStatus)}
+          />
         </div>
         {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-right">Ödeme</span><span className="text-center">Durum</span><span /></div>}
-        {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
+        {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
         {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
-        {!loading && !isError && teacherRows.length === 0 && <div className="p-6 text-center text-sm text-[var(--muted)]"><p>{hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."}</p>{hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}</div>}
+        {!loading && !isError && teacherRows.length === 0 && <EmptyState icon="teachers" title={hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."} action={hasFilters ? <button type="button" onClick={clearFilters} className="btn btn-quiet text-xs">Filtreleri temizle</button> : undefined} />}
         {!loading && !isError && <ul className="divide-y divide-[var(--line)]">
           {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} payRow={payRowsByTeacher.get(teacher.id) ?? null} weekMonday={weekMonday} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
         </ul>}
@@ -194,6 +191,10 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const updateTeacher = useUpdateTeacher(teacher.id);
+  // Pasife almak silmenin geri alınabilir karşılığı: kayıtlar kalır, giriş hesabı kapanır.
+  const setTeacherStatus = (status: TeacherStatus) =>
+    updateTeacher.mutateAsync({ firstName: teacher.firstName, lastName: teacher.lastName, status, instrumentIds: teacher.instrumentIds });
   const teacherInstruments = instruments.filter((instrument) => teacher.instrumentIds.includes(instrument.id));
   const groupedStudents = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string; courses: string[] }>();
@@ -218,8 +219,8 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
   }, [groupedStudents, studentSearch]);
 
   return <li id={`teacher-${teacher.id}`} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
-    <div className="grid min-h-14 grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 md:grid-cols-[minmax(0,1fr)_2.75rem]">
-      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-13 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 py-0.5 md:grid-cols-[minmax(0,1fr)_2.75rem]">
+      <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-11 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem]">
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
           <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders` : ""}{payRow?.payout ? " · ödendi" : payRow && payRow.completedLessons > 0 ? " · ödenmedi" : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
@@ -228,7 +229,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
         <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{groupedStudents.length}</strong></span>
         <WeeklyLessonsCells weekRow={weekRow} />
         <PayoutStatusCell payRow={payRow} />
-        <span className={`hidden justify-self-center rounded-full px-2 py-1 text-[.75rem] font-bold md:block ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
+        <span className={`hidden justify-self-center rounded-full px-2 py-0.5 text-[.72rem] font-bold md:block ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
       </button>
       {isAdmin && <RowMenu label={`${teacher.firstName} ${teacher.lastName} işlemleri`}>{(close) => <>
         {teacher.status === "Active" && <RowMenuItem icon="plus" onClick={() => { close(); setShowAddForm(true); }}>Öğrenci ekle</RowMenuItem>}
@@ -236,7 +237,11 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
             öğretmen ve seçili haftayla açılır (ikinci bir ödeme formu değil). */}
         {!payRow?.payout && <RowMenuItem icon="wallet" onClick={() => { close(); router.push(`/dashboard/costs?odeme=${teacher.id}&hafta=${toIsoDate(weekMonday)}`); }}>Ödeme yap</RowMenuItem>}
         <RowMenuItem icon="pencil" onClick={() => { close(); setShowEditForm(true); }}>Bilgileri düzenle</RowMenuItem>
-        <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil</RowMenuItem>
+        {teacher.status === "Active"
+          ? <RowMenuItem icon="x" onClick={() => { close(); void setTeacherStatus("Inactive"); }}>Pasife al</RowMenuItem>
+          : <RowMenuItem icon="check" onClick={() => { close(); void setTeacherStatus("Active"); }}>Yeniden aktif et</RowMenuItem>}
+        <RowMenuSeparator />
+        <RowMenuItem icon="x" tone="danger" onClick={() => { close(); setShowDeleteDialog(true); }}>Kalıcı olarak sil…</RowMenuItem>
       </>}</RowMenu>}
     </div>
 
@@ -245,16 +250,19 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
         teacherId={teacher.id}
         teacherName={`${teacher.firstName} ${teacher.lastName}`}
         onClose={() => setShowDeleteDialog(false)}
+        onDeactivate={teacher.status === "Active" ? () => setTeacherStatus("Inactive") : undefined}
       />
     )}
 
     {expanded && isAdmin && <div className="border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-xl border border-[var(--line)] bg-white p-1" role="group" aria-label="Öğretmen ayrıntıları">
-          <button type="button" aria-pressed={detailTab === "students"} onClick={() => setDetailTab("students")} className={`pressable min-h-11 rounded-lg px-3 text-xs font-bold ${detailTab === "students" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Öğrenciler <span className="ml-1 tabular-nums opacity-70">{groupedStudents.length}</span></button>
-          <button type="button" aria-pressed={detailTab === "availability"} onClick={() => setDetailTab("availability")} className={`pressable min-h-11 rounded-lg px-3 text-xs font-bold ${detailTab === "availability" ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>Uygunluk</button>
-        </div>
-        {detailTab === "students" && groupedStudents.length > 6 && <label className="relative ml-auto w-full sm:w-56"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci veya branş ara…" className="field min-h-11 pl-9 py-1.5 text-xs" /></label>}
+        <Segmented
+          label="Öğretmen ayrıntıları"
+          options={[{ value: "students", label: <>Öğrenciler <span className="tabular-nums opacity-70">{groupedStudents.length}</span></> }, { value: "availability", label: "Uygunluk" }]}
+          value={detailTab}
+          onChange={setDetailTab}
+        />
+        {detailTab === "students" && groupedStudents.length > 6 && <label className="relative ml-auto w-full sm:w-56"><span className="sr-only">Bu öğretmenin öğrencilerinde ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--muted)]" /><input value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci veya branş ara…" className="field pl-9 text-xs" /></label>}
       </div>
       {detailTab === "students" && <div className="mt-3 overflow-hidden rounded-xl border border-[var(--line)] bg-white">
         {visibleStudents.length > 0 ? <><div className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(7rem,.7fr)] items-center gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/45 px-3 py-2 text-micro text-[var(--muted)]"><span>#</span><span>Öğrenci</span><span>Branş</span></div><ol className="max-h-80 divide-y divide-[var(--line)] overflow-y-auto">{visibleStudents.map((student, index) => <li key={student.id} className="grid min-h-10 grid-cols-[2rem_minmax(0,1fr)_minmax(7rem,.7fr)] items-center gap-2 px-3 py-1.5 text-xs hover:bg-[var(--surface-muted)]/35"><span className="text-[.75rem] tabular-nums text-[var(--muted)]">{index + 1}</span><span className="truncate font-semibold">{student.name}</span><span className="flex min-w-0 flex-wrap gap-1">{student.courses.map((course) => <span key={course} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.75rem] font-semibold text-[var(--muted)]">{course}</span>)}</span></li>)}</ol></> : groupedStudents.length ? <p className="p-4 text-center text-xs text-[var(--muted)]">“{studentSearch}” ile eşleşen öğrenci yok.</p> : <p className="p-4 text-center text-xs text-[var(--muted)]">Bu öğretmene bağlı aktif öğrenci yok.</p>}

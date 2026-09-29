@@ -1,5 +1,6 @@
 "use client";
 
+import { ApiError } from "./api";
 import { useGuardianMe } from "./guardian-auth";
 import { useMe } from "./use-auth";
 
@@ -11,9 +12,14 @@ export type SessionDestination = "/dashboard" | "/parent";
 export function useSessionDestination() {
   const staff = useMe();
   const guardian = useGuardianMe();
-  const destination: SessionDestination | null = staff.data
+  // React Query başarısız bir tazelemeden sonra da önceki `data`'yı tutar. Sunucu oturumu
+  // reddettiyse (401/403) o eski veri "oturum açık" sayılmamalı: sayılırsa giriş ekranı
+  // /dashboard'a, dashboard da 401 yüzünden /login'e yönlendirip sonsuz döngüye giriyordu.
+  const staffSignedIn = !!staff.data && !isUnauthorized(staff.error);
+  const guardianSignedIn = !!guardian.data && !isUnauthorized(guardian.error);
+  const destination: SessionDestination | null = staffSignedIn
     ? "/dashboard"
-    : guardian.data
+    : guardianSignedIn
       ? "/parent"
       : null;
   const isResolving = destination === null && (
@@ -21,4 +27,8 @@ export function useSessionDestination() {
   );
 
   return { destination, isResolving };
+}
+
+function isUnauthorized(error: unknown) {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }

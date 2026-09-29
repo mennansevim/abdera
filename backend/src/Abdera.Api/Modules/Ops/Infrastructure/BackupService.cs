@@ -13,6 +13,7 @@ namespace Abdera.Api.Modules.Ops.Infrastructure;
 public class BackupService(
     IServiceScopeFactory scopeFactory,
     IConfiguration config,
+    SystemHealthMonitor healthMonitor,
     ILogger<BackupService> logger) : BackgroundService
 {
     // Program.cs'te AddSingleton ile kaydedilir - Trigger() elle tetikleme uç noktasından
@@ -159,6 +160,10 @@ public class BackupService(
         {
             _runLock.Release();
         }
+
+        // Sağlık kartı bir sonraki periyodik tik'i beklemeden bu koşunun sonucunu göstersin.
+        // CheckNowAsync kendi hatalarını loglayıp yutar; yedeğin sonucu zaten kaydedildi.
+        await healthMonitor.CheckNowAsync(cancellationToken);
     }
 
     private async Task<bool> WaitForManualTurnAsync(CancellationToken cancellationToken)

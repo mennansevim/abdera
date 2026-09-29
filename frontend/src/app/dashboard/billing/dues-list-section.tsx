@@ -160,7 +160,7 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
 
   const hasActiveFilters = teacherFilter !== "all" || studentSearch.trim() !== "";
 
-  return <div className="space-y-4">
+  return <div className="space-y-3">
     <Modal open={showCreatePanel} title="Tahsilat kaydet" description="Öğrenciyi, ilk dönemi ve kaç aylık ödeme yaptığını seç; aylar otomatik olarak ödendi işaretlensin." onClose={() => setShowCreatePanel(false)}>
       <QuickCollectPanel
         pickerRef={studentPickerRef}
@@ -172,15 +172,15 @@ export function DuesListSection({ onSummaryChange }: { onSummaryChange?: (summar
     {selectedStudentId && <StudentBillingSection key={selectedStudentId} initialStudentId={selectedStudentId} showStudentPicker={false} onClose={() => setSelectedStudentId(null)} />}
 
     <section className="app-card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/30 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2">
         <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{visibleStudents.length}</strong> öğrenci gösteriliyor</p>
-        <label className="min-w-0 flex-1 basis-40"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-11 text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
-        <label className="relative min-w-0 flex-1 basis-40"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field min-h-11 pl-9 text-xs font-semibold" /></label>
+        <label className="min-w-0 flex-1 basis-40"><span className="sr-only">Öğretmene göre filtrele</span><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field text-xs font-semibold"><option value="all">Tüm öğretmenler</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+        <label className="relative min-w-0 flex-1 basis-40"><span className="sr-only">Öğrenci adına göre ara</span><Icon name="search" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={studentSearch} onChange={(event) => setStudentSearch(event.target.value)} placeholder="Öğrenci ara…" className="field pl-9 text-xs font-semibold" /></label>
         <button type="button" onClick={startAddingDue} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Tahsilat kaydet</button>
       </div>
 
-      <div className="hidden grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto] gap-3 border-b border-t border-[var(--line)] bg-[var(--surface-muted)]/55 px-4 py-2.5 text-[.75rem] font-bold uppercase tracking-[.08em] text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Kurslar</span><span>Son 3 ay</span><span className="text-right">İşlem</span></div>
-      {isLoading && <div className="space-y-2 p-4">{[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-16 rounded-xl" />)}</div>}
+      <div className="hidden grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto] gap-3 border-b border-[var(--line)] px-4 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Kurslar</span><span>Son 3 ay</span><span className="text-right">İşlem</span></div>
+      {isLoading && <div className="space-y-2 p-4">{[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-11 rounded-lg" />)}</div>}
       {!isLoading && isError && <div className="grid min-h-52 place-items-center p-8 text-center"><div><span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)]"><Icon name="x" className="h-5 w-5" /></span><p className="mt-3 text-sm font-bold">Öğrenci listesi yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
       {!isLoading && !isError && visibleStudents.length > 0 && <ul className="divide-y divide-[var(--line)]">{visibleStudents.map(({ student, instruments, enrolledSince }) => <StudentRow key={student.id} student={student} instruments={instruments} enrolledSince={enrolledSince} periods={recentPeriods} duesByPeriod={duesByStudentPeriod.get(student.id)} />)}</ul>}
       {!isLoading && !isError && !visibleStudents.length && <div className="grid min-h-52 place-items-center p-8 text-center"><div>
@@ -243,9 +243,11 @@ function StudentRow({ student, instruments, enrolledSince, periods, duesByPeriod
   }
 
   return <li>
-    <div className="grid items-center gap-3 px-4 py-3 md:grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto]">
+    {/* Mobilde iki satır: ad · kurs, altında ay kutucukları + Detay. md'den itibaren sütunlar. */}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 md:grid md:grid-cols-[minmax(12rem,1.4fr)_minmax(10rem,.9fr)_minmax(9rem,.8fr)_auto]">
       <strong className="min-w-0 truncate text-sm">{student.firstName} {student.lastName}</strong>
-      <span className="text-meta truncate">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
+      <span className="text-meta min-w-0 flex-1 truncate">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
+      <span className="basis-full md:hidden" aria-hidden="true" />
       <div className="flex gap-1.5" role="group" aria-label="Son 3 ayın aidat durumu">
         {!obligatedPeriods(periods, enrolledSince).length && <span className="text-meta">Aktif kurs yok</span>}
         {obligatedPeriods(periods, enrolledSince).map((period) => {
@@ -260,7 +262,7 @@ function StudentRow({ student, instruments, enrolledSince, periods, duesByPeriod
               onClick={() => openMonth(period)}
               title={title}
               aria-label={title}
-              className={`pressable grid h-10 min-w-12 place-items-center rounded-lg border px-2 text-[.75rem] font-extrabold ${paid ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--danger)]/40 bg-[var(--danger-soft)] text-[var(--danger-strong)]"} ${showDetail && detailPeriod === period ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+              className={`pressable grid h-8 pointer-coarse:h-10 min-w-12 place-items-center rounded-lg border px-2 text-[.75rem] font-extrabold ${paid ? "border-[var(--success)]/45 bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--danger)]/40 bg-[var(--danger-soft)] text-[var(--danger-strong)]"} ${showDetail && detailPeriod === period ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             >
               <span className="flex items-center gap-1">
                 <Icon name={paid ? "check" : "x"} className="h-3 w-3" aria-hidden="true" />
@@ -270,9 +272,9 @@ function StudentRow({ student, instruments, enrolledSince, periods, duesByPeriod
           );
         })}
       </div>
-      <div className="flex justify-end"><button type="button" onClick={() => { setDetailPeriod(null); setShowDetail((visible) => !visible); }} aria-expanded={showDetail} className="btn btn-quiet text-xs">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
+      <div className="ml-auto flex justify-end"><button type="button" onClick={() => { setDetailPeriod(null); setShowDetail((visible) => !visible); }} aria-expanded={showDetail} className="btn btn-quiet min-h-8 pointer-coarse:min-h-11 px-2.5 text-xs">Detay<Icon name="chevron" className={`h-3 w-3 shrink-0 transition-transform ${showDetail ? "rotate-90" : ""}`} /></button></div>
     </div>
-    {showDetail && <div className="px-4 pb-4"><PaymentHistoryCollapse key={detailPeriod ?? "latest"} studentId={student.id} initialPeriod={detailPeriod} /></div>}
+    {showDetail && <div className="px-4 pb-3"><PaymentHistoryCollapse key={detailPeriod ?? "latest"} studentId={student.id} initialPeriod={detailPeriod} /></div>}
   </li>;
 }
 
@@ -396,7 +398,7 @@ function QuickCollectPanel({
   return <div className="mt-4 max-w-xl space-y-3">
     <label className="form-label block">
       <span>Öğrenci</span>
-      <select ref={pickerRef} value={studentId} disabled={!!initialStudentId} onChange={(event) => { setStudentId(event.target.value); setRawEnrollmentId(""); setError(null); }} className="field min-h-11 text-sm">
+      <select ref={pickerRef} value={studentId} disabled={!!initialStudentId} onChange={(event) => { setStudentId(event.target.value); setRawEnrollmentId(""); setError(null); }} className="field text-sm">
         <option value="">Öğrenci seç…</option>
         {students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}
       </select>
@@ -411,7 +413,7 @@ function QuickCollectPanel({
     {studentId && activeEnrollments.length > 1 && (
       <label className="form-label block">
         <span>Hangi kurs?</span>
-        <select value={enrollmentId} onChange={(event) => setRawEnrollmentId(event.target.value)} className="field min-h-11 text-sm">
+        <select value={enrollmentId} onChange={(event) => setRawEnrollmentId(event.target.value)} className="field text-sm">
           <option value="">Kurs seç…</option>
           {activeEnrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id}>{enrollmentLabel(enrollment)}</option>)}
         </select>
@@ -425,7 +427,7 @@ function QuickCollectPanel({
             <MonthInput label="İlk dönem" value={startPeriod} onChange={(value) => { setStartPeriod(value); setError(null); }} />
           </div>
           <label className="form-label">Kaç aylık ödeme?
-            <input type="number" inputMode="numeric" min={1} max={24} value={months} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} className="field min-h-11 bg-white text-xs" />
+            <input type="number" inputMode="numeric" min={1} max={24} value={months} onChange={(event) => { setMonths(normalizeMonthCount(event.target.value, 24)); setError(null); }} className="field bg-white text-xs" />
           </label>
         </div>
 
@@ -474,7 +476,7 @@ function QuickCollectPanel({
               value={activeOverride ?? computedTotal}
               onChange={(event) => { setOverride({ key: overrideKey, value: event.target.value === "" ? "" : Number(event.target.value) }); setError(null); }}
               aria-invalid={amountInvalid}
-              className="field min-h-11 bg-white text-sm tabular-nums"
+              className="field bg-white text-sm tabular-nums"
             />
           </label>
           {isAdjusted && !amountInvalid && <p className="mt-1.5 text-[.75rem] text-[var(--muted)]">
@@ -713,9 +715,9 @@ function ReceivablePeriodCard({
         bu form takvimin dar "Seçili dönem" panelinin içinde render ediliyor - `sm:` kırılma
         noktası panel daraldığında taşma yapıyordu, sabit iki sütun da 360px telefonda sığmıyordu. */}
     {showForm && <form onSubmit={collect} className="mt-3 grid grid-cols-1 gap-2 @xs:grid-cols-2 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
-      <label className="form-label">Tutar<input type="number" inputMode="decimal" min={0.01} max={remaining} step={0.01} value={amount} onChange={resetValidity((event) => setAmount(Number(event.target.value)))} onInvalid={onInvalidTurkish} required className="field min-h-11 w-full bg-white text-xs" /></label>
-      <label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field min-h-11 w-full bg-white text-xs" /></label>
-      <label className="form-label @xs:col-span-2">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-11 w-full bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
+      <label className="form-label">Tutar<input type="number" inputMode="decimal" min={0.01} max={remaining} step={0.01} value={amount} onChange={resetValidity((event) => setAmount(Number(event.target.value)))} onInvalid={onInvalidTurkish} required className="field w-full bg-white text-xs" /></label>
+      <label className="form-label">Tarih<input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} required className="field w-full bg-white text-xs" /></label>
+      <label className="form-label @xs:col-span-2">Yöntem<select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field w-full bg-white text-xs"><option value="Cash">Nakit</option><option value="Transfer">Havale</option><option value="Card">Kart</option><option value="Other">Diğer</option></select></label>
       <button type="submit" disabled={recordPayment.isPending} className="btn btn-primary @xs:col-span-2">{recordPayment.isPending ? "Kaydediliyor…" : "Ödemeyi kaydet"}</button>
       {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)] @xs:col-span-2">{error}</p>}
     </form>}
