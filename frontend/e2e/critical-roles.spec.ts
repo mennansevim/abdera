@@ -65,7 +65,7 @@ test.describe.serial("Abdera critical role flows", () => {
     expect(alternateTeacherResponse.status()).toBe(201);
     const alternateTeacher = (await alternateTeacherResponse.json()).teacher;
     const studentResponse = await page.request.post(`${apiUrl}/api/students`, {
-      data: { firstName: "E2E", lastName: `Öğrenci ${suffix}`, birthDate: "2014-01-01" },
+      data: { firstName: "Deneme", lastName: `Öğrenci ${suffix}`, birthDate: "2014-01-01" },
     });
     expect(studentResponse.status()).toBe(201);
     const student = await studentResponse.json();
@@ -120,7 +120,7 @@ test.describe.serial("Abdera critical role flows", () => {
     await quickAdd.getByRole("button", { name: "Seriyi takvime yerleştir" }).click();
     await expect(page.getByRole("button", { name: "Yeni ders", exact: true })).toBeVisible();
 
-    const lessonCard = page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}`) }).first();
+    const lessonCard = page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}`) }).first();
     await expect(lessonCard).toBeVisible();
     await lessonCard.click();
     await page.getByRole("button", { name: "Düzenle" }).click();
@@ -132,14 +132,14 @@ test.describe.serial("Abdera critical role flows", () => {
     await expect(page.getByRole("dialog", { name: "Ders detayları" })).toBeHidden();
     await page.reload();
     // Takvim seçili haftayı sessionStorage'da korur; reload sonrası aynı haftadayız.
-    await page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}`) }).first().click();
+    await page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}`) }).first().click();
     await expect(page.getByText("60 dakika", { exact: true })).toBeVisible();
 
     // Gerçek HTML5 sürükle-bırak akışıyla dersi aynı gün içinde başka bir saate taşı;
     // ardından sayfayı yenileyerek değişikliğin yalnızca ekranda değil veritabanında da
     // kalıcı olduğunu doğrula.
     await page.getByRole("dialog", { name: "Ders detayları" }).getByRole("button", { name: "Kapat", exact: true }).first().click();
-    const movableLesson = page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}`) }).first();
+    const movableLesson = page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}`) }).first();
     const dayColumn = page.getByTestId(`calendar-day-${date}`);
     const startHour = Number(await dayColumn.getAttribute("data-start-hour"));
     const endHour = Number(await dayColumn.getAttribute("data-end-hour"));
@@ -156,9 +156,9 @@ test.describe.serial("Abdera critical role flows", () => {
     expect((await approved).ok()).toBeTruthy();
     await expect(page.getByText(new RegExp(`dersi .* ${targetLabel} olarak güncellendi`))).toBeVisible();
     await page.reload();
-    await expect(page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}.*${targetLabel}`) }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}.*${targetLabel}`) }).first()).toBeVisible();
 
-    const movedLesson = page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}.*${targetLabel}`) }).first();
+    const movedLesson = page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}.*${targetLabel}`) }).first();
     // Lokal geliştirme veritabanında önceki E2E koşularından aynı slota denk gelen kartlar
     // kalmış olabilir; benzersiz öğrenci adına bağlı hedefe doğrudan olay göndererek testin
     // temiz CI veritabanı dışında da deterministik kalmasını sağla.
@@ -168,7 +168,7 @@ test.describe.serial("Abdera critical role flows", () => {
     await statusDialog.locator("label").filter({ hasText: "Durum" }).locator("select").selectOption("Cancelled");
     await statusDialog.getByRole("button", { name: "Değişiklikleri kaydet" }).click();
     await page.reload();
-    await page.getByRole("button", { name: new RegExp(`E2E Öğrenci ${suffix}.*${targetLabel}`) }).first().click({ force: true });
+    await page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}.*${targetLabel}`) }).first().click({ force: true });
     await expect(page.getByText("İptal edildi", { exact: true })).toBeVisible();
     await page.getByRole("dialog", { name: "Ders detayları" }).getByRole("button", { name: "Kapat", exact: true }).first().click();
 

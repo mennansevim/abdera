@@ -124,7 +124,7 @@ public class DashboardFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.True(adminDashboard.PendingChangeRequests >= 1);
         // Önceden yalnızca bir sayıydı ve hiçbir ekranda gösterilmiyordu - kullanıcı isteğiyle
         // ana ekranda gerçek bir liste (isim + tarih + kaç gün kaldı) hâline getirildi.
-        Assert.Contains(adminDashboard.UpcomingBirthdays, item => item.StudentId == studentA.Id && item.DaysUntil == 5 && item.StudentName == "StudentA Dash");
+        Assert.Contains(adminDashboard.UpcomingBirthdays, item => item.StudentId == studentA.Id && item.DaysUntil == 5 && item.StudentName == "Studenta Dash"); // ad kelime başlarıyla saklanır
 
         // Teacher A: yalnızca kendi dersi - CLAUDE.md/docs/04-permissions.md rol izolasyonu.
         using var teacherAClient = _factory.CreateClient();

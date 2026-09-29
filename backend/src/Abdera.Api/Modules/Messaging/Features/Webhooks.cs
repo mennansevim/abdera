@@ -205,7 +205,7 @@ public static class Webhooks
             null, guardian.Id, null, "Bildirimleriniz durduruldu. Tekrar açmak isterseniz bize yazabilirsiniz.", null, now));
     }
 
-    private static InboundMessage? TryExtractMessage(JsonDocument document)
+    internal static InboundMessage? TryExtractMessage(JsonDocument document)
     {
         try
         {
@@ -264,5 +264,5 @@ public static class Webhooks
         }
     }
 
-    private record InboundMessage(string MessageId, string FromPhoneNumber, string Type, string Body, string? ButtonPayload);
+    internal record InboundMessage(string MessageId, string FromPhoneNumber, string Type, string Body, string? ButtonPayload);
 }

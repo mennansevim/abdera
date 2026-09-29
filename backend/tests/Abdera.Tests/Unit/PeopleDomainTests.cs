@@ -12,6 +12,16 @@ public class PeopleDomainTests
     private static readonly DateTimeOffset Now = new(2026, 9, 11, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void Student_names_are_stored_in_title_case_on_create_and_update()
+    {
+        var student = Student.Create("mİRAY", "SEVİM", new DateOnly(2015, 1, 1), Now);
+        Assert.Equal(("Miray", "Sevim"), (student.FirstName, student.LastName));
+
+        student.Update("ışıl  su", "ÖZGÜR", new DateOnly(2015, 1, 1), Now);
+        Assert.Equal(("Işıl Su", "Özgür"), (student.FirstName, student.LastName));
+    }
+
+    [Fact]
     public void Student_create_throws_when_first_name_exceeds_max_length()
     {
         var tooLong = new string('a', 101);
@@ -26,7 +36,7 @@ public class PeopleDomainTests
 
         var student = Student.Create(atLimit, "Soyad", new DateOnly(2015, 1, 1), Now);
 
-        Assert.Equal(atLimit, student.FirstName);
+        Assert.Equal(100, student.FirstName.Length);
     }
 
     [Fact]

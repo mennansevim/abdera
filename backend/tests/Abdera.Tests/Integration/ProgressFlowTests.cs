@@ -78,7 +78,7 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.OK, progressResponse.StatusCode);
         var progress = (await progressResponse.Content.ReadFromJsonAsync<StudentProgress.ProgressResponse>(TestJson.Options))!;
         Assert.Equal(seeded.StudentId, progress.StudentId);
-        Assert.Equal("Öğrenciprogress-happy Soyad", progress.StudentName);
+        Assert.Equal("Öğrenciprogress-Happy Soyad", progress.StudentName); // ad kelime başlarıyla saklanır
         Assert.Equal(1, progress.EntryCount);
         // Create yanıtındaki DateTimeOffset 100ns hassasiyetinde olabilir; PostgreSQL
         // timestamptz ise mikrosaniyeye yuvarlar. Aynı anı temsil eden değerleri
@@ -427,7 +427,7 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal("Yorum #1", first.Summary);
         Assert.Equal("Yorum #1", second.Summary);
         Assert.Single(generator.Requests);
-        Assert.Equal($"Öğrencisummary-cache", generator.Requests[0].StudentFirstName);
+        Assert.Equal("Öğrencisummary-Cache", generator.Requests[0].StudentFirstName);
 
         // Aynı ay içinde yeni not: kayıtlı yorum gösterilir, sağlayıcıya gidilmez.
         await CreateNoteAsync(teacher, seeded.LessonId, "Son ders: ritim oturuyor.");

@@ -293,6 +293,12 @@ Kullanıcı isteği: "Veli yorumunu yapıcı metne çeviren yapay zekâ kısmın
 | R1 | Tek zorlama noktası | Kutu kapalıysa **hiçbir** mesaj gitmez: hatırlatma job'ları, bot yanıtı, OTP giriş kodu, şifre sıfırlama. Kural çağıran yerlerde değil `ConsentGatedWhatsAppClient`'ta (her `IWhatsAppClient` çözümlemesini saran dekoratör) zorlanır; numarası bir veliye ait olmayan alıcıya da gönderilmez. Bilinen sonuç: onayı kapalı veli OTP ile giremez, şifreyle girer. Dispatcher onayı kapalı veliye ait job'ı retry tüketmeden iptal eder. |
 | R1 | Açınca hatırlatmalar | Kutu açıldığında velinin birincil velisi olduğu öğrencilerin gelecekteki dersleri için ders hatırlatmaları kurulur (`INotificationScheduler.ScheduleUpcomingLessonRemindersAsync`); daha önce iptal edilmiş hatırlatma UNIQUE kısıtı yüzünden yeni satır açılmadan `NotificationJob.Reactivate` ile geri kuyruğa alınır. Hatırlatma anı geçmiş dersler ve otomasyon kapalıysa kurulmaz. |
 
+## S — Öğrenci adı kelime başları büyük saklanır (2026-09-29)
+
+| # | Konu | Karar |
+|---|---|---|
+| S1 | Ad biçimi | Kullanıcı isteği: "öğrenci isimleri kaydolurken Miray Sevim gibi olsun, geriye dönük isimleri de düzenle". `Student.Create/Update` adı ve soyadı `PersonNameFormatter.Format` ile saklar: her kelimenin (tireden sonrası dahil) ilk harfi büyük, kalanı küçük, fazla boşluk teke iner. Türkçe i/ı elle eşlenir, `CultureInfo("tr-TR")`'ye bağlı değil. Mevcut kayıtlar `NormalizeStudentNames` migration'ıyla düzeltildi. Bilinen sonuç: iç büyük harfli yabancı adlar ("McDonald" -> "Mcdonald") ve Türkçe kuralla yazılan yabancı "I" ("LILY" -> "Lıly") elle düzeltilmeli. Veli ve öğretmen adları kapsam dışı. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

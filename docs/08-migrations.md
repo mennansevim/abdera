@@ -248,3 +248,8 @@ veli künyesindeki "WhatsApp bildirimi alsın" kutusuyla açılan açık bir se�
 `guardians.notification_consent` varsayılanı `false`; mevcut tüm veliler kapalıya çekilir (her biri için
 `audit_log` satırı, actor null) ve bekleyen/işlenen `notification_jobs` `Cancelled` olur. `Down()`
 yalnızca kolon varsayılanını geri alır - kapatılan onaylar ve iptal edilen job'lar geri açılmaz.
+
+**NormalizeStudentNames** (People, veri migration'ı - şema değişmez): öğrenci adları kelime başları
+büyük biçime getirilir ("miray SEVİM" -> "Miray Sevim", `Shared/PersonNameFormatter` ile aynı kural).
+Türkçe i/ı ayrımı locale'e bağlı `upper()` yerine `translate()` ile yapılır; SQL `postgres:16-alpine`
+üzerinde birim testteki örneklerle doğrulandı. `Down()` boş: özgün yazım saklanmaz.

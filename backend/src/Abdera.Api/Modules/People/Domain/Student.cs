@@ -1,3 +1,5 @@
+using Abdera.Api.Shared;
+
 namespace Abdera.Api.Modules.People.Domain;
 
 // docs/03-erd.md - People > students. Mali/devamsızlık geçmişi korunduğu için gerçek
@@ -34,8 +36,9 @@ public class Student
         return new Student
         {
             Id = Guid.NewGuid(),
-            FirstName = firstName.Trim(),
-            LastName = lastName.Trim(),
+            // "miray sevim" / "MİRAY SEVİM" -> "Miray Sevim" (kullanıcı isteği).
+            FirstName = PersonNameFormatter.Format(firstName),
+            LastName = PersonNameFormatter.Format(lastName),
             BirthDate = birthDate,
             Status = StudentStatus.Active,
             SiblingDiscount = siblingDiscount,
@@ -49,8 +52,8 @@ public class Student
         ValidateNames(firstName, lastName);
         ValidateBirthDate(birthDate, now);
 
-        FirstName = firstName.Trim();
-        LastName = lastName.Trim();
+        FirstName = PersonNameFormatter.Format(firstName);
+        LastName = PersonNameFormatter.Format(lastName);
         BirthDate = birthDate;
         UpdatedAt = now;
     }
