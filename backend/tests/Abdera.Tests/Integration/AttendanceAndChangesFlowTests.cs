@@ -704,6 +704,12 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
             .Content.ReadFromJsonAsync<AttendanceHistory.HistoryResponse>(TestJson.Options))!;
         Assert.DoesNotContain(notMarkedOnly.Lessons.Items, item => item.LessonId == marked.LessonId);
         Assert.Contains(notMarkedOnly.Lessons.Items, item => item.LessonId == unmarked.LessonId);
+
+        // Sayaç kutuları ekranda durum filtresi olarak da çalışır: filtre listeyi daraltır,
+        // özet ve öğretmen kırılımı ise aralığın tamamını göstermeye devam eder.
+        Assert.Equal(notMarkedOnly.NotMarkedCount, notMarkedOnly.Lessons.TotalCount);
+        Assert.True(notMarkedOnly.PresentCount >= 1);
+        Assert.Equal(1, notMarkedOnly.Teachers.Single(item => item.TeacherId == marked.TeacherId).PresentCount);
     }
 
     // docs/04-permissions.md: Teacher yalnızca kendi derslerini görür - teacherId parametresi

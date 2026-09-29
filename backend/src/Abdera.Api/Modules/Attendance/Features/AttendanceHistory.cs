@@ -103,6 +103,11 @@ public static class AttendanceHistory
         // Öğretmen dersi erkenden işaretlediyse (yoklama kaydı varsa) satır yine görünür.
         rows = rows.Where(x => x.Lesson.StartAt < now || x.Attendance != null);
 
+        // Özet ve öğretmen kırılımı durum filtresinden ÖNCEKİ satırlar üzerinden sayılır:
+        // ekrandaki sayaç kutuları aynı zamanda durum filtresidir, "Gelmedi"ye basınca
+        // diğer kutuların sıfırlanması hem bilgiyi kaybettirir hem geri dönüşü zorlaştırır.
+        var unfilteredRows = rows;
+
         rows = status switch
         {
             AttendanceFilter.Present => rows.Where(x => x.Attendance != null && x.Attendance.Status == Domain.AttendanceStatus.Present),
@@ -132,10 +137,10 @@ public static class AttendanceHistory
                 x.Attendance == null ? null : x.Attendance.Note))
             .ToListAsync();
 
-        // Kırılım SAYFALANMAZ: aralığın tamamı üzerinden gruplanır, böylece sayfa
+        // Kırılım SAYFALANMAZ ve durum filtresine bakmaz: aralığın tamamı üzerinden gruplanır, böylece sayfa
         // değiştirildiğinde öğretmen özeti sabit kalır. Gruplama sonucu anonim bir ara tipe
         // projekte edilip record'a bellekte çevriliyor (Calendar.cs ile aynı yaklaşım).
-        var breakdownRows = await rows
+        var breakdownRows = await unfilteredRows
             .GroupBy(x => new { x.Lesson.TeacherId, x.Teacher.FirstName, x.Teacher.LastName })
             .Select(group => new
             {
@@ -165,7 +170,7 @@ public static class AttendanceHistory
         return Results.Ok(new HistoryResponse(
             new PagedResponse<HistoryItem>(items, totalCount, normalizedPage, normalizedPageSize),
             breakdown,
-            totalCount,
+            breakdown.Sum(item => item.LessonCount),
             breakdown.Sum(item => item.PresentCount),
             breakdown.Sum(item => item.AbsentCount),
             breakdown.Sum(item => item.ExcusedCount),
