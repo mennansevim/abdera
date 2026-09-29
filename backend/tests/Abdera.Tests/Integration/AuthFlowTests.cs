@@ -154,6 +154,14 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var meAfterChange = await client.SendAsync(meAfterChangeRequest);
         Assert.Equal(HttpStatusCode.Unauthorized, meAfterChange.StatusCode);
 
+        // Şifreyi değiştiren oturum ise yeni damgalı cookie ile açık kalır - aksi halde ön yüz
+        // /login ile /dashboard arasında sonsuz yönlendirmeye giriyordu.
+        var refreshedCookieValue = changeResponse.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+        var meWithRefreshedCookieRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        meWithRefreshedCookieRequest.Headers.Add("Cookie", refreshedCookieValue);
+        var meWithRefreshedCookie = await client.SendAsync(meWithRefreshedCookieRequest);
+        Assert.Equal(HttpStatusCode.OK, meWithRefreshedCookie.StatusCode);
+
         // Test veritabanını sonraki testler için eski şifreye geri al (yeni şifreyle
         // giriş yapıp yeni bir cookie almak gerekiyor - eskisi artık geçersiz).
         var reLoginResponse = await client.PostAsJsonAsync("/api/auth/login",

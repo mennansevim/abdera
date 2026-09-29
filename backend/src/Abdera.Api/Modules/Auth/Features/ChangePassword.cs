@@ -37,7 +37,8 @@ public static class ChangePassword
         ClaimsPrincipal principal,
         AbderaDbContext db,
         IPasswordHasher<User> passwordHasher,
-        IClock clock)
+        IClock clock,
+        HttpContext httpContext)
     {
         if (request.NewPassword.Length < 8)
         {
@@ -65,6 +66,12 @@ public static class ChangePassword
         db.AuditLogs.Add(AuditLog.Record(userId, "user.password_changed", nameof(User), user.Id, clock.UtcNow));
 
         await db.SaveChangesAsync();
+
+        // SetPassword SecurityStamp'i yeniler: başka cihazlardaki eski oturumlar düşmeli, ama
+        // şifreyi değiştiren bu oturum da düşüyordu. Ön yüz önbellekteki eski `me` ile
+        // /login ile /dashboard arasında sonsuz yönlendirmeye giriyordu (canlıda bulunan bug).
+        // Cookie'yi yeni damgayla yeniden kurmak yalnızca bu oturumu ayakta tutar.
+        await Login.SignInAsync(httpContext, user);
         return Results.NoContent();
     }
 }
