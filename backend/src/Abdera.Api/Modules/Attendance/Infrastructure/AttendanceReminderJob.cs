@@ -24,11 +24,8 @@ public static class AttendanceReminderJob
 {
     public const string ReferenceType = "lesson";
 
-    // Soru açılan geriye dönük pencere. Kısa tutuldu: özellik ilk açıldığında (ya da bir
-    // öğretmen haftalarca yoklama girmediyse) zil geçmiş derslerin sorularıyla dolmasın.
-    // Pencereden çıkan AÇIK soru kapanmaz - kullanıcı isteği "işaretleyene kadar kalsın".
-    public const int LookbackDays = 7;
-
+    // Geriye dönük pencere YOK: kullanıcı isteği "hepsi görünsün, hepsine cevap versinler" -
+    // yoklaması girilmemiş her geçmiş ders sorulur, ne kadar eski olursa olsun.
     public const string Title = "Öğrenci derse geldi mi?";
 
     public record Result(int AskedCount, int ClearedCount);
@@ -54,12 +51,11 @@ public static class AttendanceReminderJob
         AbderaDbContext db, IClock clock, IStaffNotifier notifier, CancellationToken cancellationToken)
     {
         var now = clock.UtcNow;
-        var since = now.AddDays(-LookbackDays);
 
         // Not: OrderBy, projeksiyondan ÖNCE (CLAUDE.md "Çok tablolu sorgularda OrderBy sırası").
         // Giriş hesabı olmayan öğretmenin zili yok; NotifyTeacherAsync da satır açmazdı.
         var pending = await AwaitingAttendance(db)
-            .Where(lesson => lesson.EndAt <= now && lesson.EndAt >= since)
+            .Where(lesson => lesson.EndAt <= now)
             .Join(db.Teachers.Where(teacher => teacher.UserId != null && teacher.Status == TeacherStatus.Active),
                 lesson => lesson.TeacherId, teacher => teacher.Id, (lesson, teacher) => lesson)
             .Join(db.Students, lesson => lesson.StudentId, student => student.Id,
@@ -90,7 +86,7 @@ public static class AttendanceReminderJob
         }
 
         // Artık yoklama beklemeyen derslerin açık sorularını kapat (ders iptal edildi, yoklama
-        // başka bir yoldan girildi). Pencere burada UYGULANMAZ: eski ama hâlâ cevapsız soru kalır.
+        // başka bir yoldan girildi).
         var openLessonIds = await notifier.OpenReminderReferenceIdsAsync(StaffNotificationType.AttendanceMissing, ReferenceType);
         var stillAwaiting = await AwaitingAttendance(db)
             .Where(lesson => openLessonIds.Contains(lesson.Id))
