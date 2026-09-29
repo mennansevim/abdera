@@ -77,3 +77,27 @@ sonrasında silindi.
 Bu prova dump/restore prosedürünü ve veri tutarlılığını doğrular. Gerçek SFTP'ye şifreli
 yükleme, sunucu kimlik bilgileri paylaşılmadığı için hâlâ dış bağımlılıktır; bu adım
 `Backup__Provider=Sftp` ile gerçek hedef üzerinde ayrıca uygulanmalıdır.
+
+## Canlı yedekten geri yükleme provası — 29 Eylül 2026 (Hetzner + Cloudflare R2)
+
+Yukarıdaki provada açık kalan "gerçek hedef" adımı tamamlandı. Canlı sunucunun ilk otomatik
+yedeği (`abdera-20260929-092902.sql.enc`, 580.716 bayt) uçtan uca geri açıldı. Anahtar
+sunucudan hiç çıkmadı; bütün adımlar sunucuda yapıldı.
+
+1. **R2'den indirme:** Aynı `backup-gw` imajı ve `.env`'deki R2 kimliğiyle indirildi:
+   `docker compose run --rm -v ~/prova:/out backup-gw copy r2:abdera-backups/abdera/<dosya> /out`
+2. **Şifre çözme:** `Backup__EncryptionKey` `.env`'den okundu, `python:3.12-alpine` +
+   `cryptography` (`AESGCM`) ile çözüldü. Dosya biçimi `[12 bayt nonce][şifreli][16 bayt tag]`,
+   bu yüzden `decrypt(d[:12], d[12:], None)`. Sonuç 580.688 bayt düz SQL.
+3. **Ayrı veritabanına yükleme:** `abdera_prova` veritabanına `psql -v ON_ERROR_STOP=1` ile
+   hatasız yüklendi. Canlı veritabanına dokunulmadı.
+4. **Karşılaştırma:** Tablo tablo satır sayıları (`docs/19-hetzner-runbook.md` §8'deki sayım
+   sorgusu) karşılaştırıldı:
+
+| Sonuç | Tablo |
+|---|---|
+| 56 / 57 tablo birebir aynı | öğrenci, veli, kayıt, ders, aidat, ödeme, gider, audit_log, bildirim işleri dahil |
+| `backup_runs`: canlı 3, yedek 2 | Beklenen fark: yedeğin kendisinden sonra oluşan koşu kaydı |
+
+Prova veritabanı ve çözülmüş dosya sonrasında silindi. Sonraki prova üç ay sonra ya da
+yedekleme altyapısında (anahtar, R2, `backup-gw` sürümü) bir değişiklikten sonra yapılır.
