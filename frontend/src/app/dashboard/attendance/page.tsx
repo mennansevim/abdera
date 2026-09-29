@@ -65,7 +65,8 @@ function startOfMonth() {
   return toDateInput(new Date(date.getFullYear(), date.getMonth(), 1));
 }
 
-const dayFormatter = new Intl.DateTimeFormat("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const dateFormatter = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+const weekdayFormatter = new Intl.DateTimeFormat("tr-TR", { weekday: "long" });
 const timeFormatter = new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
 
 type Counts = Pick<AttendanceTeacherBreakdown, "presentCount" | "absentCount" | "excusedCount" | "notMarkedCount">;
@@ -275,64 +276,67 @@ export default function AttendancePage() {
 
           {/* Dar ekranda tablo yatay kayıyor ve adlar kırılıyordu; her ders tek satırlık bir öğe. */}
           {days.length > 0 && (
-            <div className="md:hidden">
+            <div className="space-y-4 p-3 md:hidden">
               {days.map(([day, lessons]) => (
-                <div key={day}>
-                  <h3 className="bg-[var(--surface-muted)] px-4 py-1.5 text-xs font-bold">
-                    {dayFormatter.format(new Date(`${day}T00:00:00`))}
-                    <span className="text-meta ml-2 font-medium">{lessons.length} ders</span>
-                  </h3>
+                <section key={day} className="overflow-hidden rounded-xl border border-[var(--line)]">
+                  <DayHeading day={day} count={lessons.length} className="px-3 py-2" />
                   <ul className="divide-y divide-[var(--line)]">
                     {lessons.map((lesson) => (
-                      <li key={lesson.lessonId} className="flex items-start gap-3 px-4 py-2">
-                        <span className="w-11 shrink-0 pt-0.5 text-sm font-semibold tabular-nums">{timeFormatter.format(new Date(lesson.startAt))}</span>
+                      <li key={lesson.lessonId} className="flex items-start gap-3 px-3 py-2.5">
+                        <span className="w-11 shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-[var(--muted)]">{timeFormatter.format(new Date(lesson.startAt))}</span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold">{lesson.studentName}</p>
                           <p className="text-meta truncate text-xs">
                             {isAdmin && <>{lesson.teacherName} · </>}{lesson.instrumentName}{lesson.lessonStatus === "Makeup" && " · telafi"}
                           </p>
-                          {lesson.note && <p className="text-meta mt-0.5 line-clamp-2 text-xs">{lesson.note}</p>}
+                          {lesson.note && <p className="text-meta mt-1 line-clamp-2 text-xs italic">{lesson.note}</p>}
                         </div>
                         <AttendanceBadge status={lesson.attendanceStatus} />
                       </li>
                     ))}
                   </ul>
-                </div>
+                </section>
               ))}
             </div>
           )}
 
+          {/* Her gün, arasında boşluk bırakılmış ayrı bir blok: sütunlar tek tabloda hizalı kalsın
+              diye günler ayrı <tbody>, aradaki nefes payı boş bir ayraç satırı. */}
           {days.length > 0 && (
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[40rem] text-sm">
+            <div className="hidden overflow-x-auto px-3 pb-3 md:block">
+              <table className="w-full min-w-[40rem] border-separate border-spacing-0 text-sm">
                 <thead>
-                  <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
-                    <th className="w-16 px-4 py-2">Saat</th>
-                    <th className="px-3 py-2">Öğrenci</th>
-                    {isAdmin && <th className="px-3 py-2">Öğretmen</th>}
-                    <th className="px-3 py-2">Ders</th>
-                    <th className="px-3 py-2">Katılım</th>
-                    <th className="px-3 py-2">Not</th>
+                  <tr className="text-micro text-left text-[var(--muted)]">
+                    <th className="w-20 px-4 pt-3 pb-2">Saat</th>
+                    <th className="px-3 pt-3 pb-2">Öğrenci</th>
+                    {isAdmin && <th className="px-3 pt-3 pb-2">Öğretmen</th>}
+                    <th className="px-3 pt-3 pb-2">Ders</th>
+                    <th className="px-3 pt-3 pb-2">Katılım</th>
+                    <th className="px-3 pt-3 pb-2">Not</th>
                   </tr>
                 </thead>
-                {days.map(([day, lessons]) => (
+                {days.map(([day, lessons], dayIndex) => (
                   <tbody key={day}>
-                    <tr className="bg-[var(--surface-muted)]">
-                      <th colSpan={columnCount} scope="colgroup" className="px-4 py-1.5 text-left text-xs font-bold">
-                        {dayFormatter.format(new Date(`${day}T00:00:00`))}
-                        <span className="text-meta ml-2 font-medium">{lessons.length} ders</span>
+                    {dayIndex > 0 && <tr aria-hidden><td colSpan={columnCount} className="h-4 p-0" /></tr>}
+                    <tr>
+                      <th colSpan={columnCount} scope="colgroup" className="rounded-t-xl border border-[var(--line)] bg-[var(--surface-muted)] p-0 text-left font-normal">
+                        <DayHeading day={day} count={lessons.length} className="px-4 py-2" />
                       </th>
                     </tr>
-                    {lessons.map((lesson) => (
-                      <tr key={lesson.lessonId} className="border-t border-[var(--line)] hover:bg-[var(--surface-muted)]/60">
-                        <td className="px-4 py-2 font-semibold tabular-nums whitespace-nowrap">{timeFormatter.format(new Date(lesson.startAt))}</td>
-                        <td className="px-3 py-2 font-semibold whitespace-nowrap">{lesson.studentName}</td>
-                        {isAdmin && <td className="text-meta px-3 py-2 whitespace-nowrap">{lesson.teacherName}</td>}
-                        <td className="text-meta px-3 py-2 whitespace-nowrap">{lesson.instrumentName}{lesson.lessonStatus === "Makeup" && <span className="ml-1.5 rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[.65rem] font-bold text-[var(--brand-strong)]">telafi</span>}</td>
-                        <td className="px-3 py-2 whitespace-nowrap"><AttendanceBadge status={lesson.attendanceStatus} /></td>
-                        <td className="text-meta max-w-[16rem] truncate px-3 py-2" title={lesson.note ?? undefined}>{lesson.note ?? "—"}</td>
-                      </tr>
-                    ))}
+                    {lessons.map((lesson, index) => {
+                      const last = index === lessons.length - 1;
+                      const cell = `border-t border-[var(--line)] px-3 py-2.5 ${last ? "border-b" : ""}`;
+                      return (
+                        <tr key={lesson.lessonId} className="group">
+                          <td className={`${cell} border-l px-4 font-semibold tabular-nums whitespace-nowrap text-[var(--muted)] group-hover:bg-[var(--surface-muted)]/60 ${last ? "rounded-bl-xl" : ""}`}>{timeFormatter.format(new Date(lesson.startAt))}</td>
+                          <td className={`${cell} font-semibold whitespace-nowrap group-hover:bg-[var(--surface-muted)]/60`}>{lesson.studentName}</td>
+                          {isAdmin && <td className={`${cell} text-meta whitespace-nowrap group-hover:bg-[var(--surface-muted)]/60`}>{lesson.teacherName}</td>}
+                          <td className={`${cell} text-meta whitespace-nowrap group-hover:bg-[var(--surface-muted)]/60`}>{lesson.instrumentName}{lesson.lessonStatus === "Makeup" && <span className="ml-1.5 rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[.65rem] font-bold text-[var(--brand-strong)]">telafi</span>}</td>
+                          <td className={`${cell} whitespace-nowrap group-hover:bg-[var(--surface-muted)]/60`}><AttendanceBadge status={lesson.attendanceStatus} /></td>
+                          <td className={`${cell} border-r max-w-[20rem] truncate group-hover:bg-[var(--surface-muted)]/60 ${last ? "rounded-br-xl" : ""} ${lesson.note ? "text-meta" : "text-[var(--line)]"}`} title={lesson.note ?? undefined}>{lesson.note ?? "—"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 ))}
               </table>
@@ -345,10 +349,23 @@ export default function AttendancePage() {
   );
 }
 
+function DayHeading({ day, count, className = "" }: { day: string; count: number; className?: string }) {
+  const date = new Date(`${day}T00:00:00`);
+  return (
+    <div className={`flex items-center justify-between gap-2 ${className}`}>
+      <span className="flex items-baseline gap-2">
+        <span className="text-sm font-bold">{dateFormatter.format(date)}</span>
+        <span className="text-meta text-xs font-medium">{weekdayFormatter.format(date)}</span>
+      </span>
+      <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[.7rem] font-bold text-[var(--muted)] tabular-nums">{count} ders</span>
+    </div>
+  );
+}
+
 function AttendanceBadge({ status }: { status: AttendanceStatus | null }) {
   return status
-    ? <span className={`inline-block shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${STATUS_CLASSES[status]}`}>{STATUS_LABELS[status]}</span>
-    : <span className="inline-block shrink-0 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-bold text-[var(--muted)]">Girilmedi</span>;
+    ? <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_CLASSES[status]}`}><span aria-hidden className="size-1.5 rounded-full bg-current" />{STATUS_LABELS[status]}</span>
+    : <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-dashed border-[var(--line)] px-2.5 py-0.5 text-xs font-bold text-[var(--muted)]"><span aria-hidden className="size-1.5 rounded-full bg-current opacity-50" />Girilmedi</span>;
 }
 
 // Geldi/gelmedi/mazeretli/girilmedi oranlarını tek yatay çubukta gösterir.
