@@ -138,7 +138,16 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
             return;
         }
 
-        var result = await whatsAppClient.SendTemplateAsync(job.RecipientPhoneNumber, template.Name, message.Parameters, message.ButtonPayloads, cancellationToken);
+        var parameters = template.OrderParameters(message.Parameters, out var missing);
+        if (missing.Count > 0)
+        {
+            job.MarkFailed(
+                $"'{template.Name}' şablonundaki değişken(ler) bu bildirim için üretilmiyor: {string.Join(", ", missing)}.",
+                maxAttempts, now);
+            return;
+        }
+
+        var result = await whatsAppClient.SendTemplateAsync(job.RecipientPhoneNumber, template.Name, parameters, message.ButtonPayloads, cancellationToken);
         if (result.Success)
         {
             job.MarkSent(now);
