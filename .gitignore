@@ -81,3 +81,6 @@ tools/bulk-seed/last-run-report.*
 # Dosyalar veritabanında durur (tools/import-score-pdfs.py), buraya asla girmez.
 *.pdf
 .venv/
+
+# Tanıtım sitesi tasarım taslakları (yapay görseller, 19 MB) - yalnızca yerelde tutulur.
+/design/
