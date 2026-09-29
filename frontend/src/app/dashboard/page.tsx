@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Icon, type IconName } from "@/components/icons";
+import { Icon } from "@/components/icons";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
 import { useReceivables } from "@/lib/billing";
@@ -13,6 +13,7 @@ import { useSystemHealth } from "@/lib/ops";
 import { useAttentionNeededStudents, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
+import { Panel, StatStrip } from "@/components/ui";
 import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
 import { PendingLessonNotes } from "./pending-lesson-notes";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
@@ -67,7 +68,7 @@ export default function DashboardPage() {
   if (!me) return null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {me.role === "Teacher" ? <TeacherDashboard email={me.email} /> : <AdminDashboard email={me.email} />}
     </div>
   );
@@ -88,14 +89,17 @@ function AdminDashboard({ email }: { email: string }) {
       <DashboardTopbar email={email} />
       <SystemHealthBanner />
 
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Günün özeti">
-        <StatCard icon="calendar" value={today?.todayLessons} label="Bugünkü Ders" loading={statsLoading} tone="purple" />
-        <StatCard icon="swap" value={today?.pendingChangeRequests} label="Bekleyen Değişiklik Talebi" loading={statsLoading} tone="amber" href="/dashboard/change-requests" />
-        <StatCard icon="wallet" value={`${overdueReceivables.length} kayıt`} secondaryValue={`₺${formatMoney(overdueTotal)}`} label="Vadesi Geçen Aidat" loading={statsLoading} tone="red" href="/dashboard/billing" />
-        <StatCard icon="bell" value={failedNotifications?.totalCount ?? 0} label="Gönderilemeyen Bildirim" loading={statsLoading} tone="rose" href="/dashboard/notifications" />
-      </section>
+      <StatStrip
+        label="Günün özeti"
+        items={[
+          { key: "today", label: "Bugünkü ders", value: today?.todayLessons ?? 0, loading: statsLoading, href: "/dashboard/calendar" },
+          { key: "requests", label: "Bekleyen değişiklik talebi", value: today?.pendingChangeRequests ?? 0, tone: today?.pendingChangeRequests ? "warning" : undefined, loading: statsLoading, href: "/dashboard/change-requests" },
+          { key: "overdue", label: "Vadesi geçen aidat", value: `₺${formatMoney(overdueTotal)}`, hint: `${overdueReceivables.length} kayıt`, tone: overdueReceivables.length ? "danger" : undefined, loading: statsLoading, href: "/dashboard/billing" },
+          { key: "failed", label: "Gönderilemeyen bildirim", value: failedNotifications?.totalCount ?? 0, tone: failedNotifications?.totalCount ? "danger" : undefined, loading: statsLoading, href: "/dashboard/notifications" },
+        ]}
+      />
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <WeeklySchedule weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} error={lessonsError} retrying={lessonsFetching} onRetry={() => void refetchLessons()} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
         <AdminAttentionRail lessons={lessons ?? []} birthdays={today?.upcomingBirthdays} />
       </div>
@@ -117,17 +121,17 @@ function DashboardTopbar({ email }: { email: string }) {
     : [];
 
   return (
-    <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 className="font-serif text-[1.45rem] font-bold tracking-[-0.01em] sm:text-[1.7rem]">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
-        <p className="mt-1 text-xs text-[var(--muted)]">
+        <h1 className="text-display font-serif leading-tight">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
+        <p className="text-meta mt-0.5">
           {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())} · Okulun bugünkü akışı burada
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1 xl:w-[19rem] xl:flex-none">
+        <div className="relative min-w-0 flex-1 lg:w-[19rem] lg:flex-none">
           <Icon name="search" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
-          <input type="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} className="field min-h-11 pl-10 pr-4 text-xs" placeholder="Öğrenci veya öğretmen ara…" aria-label="Öğrenci veya öğretmen ara" />
+          <input type="search" enterKeyHint="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} className="field pl-10 pr-4 text-sm" placeholder="Öğrenci veya öğretmen ara…" aria-label="Öğrenci veya öğretmen ara" />
           {normalized && (
             <div className="app-card absolute right-0 top-[calc(100%+.45rem)] z-20 w-full min-w-[17rem] overflow-hidden p-1.5">
               {results.length ? results.map((result) => (
@@ -138,7 +142,7 @@ function DashboardTopbar({ email }: { email: string }) {
             </div>
           )}
         </div>
-        <Link href="/dashboard/notifications" className="pressable relative grid h-11 w-11 shrink-0 place-items-center rounded-xl border-2 border-[var(--line)] bg-white text-[var(--brand-strong)] shadow-sm" aria-label={failedNotifications?.totalCount ? `Bildirimleri aç, ${failedNotifications.totalCount} gönderilemeyen bildirim` : "Bildirimleri aç"}>
+        <Link href="/dashboard/notifications" className="icon-btn icon-btn-quiet relative shrink-0 text-[var(--brand-strong)]" aria-label={failedNotifications?.totalCount ? `Bildirimleri aç, ${failedNotifications.totalCount} gönderilemeyen bildirim` : "Bildirimleri aç"}>
           <Icon name="bell" className="h-[1.1rem] w-[1.1rem]" />
           {!!failedNotifications?.totalCount && <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--danger)] ring-2 ring-white" aria-hidden="true" />}
         </Link>
@@ -163,47 +167,14 @@ function SystemHealthBanner() {
     : "hiç";
 
   return (
-    <section role="alert" className={`app-card flex flex-wrap items-center gap-3 p-4 ${tone.bg}`}>
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/60 ${tone.text}`}><Icon name="shield" className="h-5 w-5" /></span>
+    <section role="alert" className={`app-card flex flex-wrap items-center gap-3 px-4 py-2.5 ${tone.bg}`}>
+      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white/60 ${tone.text}`}><Icon name="shield" className="h-5 w-5" /></span>
       <div className="min-w-0 flex-1">
         <p className={`text-sm font-bold ${tone.text}`}>{tone.label}{health.detail ? `: ${health.detail}` : ""}</p>
         <p className="text-meta mt-0.5">Son başarılı yedekleme: {lastBackup}</p>
       </div>
     </section>
   );
-}
-
-type StatTone = "purple" | "amber" | "red" | "rose";
-const STAT_TONES: Record<StatTone, { icon: string; iconBg: string; value: string }> = {
-  purple: { icon: "var(--brand-strong)", iconBg: "var(--brand-soft)", value: "#3a2a1f" },
-  amber: { icon: "var(--warning-strong)", iconBg: "var(--warning-soft)", value: "var(--warning-strong)" },
-  red: { icon: "var(--danger-strong)", iconBg: "var(--danger-soft)", value: "var(--danger-strong)" },
-  rose: { icon: "#a13c2f", iconBg: "#fbe3da", value: "#8a3423" },
-};
-
-function StatCard({ icon, value, secondaryValue, label, loading, tone, href }: { icon: IconName; value?: number | string; secondaryValue?: string; label: string; loading: boolean; tone: StatTone; href?: string }) {
-  const palette = STAT_TONES[tone];
-  const content = (
-    <div className="flex h-full items-start gap-3 p-4">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ color: palette.icon, background: palette.iconBg }}><Icon name={icon} className="h-[1.05rem] w-[1.05rem]" /></span>
-      <span className="min-w-0 flex-1 pt-0.5">
-        {loading ? (
-          <span className="skeleton mb-2 block h-7 w-16 rounded-md" />
-        ) : (
-          <span className="block">
-            {/* İkincil değeri olan kartlar (örn. "3 kayıt" + "₺8.400") sözcük içerir ve tutar
-                sınırsız büyüyebilir (çok sayıda vadesi geçen aidat) - display ölçeği dar kartta
-                taşar/kırpılır, bu yüzden bu kartlarda her iki satır da başlık ölçeğinde kalır. */}
-            <span className={`block truncate ${secondaryValue ? "text-title" : "text-display"}`} style={{ color: palette.value }}>{value ?? 0}</span>
-            {secondaryValue && <span className="text-title mt-0.5 block truncate" style={{ color: palette.value }}>{secondaryValue}</span>}
-          </span>
-        )}
-        <span className="text-meta mt-2 block leading-snug">{label}</span>
-      </span>
-      {href && <Icon name="chevron" className="ml-auto mt-2 h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />}
-    </div>
-  );
-  return href ? <Link href={href} className="app-card pressable min-h-[6.8rem] overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_12px_32px_rgba(38,31,24,.08)]">{content}</Link> : <article className="app-card min-h-[6.8rem] overflow-hidden">{content}</article>;
 }
 
 const RSVP_LEGEND: { color: string; label: string }[] = [
@@ -225,13 +196,11 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, error, retryi
 
   return (
     <section className="app-card min-w-0 overflow-hidden">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-title">Bu Hafta</h2>
-            <Link href="/dashboard/calendar" className="inline-flex min-h-11 items-center text-[.75rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
-          </div>
-          <p className="text-meta mt-0.5">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <h2 className="text-sm font-bold">Bu hafta</h2>
+          <span className="text-meta">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</span>
+          <Link href="/dashboard/calendar" className="text-[.75rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
         </div>
         <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 md:flex">
           {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} aria-hidden="true" />{item.label}</span>)}
@@ -253,17 +222,17 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, error, retryi
               açılıyordu, 768-1279 arasında istenmeyen bir ajanda görünümüne düşüyordu. */}
           <div className="hidden grid-cols-[3.2rem_repeat(5,minmax(0,1fr))] border-t border-[var(--line)] md:grid">
             <div className="border-r border-[var(--line)]" />
-            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-2.5 text-center last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="block text-[.75rem] font-semibold text-[var(--muted)]">{WEEKDAYS[index]}</span><span className="mt-1 block text-[.75rem] text-[var(--muted)]">{day.getDate()}</span></div>)}
+            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-1.5 text-center text-[.75rem] last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="font-semibold text-[var(--muted)]">{WEEKDAYS[index]}</span> <span className="font-bold">{day.getDate()}</span></div>)}
             <TimeLabels hourWindow={hourWindow} />
             {weekdays.map((day) => <DayColumn key={day.toISOString()} day={day} lessons={lessons} colors={lessonColors} hourWindow={hourWindow} onOpen={setOpenLesson} />)}
           </div>
-          <div className="space-y-4 border-t border-[var(--line)] p-4 md:hidden">
+          <div className="space-y-3 border-t border-[var(--line)] p-3 md:hidden">
             {weekdays.map((day, index) => {
               const dayLessons = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString()).sort((a,b) => a.startAt.localeCompare(b.startAt));
               return (
                 <div key={day.toISOString()}>
                   <h3 className="mb-2 flex items-center gap-2 text-xs font-bold"><span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{day.getDate()}</span>{WEEKDAYS[index]}</h3>
-                  <div className="space-y-2 pl-9">
+                  <div className="space-y-1.5">
                     {dayLessons.map((lesson) => <AgendaLesson key={lesson.id} lesson={lesson} tone={lessonColors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} onOpen={setOpenLesson} />)}
                     {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
                   </div>
@@ -337,7 +306,7 @@ function AgendaLesson({ lesson, tone, onOpen }: { lesson: CalendarLesson; tone: 
   const dot = rsvpDotTone(lesson);
   const isCancelled = lesson.status === "Cancelled";
   return (
-    <button type="button" onClick={() => onOpen(lesson)} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white p-2.5 text-left shadow-sm ${isCancelled ? "opacity-60" : ""}`}>
+    <button type="button" onClick={() => onOpen(lesson)} className={`pressable flex min-h-12 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-2.5 py-2 text-left ${isCancelled ? "opacity-60" : ""}`}>
       <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: tone.border }} />
       <span className={`w-20 shrink-0 text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`} style={{ color: tone.text }}>{start.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}–{end.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}</span>
       <span className="min-w-0 flex-1">
@@ -424,45 +393,68 @@ function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[];
   }
 
   return (
-    <aside className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+    <aside className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
       {railLoading && <div className="skeleton min-h-28 rounded-2xl md:col-span-2 xl:col-span-1" aria-label="Dikkat gerektiren işler yükleniyor" />}
 
       {allClear && (
-        <section className="app-card flex items-center gap-3 p-4 md:col-span-2 xl:col-span-1">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--success-soft)] text-[var(--success-strong)]"><Icon name="check" className="h-5 w-5" /></span>
-          <div><h2 className="text-sm font-bold">Bugün için her şey yolunda</h2><p className="text-meta mt-1">Bekleyen talep, banka işlemi veya öğrenci uyarısı yok.</p></div>
+        <section className="app-card flex items-center gap-3 px-4 py-3 md:col-span-2 xl:col-span-1">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--success-soft)] text-[var(--success-strong)]"><Icon name="check" className="h-4 w-4" /></span>
+          <div><h2 className="text-sm font-bold">Bugün için her şey yolunda</h2><p className="text-meta">Bekleyen talep, banka işlemi veya öğrenci uyarısı yok.</p></div>
         </section>
       )}
 
-      {hasRequests && <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Bekleyen Değişiklik Talepleri</h2><Link href="/dashboard/change-requests" className="inline-flex min-h-11 items-center text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
-        <div className="divide-y divide-[var(--line)]">
-          {requests?.slice(0, 3).map((request) => {
-            const lesson = lessons.find((item) => item.id === request.lessonId);
-            return <div key={request.id} className="flex items-center gap-2 py-3 first:pt-0 last:pb-0"><span className="min-w-0 flex-1"><span className="block truncate text-[.75rem] font-bold">{lesson?.studentName ?? "Ders değişikliği"}</span><span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">{new Date(request.proposedStartAt).toLocaleString("tr-TR", { weekday:"short", hour:"2-digit", minute:"2-digit" })}</span></span><button disabled={busyId === request.id} onClick={() => act(request.id,"approve")} className="pressable grid h-11 w-11 place-items-center rounded-xl bg-[var(--success-soft)] text-[var(--success-strong)] disabled:opacity-50" aria-label="Talebi onayla"><Icon name="check" className="h-4 w-4" /></button><button disabled={busyId === request.id} onClick={() => act(request.id,"reject")} className="pressable grid h-11 w-11 place-items-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger-strong)] disabled:opacity-50" aria-label="Talebi reddet"><Icon name="x" className="h-4 w-4" /></button></div>;
-          })}
-        </div>
-      </section>}
+      {hasRequests && (
+        <Panel flush title="Değişiklik talepleri" meta={requests?.length} actions={<Link href="/dashboard/change-requests" className="text-[.75rem] font-bold text-[var(--brand)] hover:underline">Tümü</Link>}>
+          <ul className="divide-y divide-[var(--line)]">
+            {requests?.slice(0, 3).map((request) => {
+              const lesson = lessons.find((item) => item.id === request.lessonId);
+              return (
+                <li key={request.id} className="flex items-center gap-2 px-4 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold">{lesson?.studentName ?? "Ders değişikliği"}</span>
+                    <span className="block text-[.72rem] text-[var(--muted)]">{new Date(request.proposedStartAt).toLocaleString("tr-TR", { weekday: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                  </span>
+                  <button disabled={busyId === request.id} onClick={() => act(request.id, "approve")} className="icon-btn bg-[var(--success-soft)] text-[var(--success-strong)] disabled:opacity-50" aria-label="Talebi onayla"><Icon name="check" className="h-4 w-4" /></button>
+                  <button disabled={busyId === request.id} onClick={() => act(request.id, "reject")} className="icon-btn bg-[var(--danger-soft)] text-[var(--danger-strong)] disabled:opacity-50" aria-label="Talebi reddet"><Icon name="x" className="h-4 w-4" /></button>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      )}
 
-      {hasBankItems && <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Gözden Geçirilmesi Gereken Banka İşlemleri</h2><Link href="/dashboard/banking" className="inline-flex min-h-11 items-center text-[.75rem] font-bold text-[var(--brand)]">Tümünü gör</Link></div>
-        <div className="divide-y divide-[var(--line)]">
-          {bankItems?.items.map((item) => (
-            <Link key={item.id} href="/dashboard/banking" className="pressable flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-              <span className="min-w-0">
-                <span className="block truncate text-[.75rem] font-bold tabular-nums">{formatMoney(item.amount)} {item.currency}</span>
-                <span className="mt-0.5 block truncate text-[.75rem] text-[var(--muted)]">{item.senderName ?? "İsimsiz gönderici"}{item.description ? ` · ${item.description}` : ""}</span>
-              </span>
-              <span className="pressable shrink-0 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[.75rem] font-bold text-[var(--brand)]">İncele</span>
-            </Link>
-          ))}
-        </div>
-      </section>}
+      {hasBankItems && (
+        <Panel flush title="İncelenecek banka işlemleri" actions={<Link href="/dashboard/banking" className="text-[.75rem] font-bold text-[var(--brand)] hover:underline">Tümü</Link>}>
+          <ul className="divide-y divide-[var(--line)]">
+            {bankItems?.items.map((item) => (
+              <li key={item.id}>
+                <Link href="/dashboard/banking" className="pressable flex items-center justify-between gap-3 px-4 py-2 hover:bg-[var(--surface-muted)]">
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-bold tabular-nums">{formatMoney(item.amount)} {item.currency}</span>
+                    <span className="block truncate text-[.72rem] text-[var(--muted)]">{item.senderName ?? "İsimsiz gönderici"}{item.description ? ` · ${item.description}` : ""}</span>
+                  </span>
+                  <span className="shrink-0 text-[.75rem] font-bold text-[var(--brand)]">İncele</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
-      {hasAttentionStudents && <section className="app-card p-4">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">İlgi Gerektirebilecek Öğrenciler</h2><span className="text-[.75rem] text-[var(--muted)]">Açıklanabilir sinyal</span></div>
-        <div className="divide-y divide-[var(--line)]">{attentionStudents?.slice(0, 4).map((student) => <Link key={student.studentId} href={`/dashboard/students#student-${student.studentId}`} className="pressable block py-3 first:pt-0 last:pb-0"><span className="block text-[.75rem] font-bold">{student.studentName}</span><span className="mt-1 block text-[.75rem] leading-relaxed text-[var(--danger-strong)]">İlgi gerektirebilir · {student.reasons.join(" · ")}</span></Link>)}</div>
-      </section>}
+      {hasAttentionStudents && (
+        <Panel flush title="İlgi gerektirebilecek öğrenciler">
+          <ul className="divide-y divide-[var(--line)]">
+            {attentionStudents?.slice(0, 4).map((student) => (
+              <li key={student.studentId}>
+                <Link href={`/dashboard/students#student-${student.studentId}`} className="pressable block px-4 py-2 hover:bg-[var(--surface-muted)]">
+                  <span className="block text-xs font-bold">{student.studentName}</span>
+                  <span className="block text-[.72rem] leading-snug text-[var(--danger-strong)]">{student.reasons.join(" · ")}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       {hasBirthdays && <UpcomingBirthdaysRail birthdays={birthdays} />}
     </aside>
@@ -480,28 +472,27 @@ function UpcomingBirthdaysRail({ birthdays }: { birthdays?: UpcomingBirthday[] }
   }
 
   return (
-    <section className="app-card p-4">
-      <div className="mb-3 flex items-center justify-between"><h2 className="text-xs font-bold">Yaklaşan Doğum Günleri</h2><span className="text-[.75rem] text-[var(--muted)]">30 gün içinde</span></div>
-      {!birthdays?.length && <EmptyRail text="Yaklaşan doğum günü yok." />}
-      <div className="divide-y divide-[var(--line)]">
+    <Panel flush title="Yaklaşan doğum günleri" meta="30 gün içinde">
+      {!birthdays?.length && <p className="text-meta px-4 py-4 text-center">Yaklaşan doğum günü yok.</p>}
+      <ul className="divide-y divide-[var(--line)]">
         {birthdays?.slice(0, 5).map((item) => (
-          <Link key={item.studentId} href={`/dashboard/students#student-${item.studentId}`} className="pressable flex min-h-11 items-center gap-3 py-3 first:pt-0 last:pb-0">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name="cake" className="h-4 w-4" /></span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[.75rem] font-bold">{item.studentName}</span>
-              <span className="mt-0.5 block text-[.75rem] text-[var(--muted)]">
-                {new Date(`${item.nextOccurrence}T00:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} · {item.turningAge} yaşına giriyor
+          <li key={item.studentId}>
+            <Link href={`/dashboard/students#student-${item.studentId}`} className="pressable flex items-center gap-3 px-4 py-2 hover:bg-[var(--surface-muted)]">
+              <Icon name="cake" className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-bold">{item.studentName}</span>
+                <span className="block text-[.72rem] text-[var(--muted)]">
+                  {new Date(`${item.nextOccurrence}T00:00:00`).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} · {item.turningAge} yaşına giriyor
+                </span>
               </span>
-            </span>
-            <span className="shrink-0 text-[.75rem] font-bold text-[var(--brand)]">{dueLabel(item.daysUntil)}</span>
-          </Link>
+              <span className="shrink-0 text-[.75rem] font-bold text-[var(--brand)]">{dueLabel(item.daysUntil)}</span>
+            </Link>
+          </li>
         ))}
-      </div>
-    </section>
+      </ul>
+    </Panel>
   );
 }
-
-function EmptyRail({ text }: { text: string }) { return <p className="rounded-xl bg-[var(--surface-muted)] px-3 py-5 text-center text-[.75rem] text-[var(--muted)]">{text}</p>; }
 
 function TeacherDashboard({ email }: { email: string }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date());

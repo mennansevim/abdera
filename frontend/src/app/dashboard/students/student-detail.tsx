@@ -459,7 +459,7 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="form-label">Ders süresi
           <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-sm">

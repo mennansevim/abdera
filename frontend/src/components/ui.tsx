@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -36,10 +37,10 @@ export function AdminGate({ children }: { children: ReactNode }) {
 // bir "+" eylemi; oluşturma formu istendiğinde Modal içinde açılır.
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3">
+    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <div className="min-w-0">
-        <h1 className="text-display font-serif">{title}</h1>
-        {description && <p className="text-meta mt-1">{description}</p>}
+        <h1 className="text-display font-serif leading-tight">{title}</h1>
+        {description && <p className="text-meta mt-0.5">{description}</p>}
       </div>
       {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">{actions}</div>}
     </header>
@@ -55,6 +56,159 @@ export function SectionHeader({ title, description, actions }: { title: string; 
         {description && <p className="text-meta mt-1">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+// Kompakt ekran yapı taşları (2026-09 sadeleştirmesi, ilk örnek: Yoklama ekranı). Ortak kalıp:
+// filtreler tek kartta tek satır, özet sayılar tek şeritte (tıklanabilirse filtre olur),
+// liste başlık şeritli tek kartta yoğun satırlar. Yeni ekran kendi kart/sayaç iskeletini kurmaz.
+export type Tone = "brand" | "success" | "danger" | "warning" | "muted";
+
+export const TONE_TEXT: Record<Tone, string> = {
+  brand: "text-[var(--brand-strong)]",
+  success: "text-[var(--success-strong)]",
+  danger: "text-[var(--danger-strong)]",
+  warning: "text-[var(--warning-strong)]",
+  muted: "text-[var(--muted)]",
+};
+
+export const TONE_BADGE: Record<Tone, string> = {
+  brand: "bg-[var(--brand-soft)] text-[var(--brand-strong)]",
+  success: "bg-[var(--success-soft)] text-[var(--success-strong)]",
+  danger: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
+  warning: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
+  muted: "bg-[var(--surface-muted)] text-[var(--muted)]",
+};
+
+// Başlık şeritli kart: solda başlık, yanında sakin bir sayaç/açıklama, sağda eylemler.
+// `flush` gövdeyi dolgusuz bırakır (tablo/liste kenara dayansın diye).
+export function Panel({ title, meta, actions, footer, flush = false, className = "", children }: {
+  title?: ReactNode; meta?: ReactNode; actions?: ReactNode; footer?: ReactNode; flush?: boolean; className?: string; children?: ReactNode;
+}) {
+  return (
+    <section className={`app-card min-w-0 overflow-hidden ${className}`}>
+      {(title || actions) && (
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--line)] px-4 py-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            {title && <h2 className="truncate text-sm font-bold">{title}</h2>}
+            {meta && <span className="text-meta truncate">{meta}</span>}
+          </div>
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+      )}
+      <div className={flush ? "" : "p-4"}>{children}</div>
+      {footer && <div className="border-t border-[var(--line)] px-4 py-2">{footer}</div>}
+    </section>
+  );
+}
+
+// Filtre çubuğundaki tek alan: küçük büyük harfli etiket + altında denetim.
+export function FilterField({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={`block min-w-0 ${className}`}>
+      <span className="text-micro text-[var(--muted)]">{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+// Birkaç seçenekten biri: "7 gün / 30 gün", "Liste / Izgara" gibi. Seçili olan beyaz zeminle öne çıkar.
+export function Segmented<T extends string>({ label, options, value, onChange, className = "" }: {
+  label: string; options: { value: T; label: ReactNode; icon?: IconName }[]; value: T | undefined; onChange: (value: T) => void; className?: string;
+}) {
+  return (
+    <div role="group" aria-label={label} className={`inline-flex max-w-full overflow-x-auto rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-0.5 ${className}`}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            className={`pressable inline-flex min-h-9 pointer-coarse:min-h-11 shrink-0 items-center gap-1.5 rounded-[.6rem] px-2.5 text-xs font-bold whitespace-nowrap ${active ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}
+          >
+            {option.icon && <Icon name={option.icon} className="h-3.5 w-3.5 shrink-0" />}
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Özet sayılar tek şeritte. `onClick` verilen öğe buton olur (sayaç = filtre).
+export interface StatItem {
+  key: string;
+  label: string;
+  value: ReactNode;
+  tone?: Tone;
+  hint?: ReactNode;
+  active?: boolean;
+  loading?: boolean;
+  onClick?: () => void;
+  href?: string;
+}
+
+export function StatStrip({ label, items, footer, className = "" }: { label: string; items: StatItem[]; footer?: ReactNode; className?: string }) {
+  const cols = { 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4", 5: "sm:grid-cols-5", 6: "sm:grid-cols-3 lg:grid-cols-6" }[items.length] ?? "sm:grid-cols-4";
+  return (
+    <section aria-label={label} className={`app-card overflow-hidden ${className}`}>
+      <div className={`grid grid-cols-2 divide-[var(--line)] sm:divide-x ${cols}`}>
+        {items.map((item) => {
+          const body = (
+            <>
+              {item.active && <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-[var(--brand)]" />}
+              <span className="block min-w-0">
+                <span className={`block truncate text-xs font-bold ${item.active ? "text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>{item.label}</span>
+                {item.loading
+                  ? <span className="skeleton mt-1 block h-6 w-16 rounded-md" />
+                  : <span className={`block truncate text-lg font-bold tabular-nums tracking-[-.01em] ${item.tone ? TONE_TEXT[item.tone] : ""}`}>{item.value}</span>}
+                {item.hint && <span className="text-meta block truncate text-[.72rem]">{item.hint}</span>}
+              </span>
+            </>
+          );
+          const base = `relative min-w-0 px-4 py-2.5 text-left ${item.active ? "bg-[var(--brand-soft)]" : ""}`;
+          if (item.href) return <Link key={item.key} href={item.href} className={`pressable ${base} hover:bg-[var(--surface-muted)]`}>{body}</Link>;
+          return item.onClick
+            ? <button key={item.key} type="button" aria-pressed={Boolean(item.active)} onClick={item.onClick} className={`pressable ${base} hover:bg-[var(--surface-muted)]`}>{body}</button>
+            : <div key={item.key} className={base}>{body}</div>;
+        })}
+      </div>
+      {footer}
+    </section>
+  );
+}
+
+// Küçük durum rozeti - listelerde tek tip.
+export function Badge({ tone = "muted", children, className = "" }: { tone?: Tone; children: ReactNode; className?: string }) {
+  return <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[.72rem] font-bold whitespace-nowrap ${TONE_BADGE[tone]} ${className}`}>{children}</span>;
+}
+
+// Liste/tablo boş durumu - kartın içinde sakin tek blok.
+export function EmptyState({ icon = "check", title, description, action }: { icon?: IconName; title: string; description?: string; action?: ReactNode }) {
+  return (
+    <div className="grid min-h-32 place-items-center px-6 py-8 text-center">
+      <div>
+        <span className="mx-auto grid h-10 w-10 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name={icon} className="h-5 w-5" /></span>
+        <p className="mt-3 text-sm font-bold">{title}</p>
+        {description && <p className="text-meta mt-1">{description}</p>}
+        {action && <div className="mt-3">{action}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Sayfalama şeridi - Panel footer'ında kullanılır.
+export function Pager({ page, totalPages, onChange, summary }: { page: number; totalPages: number; onChange: (page: number) => void; summary?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-meta">{summary ?? <>Sayfa {page} / {totalPages}</>}</span>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => onChange(Math.max(1, page - 1))} disabled={page <= 1} className="btn btn-quiet min-h-9 pointer-coarse:min-h-11 px-3 text-xs">Önceki</button>
+        <button type="button" onClick={() => onChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="btn btn-quiet min-h-9 pointer-coarse:min-h-11 px-3 text-xs">Sonraki</button>
+      </div>
     </div>
   );
 }
@@ -88,7 +242,7 @@ export function SearchInput({ value, onChange, label, placeholder }: { value: st
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder ?? label}
-        className="field min-h-11 pl-9 text-sm"
+        className="field pl-9 text-sm"
       />
     </label>
   );

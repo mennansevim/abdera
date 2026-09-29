@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Icon } from "@/components/icons";
-import { PageHeader } from "@/components/ui";
+import { EmptyState, FilterField, PageHeader, Pager, Panel, Segmented, StatStrip, TONE_TEXT, type Tone } from "@/components/ui";
 import {
   useAttendanceHistory,
   type AttendanceFilter,
@@ -29,19 +28,8 @@ const STATUS_CLASSES: Record<AttendanceStatus, string> = {
   Excused: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
 };
 
-// Sayaç kutuları aynı zamanda durum filtresidir - ayrı bir filtre satırı ekranı uzatıyordu.
-// Sunucu özet sayılarını durum filtresinden bağımsız verir, bu yüzden seçim değişince
-// diğer kutular sıfırlanmaz.
-type StatusTone = "success" | "danger" | "warning" | "muted";
-
-const TONE_TEXT: Record<StatusTone, string> = {
-  success: "text-[var(--success-strong)]",
-  danger: "text-[var(--danger-strong)]",
-  warning: "text-[var(--warning-strong)]",
-  muted: "text-[var(--muted)]",
-};
-
-const TONE_BAR: Record<StatusTone, string> = {
+const TONE_BAR: Record<Tone, string> = {
+  brand: "bg-[var(--brand)]",
   success: "bg-[var(--success-strong)]",
   danger: "bg-[var(--danger-strong)]",
   warning: "bg-[var(--warning-strong)]",
@@ -177,48 +165,36 @@ export default function AttendancePage() {
             <span className="text-micro text-[var(--muted)]">Tarih aralığı</span>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5">
-                <input type="date" aria-label="Başlangıç" value={from} max={to || today} onChange={(event) => { setFrom(event.target.value); setPage(1); }} className="field min-h-10 w-[9.5rem] py-1.5 text-sm" />
+                <input type="date" aria-label="Başlangıç" value={from} max={to || today} onChange={(event) => { setFrom(event.target.value); setPage(1); }} className="field w-[9.5rem] text-sm" />
                 <span className="text-[var(--muted)]">–</span>
-                <input type="date" aria-label="Bitiş" value={to} min={from} max={today} onChange={(event) => { setTo(event.target.value); setPage(1); }} className="field min-h-10 w-[9.5rem] py-1.5 text-sm" />
+                <input type="date" aria-label="Bitiş" value={to} min={from} max={today} onChange={(event) => { setTo(event.target.value); setPage(1); }} className="field w-[9.5rem] text-sm" />
               </div>
-              <div role="group" aria-label="Hızlı aralık" className="flex rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-0.5">
-                {RANGE_PRESETS.map((preset) => {
-                  const active = activePreset === preset.label;
-                  return (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => applyRange(preset.from(), today)}
-                      className={`pressable min-h-9 rounded-[.6rem] px-2.5 text-xs font-bold whitespace-nowrap ${active ? "bg-white text-[var(--brand-strong)] shadow-sm" : "text-[var(--muted)] hover:text-[var(--foreground)]"}`}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
+              <Segmented
+                label="Hızlı aralık"
+                options={RANGE_PRESETS.map((preset) => ({ value: preset.label, label: preset.label }))}
+                value={activePreset}
+                onChange={(label) => { const preset = RANGE_PRESETS.find((item) => item.label === label); if (preset) applyRange(preset.from(), today); }}
+              />
             </div>
           </div>
 
           {isAdmin && (
-            <label className="min-w-[11rem] flex-1">
-              <span className="text-micro text-[var(--muted)]">Öğretmen</span>
-              <select value={teacherId} onChange={(event) => { setTeacherId(event.target.value); setPage(1); }} className="field mt-1 min-h-10 py-1.5 text-sm">
+            <FilterField label="Öğretmen" className="min-w-[11rem] flex-1">
+              <select value={teacherId} onChange={(event) => { setTeacherId(event.target.value); setPage(1); }} className="field text-sm">
                 <option value="">Tüm öğretmenler</option>
                 {teachers?.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}
               </select>
-            </label>
+            </FilterField>
           )}
-          <label className="min-w-[11rem] flex-1">
-            <span className="text-micro text-[var(--muted)]">Öğrenci</span>
-            <select value={studentId} onChange={(event) => { setStudentId(event.target.value); setPage(1); }} className="field mt-1 min-h-10 py-1.5 text-sm">
+          <FilterField label="Öğrenci" className="min-w-[11rem] flex-1">
+            <select value={studentId} onChange={(event) => { setStudentId(event.target.value); setPage(1); }} className="field text-sm">
               <option value="">Tüm öğrenciler</option>
               {students?.map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}
             </select>
-          </label>
+          </FilterField>
 
           {hasFilters && (
-            <button type="button" onClick={resetFilters} className="pressable min-h-10 rounded-xl px-3 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
+            <button type="button" onClick={resetFilters} className="btn px-3 text-xs text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
               Filtreleri temizle
             </button>
           )}
@@ -231,25 +207,26 @@ export default function AttendancePage() {
 
       {/* Özet şeridi: her sayaç tıklanınca listeyi o duruma daraltır; alttaki çubuk dağılımı gösterir. */}
       {data && (
-        <section className="app-card overflow-hidden">
-          <div role="group" aria-label="Katılım durumuna göre filtrele" className="grid grid-cols-2 divide-[var(--line)] sm:grid-cols-5 sm:divide-x">
-            <StatButton label="İşlenen ders" value={data.totalLessonCount} hint={rate !== null ? `katılım %${rate}` : undefined} active={status === "all"} onClick={() => { setStatus("all"); setPage(1); }} className="col-span-2 sm:col-span-1" />
-            <StatButton label={STATUS_LABELS.Present} value={data.presentCount} tone="success" active={status === "Present"} onClick={() => { setStatus("Present"); setPage(1); }} />
-            <StatButton label={STATUS_LABELS.Absent} value={data.absentCount} tone="danger" active={status === "Absent"} onClick={() => { setStatus("Absent"); setPage(1); }} />
-            <StatButton label={STATUS_LABELS.Excused} value={data.excusedCount} tone="warning" active={status === "Excused"} onClick={() => { setStatus("Excused"); setPage(1); }} />
-            <StatButton label="Yoklama girilmedi" value={data.notMarkedCount} tone="muted" active={status === "NotMarked"} onClick={() => { setStatus("NotMarked"); setPage(1); }} />
-          </div>
-          <DistributionBar counts={data} className="h-1.5" />
-        </section>
+        <StatStrip
+          label="Katılım durumuna göre filtrele"
+          items={([
+            ["all", "İşlenen ders", data.totalLessonCount, undefined, rate !== null ? `katılım %${rate}` : undefined],
+            ["Present", STATUS_LABELS.Present, data.presentCount, "success", undefined],
+            ["Absent", STATUS_LABELS.Absent, data.absentCount, "danger", undefined],
+            ["Excused", STATUS_LABELS.Excused, data.excusedCount, "warning", undefined],
+            ["NotMarked", "Yoklama girilmedi", data.notMarkedCount, "muted", undefined],
+          ] as const).map(([value, label, count, tone, hint]) => ({
+            key: value, label, value: count, tone, hint,
+            active: status === value,
+            onClick: () => { setStatus(value); setPage(1); },
+          }))}
+          footer={<DistributionBar counts={data} className="h-1.5" />}
+        />
       )}
 
       <div className={showBreakdown ? "grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]" : ""}>
         {showBreakdown && data && (
-          <aside className="app-card overflow-hidden xl:sticky xl:top-4 xl:order-2">
-            <div className="flex items-baseline justify-between gap-2 border-b border-[var(--line)] px-4 py-2.5">
-              <h2 className="text-sm font-bold">Öğretmen kırılımı</h2>
-              <span className="text-meta">{data.teachers.length} öğretmen</span>
-            </div>
+          <Panel flush title="Öğretmen kırılımı" meta={`${data.teachers.length} öğretmen`} className="xl:sticky xl:top-4 xl:order-2">
             <ul className="grid divide-[var(--line)] sm:grid-cols-2 xl:grid-cols-1 xl:divide-y">
               {data.teachers.map((teacher) => {
                 const teacherRate = attendanceRate(teacher);
@@ -281,25 +258,19 @@ export default function AttendancePage() {
                 );
               })}
             </ul>
-          </aside>
+          </Panel>
         )}
 
-        <section className="app-card min-w-0 overflow-hidden">
-          <div className="flex items-baseline justify-between gap-2 border-b border-[var(--line)] px-4 py-2.5">
-            <h2 className="text-sm font-bold">Ders dökümü</h2>
-            {data && <span className="text-meta">{data.lessons.totalCount} ders</span>}
-          </div>
-
+        <Panel
+          flush
+          title="Ders dökümü"
+          meta={data ? `${data.lessons.totalCount} ders` : undefined}
+          footer={data && totalPages > 1 ? <Pager page={data.lessons.page} totalPages={totalPages} onChange={setPage} /> : undefined}
+        >
           {isLoading && <div className="space-y-2 p-4">{Array.from({ length: 6 }, (_, index) => <div key={index} className="skeleton h-9 rounded-lg" />)}</div>}
 
           {!isLoading && items?.length === 0 && (
-            <div className="grid min-h-40 place-items-center p-8 text-center">
-              <div>
-                <span className="mx-auto grid h-10 w-10 place-items-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]"><Icon name="check" className="h-5 w-5" /></span>
-                <p className="mt-3 text-sm font-bold">Bu aralıkta işlenmiş ders yok</p>
-                <p className="text-meta mt-1">Tarih aralığını genişletmeyi veya filtreleri sıfırlamayı dene.</p>
-              </div>
-            </div>
+            <EmptyState title="Bu aralıkta işlenmiş ders yok" description="Tarih aralığını genişletmeyi veya filtreleri sıfırlamayı dene." />
           )}
 
           {/* Dar ekranda tablo yatay kayıyor ve adlar kırılıyordu; her ders tek satırlık bir öğe. */}
@@ -368,16 +339,7 @@ export default function AttendancePage() {
             </div>
           )}
 
-          {data && totalPages > 1 && (
-            <div className="flex items-center justify-between gap-2 border-t border-[var(--line)] px-4 py-2 text-sm">
-              <span className="text-meta">Sayfa {data.lessons.page} / {totalPages}</span>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1} className="pressable min-h-9 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Önceki</button>
-                <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages} className="pressable min-h-9 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold disabled:opacity-50">Sonraki</button>
-              </div>
-            </div>
-          )}
-        </section>
+        </Panel>
       </div>
     </div>
   );
@@ -389,29 +351,9 @@ function AttendanceBadge({ status }: { status: AttendanceStatus | null }) {
     : <span className="inline-block shrink-0 rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-bold text-[var(--muted)]">Girilmedi</span>;
 }
 
-function StatButton({ label, value, tone, hint, active, onClick, className = "" }: {
-  label: string; value: number; tone?: StatusTone; hint?: string; active: boolean; onClick: () => void; className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`pressable relative flex items-baseline gap-2 px-4 py-2.5 text-left hover:bg-[var(--surface-muted)] ${active ? "bg-[var(--brand-soft)]" : ""} ${className}`}
-    >
-      {active && <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-[var(--brand)]" />}
-      <span className={`text-xl font-bold tabular-nums ${tone ? TONE_TEXT[tone] : ""}`}>{value}</span>
-      <span className="min-w-0">
-        <span className={`block truncate text-xs font-bold ${active ? "text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>{label}</span>
-        {hint && <span className="text-meta block truncate text-[.7rem]">{hint}</span>}
-      </span>
-    </button>
-  );
-}
-
 // Geldi/gelmedi/mazeretli/girilmedi oranlarını tek yatay çubukta gösterir.
 function DistributionBar({ counts, className = "" }: { counts: Counts; className?: string }) {
-  const segments: [StatusTone, number][] = [
+  const segments: [Tone, number][] = [
     ["success", counts.presentCount],
     ["danger", counts.absentCount],
     ["warning", counts.excusedCount],

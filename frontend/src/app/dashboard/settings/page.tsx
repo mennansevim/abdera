@@ -34,14 +34,14 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="mx-auto max-w-4xl space-y-3">
       <PageHeader title="Ayarlar" description="Hesap güvenliği, görünüm ve bildirim tercihleri." />
 
       <section className="app-card overflow-hidden">
-        <div className="border-b border-[var(--line)] p-4 sm:p-5">
+        <div className="border-b border-[var(--line)] px-4 py-2.5">
           <SectionHeader title="Şifre değiştir" description="Mevcut şifreni ve en az 8 karakterli yeni şifreni gir." />
         </div>
-        <div className="p-4 sm:p-5">
+        <div className="p-4">
           {passwordChangeRequired && (
             <p className="mb-4 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--warning-strong)]">
               Güvenliğin için önce kalıcı bir şifre belirlemelisin.
@@ -53,10 +53,10 @@ export default function SettingsPage() {
       </section>
 
       <section className="app-card overflow-hidden">
-        <div className="border-b border-[var(--line)] p-4 sm:p-5">
+        <div className="border-b border-[var(--line)] px-4 py-2.5">
           <SectionHeader title="Yazı boyutu" description="Uygulamadaki yazıları ve aralıkları birlikte ölçekler; seçim bu tarayıcıda saklanır." />
         </div>
-        <div className="p-4 sm:p-5">
+        <div className="p-4">
           <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Yazı boyutu seçimi">
             {FONT_SIZE_OPTIONS.map((option) => (
               <button
@@ -80,16 +80,16 @@ export default function SettingsPage() {
           ekranındaki öğretmen kartından kullanır. */}
       {me?.role === "Teacher" && me.teacherId && (
         <section className="app-card overflow-hidden">
-          <div className="border-b border-[var(--line)] p-4 sm:p-5">
+          <div className="border-b border-[var(--line)] px-4 py-2.5">
             <SectionHeader title="Uygun günlerim" description="Ders programı ve telafi önerileri bu günleri kullanır; bir günü kapatmak o güne ders yerleştirilmesini engeller." />
           </div>
-          <div className="p-4 sm:p-5">
+          <div className="p-4">
             <TeacherAvailabilityDays teacherId={me.teacherId} self />
           </div>
         </section>
       )}
 
-      <section className="app-card p-4 sm:p-5">
+      <section className="app-card p-4">
         <SectionHeader title="Mesaj Merkezi" description="Ders hatırlatmaları, WhatsApp şablonları ve gönderim tercihleri Mesaj Merkezi'nde yönetilir." />
       </section>
       {me?.role === "Admin" && <MaintenanceSettingsPanel />}
@@ -117,7 +117,7 @@ function MaintenanceSettingsPanel() {
 
   return (
     <section className="app-card overflow-hidden">
-      <div className="border-b border-[var(--line)] p-4 sm:p-5">
+      <div className="border-b border-[var(--line)] px-4 py-2.5">
         <SectionHeader
           title="Enstrüman bakımı"
           description="Bakım türü, dönem ve kanal enstrüman bazında yönetilir; WhatsApp kuyruğuna yalnız rızası açık veliler eklenir."

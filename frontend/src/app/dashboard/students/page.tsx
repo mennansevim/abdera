@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
-import { AddButton, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput } from "@/components/ui";
+import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput, Segmented } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
@@ -72,7 +72,7 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Öğrenciler"
         description={isLoading ? "Öğrenciler, dersleri ve kayıt bilgileri." : `${activeStudentCount} aktif öğrenci`}
@@ -85,44 +85,42 @@ export default function StudentsPage() {
 
       {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
 
-      <div className="app-card relative">
-        <div className="flex flex-wrap items-center gap-2 rounded-t-[1.3rem] border-b border-[var(--line)] bg-[var(--surface-muted)]/30 px-3 py-2">
+      <div className="app-card relative overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2">
           <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{visibleRows.length}</strong> öğrenci gösteriliyor</p>
           <label className="relative min-w-44 flex-1 sm:flex-none">
             <span className="sr-only">Enstrümana göre filtrele</span>
-            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
+            <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field appearance-none pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
               <option value="">Tüm enstrümanlar</option>
               {instrumentOptions.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
           </label>
-          <label className="relative min-w-28 flex-1 sm:flex-none">
-            <span className="sr-only">Duruma göre filtrele</span>
-            <select value={status} onChange={(event) => setStatus(event.target.value as "all" | StudentStatus)} className="field min-h-11 appearance-none py-1.5 pr-8 text-xs font-semibold" aria-label="Duruma göre filtrele">
-              <option value="Active">Aktif</option>
-              <option value="Inactive">Pasif</option>
-              <option value="all">Tümü</option>
-            </select>
-            <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
-          </label>
+          <Segmented
+            label="Duruma göre filtrele"
+            options={[{ value: "Active", label: "Aktif" }, { value: "Inactive", label: "Pasif" }, { value: "all", label: "Tümü" }]}
+            value={status}
+            onChange={(value) => setStatus(value as "all" | StudentStatus)}
+          />
           {isAdmin && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet text-xs">Hızlı ekle</button>}
         </div>
         {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span className="text-center">Durum</span></div>}
-        {isLoading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-13 rounded-lg" />)}</div>}
+        {isLoading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
         {!isLoading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğrenciler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!isLoading && !isError && visibleRows.length === 0 && (
-          <div className="p-6 text-center text-sm text-[var(--muted)]">
-            <p>{hasFilters ? "Seçili filtrelerle eşleşen öğrenci yok." : "Henüz öğrenci yok."}</p>
-            {hasFilters && <button type="button" onClick={clearFilters} className="pressable mt-2 text-xs font-bold text-[var(--brand)] hover:underline">Filtreleri temizle</button>}
-          </div>
+          <EmptyState
+            icon="students"
+            title={hasFilters ? "Seçili filtrelerle eşleşen öğrenci yok." : "Henüz öğrenci yok."}
+            action={hasFilters ? <button type="button" onClick={clearFilters} className="btn btn-quiet text-xs">Filtreleri temizle</button> : undefined}
+          />
         )}
         {!isLoading && !isError && <ul className="divide-y divide-[var(--line)]">
           {visibleRows.map(({ student, instruments }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
-              <div className="min-h-14 px-2">
+              <div className="px-2 py-0.5">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
-                className="pressable grid min-h-13 w-full min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] md:grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem]"
+                className="pressable grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] md:grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem]"
                 aria-expanded={expandedId === student.id}
               >
                 <span className="min-w-0">
@@ -131,7 +129,7 @@ export default function StudentsPage() {
                 </span>
                 <span className="text-meta hidden tabular-nums md:block">{student.birthDate}</span>
                 <span className="text-meta hidden truncate md:block">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
-                <span className={`hidden justify-self-center rounded-full px-2 py-1 text-[.75rem] font-bold md:block ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{student.status === "Active" ? "Aktif" : "Pasif"}</span>
+                <span className={`hidden justify-self-center rounded-full px-2 py-0.5 text-[.72rem] font-bold md:block ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{student.status === "Active" ? "Aktif" : "Pasif"}</span>
               </button>
               </div>
               {expandedId === student.id && <StudentDetail student={student} isAdmin={isAdmin} canManage={canManage} onDelete={() => setDeleting({ id: student.id, name: `${student.firstName} ${student.lastName}` })} />}

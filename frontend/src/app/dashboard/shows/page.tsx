@@ -38,7 +38,7 @@ export default function ShowsPage() {
   const isAdmin = me?.role === "Admin";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Yıl sonu gösterisi"
         description="Programı sıraya diz, gösteri gecesi sahne ekranından tek tuşla ilerlet."
@@ -65,13 +65,13 @@ export default function ShowsPage() {
         </div>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {shows?.map((show) => (
           <article key={show.id} className="app-card overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-3 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-title truncate">{show.title}</h2>
+                  <h2 className="truncate text-sm font-bold">{show.title}</h2>
                   <span className={`rounded-full px-2 py-0.5 text-[.75rem] font-bold ${STATUS_TONES[show.status]}`}>
                     {show.status === "Live" && <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current align-middle" />}
                     {SHOW_STATUS_LABEL[show.status]}
@@ -89,14 +89,14 @@ export default function ShowsPage() {
                 { label: "Öğrenci", value: `${show.performerCount}` },
                 { label: "Süre", value: formatDuration(show.totalDurationMinutes) },
               ].map((cell) => (
-                <div key={cell.label} className="bg-white px-2 py-2.5">
+                <div key={cell.label} className="bg-white px-2 py-1.5">
                   <dt className="text-[.75rem] font-bold text-[var(--muted)]">{cell.label}</dt>
                   <dd className="mt-0.5 text-sm font-bold tabular-nums">{cell.value}</dd>
                 </div>
               ))}
             </dl>
 
-            <div className="flex flex-wrap gap-2 p-4">
+            <div className="flex flex-wrap gap-2 px-4 py-3">
               <Link href={`/dashboard/shows/${show.id}`} className="btn btn-quiet flex-1">
                 <Icon name="calendar" className="h-4 w-4" />Program
               </Link>

@@ -30,10 +30,10 @@ export function MonthInput({
 
   return (
     <span className={`mt-[.35rem] grid grid-cols-[minmax(0,1fr)_minmax(5.5rem,auto)] gap-2 ${className}`}>
-      <select aria-label={`${label} - ay`} value={month} onChange={(event) => emit(year, Number(event.target.value))} className="field min-h-11 bg-white text-xs">
+      <select aria-label={`${label} - ay`} value={month} onChange={(event) => emit(year, Number(event.target.value))} className="field bg-white text-xs">
         {MONTHS.map((name, index) => <option key={name} value={index + 1}>{name}</option>)}
       </select>
-      <select aria-label={`${label} - yıl`} value={year} onChange={(event) => emit(Number(event.target.value), month)} className="field min-h-11 bg-white text-xs tabular-nums">
+      <select aria-label={`${label} - yıl`} value={year} onChange={(event) => emit(Number(event.target.value), month)} className="field bg-white text-xs tabular-nums">
         {years.map((item) => <option key={item} value={item}>{item}</option>)}
       </select>
     </span>

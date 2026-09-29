@@ -4,7 +4,7 @@
 // olarak performansı: öğrenci sayısı, çalışma günü (ders), not/onaylı yorum, katılım oranı ve
 // bunlardan türetilen kompozit skor (backend Benchmark.cs).
 import { useMemo, useState } from "react";
-import { AdminGate, PageHeader, SearchInput } from "@/components/ui";
+import { AdminGate, PageHeader, SearchInput, Segmented } from "@/components/ui";
 import { WeekPicker, mondayOf, toIsoDate } from "@/components/week-picker";
 import {
   useStudentBenchmark,
@@ -26,23 +26,17 @@ export default function BenchmarkPage() {
 function BenchmarkView() {
   const [tab, setTab] = useState<Tab>("teachers");
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Performans / Benchmark"
         description="Öğretmen ve öğrenci performansı: öğrenci sayısı, çalışma günü, not & onaylı yorum, katılım."
       />
-      <div className="inline-flex rounded-xl bg-[var(--surface-muted)] p-1 text-sm font-semibold">
-        <button
-          type="button"
-          onClick={() => setTab("teachers")}
-          className={`pressable min-h-10 rounded-lg px-4 ${tab === "teachers" ? "bg-white shadow-sm text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}
-        >Öğretmenler</button>
-        <button
-          type="button"
-          onClick={() => setTab("students")}
-          className={`pressable min-h-10 rounded-lg px-4 ${tab === "students" ? "bg-white shadow-sm text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}
-        >Öğrenciler</button>
-      </div>
+      <Segmented
+        label="Performans görünümü"
+        options={[{ value: "teachers", label: "Öğretmenler" }, { value: "students", label: "Öğrenciler" }]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "teachers" ? <TeachersTab /> : <StudentsTab />}
     </div>
@@ -62,9 +56,9 @@ function ScoreBar({ score }: { score: number }) {
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
-    <span className="inline-flex flex-col rounded-lg bg-[var(--surface-muted)] px-2.5 py-1">
-      <span className="text-[.75rem] font-semibold uppercase tracking-wide text-[var(--muted)]">{label}</span>
-      <span className="text-sm font-bold tabular-nums">{value}</span>
+    <span className="inline-flex items-baseline gap-1 rounded-lg bg-[var(--surface-muted)] px-2 py-0.5 text-[.72rem]">
+      <span className="font-semibold text-[var(--muted)]">{label}</span>
+      <span className="font-bold tabular-nums">{value}</span>
     </span>
   );
 }
@@ -96,9 +90,9 @@ function TeachersTab() {
         <WeekPicker monday={monday} onChange={setMonday} />
       </div>
       <div className="app-card divide-y divide-[var(--line)]">
-        <p className="px-4 pt-3 text-meta text-[var(--muted)]">Hafta ders, tamamlanan ve katılım seçilen haftanın (Pazartesi–Cumartesi) verisidir. Tamamlanan: yoklaması girilmiş, durumu Tamamlandı olan dersler.</p>
+        <p className="px-4 py-2 text-meta text-[var(--muted)]">Hafta ders, tamamlanan ve katılım seçilen haftanın (Pazartesi–Cumartesi) verisidir. Tamamlanan: yoklaması girilmiş, durumu Tamamlandı olan dersler.</p>
         {rows.map((r: TeacherBenchmarkRow) => (
-          <div key={r.teacherId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
+          <div key={r.teacherId} className="flex flex-col gap-1.5 px-4 py-2 sm:flex-row sm:items-center sm:gap-4">
             <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
               {/* Sıra her zaman filtrelenmemiş listedeki konumdur; arama yalnızca görünürlüğü daraltır. */}
               <RankBadge rank={(data ?? []).indexOf(r) + 1} />
@@ -142,7 +136,7 @@ function StudentsTab() {
         {rows.map((r: StudentBenchmarkRow) => {
           const rank = (data ?? []).indexOf(r) + 1;
           return (
-            <div key={r.studentId} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-4">
+            <div key={r.studentId} className="flex flex-col gap-1.5 px-4 py-2 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-3 sm:w-56 sm:shrink-0">
                 <RankBadge rank={rank} />
                 <span className="truncate text-sm font-bold">{r.studentName}</span>

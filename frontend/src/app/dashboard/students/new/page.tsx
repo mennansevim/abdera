@@ -128,7 +128,7 @@ function NewStudentForm() {
   // --- başarı ekranı ---
   if (result) {
     return (
-      <div className="mx-auto max-w-[640px] space-y-4">
+      <div className="mx-auto max-w-[640px] space-y-3">
         <PageHeader title="Öğrenci kaydedildi" />
         <div className="app-card p-5">
           <div className="mb-4 flex items-center gap-2 text-[var(--brand-strong)]">
@@ -166,9 +166,9 @@ function NewStudentForm() {
   const pending = register.isPending;
 
   return (
-    <div className="mx-auto max-w-[640px] space-y-4">
+    <div className="mx-auto max-w-[640px] space-y-3">
       <PageHeader title="Yeni öğrenci kaydı" description="Öğrenci, eğitim, ders günü ve veli bilgilerini tek ekranda gir." />
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-3">
         {/* 1) Öğrenci */}
         <Step number={1} title="Öğrenci">
           <div className="grid gap-3 sm:grid-cols-2">

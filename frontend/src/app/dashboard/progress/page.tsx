@@ -104,7 +104,7 @@ function ProgressPageContent() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Gelişim günlüğü"
         description="Ders notları, ödevler ve çalışılan eserler."
@@ -139,7 +139,7 @@ function ProgressPageContent() {
             </Modal>
           )}
 
-          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
+          <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_21rem]">
             {!progressLoading && !progressError && <CurrentFocus entries={entries} />}
             {!progressLoading && !progressError && entries.length > 0 && (
               <div className="xl:sticky xl:top-4 xl:col-start-2 xl:row-span-2 xl:row-start-1">
@@ -223,7 +223,7 @@ function StudentBar({
           aria-label="Öğrenci seç"
           value={student.id}
           onChange={(event) => onSelect(event.target.value)}
-          className="field min-h-12 min-w-0 flex-1 truncate py-2 text-base font-bold sm:w-auto sm:max-w-sm sm:flex-none sm:pr-10"
+          className="field min-w-0 flex-1 truncate text-base font-bold sm:w-auto sm:max-w-sm sm:flex-none sm:pr-10"
         >
           {students.map((option) => (
             <option key={option.id} value={option.id}>
@@ -232,7 +232,7 @@ function StudentBar({
           ))}
         </select>
         {onAdd && (
-          <button type="button" onClick={onAdd} aria-label="Yeni gelişim notu" className="btn btn-primary min-h-12 shrink-0 rounded-2xl">
+          <button type="button" onClick={onAdd} aria-label="Yeni gelişim notu" className="btn btn-primary shrink-0">
             <Icon name="plus" className="h-4 w-4" />
             <span className="sm:hidden">Yeni not</span>
             <span className="hidden sm:inline">Yeni gelişim notu</span>

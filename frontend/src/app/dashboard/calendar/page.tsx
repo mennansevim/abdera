@@ -133,7 +133,7 @@ function InstrumentFilterPicker<T extends string>({ filters, value, onChange }: 
       ) : (
         <label className="block">
           <span className="sr-only">Enstrümana göre filtrele</span>
-          <select value={value} onChange={(event) => onChange(event.target.value as T)} className={`field min-h-11 bg-white text-xs font-bold xl:min-h-9 xl:py-1 ${value !== filters[0] ? "border-[var(--brand)] text-[var(--brand-strong)]" : ""}`}>
+          <select value={value} onChange={(event) => onChange(event.target.value as T)} className={`field bg-white text-xs font-bold xl:min-h-9 xl:py-1 ${value !== filters[0] ? "border-[var(--brand)] text-[var(--brand-strong)]" : ""}`}>
             {filters.map((filter) => <option key={filter} value={filter}>{filter === filters[0] ? `Enstrüman: ${filter}` : filter}</option>)}
           </select>
         </label>
@@ -291,7 +291,7 @@ export default function CalendarPage() {
   }, []);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <header>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="font-serif text-[1.45rem] font-bold tracking-[-0.01em] sm:text-[1.7rem]">Ders Programı</h1>
@@ -366,8 +366,8 @@ export default function CalendarPage() {
               arasından seçim yapabilecekmiş gibi bir kontrol sunmak yanıltıcı ve kullanıcı
               isteği üzerine kaldırıldı ("öğretmen diğer öğretmenlerin derslerini görmemeli"). */}
           {isAdmin && <>
-            <label className="relative w-full shrink-0 md:w-48 xl:w-[8.25rem] 2xl:w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field min-h-11 bg-white pl-9 pr-7 text-xs font-bold xl:min-h-9 xl:py-1"><option value="all">Öğrenci</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
-            <label className="relative w-full shrink-0 md:w-48 xl:w-36 2xl:w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field min-h-11 bg-white pl-9 pr-7 text-xs font-bold xl:min-h-9 xl:py-1"><option value="all">Öğretmen</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
+            <label className="relative w-full shrink-0 md:w-48 xl:w-[8.25rem] 2xl:w-48"><span className="sr-only">Öğrenciye göre filtrele</span><Icon name="students" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={studentFilter} onChange={(event) => setStudentFilter(event.target.value)} className="field bg-white pl-9 pr-7 text-xs font-bold xl:min-h-9 xl:py-1"><option value="all">Öğrenci</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>
+            <label className="relative w-full shrink-0 md:w-48 xl:w-36 2xl:w-48"><span className="sr-only">Öğretmene göre filtrele</span><Icon name="teachers" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--brand)]" /><select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} className="field bg-white pl-9 pr-7 text-xs font-bold xl:min-h-9 xl:py-1"><option value="all">Öğretmen</option>{teachers?.filter((teacher) => teacher.status === "Active").map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>
             <div className="h-6 w-px bg-[var(--line)] max-sm:hidden" aria-hidden="true" />
           </>}
           {/* Enstrüman filtresi de aynı kuralı izler: Teacher oturumunda yalnızca kendi
@@ -397,7 +397,7 @@ export default function CalendarPage() {
       {isError ? (
         <div className="app-card grid min-h-64 place-items-center p-8 text-center"><div><p className="text-sm font-bold">Ders programı yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>
       ) : (
-        <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
+        <div className="grid items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
           <WeeklyGrid
             weekDays={weekDays}
             lessons={visibleLessons}
@@ -683,7 +683,7 @@ function WeeklyGrid({
       </div>
 
       {/* Tablet/mobil ajanda görünümü - tasarım kuralı: dar ekranda ızgara yerine dikey liste. */}
-      <div className="space-y-4 border-t border-[var(--line)] p-4 xl:hidden">
+      <div className="space-y-3 border-t border-[var(--line)] p-4 xl:hidden">
         {weekDays.map((day, index) => {
           const dayLessons = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString()).sort((a, b) => a.startAt.localeCompare(b.startAt));
           return (
@@ -718,7 +718,7 @@ function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: Pendin
   return (
     <div className="fixed inset-0 z-[80] grid place-items-end p-3 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Dersi taşıma kapsamı">
       <button type="button" onClick={onClose} disabled={pending} aria-label="Taşıma seçimini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
-      <section className="relative z-10 w-full max-w-md rounded-2xl border border-white/60 bg-[rgba(255,253,249,.96)] p-4 shadow-[0_24px_70px_rgba(52,35,24,.28)] backdrop-blur-2xl sm:p-5">
+      <section className="relative z-10 w-full max-w-md rounded-2xl border border-white/60 bg-[rgba(255,253,249,.96)] p-4 shadow-[0_24px_70px_rgba(52,35,24,.28)] backdrop-blur-2xl">
         <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--line)] sm:hidden" aria-hidden="true" />
         <p className="text-micro text-[var(--brand-strong)]">Yeni saat seçildi</p>
         <h2 className="mt-1 font-serif text-xl font-bold">{move.lesson.studentName}</h2>
@@ -926,7 +926,7 @@ function AgendaLessonCard({ lesson, tone, showTeacher, active = false, overdue =
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   return (
-    <button type="button" onClick={onOpen} title={overdue ? "Aidat gecikmiş" : undefined} className={`pressable flex min-h-14 w-full items-center gap-3 rounded-xl border bg-white p-2.5 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
+    <button type="button" onClick={onOpen} title={overdue ? "Aidat gecikmiş" : undefined} className={`pressable flex min-h-12 w-full items-center gap-3 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
       <span className="h-9 w-1 rounded-full" style={{ background: tone.border }} />
       <span className="w-20 shrink-0 text-[.75rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
       <span className="min-w-0 flex-1">
@@ -1197,7 +1197,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
     <div className="fixed inset-0 z-50 grid place-items-end p-0 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
       <button type="button" onClick={onClose} aria-label="Ders detay penceresini kapat" className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
       <section className="app-card relative z-10 flex max-h-[calc(100dvh-.75rem)] w-full max-w-md flex-col overflow-y-auto overscroll-contain rounded-b-none sm:max-h-[calc(100dvh-2rem)] sm:rounded-b-[1.35rem]">
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] p-5">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
           <div>
             <p className="text-micro text-[var(--brand-strong)]">Ders ayrıntısı</p>
             <h2 className="mt-1 font-serif text-xl font-bold">{lesson.studentName}</h2>
@@ -1205,7 +1205,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
         </div>
-        <dl className="grid gap-3 p-5 sm:grid-cols-2">
+        <dl className="grid gap-3 p-4 sm:grid-cols-2">
           <DetailItem label="Tarih" value={start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} />
           <DetailItem label="Saat" value={`${formatTime(start)} – ${formatTime(end)}`} />
           <DetailItem label="Süre" value={`${duration} dakika`} />
@@ -1214,7 +1214,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
           <DetailItem label="Durum" value={lesson.status === "Cancelled" ? "İptal edildi" : lesson.status === "Completed" ? "Tamamlandı" : lesson.status === "Makeup" ? "Telafi" : "Planlandı"} />
         </dl>
         {editing ? (
-          <form onSubmit={handleSave} className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-5">
+          <form onSubmit={handleSave} className="border-t border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
             <div className="grid gap-3 sm:grid-cols-2">
               {isAdmin && <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>}
               {isAdmin && <label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğretmen seç</option>{eligibleTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>}

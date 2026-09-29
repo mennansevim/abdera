@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { MonthInput } from "@/components/month-input";
 import { TeacherPayoutForm } from "@/components/teacher-payout-form";
-import { AdminGate, FormActions, FormMessage, Modal, PageHeader, RowMenu, RowMenuItem, SearchInput, SectionHeader } from "@/components/ui";
+import { AdminGate, FormActions, FormMessage, Modal, PageHeader, Panel, RowMenu, RowMenuItem, SearchInput, SectionHeader, Segmented, StatStrip } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   recurringAmountFor, useChangeRecurringExpenseAmount, useCreateExpense, useCreateRecurringExpense, useEndRecurringExpense,
@@ -154,57 +154,63 @@ function CostDashboard() {
   const newExpenseDate = dayKey ?? (isCurrent ? `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}` : null);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Giderler"
         description="Kira, fatura ve maaş gibi sabit giderler bir kez girilir, her aya kendiliğinden sayılır."
         actions={<button type="button" onClick={() => setShowCreate(true)} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Gider ekle</button>}
       />
 
-      <section className="app-card flex flex-wrap items-center gap-2 p-3 sm:p-4" aria-label="Dönem ve kategori filtreleri">
-        <div className="inline-flex rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Görünüm">
-          {([["month", "Aylık"], ["year", "Yıllık"]] as const).map(([value, label]) => (
-            <button key={value} type="button" onClick={() => setPeriod((current) => ({ ...current, scope: value, day: null }))} aria-pressed={period.scope === value} className={`pressable min-h-10 rounded-lg px-3 text-xs font-bold ${period.scope === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
-          ))}
-        </div>
-        <div className="flex items-center gap-1 rounded-[.9rem] bg-[var(--surface-muted)] p-1">
+      <section className="app-card flex flex-wrap items-center gap-2 p-3" aria-label="Dönem ve kategori filtreleri">
+        <Segmented
+          label="Görünüm"
+          options={[{ value: "month", label: "Aylık" }, { value: "year", label: "Yıllık" }]}
+          value={period.scope}
+          onChange={(value) => setPeriod((current) => ({ ...current, scope: value, day: null }))}
+        />
+        <div className="flex items-center gap-1">
           <button type="button" onClick={() => setPeriod((current) => shift(current, -1))} className="icon-btn icon-btn-quiet" aria-label={period.scope === "year" ? "Önceki yıl" : "Önceki ay"}><Icon name="arrow-left" className="h-4 w-4" /></button>
           <span aria-live="polite" className="min-w-[7.5rem] text-center text-xs font-bold tabular-nums">{periodLabel(period)}</span>
           <button type="button" onClick={() => setPeriod((current) => shift(current, 1))} className="icon-btn icon-btn-quiet" aria-label={period.scope === "year" ? "Sonraki yıl" : "Sonraki ay"}><Icon name="arrow-right" className="h-4 w-4" /></button>
         </div>
         <button type="button" disabled={isCurrent} onClick={() => setPeriod((current) => ({ ...current, year: today.getFullYear(), month: today.getMonth(), day: null }))} className="btn btn-quiet px-3 text-[.75rem] font-semibold disabled:cursor-default disabled:opacity-50">{period.scope === "year" ? "Bu yıl" : "Bu ay"}</button>
-        <span className="mx-1 hidden h-6 w-px bg-[var(--line)] md:block" aria-hidden="true" />
-        <div className="flex w-full gap-1.5 overflow-x-auto md:w-auto" role="group" aria-label="Kategoriye göre filtrele">
-          {(["all", ...CATEGORIES] as const).map((value) => (
-            <button key={value} type="button" onClick={() => setCategory(value)} aria-pressed={category === value} className={`pressable min-h-10 shrink-0 rounded-xl border px-3 text-xs font-bold ${category === value ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line)] bg-white text-[#5c4d3f] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}>
-              {value === "all" ? "Tümü" : CATEGORY_LABEL[value]}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label="Kategoriye göre filtrele"
+          className="md:ml-auto"
+          options={(["all", ...CATEGORIES] as const).map((value) => ({ value, label: value === "all" ? "Tümü" : CATEGORY_LABEL[value] }))}
+          value={category}
+          onChange={setCategory}
+        />
       </section>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CostStat
-          label={`${category === "all" ? "Toplam gider" : `${CATEGORY_LABEL[category]} gideri`}${futurePeriod ? " (planlanan)" : ""}`}
-          value={loading ? "…" : money(stats.total)}
-          secondary={[
-            `Sabit ${money(stats.recurringTotal)} · tek seferlik ${money(stats.oneOffTotal)}`,
-            change !== null ? `önceki ${period.scope === "year" ? "yıla" : "aya"} göre ${change > 0 ? "▲" : change < 0 ? "▼" : ""} %${Math.abs(change).toLocaleString("tr-TR", { maximumFractionDigits: 0 })}` : null,
-          ].filter(Boolean).join(" · ")}
-          tone="muted"
-        />
-        <CostStat label="Tahsil edilen aidat" value={loading ? "…" : money(stats.income)} secondary="Ödeme tarihi bu dönemde olanlar" tone="success" />
-        <CostStat
-          label={category === "all" ? "Net sonuç" : "Tahsilat − bu kategori"}
-          value={loading ? "…" : `${stats.net < 0 ? "−" : ""}${money(Math.abs(stats.net))}`}
-          secondary={period.scope === "year" && stats.toDate !== stats.total ? `Bugüne kadarki ${money(stats.toDate)} gider düşüldü` : stats.net < 0 ? "Gider tahsilatı aşıyor" : "Tahsilat gideri karşılıyor"}
-          tone={stats.net < 0 ? "danger" : "brand"}
-        />
-        <CostStat label="Bekleyen aidat" value={loading ? "…" : money(stats.pending)} secondary="Tüm dönemler · Aidatlar ekranından tahsil edilir" tone="warning" href="/dashboard/billing" />
-      </div>
+      <StatStrip
+        label="Dönem özeti"
+        items={[
+          {
+            key: "total",
+            label: `${category === "all" ? "Toplam gider" : `${CATEGORY_LABEL[category]} gideri`}${futurePeriod ? " (planlanan)" : ""}`,
+            value: money(stats.total),
+            loading,
+            hint: [
+              `Sabit ${money(stats.recurringTotal)} · tek seferlik ${money(stats.oneOffTotal)}`,
+              change !== null ? `önceki ${period.scope === "year" ? "yıla" : "aya"} göre ${change > 0 ? "▲" : change < 0 ? "▼" : ""} %${Math.abs(change).toLocaleString("tr-TR", { maximumFractionDigits: 0 })}` : null,
+            ].filter(Boolean).join(" · "),
+          },
+          { key: "income", label: "Tahsil edilen aidat", value: money(stats.income), loading, hint: "Ödeme tarihi bu dönemde olanlar", tone: "success" },
+          {
+            key: "net",
+            label: category === "all" ? "Net sonuç" : "Tahsilat − bu kategori",
+            value: `${stats.net < 0 ? "−" : ""}${money(Math.abs(stats.net))}`,
+            loading,
+            hint: period.scope === "year" && stats.toDate !== stats.total ? `Bugüne kadarki ${money(stats.toDate)} gider düşüldü` : stats.net < 0 ? "Gider tahsilatı aşıyor" : "Tahsilat gideri karşılıyor",
+            tone: stats.net < 0 ? "danger" : "brand",
+          },
+          { key: "pending", label: "Bekleyen aidat", value: money(stats.pending), loading, hint: "Tüm dönemler · Aidatlar ekranından tahsil edilir", tone: "warning", href: "/dashboard/billing" },
+        ]}
+      />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <section className="app-card p-4 sm:p-5">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <section className="app-card p-4">
           {period.scope === "month" ? (
             <>
               <SectionHeader title="Gider takvimi" description="Tek seferlik giderler güne göre; güne dokun, defter o güne daralsın." actions={period.day !== null ? <button type="button" onClick={() => setPeriod((current) => ({ ...current, day: null }))} className="btn btn-quiet px-3 text-[.75rem]">Günü temizle</button> : undefined} />
@@ -231,16 +237,14 @@ function CostDashboard() {
 
       <RecurringExpensesPanel items={allRecurring} loading={recurringLoading} currentMonth={currentMonth} />
 
-      <section className="app-card overflow-hidden">
-        <div className="border-b border-[var(--line)] p-4 sm:p-5">
-          <SectionHeader
-            title="Gider defteri"
-            description={dayKey ? `${period.day} ${MONTHS[period.month]} ${period.year}` : `${periodLabel(period)} · kayıtlar silinmez, tarih ve tutarıyla saklanır`}
-            actions={<SearchInput value={search} onChange={setSearch} label="Giderlerde ara" placeholder="Açıklamada ara" />}
-          />
-        </div>
+      <Panel
+        flush
+        title="Gider defteri"
+        meta={dayKey ? `${period.day} ${MONTHS[period.month]} ${period.year}` : `${periodLabel(period)} · kayıtlar silinmez`}
+        actions={<SearchInput value={search} onChange={setSearch} label="Giderlerde ara" placeholder="Açıklamada ara" />}
+      >
         <ExpenseLedger oneOffs={listedOneOffs} recurring={listedRecurring} scope={period.scope} loading={loading} />
-      </section>
+      </Panel>
 
       <Modal open={showCreate} title="Gider ekle" onClose={closeCreate} size="sm">
         <CreateExpenseForm
@@ -314,7 +318,7 @@ function MonthCalendar({ period, expenses, today, onSelectDay }: { period: Perio
               aria-pressed={selected}
               aria-label={label}
               title={label}
-              className={`pressable relative flex min-h-[3.4rem] min-w-0 flex-col items-start justify-between rounded-xl border p-1.5 text-left sm:min-h-[4.2rem] sm:p-2 ${selected ? "border-[var(--brand)] ring-2 ring-[var(--brand)]" : "border-[var(--line)]"}`}
+              className={`pressable relative flex min-h-[3rem] min-w-0 flex-col items-start justify-between rounded-lg border p-1.5 text-left sm:min-h-[3.25rem] ${selected ? "border-[var(--brand)] ring-2 ring-[var(--brand)]" : "border-[var(--line)]"}`}
               style={{ background: entry ? `rgba(155, 63, 107, ${intensity})` : "var(--surface)" }}
             >
               <span className={`text-[.6875rem] font-bold tabular-nums ${isThisMonth && today.getDate() === day ? "rounded-md bg-[var(--brand)] px-1 text-white" : intensity > 0.5 ? "text-white" : "text-[var(--muted)]"}`}>{day}</span>
@@ -384,20 +388,20 @@ function CategoryBreakdown({ rows, active, onSelect }: { rows: { category: Expen
   const sorted = [...rows].sort((a, b) => b.amount - a.amount);
 
   return (
-    <section className="app-card p-4 sm:p-5">
+    <section className="app-card p-4">
       <SectionHeader title="Kategori dağılımı" description={total > 0 ? `Dönem toplamı ${money(total)} · sabit + tek seferlik` : "Bu dönemde gider yok."} />
-      <ul className="mt-4 space-y-3">
+      <ul className="mt-2 space-y-0.5">
         {sorted.map(({ category, amount }) => {
           const share = total > 0 ? (amount / total) * 100 : 0;
           const selected = active === category;
           return (
             <li key={category}>
-              <button type="button" onClick={() => onSelect(selected ? "all" : category)} aria-pressed={selected} className={`pressable w-full rounded-xl border p-2.5 text-left ${selected ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-transparent hover:border-[var(--line)]"}`}>
+              <button type="button" onClick={() => onSelect(selected ? "all" : category)} aria-pressed={selected} className={`pressable w-full rounded-xl border px-2.5 py-1.5 text-left ${selected ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-transparent hover:border-[var(--line)]"}`}>
                 <span className="flex items-baseline justify-between gap-2 text-sm">
                   <strong>{CATEGORY_LABEL[category]}</strong>
                   <span className="tabular-nums"><strong>{money(amount)}</strong><span className="text-meta ml-1.5">%{share.toLocaleString("tr-TR", { maximumFractionDigits: 0 })}</span></span>
                 </span>
-                <span className="mt-1.5 block h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
                   <span className="block h-full rounded-full bg-[var(--brand)]" style={{ width: `${share}%` }} />
                 </span>
               </button>
@@ -423,7 +427,7 @@ function RecurringExpensesPanel({ items, loading, currentMonth }: { items: Recur
 
   return (
     <section className="app-card overflow-hidden">
-      <div className="border-b border-[var(--line)] p-4 sm:p-5">
+      <div className="border-b border-[var(--line)] px-4 py-2.5">
         <SectionHeader
           title="Sabit aylık giderler"
           description={active.length ? `Bu ay toplam ${money(monthlyTotal)} · her aya kendiliğinden sayılır` : "Kira, elektrik/su ortalaması, sabit maaş gibi kalemleri bir kez gir."}
@@ -437,7 +441,7 @@ function RecurringExpensesPanel({ items, loading, currentMonth }: { items: Recur
             const last = item.amounts[item.amounts.length - 1];
             const upcoming = open && open.effectiveFrom > currentMonth;
             return (
-              <li key={item.id} className={`px-4 py-3 ${item.isEnded ? "opacity-60" : ""}`}>
+              <li key={item.id} className={`px-4 py-2 ${item.isEnded ? "opacity-60" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
                   <button type="button" onClick={() => setExpanded((value) => value === item.id ? null : item.id)} aria-expanded={expanded === item.id} className="min-w-0 flex-1 text-left">
                     <strong className="block truncate text-sm">{item.name}</strong>
@@ -604,7 +608,7 @@ function LedgerGroup({ heading, total, children }: { heading: string; total: num
 
 function LedgerRow({ title, meta, amount }: { title: string; meta: string; amount: string }) {
   return (
-    <li className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+    <li className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
       <span className="min-w-0">
         <strong className="block truncate">{title}</strong>
         <span className="text-meta">{meta}</span>
@@ -690,18 +694,4 @@ function SimpleExpenseForm({ kind, tabs, initialDate, initialMonth, initialCateg
       <FormActions onCancel={onClose} submitLabel="Gideri kaydet" pending={pending} />
     </form>
   );
-}
-
-function CostStat({ label, value, secondary, tone, href }: { label: string; value: string; secondary?: string; tone: "warning" | "success" | "brand" | "danger" | "muted"; href?: string }) {
-  const palette = { warning: "text-[var(--warning-strong)]", success: "text-[var(--success-strong)]", brand: "text-[var(--brand-strong)]", danger: "text-[var(--danger-strong)]", muted: "text-[var(--foreground)]" }[tone];
-  const body = (
-    <>
-      <p className="text-meta font-bold">{label}</p>
-      <p className={`mt-2 text-xl font-bold tabular-nums ${palette}`}>{value}</p>
-      {secondary && <p className="text-meta mt-1">{secondary}</p>}
-    </>
-  );
-  return href
-    ? <a href={href} className="app-card pressable block p-4 hover:border-[var(--brand)]">{body}</a>
-    : <article className="app-card p-4">{body}</article>;
 }

@@ -98,7 +98,7 @@ export function BulkPaymentSection() {
         />
       </div>
 
-      <div className="space-y-4 border-t border-[var(--line)] p-4">
+      <div className="space-y-3 border-t border-[var(--line)] p-4">
         <RulesStrip tiers={tiers} multiCoursePercent={policy?.multiCourseDiscountPercent ?? 0} siblingPercent={policy?.siblingDiscountPercent ?? 0} />
 
         {/* 1. adım - öğrenciyi bul. Arama satırları kurs kaydı başına döner, çünkü aidat
@@ -124,7 +124,7 @@ export function BulkPaymentSection() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Öğrenci, öğretmen veya enstrüman adı yaz"
-                  className="field min-h-11 pl-9 text-sm"
+                  className="field pl-9 text-sm"
                 />
               </label>
               {query.trim().length >= 2 && (
@@ -150,7 +150,7 @@ export function BulkPaymentSection() {
         </div>
 
         {selected && !result && (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             {/* 2. adım - kaç ay. Kademeler politikadan gelir; oranlar burada hesaplanmaz. */}
             <div>
               <p className="text-micro text-[var(--muted)]">2 · Kaç ay</p>
@@ -192,10 +192,10 @@ export function BulkPaymentSection() {
                   <MonthInput label="Başlangıç ayı" value={startPeriod} onChange={(value) => { setStartPeriod(value); setError(null); }} />
                 </div>
                 <label className="form-label">Ödeme tarihi
-                  <input type="date" value={paymentDate} onChange={(event) => { setPaymentDate(event.target.value); setError(null); }} required className="field min-h-11 text-sm" />
+                  <input type="date" value={paymentDate} onChange={(event) => { setPaymentDate(event.target.value); setError(null); }} required className="field text-sm" />
                 </label>
                 <label className="form-label">Yöntem
-                  <select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field min-h-11 text-sm">
+                  <select value={method} onChange={(event) => setMethod(event.target.value as PaymentMethod)} className="field text-sm">
                     <option value="Transfer">Havale</option>
                     <option value="Cash">Nakit</option>
                     <option value="Card">Kart</option>
@@ -203,7 +203,7 @@ export function BulkPaymentSection() {
                   </select>
                 </label>
                 <label className="form-label">Dekont / açıklama
-                  <input type="text" value={reference} onChange={(event) => setReference(event.target.value)} placeholder="İsteğe bağlı" className="field min-h-11 text-sm" />
+                  <input type="text" value={reference} onChange={(event) => setReference(event.target.value)} placeholder="İsteğe bağlı" className="field text-sm" />
                 </label>
               </div>
             </div>

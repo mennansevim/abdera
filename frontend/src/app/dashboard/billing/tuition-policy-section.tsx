@@ -49,7 +49,7 @@ export function TuitionPolicySection() {
   const history = useMemo(() => (rates ?? []).filter((rate) => !rate.isCurrent), [rates]);
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-3">
       <SectionHeader
         title="Ücret tarifesi"
         description="Aidat tutarı yalnızca dersin birebir mi grup mu olduğuna göre değişir. Zam, yeni yürürlük tarihiyle yeni bir satır açar; yazılmış aidatlar değişmez."
@@ -214,7 +214,7 @@ function DiscountPolicyCard() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="app-card space-y-4 p-4">
+    <form onSubmit={handleSubmit} className="app-card space-y-3 p-4">
       <div>
         <h3 className="text-title">İndirim politikası</h3>
         <p className="text-meta mt-0.5">Bir öğrenci birden fazla indirime uyuyorsa <strong>en yükseği</strong> uygulanır, toplanmaz. Bir kurs kaydına elle indirim girilmişse otomatik kurallar yerine o geçerlidir.</p>
@@ -242,10 +242,10 @@ function DiscountPolicyCard() {
           {draft.tiers.map((tier, index) => (
             <div key={index} className="flex flex-wrap items-end gap-2">
               <label className="form-label w-28">En az ay
-                <input type="number" inputMode="numeric" min={2} max={24} value={tier.minMonths} onChange={(event) => patchTier(index, { minMonths: Number(event.target.value) })} className="field min-h-11 text-sm" />
+                <input type="number" inputMode="numeric" min={2} max={24} value={tier.minMonths} onChange={(event) => patchTier(index, { minMonths: Number(event.target.value) })} className="field text-sm" />
               </label>
               <label className="form-label w-28">İndirim (%)
-                <input type="number" inputMode="decimal" min={0} max={100} step={0.5} value={tier.percent} onChange={(event) => patchTier(index, { percent: Number(event.target.value) })} className="field min-h-11 text-sm" />
+                <input type="number" inputMode="decimal" min={0} max={100} step={0.5} value={tier.percent} onChange={(event) => patchTier(index, { percent: Number(event.target.value) })} className="field text-sm" />
               </label>
               <p className="text-meta min-w-0 flex-1 pb-2.5">{tier.minMonths} ay ve üzeri peşin ödeyene %{tier.percent} indirim</p>
               <button type="button" onClick={() => patch({ tiers: draft.tiers.filter((_, i) => i !== index) })} aria-label={`${tier.minMonths} aylık kademeyi sil`} className="icon-btn icon-btn-quiet mb-1 h-10 w-10 hover:border-[var(--danger)] hover:text-[var(--danger-strong)]">

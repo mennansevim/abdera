@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AdminGate, FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
+import { AdminGate, EmptyState, FormActions, FormMessage, Modal, PageHeader, Pager, Panel, Segmented } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useGuardians } from "@/lib/people";
 import {
@@ -24,10 +24,12 @@ export default function BankingPage() {
 // Banka/havale eşleştirmesi tamamen Admin'e özel (docs/04-permissions.md).
 function BankingPageContent() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader title="Banka entegrasyonu" description="Sanal IBAN atamaları ve gelen havalelerin aidatlara işlenmesi." />
-      <VirtualIbanSection />
-      <TransactionsSection />
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <TransactionsSection />
+        <VirtualIbanSection />
+      </div>
     </div>
   );
 }
@@ -49,37 +51,30 @@ function VirtualIbanSection() {
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-title">Sanal IBAN ataması</h2>
-      <div className="app-card space-y-3 p-4 sm:p-5">
-        <p className="text-meta max-w-2xl leading-relaxed">
-          Bir veliye sanal IBAN atandığında o IBAN&apos;a gelen havaleler otomatik olarak veliye bağlı aidatlara
-          işlenmeye çalışılır. Belirsiz kalan işlemler aşağıdaki listede görünür.
+    <Panel title="Sanal IBAN ataması" className="xl:sticky xl:top-4">
+      <div className="space-y-2.5">
+        <p className="text-meta leading-snug">
+          Sanal IBAN&apos;a gelen havaleler veliye bağlı aidatlara otomatik işlenmeye çalışılır; belirsiz kalanlar gelen işlemlerde görünür.
         </p>
-
-        <div className="flex flex-wrap items-end gap-3">
-          <select value={guardianId} onChange={(e) => setGuardianId(e.target.value)} className="field min-h-11 w-full max-w-xs text-sm">
-            <option value="">Veli seç</option>
-            {guardians?.map((g) => (
-              <option key={g.id} value={g.id}>{g.firstName} {g.lastName} · {g.phoneNumber}</option>
-            ))}
-          </select>
-
-          {guardianId && virtualIban && (
-            <span className="rounded-xl bg-[var(--success-soft)] px-3 py-2 text-sm font-semibold text-[var(--success-strong)]">
-              Atanmış IBAN: {virtualIban.iban} ({virtualIban.provider})
-            </span>
-          )}
-          {guardianId && !virtualIban && (
-            <button onClick={handleAssign} disabled={assign.isPending}
-              className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:opacity-50">
-              {assign.isPending ? "Atanıyor…" : "Sanal IBAN ata"}
-            </button>
-          )}
-        </div>
+        <select value={guardianId} onChange={(e) => setGuardianId(e.target.value)} className="field w-full text-sm" aria-label="Veli seç">
+          <option value="">Veli seç</option>
+          {guardians?.map((g) => (
+            <option key={g.id} value={g.id}>{g.firstName} {g.lastName} · {g.phoneNumber}</option>
+          ))}
+        </select>
+        {guardianId && virtualIban && (
+          <p className="rounded-xl bg-[var(--success-soft)] px-3 py-2 text-xs font-semibold break-all text-[var(--success-strong)]">
+            Atanmış IBAN: {virtualIban.iban} ({virtualIban.provider})
+          </p>
+        )}
+        {guardianId && !virtualIban && (
+          <button onClick={handleAssign} disabled={assign.isPending} className="btn btn-primary w-full">
+            {assign.isPending ? "Atanıyor…" : "Sanal IBAN ata"}
+          </button>
+        )}
         {error && <p className="text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -108,71 +103,44 @@ function TransactionsSection() {
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-title">Gelen işlemler</h2>
-
-      <div className="flex flex-wrap gap-2">
-        {(["NeedsReview", "Matched", "Ignored", "all"] as const).map((f) => (
-          <button key={f} onClick={() => handleFilterChange(f)}
-            className={`pressable min-h-11 rounded-full px-4 text-xs font-bold ${
-              filter === f ? "bg-[var(--brand)] text-white" : "border-2 border-[var(--line)] bg-white text-[var(--muted)] hover:border-[#e0c39d]"
-            }`}>
-            {f === "all" ? "Tümü" : STATUS_LABELS[f]}
-          </button>
-        ))}
-      </div>
-
-      {isLoading && <div className="space-y-2">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-14 rounded-xl" />)}</div>}
-
-      <div className="app-card overflow-x-auto">
-        <table className="w-full min-w-[46rem] text-sm">
-          <thead>
-            <tr className="text-micro border-b border-[var(--line)] text-left">
-              <th className="px-4 py-3">Tarih</th>
-              <th className="px-4 py-3">Gönderen</th>
-              <th className="px-4 py-3">Açıklama</th>
-              <th className="px-4 py-3">Tutar</th>
-              <th className="px-4 py-3">Durum</th>
-              <th className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-4 py-3"><span className="sr-only">İşlem</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions?.map((t) => (
-              <TransactionRow key={t.id} transaction={t} />
-            ))}
-            {transactions?.length === 0 && !isLoading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--muted)]">Bu filtrede işlem yok.</td>
+    <Panel
+      flush
+      title="Gelen işlemler"
+      meta={data ? `${data.totalCount} kayıt` : undefined}
+      actions={
+        <Segmented
+          label="Duruma göre filtrele"
+          options={(["NeedsReview", "Matched", "Ignored", "all"] as const).map((f) => ({ value: f, label: f === "all" ? "Tümü" : STATUS_LABELS[f] }))}
+          value={filter}
+          onChange={handleFilterChange}
+        />
+      }
+      footer={data && totalPages > 1 ? <Pager page={data.page} totalPages={totalPages} onChange={setPage} /> : undefined}
+    >
+      {isLoading && <div className="space-y-2 p-4">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
+      {!isLoading && transactions?.length === 0 && <EmptyState icon="bank" title="Bu filtrede işlem yok." />}
+      {!isLoading && !!transactions?.length && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[46rem] text-sm">
+            <thead>
+              <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
+                <th className="px-4 py-2">Tarih</th>
+                <th className="px-3 py-2">Gönderen</th>
+                <th className="px-3 py-2">Açıklama</th>
+                <th className="px-3 py-2">Tutar</th>
+                <th className="px-3 py-2">Durum</th>
+                <th className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-3 py-2"><span className="sr-only">İşlem</span></th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {data && data.totalCount > 0 && (
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-meta">
-            Toplam {data.totalCount} kayıt - sayfa {data.page} / {totalPages}
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="pressable min-h-11 rounded-xl border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
-            >
-              Önceki
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="pressable min-h-11 rounded-xl border-2 border-[var(--line)] bg-white px-3 text-xs font-bold hover:bg-[var(--surface-muted)] disabled:opacity-50"
-            >
-              Sonraki
-            </button>
-          </div>
+            </thead>
+            <tbody>
+              {transactions.map((t) => (
+                <TransactionRow key={t.id} transaction={t} />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }
 
@@ -194,28 +162,29 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
 
   return (
     <tr className="border-b border-[var(--line)] align-top last:border-0">
-      <td className="text-meta px-4 py-3">{new Date(transaction.receivedAt).toLocaleString("tr-TR")}</td>
-      <td className="px-4 py-3 font-semibold">{transaction.senderName ?? "—"}</td>
-      <td className="text-meta px-4 py-3">{transaction.description ?? "—"}</td>
-      <td className="px-4 py-3 font-bold tabular-nums">{transaction.amount.toLocaleString("tr-TR")} {transaction.currency}</td>
-      <td className="px-4 py-3">
-        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${STATUS_CLASSES[transaction.status]}`}>{STATUS_LABELS[transaction.status]}</span>
+      <td className="text-meta px-4 py-2 whitespace-nowrap">{new Date(transaction.receivedAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+      <td className="px-3 py-2 font-semibold">{transaction.senderName ?? "—"}</td>
+      <td className="text-meta px-3 py-2">{transaction.description ?? "—"}</td>
+      <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap">{transaction.amount.toLocaleString("tr-TR")} {transaction.currency}</td>
+      <td className="px-3 py-2">
+        <span className={`rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${STATUS_CLASSES[transaction.status]}`}>{STATUS_LABELS[transaction.status]}</span>
       </td>
       {/* Tablo mobilde yatay kayar; işlem sütunu sağa yapışık kalır ki asıl eylem
           kaydırmadan görünsün. Dar ekranda içerik alt alta dizilip sütunu dar tutar. */}
-      <td className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-4 py-3">
+      <td className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-3 py-2">
         {transaction.status === "NeedsReview" && (
-          <div className="flex w-40 flex-col items-stretch gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex w-40 flex-col items-stretch gap-1.5 lg:w-auto lg:flex-row lg:items-center">
             <input value={receivableId} onChange={(e) => setReceivableId(e.target.value)}
               aria-label="Aidat ID"
-              placeholder="Aidat ID (Aidatlar sayfasından)"
-              className="field min-h-11 w-full text-xs sm:w-48" />
+              placeholder="Aidat ID"
+              title="Aidat ID (Aidatlar sayfasından)"
+              className="field w-full text-xs lg:w-32" />
             <button type="button" onClick={() => handleResolve(receivableId)} disabled={!receivableId || resolve.isPending}
-              className="pressable min-h-11 rounded-lg bg-[var(--brand)] px-2.5 text-xs font-bold text-white hover:bg-[var(--brand-strong)] disabled:opacity-50">
+              className="btn btn-primary px-2.5 text-xs">
               Bu aidata say
             </button>
             <button type="button" onClick={() => { setError(null); setConfirmingIgnore(true); }} disabled={resolve.isPending}
-              className="pressable min-h-11 rounded-lg border-2 border-[var(--line)] px-2.5 text-xs font-bold text-[var(--muted)] hover:bg-[var(--surface-muted)]">
+              className="btn btn-quiet px-2.5 text-xs">
               Hiçbirine sayma
             </button>
           </div>

@@ -53,9 +53,9 @@ export function StudentBillingSection({ initialStudentId = "", showStudentPicker
 
   return (
     <section className="app-card overflow-hidden">
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line)] bg-[var(--surface-muted)]/45 p-4 sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)]/45 p-4">
         <div><p className="text-micro text-[var(--brand-strong)]">Öğrenci hesabı</p><h2 className="mt-1 text-title">Aidat geçmişi</h2><p className="text-meta mt-1">Geçmiş dönemleri gör, yeni aidat ekle, ödeme al.</p></div>
-        <div className="flex w-full items-end gap-2 sm:w-auto">{showStudentPicker ? <label className="min-w-0 flex-1 space-y-1.5 sm:w-72"><span className="text-[.75rem] font-bold text-[var(--muted)]">Öğrenci</span><select value={studentId} onChange={(e) => setStudentId(e.target.value)} className="field min-h-11 text-sm">
+        <div className="flex w-full items-end gap-2 sm:w-auto">{showStudentPicker ? <label className="min-w-0 flex-1 space-y-1.5 sm:w-72"><span className="text-[.75rem] font-bold text-[var(--muted)]">Öğrenci</span><select value={studentId} onChange={(e) => setStudentId(e.target.value)} className="field text-sm">
           <option value="">Öğrenci seçin…</option>
           {students?.map((s) => (<option key={s.id} value={s.id}>{s.firstName} {s.lastName}</option>))}
         </select></label> : <p className="text-meta">Seçilen öğrencinin aidat geçmişi</p>}{onClose && <button type="button" onClick={onClose} className="pressable grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-[var(--line)] bg-white text-[var(--muted)]" aria-label="Hesap ayrıntısını kapat"><Icon name="close" className="h-4 w-4" /></button>}</div>
@@ -64,7 +64,7 @@ export function StudentBillingSection({ initialStudentId = "", showStudentPicker
       {!studentId && <div className="grid min-h-56 place-items-center p-8 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--brand-soft)] text-xl" aria-hidden="true">₺</span><p className="mt-4 text-sm font-bold">Öğrenci hesabı seçilmedi</p><p className="text-meta mt-1">Borç, tahsilat ve ödeme geçmişi burada gösterilecek.</p></div></div>}
 
       {studentId && (
-        <div className="space-y-4 p-4 sm:p-5">
+        <div className="space-y-3 p-4">
           <UnifiedPeriodsList
             studentId={studentId}
             billing={billing}
@@ -318,8 +318,8 @@ function PeriodRow({ studentId, receivable, instrumentLabel }: { studentId: stri
     </div>
 
     {showForm && <form onSubmit={handleSubmit} className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)]/45 p-3">
-      <input type="number" inputMode="decimal" step={0.01} min={0.01} max={remaining} value={amount} onChange={resetValidity((e) => setAmount(Number(e.target.value)))} onInvalid={onInvalidTurkish} aria-label="Tahsil edilen tutar" className="field min-h-11 w-24 text-xs" />
-      <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} aria-label="Ödeme yöntemi" className="field min-h-11 w-auto text-xs">
+      <input type="number" inputMode="decimal" step={0.01} min={0.01} max={remaining} value={amount} onChange={resetValidity((e) => setAmount(Number(e.target.value)))} onInvalid={onInvalidTurkish} aria-label="Tahsil edilen tutar" className="field w-24 text-xs" />
+      <select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)} aria-label="Ödeme yöntemi" className="field w-auto text-xs">
         <option value="Cash">Nakit</option>
         <option value="Transfer">Havale</option>
         <option value="Card">Kart</option>
@@ -362,6 +362,6 @@ function PaymentHistoryRow({ studentId, payment, currency }: { studentId: string
 
   return <div className="rounded-lg bg-white px-2.5 py-2 text-xs">
     <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex flex-wrap items-center gap-1.5">{payment.paymentDate} · {payment.method === "Transfer" ? "Havale" : payment.method === "Cash" ? "Nakit" : payment.method === "Card" ? "Kart" : "Diğer"}{payment.prepayPlanId && <span className="rounded-full bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--brand-strong)]">Peşin ödeme · {payment.prepayPlanMonths} ay</span>}</span><span className="flex items-center gap-2"><strong>{payment.amount.toLocaleString("tr-TR")} {currency}</strong><button type="button" onClick={() => setEditing((value) => !value)} aria-expanded={editing} className="pressable inline-flex min-h-11 items-center rounded-lg px-3 font-bold text-[var(--brand)] hover:bg-[var(--brand-soft)]">Düzelt</button></span></div>
-    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" inputMode="decimal" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field min-h-11 text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" aria-label="Düzeltme nedeni" className="field min-h-11 text-xs" /><button disabled={correctPayment.isPending} className="btn btn-primary">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
+    {editing && <form onSubmit={submit} className="mt-2 grid gap-2 rounded-lg bg-[var(--surface-muted)] p-2 sm:grid-cols-[7rem_1fr_auto]"><input type="number" inputMode="decimal" min={0} step={0.01} value={correctedAmount} onChange={(event) => setCorrectedAmount(Number(event.target.value))} aria-label="Düzeltilen ödeme tutarı" className="field text-xs" /><input value={reason} onChange={(event) => setReason(event.target.value)} required placeholder="Düzeltme nedeni" aria-label="Düzeltme nedeni" className="field text-xs" /><button disabled={correctPayment.isPending} className="btn btn-primary">{correctPayment.isPending ? "Kaydediliyor…" : "Düzeltmeyi kaydet"}</button>{error && <p role="alert" className="text-[var(--danger-strong)] sm:col-span-3">{error}</p>}</form>}
   </div>;
 }
