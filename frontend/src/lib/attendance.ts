@@ -23,6 +23,11 @@ export function useMarkAttendance(lessonId: string) {
       api.post<Attendance>(`/api/lessons/${lessonId}/attendance`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      // Yoklama dersi Tamamlandı'ya çeker: Öğretmenler listesindeki haftalık "Tamamlanan"
+      // sütunu (benchmark) ve ödeme durumu (ödeme haftası) bu sayıdan beslenir. Yenilenmezse
+      // liste önbellekteki eski 0'ı göstermeye devam ediyordu.
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-payout-week"] });
       // Geçmiş bir derse "geldi" girilirse ders yorum bekleyenler listesine düşer.
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
     },
@@ -82,6 +87,7 @@ export function useApproveChangeRequest() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["change-requests"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
     },
   });
 }
@@ -116,6 +122,7 @@ export function useRescheduleLesson() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["change-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
     },
   });
 }
@@ -131,6 +138,7 @@ export function useCancelLesson() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
     },
   });
 }

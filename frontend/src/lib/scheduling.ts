@@ -54,6 +54,7 @@ export function useCreateLessonSeries() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["student-lesson-series"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
     },
   });
 }
@@ -99,6 +100,7 @@ export function useRescheduleLessonSeries(studentId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-lesson-series", studentId] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
     },
   });
 }
@@ -150,6 +152,8 @@ export function useUpdateLesson() {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["change-requests"] });
       queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-payout-week"] });
     },
   });
 }
