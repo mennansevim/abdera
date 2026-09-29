@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Shared;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace Abdera.Api.Modules.Ops.Infrastructure;
@@ -38,7 +39,8 @@ public class BackupService(
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task RunIfDueAsync(CancellationToken cancellationToken)
+    // public: yeniden başlatma sonrası davranışı testte yeni bir örnekle doğrulanabilsin diye.
+    public async Task RunIfDueAsync(CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();
         var clock = scope.ServiceProvider.GetRequiredService<IClock>();
@@ -50,6 +52,17 @@ public class BackupService(
 
         var runTimeLocal = TimeOnly.Parse(config["Backup:DailyRunTimeLocal"] ?? "03:00");
         if (TimeOnly.FromDateTime(local.DateTime) < runTimeLocal) return;
+
+        // LastRunDate yalnızca bellekte - her deploy/yeniden başlatmada sıfırlanıp saat
+        // geçtiği için aynı gün tekrar yedek alınıyordu. Bugün (okul saatiyle) başlamış bir
+        // koşu zaten varsa, manuel olsun başarısız olsun, günü yapılmış say.
+        var db = scope.ServiceProvider.GetRequiredService<AbderaDbContext>();
+        var startOfTodayUtc = new DateTimeOffset(local.Date, local.Offset).ToUniversalTime();
+        if (await db.BackupRuns.AnyAsync(r => r.StartedAt >= startOfTodayUtc, cancellationToken))
+        {
+            LastRunDate = today;
+            return;
+        }
 
         await RunOnceAsync(triggeredManually: false, cancellationToken);
     }

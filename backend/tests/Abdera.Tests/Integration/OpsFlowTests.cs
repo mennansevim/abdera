@@ -4,6 +4,7 @@ using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -60,6 +61,30 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.NotNull(run.RemotePath);
         Assert.True(run.SizeBytes > 0);
         Assert.EndsWith(".sql.enc", run.RemotePath);
+    }
+
+    [Fact]
+    public async Task Restarted_service_does_not_take_a_second_automatic_backup_on_the_same_day()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        _ = _factory.CreateClient();
+
+        // Bugün için bir koşu olsun ve servis açılışındaki otomatik koşu (varsa) bitmiş olsun.
+        var today = BackupRun.Start(triggeredManually: false, DateTimeOffset.UtcNow);
+        today.MarkSucceeded("today.sql.enc", 100, DateTimeOffset.UtcNow);
+        db.BackupRuns.Add(today);
+        await db.SaveChangesAsync();
+        for (var attempt = 0; attempt < 120 && await db.BackupRuns.AnyAsync(r => r.Status == BackupRunStatus.Running); attempt++)
+        {
+            await Task.Delay(500);
+        }
+        var idsBefore = await db.BackupRuns.Select(r => r.Id).ToListAsync();
+
+        // Deploy/yeniden başlatmanın karşılığı: LastRunDate'i boş, yepyeni bir örnek.
+        var restarted = ActivatorUtilities.CreateInstance<Abdera.Api.Modules.Ops.Infrastructure.BackupService>(_factory.Services);
+        await restarted.RunIfDueAsync(CancellationToken.None);
+
+        Assert.False(await db.BackupRuns.AnyAsync(r => !idsBefore.Contains(r.Id)));
     }
 
     [Fact]
