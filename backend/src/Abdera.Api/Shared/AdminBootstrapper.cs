@@ -9,10 +9,11 @@ namespace Abdera.Api.Shared;
 // Yalnızca users tablosu tamamen boşsa (ilk kurulum) admin oluşturur. Development
 // ortamında öğretmen önizlemesini kolaylaştırmak için demo öğretmen hesabını da
 // idempotent biçimde hazırlar. Demo:Enabled açıldığında staging yayını için ayrı,
-// herkese açık demo yönetici/öğretmen hesapları hazırlanır.
+// herkese açık demo öğretmen hesabı hazırlanır. Demo yönetici hesabı artık yok: okulun
+// gerçek yönetici hesabına dönüştü (RenameDemoAdminAccount migration'ı). Herkese açık
+// şifreli bir yönetici hesabını her açılışta geri getirmek canlı veriye arka kapı olurdu.
 public static class AdminBootstrapper
 {
-    private const string DemoAdminEmail = "demo.yonetici@abdera.com";
     private const string DemoTeacherEmail = "demo.ogretmen@abdera.com";
     private const string DemoPassword = "AbderaDemo2026!";
 
@@ -67,28 +68,14 @@ public static class AdminBootstrapper
         IClock clock,
         ILogger<Program> logger)
     {
-        var admin = await db.Users.SingleOrDefaultAsync(item => item.Email == DemoAdminEmail);
         // YENİ oluşturulan hesabın PasswordHash'i "placeholder" - geçerli bir hash değil.
         // VerifyHashedPassword onu Base64 olarak çözmeye çalışıp FormatException fırlatıyor
-        // ve uygulama açılışta çöküyordu (boş veritabanı + Demo:Enabled=true). Mevcut bir
-        // veritabanında hesaplar zaten gerçek hash taşıdığı için hata yalnızca İLK kurulumda
-        // görünüyordu; bu yüzden gözden kaçmıştı.
-        var adminIsNew = admin is null;
-        if (admin is null)
-        {
-            admin = User.Create(DemoAdminEmail, "placeholder", UserRole.Admin, clock.UtcNow);
-            db.Users.Add(admin);
-            db.AuditLogs.Add(AuditLog.Record(null, "user.bootstrap_demo_admin_created", nameof(User), admin.Id, clock.UtcNow));
-        }
+        // ve uygulama açılışta çöküyordu (boş veritabanı + Demo:Enabled=true); bu yüzden
+        // yeni hesapta doğrulama atlanır.
+        //
         // SetPassword SecurityStamp'i yeniler. Bunu her serverless cold start'ta
-        // çağırmak açık admin çerezlerini geçersiz kılar ve kullanıcı takvimi görse bile
-        // ders oluştururken 401 alır. Demo şifre gerçekten değişmişse (veya hesap yeni
-        // oluşturulmuşsa) yalnızca o durumda yeniden hash'le.
-        if (adminIsNew || passwordHasher.VerifyHashedPassword(admin, admin.PasswordHash, DemoPassword) == PasswordVerificationResult.Failed)
-        {
-            admin.SetPassword(passwordHasher.HashPassword(admin, DemoPassword), clock.UtcNow);
-        }
-
+        // çağırmak açık çerezleri geçersiz kılar; demo şifre gerçekten değişmişse (veya
+        // hesap yeni oluşturulmuşsa) yalnızca o durumda yeniden hash'le.
         var teacherUser = await db.Users.SingleOrDefaultAsync(item => item.Email == DemoTeacherEmail);
         var teacherIsNew = teacherUser is null;
         if (teacherUser is null)

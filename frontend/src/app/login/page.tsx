@@ -41,10 +41,19 @@ function RoleCardContent({ option }: { option: (typeof ROLE_OPTIONS)[number] }) 
 
 const DEMO_PASSWORD = "AbderaDemo2026!";
 const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
-const DEMO_EMAILS: Record<StaffRole, string> = {
-  Admin: "demo.yonetici@abdera.com",
+// Yönetici için demo hesabı yok - eski demo yönetici okulun gerçek hesabı oldu
+// (RenameDemoAdminAccount), onun bilgileri burada önceden doldurulmaz.
+const DEMO_EMAILS: Partial<Record<StaffRole, string>> = {
   Teacher: "demo.ogretmen@abdera.com",
 };
+
+function demoEmailFor(role: StaffRole) {
+  return DEMO_ENABLED ? DEMO_EMAILS[role] ?? "" : "";
+}
+
+function demoPasswordFor(role: StaffRole) {
+  return DEMO_ENABLED && DEMO_EMAILS[role] ? DEMO_PASSWORD : "";
+}
 
 // Yerel geliştirmede şifre yerine hesap listesinden seçilir (/api/dev/auth/*). Karar
 // tarayıcının açtığı adrese göre verilir; asıl koruma sunucudadır - o uçlar yalnızca
@@ -76,8 +85,8 @@ function LoginPageContent() {
   const emailRef = useRef<HTMLInputElement>(null);
   const roleRefs = useRef<Partial<Record<StaffRole, HTMLButtonElement | null>>>({});
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
-  const [email, setEmail] = useState(DEMO_ENABLED ? DEMO_EMAILS.Admin : "");
-  const [password, setPassword] = useState(DEMO_ENABLED ? DEMO_PASSWORD : "");
+  const [email, setEmail] = useState(demoEmailFor("Admin"));
+  const [password, setPassword] = useState(demoPasswordFor("Admin"));
   const [error, setError] = useState<string | null>(null);
   const roleAccounts = selectedRole === "Guardian" ? [] : devAccounts?.filter((account) => account.role === selectedRole) ?? [];
   // Rol değişince önceki rolün seçimi geçersiz kalır; o durumda rolün ilk hesabı seçili sayılır.
@@ -114,8 +123,8 @@ function LoginPageContent() {
       router.push("/parent");
       return;
     }
-    setEmail(DEMO_ENABLED ? DEMO_EMAILS[role] : "");
-    setPassword(DEMO_ENABLED ? DEMO_PASSWORD : "");
+    setEmail(demoEmailFor(role));
+    setPassword(demoPasswordFor(role));
     requestAnimationFrame(() => emailRef.current?.focus());
   }
 
@@ -131,8 +140,8 @@ function LoginPageContent() {
     const next = roles[(currentIndex + step + roles.length) % roles.length]!;
     setSelectedRole(next);
     setError(null);
-    setEmail(DEMO_ENABLED ? DEMO_EMAILS[next] : "");
-    setPassword(DEMO_ENABLED ? DEMO_PASSWORD : "");
+    setEmail(demoEmailFor(next));
+    setPassword(demoPasswordFor(next));
     roleRefs.current[next]?.focus();
   }
 
