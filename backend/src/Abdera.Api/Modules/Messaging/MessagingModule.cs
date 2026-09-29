@@ -21,7 +21,6 @@ public static class MessagingModule
         app.MapNotifications();
         app.MapWebhookEventLog();
         app.MapStaffNotifications();
-        app.MapMessageTemplates();
         app.MapAutomationSettings();
 
         if (app.Environment.IsDevelopment())

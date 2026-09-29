@@ -299,6 +299,12 @@ Kullanıcı isteği: "Veli yorumunu yapıcı metne çeviren yapay zekâ kısmın
 |---|---|---|
 | S1 | Ad biçimi | Kullanıcı isteği: "öğrenci isimleri kaydolurken Miray Sevim gibi olsun, geriye dönük isimleri de düzenle". `Student.Create/Update` adı ve soyadı `PersonNameFormatter.Format` ile saklar: her kelimenin (tireden sonrası dahil) ilk harfi büyük, kalanı küçük, fazla boşluk teke iner. Türkçe i/ı elle eşlenir, `CultureInfo("tr-TR")`'ye bağlı değil. Mevcut kayıtlar `NormalizeStudentNames` migration'ıyla düzeltildi. Bilinen sonuç: iç büyük harfli yabancı adlar ("McDonald" -> "Mcdonald") ve Türkçe kuralla yazılan yabancı "I" ("LILY" -> "Lıly") elle düzeltilmeli. Veli ve öğretmen adları kapsam dışı. |
 
+## T — Mesaj şablonları panelden düzenlenmez (2026-09-29)
+
+| # | Konu | Karar |
+|---|---|---|
+| T1 | Şablon editörü kaldırıldı | Kullanıcı isteği: "şablonlar gereksiz, Meta'nın şablonu zaten statik, bunun dışına çıkamıyoruz; gereksiz tasarımları kaldıralım, otomasyon kalabilir". Mesaj Merkezi'ndeki şablon listesi/düzenleyici/önizleme ve `/api/message-templates` (GET/POST/PATCH) kaldırıldı. Panelde düzenlenen gövde telefona giden metni değiştirmiyordu; tek gerçek etkisi değişken sırasını (`MessageTemplate.OrderParameters`) Meta'daki onaylı şablondan kaydırıp gönderimi bozmaktı. `message_templates` tablosu kalır: dispatcher şablon adını, değişken sırasını ve `whatsapp_messages.body_snapshot` için gövdeyi oradan okur. Meta'da şablon değişirse gövde bir migration'la güncellenir. Sekme artık yalnızca "Otomasyon" (ders hatırlatması süresi, açık/kapalı, "Geç kalacağım" seçeneği). |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

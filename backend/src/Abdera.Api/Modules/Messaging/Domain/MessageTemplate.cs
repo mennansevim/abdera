@@ -4,6 +4,8 @@ namespace Abdera.Api.Modules.Messaging.Domain;
 
 // docs/03-erd.md - Messaging > message_templates. docs/06-whatsapp.md: gövde Meta'ya
 // onaylatılan metnin ta kendisi - burada placeholder'larla (`{{guardian_name}}` gibi) saklanır.
+// Panelden düzenlenemez (docs/10-decisions.md T1): Meta şablonu sabit, gövdeyi burada
+// değiştirmek yalnızca değişken sırasını onaylı şablondan kaydırırdı. Değişiklik migration'la.
 public class MessageTemplate
 {
     public Guid Id { get; private set; }
@@ -22,15 +24,6 @@ public class MessageTemplate
         Body = body,
         IsActive = true,
     };
-
-    public void Update(string name, string body, string language = "tr")
-    {
-        Name = name.Trim();
-        Body = body;
-        Language = language.Trim();
-    }
-
-    public void SetActive(bool isActive) => IsActive = isActive;
 
     private static readonly Regex Placeholder = new(@"\{\{([A-Za-z0-9_]+)\}\}", RegexOptions.Compiled);
 

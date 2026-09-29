@@ -111,9 +111,7 @@ POST   /api/webhooks/whatsapp                    ✅ imza doğrulama + idempoten
 POST   /api/dev/whatsapp/simulate-text           ✅ yalnızca Development - serbest metin/opt-out testi
 POST   /api/dev/whatsapp/simulate-rsvp           ✅ yalnızca Development - imzalı RSVP butonu testi ("Faz 3'ten itibaren rsvp_attending_late de kabul eder)
 
-GET    /api/message-templates                    ✅ Faz 1 - Mesaj Merkezi şablon editörü (redesign/sicak-atolye)
-POST   /api/message-templates                    ✅ yeni şablon ekler
-PATCH  /api/message-templates/{templateId}       ✅ gövde/dil/aktiflik günceller - şablon anahtarı (Name) sabit kalır
+(kaldırıldı) /api/message-templates             ❌ şablon editörü kaldırıldı - Meta şablonu sabit, gövde migration'la (10-decisions T1)
 
 GET    /api/notification-automation-settings     ✅ Faz 3 - hatırlatma süresi/aktiflik/3. RSVP seçeneği (tek satırlık kurum ayarı)
 PUT    /api/notification-automation-settings     ✅ günceller; bekleyen LessonReminder job'larını yeniden hesaplar veya (kapatılırsa) iptal eder, audit_log'a yazar
