@@ -22,7 +22,12 @@ Açıksa Actions'ın "Deploy" koşusunu `gh run` ile takip et, elle SSH deploy'u
 
 ## Adımlar
 
-### 1. Yerel durumu kontrol et
+**Sıra sabittir: önce commit + push (main), sonra deploy.** "deploy et" komutu çalışma
+ağacındaki değişiklikleri de kapsar — kullanıcıya ayrıca "commit'leyeyim mi?" diye sorma,
+commit'lenmemiş iş varken sunucuya dokunma. Sunucu yalnızca `origin/main`'deki commit'i
+çeker; push edilmemiş değişiklik canlıya hiç gitmez.
+
+### 1. Yerel durumu kontrol et ve commit'le
 
 ```bash
 git status --short
@@ -32,9 +37,10 @@ git log --oneline HEAD..origin/main   # uzakta olup yerelde olmayanlar
 ```
 
 - Dal `main` değilse dur ve kullanıcıya sor — production yalnızca `main`'den çıkar.
-- **Commit'lenmemiş değişiklik varsa:** `abdera-commit` skill'inin adımlarını uygula (Türkçe
-  conventional-commit, **zorunlu secret taraması**, `.env`/`appsettings.*.json` staged ise çıkar).
-  Repo **public** — secret şüphesinde onay almadan devam etme.
+- **Commit'lenmemiş değişiklik varsa (her zaman ilk iş):** `abdera-commit` skill'inin adımlarını
+  uygula (Türkçe conventional-commit, **zorunlu secret taraması**, `.env`/`appsettings.*.json`
+  staged ise çıkar). Repo **public** — yalnızca secret şüphesinde durup onay al; bunun dışında
+  sormadan commit'le ve adım 2'ye geç.
 
 ### 2. Push et
 
