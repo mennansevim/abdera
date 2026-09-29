@@ -47,6 +47,8 @@ export interface LessonLayout {
   column: number;
   /** Çakışma grubu içindeki toplam sütun sayısı */
   columns: number;
+  /** Günün içindeki çakışma kümesinin sırası - aynı kümedeki dersler birlikte gruplanabilir */
+  cluster: number;
 }
 
 /**
@@ -76,16 +78,18 @@ export function layoutDayLessons<T extends GridLessonInput>(
   let cluster: Entry[] = [];
   let clusterEnd = -Infinity;
   const columnEnds: number[] = [];
+  let clusterIndex = 0;
 
   function flushCluster() {
     if (!cluster.length) return;
     const totalColumns = Math.max(...cluster.map((entry) => entry.column)) + 1;
+    const currentCluster = clusterIndex++;
     for (const entry of cluster) {
       const startMinutes = new Date(entry.lesson.startAt).getHours() * 60 + new Date(entry.lesson.startAt).getMinutes() - window.startHour * 60;
       const durationMinutes = Math.max(15, entry.endMin - entry.startMin);
       const top = Math.max(0, Math.min(1, startMinutes / windowMinutes));
       const height = Math.max(0.02, Math.min(1 - top, durationMinutes / windowMinutes));
-      result.set(entry.lesson.id, { top, height, column: entry.column, columns: totalColumns });
+      result.set(entry.lesson.id, { top, height, column: entry.column, columns: totalColumns, cluster: currentCluster });
     }
     cluster = [];
     columnEnds.length = 0;

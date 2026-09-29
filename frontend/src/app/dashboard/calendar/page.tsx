@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Icon } from "@/components/icons";
+import { Icon, instrumentBadgeStyle } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/attendance";
-import { useBillingDues, useMakeupCredits } from "@/lib/billing";
+import { useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
-import { computeHourWindow, layoutDayLessons, type HourWindow } from "@/lib/week-grid-layout";
+import { computeHourWindow, layoutDayLessons, type HourWindow, type LessonLayout } from "@/lib/week-grid-layout";
 import { Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
 import { MakeupScheduler, type MakeupSchedulerContext } from "./makeup-scheduler";
@@ -148,6 +148,14 @@ function isLessonActive(lesson: CalendarLesson, now: Date) {
     && now.getTime() < new Date(lesson.endAt).getTime();
 }
 
+// Yan yana bölünmüş dar kart için: "Zeynep Azra Yıldız" -> "Zeynep Y.". Tam ad kesilip
+// "Zeyn…" olunca kim olduğu okunmuyordu.
+function shortStudentName(name: string) {
+  const parts = name.split(" ").filter(Boolean);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1]!.charAt(0).toLocaleUpperCase("tr-TR")}.`;
+}
+
 function studentInitials(name: string) {
   return name
     .split(" ")
@@ -243,13 +251,6 @@ export default function CalendarPage() {
       : [...ALL_INSTRUMENT_FILTERS]),
     [myInstrumentNames],
   );
-  // Aidat/tahsilat verisi tamamen Admin'e ait (docs/04-permissions.md) - Teacher oturumunda
-  // bu istek hiç gönderilmez, yalnızca sonucu (gecikmiş aidat rozeti) Admin görür.
-  const { data: dues } = useBillingDues({ enabled: isAdmin });
-  const overdueStudentIds = useMemo(
-    () => new Set((dues ?? []).filter((due) => due.status === "Overdue").map((due) => due.studentId)),
-    [dues],
-  );
   const { data: rawLessons, isLoading, isError, isFetching, refetch } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
   const { data: rawTimelineLessons, isLoading: timelineLoading, isError: timelineError, isFetching: timelineFetching, refetch: refetchTimeline } = useCalendar(timelineRange.from.toISOString(), timelineRange.to.toISOString());
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
@@ -273,6 +274,10 @@ export default function CalendarPage() {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const isCurrentWeek = startOfWeek(now).getTime() === weekStart.getTime();
   const colors = useMemo(() => buildInstrumentColorMap([...lessons, ...timelineLessons].map((lesson) => lesson.instrumentName)), [lessons, timelineLessons]);
+  const legendInstruments = useMemo(
+    () => [...new Set(visibleLessons.map((lesson) => lesson.instrumentName))].sort((a, b) => a.localeCompare(b, "tr-TR")),
+    [visibleLessons],
+  );
   const hourWindow = useMemo(() => computeHourWindow(visibleLessons), [visibleLessons]);
   const totalMinutes = useMemo(() => visibleLessons.reduce((total, lesson) => total + lessonDurationMinutes(lesson), 0), [visibleLessons]);
   const activeFilterCount = Number(instrumentFilter !== "Hepsi")
@@ -296,6 +301,23 @@ export default function CalendarPage() {
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="font-serif text-[1.45rem] font-bold tracking-[-0.01em] sm:text-[1.7rem]">Ders Programı</h1>
           <p className="text-xs font-semibold text-[var(--muted)]">{visibleLessons.length} ders · {formatLessonTotal(totalMinutes)}</p>
+          {/* Renk açıklaması: dar kartlarda enstrüman adı yazılamadığı için hangi rengin hangi
+              ders olduğu burada okunur. Yalnızca bu haftanın görünen enstrümanları listelenir. */}
+          {legendInstruments.length > 0 && (
+            <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:ml-auto" aria-label="Enstrüman renkleri">
+              {legendInstruments.map((name) => {
+                const tone = colors.get(name) ?? INSTRUMENT_TONES[0];
+                return (
+                  <li key={name} className="flex items-center gap-1.5 text-xs font-bold" style={{ color: tone.text }}>
+                    <span className="grid h-5 w-5 place-items-center rounded-[.3rem] border-l-[3px]" style={{ background: tone.bg, borderLeftColor: tone.border }} aria-hidden="true">
+                      <Icon name={instrumentBadgeStyle(name).icon} className="h-3.5 w-3.5" style={{ color: tone.border }} />
+                    </span>
+                    {name}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </header>
 
@@ -407,7 +429,6 @@ export default function CalendarPage() {
             canSchedule={!!canSchedule}
             hourWindow={hourWindow}
             now={now}
-            overdueStudentIds={overdueStudentIds}
             onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setMakeupContext(null); setShowSeriesForm(false); }}
             onPlanMakeup={(lesson) => {
               setMakeupContext({
@@ -442,7 +463,6 @@ function WeeklyGrid({
   canSchedule,
   hourWindow,
   now,
-  overdueStudentIds,
   onDoubleClickSlot,
   onPlanMakeup,
 }: {
@@ -454,7 +474,6 @@ function WeeklyGrid({
   canSchedule: boolean;
   hourWindow: HourWindow;
   now: Date;
-  overdueStudentIds: Set<string>;
   onDoubleClickSlot: (slot: QuickAddSlot) => void;
   onPlanMakeup: (lesson: CalendarLesson) => void;
 }) {
@@ -665,7 +684,6 @@ function WeeklyGrid({
               isAdmin={isAdmin}
               canManage={canSchedule}
               hourWindow={hourWindow}
-              overdueStudentIds={overdueStudentIds}
               draggingId={draggingId}
               movingId={movingId}
               hoverSlot={hoverSlot?.day === day.toDateString() ? hoverSlot : null}
@@ -693,7 +711,7 @@ function WeeklyGrid({
                 {WEEK_DAYS_TR[index]}
               </h3>
               <div className="space-y-2 pl-9">
-                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} overdue={overdueStudentIds.has(lesson.studentId)} onOpen={() => setOpenLesson(lesson)} />)}
+                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} onOpen={() => setOpenLesson(lesson)} />)}
                 {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
               </div>
             </div>
@@ -814,7 +832,6 @@ function GridDayColumn({
   isAdmin,
   canManage,
   hourWindow,
-  overdueStudentIds,
   draggingId,
   movingId,
   hoverSlot,
@@ -832,7 +849,6 @@ function GridDayColumn({
   isAdmin: boolean;
   canManage: boolean;
   hourWindow: HourWindow;
-  overdueStudentIds: Set<string>;
   draggingId: string | null;
   movingId: string | null;
   hoverSlot: { minutes: number; label: string; heightPercent: number } | null;
@@ -846,6 +862,8 @@ function GridDayColumn({
 }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
   const layout = useMemo(() => layoutDayLessons(entries, hourWindow, { minDurationMinutes: LESSON_CARD_MIN_MINUTES }), [entries, hourWindow]);
+  const blocks = useMemo(() => buildGridBlocks(entries, layout), [entries, layout]);
+  const [openGroup, setOpenGroup] = useState<CalendarLesson[] | null>(null);
   const isToday = day.toDateString() === new Date().toDateString();
   const totalHours = hourWindow.endHour - hourWindow.startHour;
   const totalMinutes = totalHours * 60;
@@ -877,20 +895,32 @@ function GridDayColumn({
         </span>
       )}
 
-      {entries.map((lesson) => {
+      {blocks.map((block) => {
+        if (block.kind === "group") {
+          return (
+            <LessonGroupCard
+              key={`group-${block.lessons[0]!.id}`}
+              lessons={block.lessons}
+              top={block.top}
+              height={block.height}
+              colors={colors}
+              now={now}
+              onOpen={() => setOpenGroup(block.lessons)}
+            />
+          );
+        }
+        const { lesson, position } = block;
         const start = new Date(lesson.startAt);
         const end = new Date(lesson.endAt);
-        const position = layout.get(lesson.id);
-        if (!position) return null;
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
         const isPast = end.getTime() <= now.getTime();
         const draggable = canManage && lesson.status === "Normal" && !isPast;
         const isCancelled = lesson.status === "Cancelled";
         const active = isLessonActive(lesson, now);
-        const overdue = overdueStudentIds.has(lesson.studentId);
-        const gapPct = 1.5;
-        const width = `calc(${100 / position.columns}% - ${gapPct}px)`;
-        const left = `calc(${(position.column / position.columns) * 100}% + ${gapPct / 2}px)`;
+        const split = position.columns > 1;
+        const gapPx = 4;
+        const width = `calc(${100 / position.columns}% - ${gapPx + (split ? 0 : 4)}px)`;
+        const left = `calc(${(position.column / position.columns) * 100}% + ${gapPx / 2 + (split ? 0 : 2)}px)`;
         return (
           <button
             type="button"
@@ -901,38 +931,191 @@ function GridDayColumn({
             onDragEnd={onDragEndLesson}
             onClick={() => onOpenLesson(lesson)}
             onDoubleClick={(event) => event.stopPropagation()}
-            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${isPast ? " · Geçmiş ders" : ""}${overdue ? " · Aidat gecikmiş" : ""}`}
-            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${isPast ? ", geçmiş ders" : ""}${overdue ? ", aidat gecikmiş" : ""}. Detayları aç`}
-            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : isPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${isPast ? " · Geçmiş ders" : ""}`}
+            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${isPast ? ", geçmiş ders" : ""}. Detayları aç`}
+            className={`pressable absolute z-10 flex flex-col overflow-hidden rounded-lg border border-black/[.04] border-l-4 px-2.5 py-1 text-left shadow-[0_1px_2px_rgba(80,48,24,.08)] transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : isPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem`, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
-            {/* Yalnızca Admin oturumunda dolu gelir (overdueStudentIds) - Teacher'a mali veri
-                sızmaz, çünkü hook Teacher için hiç istek atmıyor (docs/04-permissions.md). */}
-            {overdue && <span className="absolute right-1 top-1 z-10 grid h-3.5 w-3.5 place-items-center rounded-full bg-[var(--danger)] text-white shadow-sm" aria-hidden="true"><Icon name="alert-triangle" className="h-2.5 w-2.5" strokeWidth={2.6} /></span>}
-            <span className="flex items-center justify-between gap-1">
-              <span className={`block text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{formatTime(start)}–{formatTime(end)}</span>
-              {active && <span className="rounded-full bg-[var(--brand)] px-1.5 py-0.5 text-[.75rem] font-extrabold uppercase tracking-wide text-white">Şimdi</span>}
+            {/* Kart düzeni: önce kim (öğrenci, kalın), altında ne zaman. Hangi ders olduğunu sol
+                şerit + zemin rengi söyler, anahtarı başlıktaki renk açıklamasıdır. Yan yana iki
+                kartta yalnızca başlangıç saati yazılır, isim kesilmesin diye. */}
+            {/* Enstrüman fligranı (çizgi çizim): hangi ders olduğunu renge ek olarak şekille de
+                söyler - renk ayrımı zor görenler ve dar kartlar için. Yazının arkasında kalır. */}
+            <Icon
+              name={instrumentBadgeStyle(lesson.instrumentName).icon}
+              strokeWidth={0.7}
+              className="pointer-events-none absolute -bottom-2.5 -right-1.5 h-[3.4rem] w-[3.4rem] opacity-35"
+              style={{ color: tone.border }}
+            />
+            <span className="relative flex min-w-0 items-center gap-1.5">
+              <span className={`min-w-0 flex-1 truncate text-[.8rem] font-bold leading-tight ${isCancelled ? "line-through" : ""}`}>{split ? shortStudentName(lesson.studentName) : lesson.studentName}</span>
+              {active &&<span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--brand)]" aria-hidden="true" />}
             </span>
-            <span className={`mt-0.5 block truncate text-[.75rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
-            <span className="block truncate text-[.75rem] opacity-75">{lesson.instrumentName}{isAdmin ? ` · ${lesson.teacherName}` : ""}</span>
+            <span className={`relative mt-0.5 block truncate text-[.75rem] tabular-nums opacity-80 ${isCancelled ? "line-through" : ""}`}>
+              {split ? formatTime(start) : `${formatTime(start)} – ${formatTime(end)}`}
+            </span>
+            {/* Öğretmen üçüncü satır: yalnızca sığdığı uzunluktaki (≥60 dk) derslerde, yoksa yarım
+                kesilmiş bir satır görünüyordu. */}
+            {isAdmin && !split && lessonDurationMinutes(lesson) >= 60 && <span className="relative mt-auto block truncate text-[.75rem] opacity-65">{lesson.teacherName}</span>}
           </button>
         );
       })}
+
+      {/* Modal portal ile body'ye çizilse de React olayları bileşen ağacında kabarır: listede
+          çift tıklama sütunun "yeni ders" hızlı ekleme davranışını tetiklemesin. */}
+      {openGroup && (
+        <span className="contents" onDoubleClick={(event) => event.stopPropagation()}>
+          <LessonGroupDialog
+            lessons={openGroup}
+            colors={colors}
+            isAdmin={isAdmin}
+            now={now}
+            onOpenLesson={(lesson) => { setOpenGroup(null); onOpenLesson(lesson); }}
+            onClose={() => setOpenGroup(null)}
+          />
+        </span>
+      )}
     </div>
   );
 }
 
-function AgendaLessonCard({ lesson, tone, showTeacher, active = false, overdue = false, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; overdue?: boolean; onOpen: () => void }) {
+// Aynı anda en fazla bu kadar ders yan yana ayrı kart olarak çizilir. Fazlası sütunu okunmaz
+// şeritlere bölüyordu (8 ders = 8 tane "0…" kutusu); onun yerine tek bir grup kartı gösterilir.
+const MAX_SIDE_BY_SIDE = 2;
+
+type GridBlock =
+  | { kind: "lesson"; lesson: CalendarLesson; position: LessonLayout }
+  | { kind: "group"; lessons: CalendarLesson[]; top: number; height: number };
+
+function buildGridBlocks(entries: CalendarLesson[], layout: Map<string, LessonLayout>): GridBlock[] {
+  const clusters = new Map<number, { lesson: CalendarLesson; position: LessonLayout }[]>();
+  for (const lesson of entries) {
+    const position = layout.get(lesson.id);
+    if (!position) continue;
+    const members = clusters.get(position.cluster) ?? [];
+    members.push({ lesson, position });
+    clusters.set(position.cluster, members);
+  }
+  const blocks: GridBlock[] = [];
+  for (const members of clusters.values()) {
+    if (members[0]!.position.columns <= MAX_SIDE_BY_SIDE) {
+      for (const member of members) blocks.push({ kind: "lesson", ...member });
+      continue;
+    }
+    const top = Math.min(...members.map((member) => member.position.top));
+    const bottom = Math.max(...members.map((member) => member.position.top + member.position.height));
+    blocks.push({
+      kind: "group",
+      lessons: members.map((member) => member.lesson).sort((a, b) => a.startAt.localeCompare(b.startAt) || a.studentName.localeCompare(b.studentName, "tr-TR")),
+      top,
+      height: bottom - top,
+    });
+  }
+  return blocks;
+}
+
+function LessonGroupCard({ lessons, top, height, colors, now, onOpen }: { lessons: CalendarLesson[]; top: number; height: number; colors: Map<string, InstrumentTone>; now: Date; onOpen: () => void }) {
+  const first = new Date(lessons[0]!.startAt);
+  const last = new Date(Math.max(...lessons.map((lesson) => new Date(lesson.endAt).getTime())));
+  const active = lessons.some((lesson) => isLessonActive(lesson, now));
+  const allPast = last.getTime() <= now.getTime();
+  // Enstrüman başına kaç ders olduğu: grup kartı "ne var burada" sorusunu açmadan yanıtlasın.
+  const byInstrument = [...lessons.reduce((map, lesson) => map.set(lesson.instrumentName, (map.get(lesson.instrumentName) ?? 0) + 1), new Map<string, number>())]
+    .sort((a, b) => b[1] - a[1]);
+  const shown = lessons.slice(0, 4);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      onDoubleClick={(event) => event.stopPropagation()}
+      aria-label={`${formatTime(first)} – ${formatTime(last)} arası ${lessons.length} ders: ${byInstrument.map(([name, count]) => `${count} ${name}`).join(", ")}. Listeyi aç`}
+      className={`pressable absolute inset-x-[3px] z-10 flex flex-col gap-0.5 overflow-hidden rounded-lg border border-[var(--line)] bg-white px-2 py-1 text-left shadow-[0_1px_2px_rgba(80,48,24,.08)] hover:z-20 hover:border-[var(--brand)] hover:shadow-md ${allPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+      style={{ top: `${top * 100}%`, height: `${height * 100}%`, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem` }}
+    >
+      {/* Üst üste binen baş harf rozetleri (enstrüman renginde): kimler ve hangi dersler, tek
+          bakışta. 45 dakikalık kartta iki satır sığar; önce rozetler, altında saat aralığı. */}
+      <span className="flex items-center gap-1.5">
+        <span className="flex min-w-0 items-center">
+          {shown.map((lesson, index) => {
+            const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
+            return (
+              <span
+                key={lesson.id}
+                className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] border-white text-[.6rem] font-extrabold ${index > 0 ? "-ml-1.5" : ""} ${lesson.status === "Cancelled" ? "opacity-50" : ""}`}
+                style={{ background: tone.bg, color: tone.text, boxShadow: `inset 0 0 0 1.5px ${tone.border}`, zIndex: shown.length - index }}
+                aria-hidden="true"
+              >
+                {studentInitials(lesson.studentName)}
+              </span>
+            );
+          })}
+        </span>
+        <span className="ml-auto shrink-0 rounded-full bg-[var(--foreground)] px-1.5 text-[.75rem] font-extrabold leading-[1.15rem] text-white">{lessons.length} ders</span>
+      </span>
+      <span className="truncate text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">{formatTime(first)} – {formatTime(last)}</span>
+    </button>
+  );
+}
+
+function LessonGroupDialog({ lessons, colors, isAdmin, now, onOpenLesson, onClose }: { lessons: CalendarLesson[]; colors: Map<string, InstrumentTone>; isAdmin: boolean; now: Date; onOpenLesson: (lesson: CalendarLesson) => void; onClose: () => void }) {
+  const first = new Date(lessons[0]!.startAt);
+  const last = new Date(Math.max(...lessons.map((lesson) => new Date(lesson.endAt).getTime())));
+  return (
+    <Modal
+      open
+      title={`Çakışan ${lessons.length} ders`}
+      description={`${first.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · ${formatTime(first)} – ${formatTime(last)}`}
+      onClose={onClose}
+    >
+      <ul className="space-y-1.5">
+        {lessons.map((lesson) => {
+          const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
+          const active = isLessonActive(lesson, now);
+          return (
+            <li key={lesson.id}>
+              <button
+                type="button"
+                onClick={() => onOpenLesson(lesson)}
+                className={`pressable relative flex min-h-14 w-full items-center gap-3 overflow-hidden rounded-lg border border-black/[.04] border-l-4 px-3 py-2 text-left shadow-[0_1px_2px_rgba(80,48,24,.08)] hover:shadow-md ${lesson.status === "Cancelled" ? "opacity-60" : ""} ${active ? "ring-2 ring-[var(--brand)]" : ""}`}
+                style={{ background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
+              >
+                {/* Izgaradaki ders kartıyla aynı dil: önce öğrenci, altında saat; enstrümanı sağdaki
+                    çizgi fligran ve alt satırdaki ad söyler. */}
+                <Icon
+                  name={instrumentBadgeStyle(lesson.instrumentName).icon}
+                  strokeWidth={0.7}
+                  className="pointer-events-none absolute -bottom-3 right-2 h-[4.2rem] w-[4.2rem] opacity-35"
+                  style={{ color: tone.border }}
+                />
+                <span className="relative min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`truncate text-sm font-bold ${lesson.status === "Cancelled" ? "line-through" : ""}`}>{lesson.studentName}</span>
+                    {active && <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--brand)]" aria-hidden="true" />}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[.75rem] tabular-nums opacity-80">
+                    {formatTime(new Date(lesson.startAt))} – {formatTime(new Date(lesson.endAt))} · <span className="font-bold">{lesson.instrumentName}</span>{isAdmin ? ` · ${lesson.teacherName}` : ""}
+                  </span>
+                </span>
+                {lesson.status !== "Normal" && <span className="relative"><LessonStatusChip lesson={lesson} /></span>}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </Modal>
+  );
+}
+
+function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; onOpen: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   return (
-    <button type="button" onClick={onOpen} title={overdue ? "Aidat gecikmiş" : undefined} className={`pressable flex min-h-12 w-full items-center gap-3 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
+    <button type="button" onClick={onOpen} className={`pressable flex min-h-12 w-full items-center gap-3 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
       <span className="h-9 w-1 rounded-full" style={{ background: tone.border }} />
       <span className="w-20 shrink-0 text-[.75rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="block truncate text-xs font-bold">{lesson.studentName}</span>
-          {overdue && <><Icon name="alert-triangle" className="h-3.5 w-3.5 shrink-0 text-[var(--danger-strong)]" aria-hidden="true" /><span className="sr-only">Aidat gecikmiş</span></>}
           {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] font-extrabold uppercase text-white">Şimdi</span>}
         </span>
         <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
