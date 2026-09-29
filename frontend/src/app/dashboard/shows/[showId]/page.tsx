@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
+import { FormActions, FormMessage, Modal, PageHeader, StatStrip } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useInstruments, useStudents, useTeachers } from "@/lib/people";
@@ -113,7 +113,7 @@ export default function ShowProgramPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="print:hidden">
         <PageHeader
           title={show.title}
@@ -134,25 +134,21 @@ export default function ShowProgramPage() {
         <p className="text-sm">{formatDateTime(show.startsAt)}{show.venueName ? ` · ${show.venueName}` : ""}</p>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-3 print:hidden" aria-label="Program özeti">
-        {[
-          { label: "Sıra", value: `${show.items.length}`, detail: "programdaki toplam satır" },
-          { label: "Sahneye çıkan", value: `${new Set(show.items.filter((item) => item.studentId).map((item) => item.studentId)).size}`, detail: "farklı öğrenci" },
-          { label: "Tahmini süre", value: formatDuration(show.totalDurationMinutes), detail: "girilen sürelerin toplamı" },
-        ].map((tile) => (
-          <article key={tile.label} className="app-card p-4">
-            <p className="text-[.75rem] font-bold text-[var(--muted)]">{tile.label}</p>
-            <p className="mt-1 text-lg font-bold tabular-nums">{tile.value}</p>
-            <p className="text-meta mt-0.5">{tile.detail}</p>
-          </article>
-        ))}
-      </section>
+      <StatStrip
+        label="Program özeti"
+        className="print:hidden"
+        items={[
+          { key: "items", label: "Sıra", value: `${show.items.length}`, hint: "programdaki toplam satır" },
+          { key: "performers", label: "Sahneye çıkan", value: `${new Set(show.items.filter((item) => item.studentId).map((item) => item.studentId)).size}`, hint: "farklı öğrenci" },
+          { key: "duration", label: "Tahmini süre", value: formatDuration(show.totalDurationMinutes), hint: "girilen sürelerin toplamı" },
+        ]}
+      />
 
       <section className="app-card overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--surface-muted)]/60 px-4 py-3 print:hidden">
-          <div>
-            <h2 className="text-title">Program</h2>
-            <p className="text-meta mt-0.5">Sürükleyerek veya okları kullanarak sırayı değiştir.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] px-4 py-2 print:hidden">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+            <h2 className="text-sm font-bold">Program</h2>
+            <p className="text-meta">Sürükleyerek veya okları kullanarak sırayı değiştir.</p>
           </div>
           {isAdmin && (
             <div className="flex flex-wrap gap-2">

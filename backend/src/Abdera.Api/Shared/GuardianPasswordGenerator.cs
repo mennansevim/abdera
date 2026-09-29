@@ -1,28 +1,21 @@
 namespace Abdera.Api.Shared;
 
-// docs/13-toplu-kurulum-ve-fix-list.md - veli ilk şifresi mnemonik bir desenle üretilir:
-//   {ÇocukAdıİlk3, baş harf büyük}{VeliAdıİlk2, küçük}{TelefonSon4}
-// Örn: çocuk "Zeynep", veli "Ayşe", telefon +90 532 123 45 67 -> "Zeyay4567".
-// Türkçe karakterler ASCII'ye indirgenir ki veli WhatsApp'tan gelen şifreyi herhangi bir
-// klavyeyle sorunsuz girebilsin. Güvenlik: kamuya açık bilgiden türer, YALNIZCA ilk şifredir
-// (bkz. FIX-BACKLOG: "ilk girişte şifre değiştir"). Tek kaynak - hem toplu kurulum agent'ı
-// hem admin "şifre gönder" akışı bunu kullanır.
+// docs/10-decisions.md Q1 - veli varsayılan şifresi ad soyaddan türer:
+//   {soyad, küçük harf}{adın ilk harfi, küçük}
+// Örn: "Mennan Sevim" -> "sevimm", "Ayşe Nur Çelik" -> "celika".
+// Türkçe karakterler ASCII'ye indirgenir ki veli şifreyi herhangi bir klavyeyle sorunsuz
+// girebilsin; boşluk/tire gibi harf olmayan her şey atılır. Güvenlik: kamuya açık bilgiden
+// türediği için YALNIZCA ilk şifredir - portal, bu şifreyle giren veliye değiştirmesini
+// hatırlatır (GuardianAuth.ChangePasswordAsync). Tek kaynak: giriş yedeği, admin sıfırlama
+// ve "varsayılan şifre mi" denetimi hep bunu kullanır.
 public static class GuardianPasswordGenerator
 {
-    public static string Generate(string childFirstName, string guardianFirstName, string phoneNumber)
+    public static string Generate(string firstName, string lastName)
     {
-        var child = OnlyLetters(ToAscii(childFirstName));
-        var guardian = OnlyLetters(ToAscii(guardianFirstName));
-
-        var digits = new string((phoneNumber ?? "").Where(char.IsDigit).ToArray());
-        var last4 = digits.Length >= 4 ? digits[^4..] : digits.PadLeft(4, '0');
-
-        var childPart = (child.Length >= 3 ? child[..3] : child.PadRight(3, 'x'));
-        childPart = char.ToUpperInvariant(childPart[0]) + childPart[1..].ToLowerInvariant();
-
-        var guardianPart = (guardian.Length >= 2 ? guardian[..2] : guardian.PadRight(2, 'x')).ToLowerInvariant();
-
-        return $"{childPart}{guardianPart}{last4}";
+        var first = OnlyLetters(ToAscii(firstName)).ToLowerInvariant();
+        var last = OnlyLetters(ToAscii(lastName)).ToLowerInvariant();
+        var initial = first.Length > 0 ? first[..1] : "";
+        return $"{last}{initial}";
     }
 
     private static string ToAscii(string? input)

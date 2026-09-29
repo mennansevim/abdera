@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
-import { FormActions, FormMessage, Modal, RowMenu, RowMenuItem } from "@/components/ui";
+import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
   formatWeeklySchedule,
@@ -14,6 +14,7 @@ import {
   type StudentLessonSeries,
 } from "@/lib/scheduling";
 import {
+  useResetGuardianPassword,
   useCreateAndLinkGuardian,
   useCreateEnrollment,
   useEndEnrollment,
@@ -47,6 +48,18 @@ export function StudentDetail({
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
+  const resetGuardianPassword = useResetGuardianPassword();
+  const [guardianCredential, setGuardianCredential] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function resetGuardianLogin(guardian: StudentGuardianLink) {
+    setGuardianCredential(null);
+    try {
+      const result = await resetGuardianPassword.mutateAsync(guardian.id);
+      setGuardianCredential({ ok: true, text: `${guardian.firstName} ${guardian.lastName} · kullanıcı adı ${result.phoneNumber} · şifre ${result.password} (WhatsApp'tan da gönderildi)` });
+    } catch (err) {
+      setGuardianCredential({ ok: false, text: err instanceof ApiError ? (err.detail ?? err.title) : "Şifre sıfırlanamadı." });
+    }
+  }
   const [programEnrollmentId, setProgramEnrollmentId] = useState<string | null>(null);
   const { data: guardians, isLoading: guardiansLoading } = useStudentGuardians(canManage ? studentId : "");
   const { data: enrollments, isLoading: enrollmentsLoading } = useEnrollments(studentId);
@@ -95,6 +108,7 @@ export function StudentDetail({
               <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Veliler</h3><p className="text-meta">{guardiansLoading ? "Yükleniyor…" : `${guardians?.length ?? 0} kayıtlı kişi`}</p></div>
               <button type="button" onClick={() => setShowGuardianForm(true)} className="pressable min-h-11 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Veli</button>
             </div>
+            {guardianCredential && <div className="px-3 pt-2">{guardianCredential.ok ? <Notice onDismiss={() => setGuardianCredential(null)}>{guardianCredential.text}</Notice> : <FormMessage tone="error">{guardianCredential.text}</FormMessage>}</div>}
             <ul className="divide-y divide-[var(--line)]">
               {guardians?.map((guardian) => (
                 <li key={guardian.id} className="flex min-h-12 items-center gap-2 px-3 py-2">
@@ -123,6 +137,7 @@ export function StudentDetail({
                         <RowMenuItem icon="pencil" onClick={() => { close(); setEditingGuardian(guardian); }}>Veliyi düzenle</RowMenuItem>
                         <RowMenuItem icon="phone" onClick={() => { close(); window.location.href = `tel:${guardian.phoneNumber}`; }}>Ara</RowMenuItem>
                         <RowMenuItem icon="whatsapp" onClick={() => { close(); window.open(whatsAppChatUrl(guardian.phoneNumber), "_blank", "noopener,noreferrer"); }}>WhatsApp&apos;tan yaz</RowMenuItem>
+                        {isAdmin && <RowMenuItem icon="shield" onClick={() => { close(); void resetGuardianLogin(guardian); }}>Giriş şifresini sıfırla</RowMenuItem>}
                       </>
                     )}
                   </RowMenu>
@@ -459,7 +474,7 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="form-label">Ders süresi
           <select value={durationMinutes} onChange={(event) => setDurationMinutes(Number(event.target.value))} className="field text-sm">

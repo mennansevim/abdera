@@ -18,7 +18,7 @@ const EXAMPLE_GUARDIAN_PHONE = "0555 000 00 01";
 const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 
 // docs/10-decisions.md Karar F (ikinci) reversal: veli artık telefon + KALICI ŞİFRE ile giriş
-// yapar (şifre okul yönetimi tarafından üretilip WhatsApp'tan gönderilir). WhatsApp OTP ikincil
+// yapar (ilk şifre ad soyaddan türer, docs/10-decisions.md Q1; veli portaldan değiştirir). WhatsApp OTP ikincil
 // seçenek olarak korunur ("Şifreni bilmiyor musun?"). Demo yayınında örnek veli düğmesi vardır.
 type Mode = "password" | "otp-phone" | "otp-code";
 
@@ -86,7 +86,7 @@ export default function GuardianLoginPage() {
     mode === "otp-code" ? "Telefonuna gelen kodu gir" : "Veli girişi";
   const subtitle =
     mode === "password"
-      ? "Kayıtlı telefon numaran ve okuldan WhatsApp ile aldığın şifreyle giriş yap."
+      ? "Kayıtlı telefon numaran ve şifrenle giriş yap. İlk şifreni okul yönetimi iletir; girdikten sonra değiştirebilirsin."
       : mode === "otp-phone"
         ? "Kayıtlı telefon numarana WhatsApp üzerinden tek kullanımlık bir kod gönderelim."
         : `${phoneNumber} numarasına gönderilen 6 haneli kodu gir.`;
@@ -115,7 +115,7 @@ export default function GuardianLoginPage() {
           {/* --- Birincil: telefon + şifre --- */}
           {mode === "password" && (
             <form onSubmit={handlePasswordLogin}>
-              <label htmlFor="phoneNumber" className="mb-1.5 block text-[.75rem] font-semibold text-[#625c68]">Telefon numarası</label>
+              <label htmlFor="phoneNumber" className="mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Telefon numarası</label>
               <input
                 id="phoneNumber"
                 type="tel"
@@ -129,7 +129,7 @@ export default function GuardianLoginPage() {
                 className="field text-sm"
               />
 
-              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[#625c68]">Şifre</label>
+              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>
               <input
                 id="password"
                 type="password"
@@ -137,20 +137,20 @@ export default function GuardianLoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="WhatsApp ile gelen şifre"
+                placeholder="Şifren"
                 className="field text-sm"
               />
 
               {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
 
-              <button type="submit" disabled={login.isPending} className="pressable mt-5 min-h-12 w-full rounded-lg bg-[#5948aa] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[#4d3c9b] disabled:cursor-wait disabled:opacity-60">
+              <button type="submit" disabled={login.isPending} className="btn btn-primary mt-4 w-full text-sm disabled:cursor-wait">
                 {login.isPending ? "Giriş yapılıyor…" : "Giriş yap"}
               </button>
 
               <button
                 type="button"
                 onClick={() => { setMode("otp-phone"); setError(null); }}
-                className="pressable mt-3 min-h-11 w-full rounded-lg border border-dashed border-[#b6a8e4] bg-[#f5f1ff] px-4 text-xs font-bold text-[#5948aa] hover:bg-[#eee8ff]"
+                className="btn btn-quiet mt-2 w-full border-dashed text-xs"
               >
                 Şifreni bilmiyor musun? WhatsApp ile kod al
               </button>
@@ -160,7 +160,7 @@ export default function GuardianLoginPage() {
           {/* --- İkincil: OTP telefon adımı --- */}
           {mode === "otp-phone" && (
             <form onSubmit={handleRequestOtp}>
-              <label htmlFor="otpPhone" className="mb-1.5 block text-[.75rem] font-semibold text-[#625c68]">Telefon numarası</label>
+              <label htmlFor="otpPhone" className="mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Telefon numarası</label>
               <input
                 id="otpPhone"
                 type="tel"
@@ -176,7 +176,7 @@ export default function GuardianLoginPage() {
 
               {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
 
-              <button type="submit" disabled={requestOtp.isPending} className="pressable mt-5 min-h-12 w-full rounded-lg bg-[#5948aa] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[#4d3c9b] disabled:cursor-wait disabled:opacity-60">
+              <button type="submit" disabled={requestOtp.isPending} className="btn btn-primary mt-4 w-full text-sm disabled:cursor-wait">
                 {requestOtp.isPending ? "Kod gönderiliyor…" : "Kod gönder"}
               </button>
 
@@ -193,7 +193,7 @@ export default function GuardianLoginPage() {
           {/* --- İkincil: OTP kod adımı --- */}
           {mode === "otp-code" && (
             <form onSubmit={handleVerifyOtp}>
-              <label htmlFor="code" className="mb-1.5 block text-[.75rem] font-semibold text-[#625c68]">Doğrulama kodu</label>
+              <label htmlFor="code" className="mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Doğrulama kodu</label>
               <input
                 ref={codeRef}
                 id="code"
@@ -217,7 +217,7 @@ export default function GuardianLoginPage() {
 
               {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
 
-              <button type="submit" disabled={verifyOtp.isPending || code.length !== 6} className="pressable mt-5 min-h-12 w-full rounded-lg bg-[#5948aa] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(74,55,143,.16)] hover:bg-[#4d3c9b] disabled:cursor-wait disabled:opacity-60">
+              <button type="submit" disabled={verifyOtp.isPending || code.length !== 6} className="btn btn-primary mt-4 w-full text-sm disabled:cursor-wait">
                 {verifyOtp.isPending ? "Giriş yapılıyor…" : "Giriş yap"}
               </button>
 

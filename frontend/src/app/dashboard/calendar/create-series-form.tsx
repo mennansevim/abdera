@@ -82,7 +82,7 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
   }
 
   return (
-    <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
+    <form onSubmit={handleSubmit} className="min-w-0 space-y-3">
       <div className={`grid min-w-0 gap-3 ${isTeacher && activeEnrollments.length <= 1 ? "" : "sm:grid-cols-2"}`}>
         <label className="form-label min-w-0">
           1 · Öğrenci

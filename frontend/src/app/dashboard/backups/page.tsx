@@ -52,7 +52,7 @@ function BackupsPageContent() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
         title="Yedekleme"
         description="Günlük şifreli veritabanı yedeklemesi ve sistem sağlık durumu."
@@ -60,7 +60,7 @@ function BackupsPageContent() {
       />
 
       {health && health.level !== "Healthy" && (
-        <section role="alert" className="app-card flex items-start gap-3 border-[var(--danger)]/30 bg-[var(--danger-soft)] p-4">
+        <section role="alert" className="app-card flex items-start gap-3 border-[var(--danger)]/30 bg-[var(--danger-soft)] px-4 py-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/60 text-[var(--danger-strong)]"><Icon name="shield" className="h-5 w-5" /></span>
           <div>
             <p className="text-sm font-bold text-[var(--danger-strong)]">{health.detail ?? "Sistemde bir sorun var."}</p>
@@ -69,12 +69,12 @@ function BackupsPageContent() {
         </section>
       )}
 
-      <section className="app-card flex flex-wrap items-center justify-between gap-3 p-5">
+      <section className="app-card flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div>
           <h2 className="text-title">Manuel yedekleme</h2>
           <p className="text-meta mt-1">{backupDisabled ? "Harici yedekleme sağlayıcısı henüz yapılandırılmadı." : "Otomatik günlük yedeklemeyi beklemeden şimdi bir yedek al."}</p>
         </div>
-        <button type="button" onClick={triggerNow} disabled={trigger.isPending || backupDisabled} className="pressable min-h-11 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:opacity-50">
+        <button type="button" onClick={triggerNow} disabled={trigger.isPending || backupDisabled} className="btn btn-primary">
           {backupDisabled ? "Yedekleme kapalı" : trigger.isPending ? "Başlatılıyor…" : "Şimdi yedek al"}
         </button>
       </section>
@@ -85,22 +85,22 @@ function BackupsPageContent() {
         <table className="w-full min-w-[46rem] text-sm">
           <thead>
             <tr className="text-micro border-b border-[var(--line)] text-left">
-              <th className="px-3 py-3">Başlangıç</th>
-              <th className="px-3 py-3">Tür</th>
-              <th className="px-3 py-3">Durum</th>
-              <th className="px-3 py-3">Boyut</th>
-              <th className="px-3 py-3">Hata</th>
+              <th className="px-3 py-2">Başlangıç</th>
+              <th className="px-3 py-2">Tür</th>
+              <th className="px-3 py-2">Durum</th>
+              <th className="px-3 py-2">Boyut</th>
+              <th className="px-3 py-2">Hata</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && <tr><td colSpan={5} className="px-3 py-8 text-center text-sm text-[var(--muted)]">Yükleniyor…</td></tr>}
             {runs?.items.map((run) => (
               <tr key={run.id} className="border-b border-[var(--line)] last:border-0">
-                <td className="text-meta px-3 py-3">{new Date(run.startedAt).toLocaleString("tr-TR")}</td>
-                <td className="px-3 py-3">{run.triggeredManually ? "Manuel" : "Otomatik"}</td>
-                <td className={`px-3 py-3 font-bold ${STATUS_CLASS[run.status]}`}>{STATUS_LABELS[run.status]}</td>
-                <td className="text-meta px-3 py-3">{formatSize(run.sizeBytes)}</td>
-                <td className="text-meta max-w-xs px-3 py-3">
+                <td className="text-meta px-3 py-2">{new Date(run.startedAt).toLocaleString("tr-TR")}</td>
+                <td className="px-3 py-2">{run.triggeredManually ? "Manuel" : "Otomatik"}</td>
+                <td className={`px-3 py-2 font-bold ${STATUS_CLASS[run.status]}`}>{STATUS_LABELS[run.status]}</td>
+                <td className="text-meta px-3 py-2">{formatSize(run.sizeBytes)}</td>
+                <td className="text-meta max-w-xs px-3 py-2">
                   {run.errorMessage
                     ? <details className="group"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{run.errorMessage}</summary></details>
                     : "—"}
