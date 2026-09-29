@@ -125,6 +125,7 @@ builder.Services.AddBillingModule(enableHostedServices);
 builder.Services.AddMessagingModule(enableHostedServices);
 builder.Services.AddOpsModule(enableHostedServices);
 builder.Services.AddProgressModule(enableHostedServices);
+builder.Services.AddAttendanceModule(enableHostedServices);
 
 // --- Data Protection anahtarları kalıcı bir dizine yazılır ---
 // Aksi halde anahtarlar yalnızca bellekte tutulur ve her container yeniden başlatmasında

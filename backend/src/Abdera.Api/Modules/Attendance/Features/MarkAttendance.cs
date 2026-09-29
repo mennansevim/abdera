@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using Abdera.Api.Modules.Attendance.Domain;
+using Abdera.Api.Modules.Attendance.Infrastructure;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,7 +33,8 @@ public static class MarkAttendance
         return attendance is null ? Results.NotFound() : Results.Ok(ToResponse(attendance));
     }
 
-    private static async Task<IResult> MarkAsync(Guid lessonId, MarkRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> MarkAsync(
+        Guid lessonId, MarkRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IStaffNotifier notifier)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -40,6 +44,11 @@ public static class MarkAttendance
 
         var existing = await db.LessonAttendances.SingleOrDefaultAsync(a => a.LessonId == lessonId);
         var actorUserId = AuthContext.GetUserId(principal);
+
+        // Zildeki "öğrenci geldi mi?" sorusu cevaplandı - kim girerse girsin (öğretmen zilden,
+        // yönetici takvimden) soru aynı kayıtla birlikte kapanır.
+        await notifier.ClearReminderForAllAsync(
+            StaffNotificationType.AttendanceMissing, AttendanceReminderJob.ReferenceType, lessonId);
 
         if (existing is null)
         {

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Abdera.Api.Modules.Attendance.Features;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Progress.Domain;
@@ -132,6 +133,9 @@ public static class LessonNotes
                 HasPiece = note.PieceTitle is not null,
                 note.PieceDifficulty,
             })));
+        // Not yazılan derse öğrenci gelmiştir: yoklama hiç girilmediyse "geldi" olarak aynı
+        // kayıtla işlenir ve zildeki "öğrenci geldi mi?" sorusu kapanır.
+        await AttendanceFromNote.MarkPresentIfUnmarkedAsync(db, clock, notifier, lesson, AuthContext.GetUserId(principal));
         await db.SaveChangesAsync();
 
         // Yorum bekleyen son ders de yazıldıysa zildeki hatırlatma hemen kapanır (not önce

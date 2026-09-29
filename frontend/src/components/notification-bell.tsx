@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "./icons";
 import { Modal } from "./ui";
+import { ApiError } from "@/lib/api";
+import { useMarkAttendance } from "@/lib/attendance";
 import {
   useMarkAllStaffNotificationsRead,
   useMarkStaffNotificationRead,
@@ -30,10 +32,58 @@ const TYPE_META: Record<StaffNotificationType, { icon: IconName; tone: string; h
   StudentDeletionRequested: { icon: "students", tone: "bg-[var(--brand-soft)] text-[var(--brand-strong)]", href: "/dashboard/change-requests" },
   // Tek, tazelenen hatırlatma: notu yazılmamış dersler öğretmenin ana ekranındaki kartta listelenir.
   LessonNoteMissing: { icon: "note", tone: "bg-[var(--warning-soft)] text-[var(--warning-strong)]", href: "/dashboard#yorum-bekleyen-dersler" },
+  // "Öğrenci geldi mi?" - satırın kendisi değil Geldi/Gelmedi düğmeleri cevaplar (AttendanceQuestion).
+  AttendanceMissing: { icon: "students", tone: "bg-[var(--brand-soft)] text-[var(--brand-strong)]", href: "/dashboard/calendar" },
 };
 
 function metaFor(type: StaffNotificationType) {
   return TYPE_META[type] ?? TYPE_META.LessonMoved;
+}
+
+// Cevap bekleyen yoklama sorusu. Okundu işaretlemekle kapanmaz (sunucu reddeder); yalnızca
+// yoklama girilince kapanır. Cevaplanmış soru listede tekrar gösterilmez - iş bitti.
+function isOpenQuestion(notification: StaffNotification) {
+  return notification.type === "AttendanceMissing" && !notification.readAt;
+}
+
+// Kullanıcı isteği: "bildirim ekranında buton olsun geldi gelmedi diye. seçim yapılmayanlar
+// bildirimlerde kalsın." Cevap doğrudan yoklama ucuna gider (dersin id'si referenceId);
+// sunucu yoklamayla birlikte soruyu kapatır, liste yenilenince satır düşer.
+function AttendanceQuestion({ notification, onAnswered }: { notification: StaffNotification; onAnswered?: () => void }) {
+  const markAttendance = useMarkAttendance(notification.referenceId);
+  const [error, setError] = useState<string | null>(null);
+
+  function answer(status: "Present" | "Absent") {
+    setError(null);
+    markAttendance.mutate({ status }, {
+      onSuccess: () => onAnswered?.(),
+      onError: (err) => setError(err instanceof ApiError ? (err.detail ?? err.title) : "Yoklama kaydedilemedi."),
+    });
+  }
+
+  const pending = markAttendance.isPending;
+  return (
+    <div className="rounded-xl border border-[var(--brand)]/30 bg-[var(--brand-soft)]/45 p-3">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand-strong)]">
+          <Icon name="students" className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1 pr-6">
+          <span className="block text-xs font-bold">{notification.title}</span>
+          <span className="text-meta mt-1 block">{notification.body}</span>
+        </span>
+      </div>
+      <div className="mt-2.5 grid grid-cols-2 gap-2 pl-11">
+        <button type="button" onClick={() => answer("Present")} disabled={pending} className="pressable min-h-10 rounded-lg bg-[var(--success-strong)] px-3 text-xs font-bold text-white disabled:opacity-60">
+          {pending && markAttendance.variables?.status === "Present" ? "Kaydediliyor…" : "Geldi"}
+        </button>
+        <button type="button" onClick={() => answer("Absent")} disabled={pending} className="pressable min-h-10 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--danger-strong)] disabled:opacity-60">
+          {pending && markAttendance.variables?.status === "Absent" ? "Kaydediliyor…" : "Gelmedi"}
+        </button>
+      </div>
+      {error && <p role="alert" className="mt-2 pl-11 text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
+    </div>
+  );
 }
 
 function badgeText(count: number) {
@@ -55,7 +105,12 @@ export function NotificationBell({ variant = "sidebar" }: { variant?: "sidebar" 
   const markAllRead = useMarkAllStaffNotificationsRead();
   const openNotification = useOpenNotification();
   const unread = data?.unreadCount ?? 0;
-  const items = data?.items ?? [];
+  const allItems = data?.items ?? [];
+  // Cevap bekleyen yoklama soruları listenin en üstünde ayrı durur; cevaplanmış olanlar
+  // gösterilmez. Rozet onları da sayar - soru cevaplanana kadar zil boşalmaz.
+  const questions = allItems.filter(isOpenQuestion).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const items = allItems.filter((item) => item.type !== "AttendanceMissing");
+  const unreadOthers = items.filter((item) => !item.readAt).length;
   const label = unread ? `Bildirimler · ${unread} okunmamış` : "Bildirimler";
 
   const badge = unread > 0 && (
@@ -110,10 +165,19 @@ export function NotificationBell({ variant = "sidebar" }: { variant?: "sidebar" 
       )}
 
       <Modal open={open} title="Bildirimler" onClose={() => setOpen(false)} size="sm">
-        {items.length === 0 ? (
+        {items.length === 0 && questions.length === 0 ? (
           <p className="text-meta py-6 text-center">Yeni bildirim yok.</p>
         ) : (
           <div className="space-y-3">
+            {questions.length > 0 && (
+              <section aria-label="Yoklama bekleyen dersler" className="space-y-2">
+                <h3 className="text-micro text-[var(--brand-strong)]">Yoklama bekleyen dersler · {questions.length}</h3>
+                <ul className="space-y-2">
+                  {questions.map((question) => <li key={question.id}><AttendanceQuestion notification={question} /></li>)}
+                </ul>
+              </section>
+            )}
+            {questions.length > 0 && items.length > 0 && <div className="border-t border-[var(--line)]" aria-hidden="true" />}
             <ul className="space-y-2">
               {items.map((notification) => {
                 const meta = metaFor(notification.type);
@@ -142,7 +206,7 @@ export function NotificationBell({ variant = "sidebar" }: { variant?: "sidebar" 
                 );
               })}
             </ul>
-            {unread > 0 && (
+            {unreadOthers > 0 && (
               <div className="flex justify-end border-t border-[var(--line)] pt-3">
                 <button type="button" onClick={() => markAllRead.mutate()} disabled={markAllRead.isPending} className="btn btn-quiet">
                   Tümünü okundu işaretle
@@ -250,6 +314,24 @@ export function NotificationToasts() {
     >
       {toasts.map((toast) => {
         const meta = metaFor(toast.type);
+        // Ders bitince açılan "öğrenci geldi mi?" kartı düğmeleriyle gelir. Kartı kapatmak
+        // soruyu zilden SİLMEZ (sunucu okundu saymaz) - cevaplanana kadar zilde bekler.
+        if (toast.type === "AttendanceMissing") {
+          return (
+            <div key={toast.id} className="toast-in pointer-events-auto relative rounded-2xl bg-white shadow-[0_18px_40px_rgba(60,35,15,.22)]">
+              <AttendanceQuestion notification={toast} onAnswered={() => setToasts((current) => current.filter((item) => item.id !== toast.id))} />
+              <button
+                type="button"
+                onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))}
+                aria-label="Kartı kapat, soru bildirimlerde kalsın"
+                title="Sonra cevapla"
+                className="pressable absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-muted)]"
+              >
+                <Icon name="close" className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        }
         return (
           <button
             key={toast.id}

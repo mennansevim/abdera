@@ -58,6 +58,16 @@ public interface IStaffNotifier
     Task<bool> ClearTeacherReminderAsync(
         Guid teacherId, StaffNotificationType type, string referenceType, Guid referenceId);
 
+    // Referansa bağlı okunmamış hatırlatmayı KİM alıcı olursa olsun kapatır. Yoklama
+    // hatırlatması dersin öğretmenine düşer, ama yoklamayı yönetici de girebilir ya da ders
+    // sonradan başka öğretmene geçebilir - kapatan yolun alıcıyı bilmesi gerekmesin.
+    /// <returns>Kapatılan satır sayısı.</returns>
+    Task<int> ClearReminderForAllAsync(StaffNotificationType type, string referenceType, Guid referenceId);
+
+    // Hâlâ açık (okunmamış) hatırlatmaların referansları - tur, artık geçerli olmayanları
+    // (örn. iptal edilen dersin yoklama sorusu) kapatabilsin diye.
+    Task<List<Guid>> OpenReminderReferenceIdsAsync(StaffNotificationType type, string referenceType);
+
     // Kuyruktaki e-postaları gönderir. Hata isteği düşürmez: değişiklik zaten kaydedildi ve
     // ekran içi bildirim yerinde; e-posta en iyi çabadır, başarısızlık loglanır.
     Task FlushEmailsAsync(CancellationToken cancellationToken = default);
@@ -176,6 +186,29 @@ public class StaffNotifier(
         existing.MarkRead(clock.UtcNow);
         return true;
     }
+
+    public async Task<int> ClearReminderForAllAsync(StaffNotificationType type, string referenceType, Guid referenceId)
+    {
+        var open = await db.StaffNotifications
+            .Where(notification =>
+                notification.Type == type &&
+                notification.ReferenceType == referenceType &&
+                notification.ReferenceId == referenceId &&
+                notification.ReadAt == null)
+            .ToListAsync();
+        foreach (var notification in open) notification.MarkRead(clock.UtcNow);
+        return open.Count;
+    }
+
+    public Task<List<Guid>> OpenReminderReferenceIdsAsync(StaffNotificationType type, string referenceType) =>
+        db.StaffNotifications
+            .Where(notification =>
+                notification.Type == type &&
+                notification.ReferenceType == referenceType &&
+                notification.ReadAt == null)
+            .Select(notification => notification.ReferenceId)
+            .Distinct()
+            .ToListAsync();
 
     // Öğretmenin giriş hesabı olmayabilir (Teacher.UserId nullable - yalnızca yönetici
     // tarafından yönetilen öğretmen). Bildirimi görecek bir ekran yoksa satır da açılmaz.

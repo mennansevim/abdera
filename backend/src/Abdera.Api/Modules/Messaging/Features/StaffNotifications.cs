@@ -38,11 +38,21 @@ public static class StaffNotifications
     private static async Task<IResult> ListAsync(ClaimsPrincipal principal, AbderaDbContext db)
     {
         var userId = AuthContext.GetUserId(principal);
-        var notifications = await db.StaffNotifications
+        var recent = await db.StaffNotifications
             .Where(notification => notification.UserId == userId)
             .OrderByDescending(notification => notification.CreatedAt)
             .Take(MaxItems)
             .ToListAsync();
+        // Cevapsız yoklama soruları tavana takılmadan HER ZAMAN listede: "seçim yapılmayanlar
+        // bildirimlerde kalsın" - yeni olaylar onları 30'luk pencerenin dışına itmemeli.
+        var openQuestions = await db.StaffNotifications
+            .Where(notification => notification.UserId == userId &&
+                                   notification.Type == StaffNotificationType.AttendanceMissing &&
+                                   notification.ReadAt == null)
+            .ToListAsync();
+        var notifications = recent
+            .UnionBy(openQuestions, notification => notification.Id)
+            .OrderByDescending(notification => notification.CreatedAt);
         var unreadCount = await db.StaffNotifications
             .CountAsync(notification => notification.UserId == userId && notification.ReadAt == null);
 
@@ -56,7 +66,10 @@ public static class StaffNotifications
             .SingleOrDefaultAsync(item => item.Id == notificationId && item.UserId == userId)
             ?? throw new NotFoundException("Bildirim bulunamadı.");
 
-        notification.MarkRead(clock.UtcNow);
+        // Yoklama sorusu okumakla kapanmaz, cevaplanınca kapanır (AttendanceReminderJob).
+        // Hata dönülmez: ekrandaki açılır kartı kapatmak bu ucu çağırıyor, soru zilde kalır.
+        if (notification.Type != StaffNotificationType.AttendanceMissing)
+            notification.MarkRead(clock.UtcNow);
         await db.SaveChangesAsync();
         return Results.Ok(ToResponse(notification));
     }
@@ -66,6 +79,7 @@ public static class StaffNotifications
         var userId = AuthContext.GetUserId(principal);
         var unread = await db.StaffNotifications
             .Where(notification => notification.UserId == userId && notification.ReadAt == null)
+            .Where(notification => notification.Type != StaffNotificationType.AttendanceMissing)
             .ToListAsync();
 
         foreach (var notification in unread) notification.MarkRead(clock.UtcNow);

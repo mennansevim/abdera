@@ -30,6 +30,8 @@ export function useMarkAttendance(lessonId: string) {
       queryClient.invalidateQueries({ queryKey: ["teacher-payout-week"] });
       // Geçmiş bir derse "geldi" girilirse ders yorum bekleyenler listesine düşer.
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+      // Yoklama girilince zildeki "öğrenci geldi mi?" sorusu sunucuda kapanır.
+      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
     },
   });
 }
@@ -41,8 +43,10 @@ export function useCreateLessonNote(lessonId: string) {
       api.post(`/api/lessons/${lessonId}/notes`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
-      // Son eksik not yazılınca sunucu zildeki hatırlatmayı kapatır.
+      // Son eksik not yazılınca sunucu zildeki hatırlatmayı kapatır; yoklaması girilmemiş derse
+      // yazılan not yoklamayı "geldi" olarak işler ve "öğrenci geldi mi?" sorusunu da kapatır.
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
   });
 }

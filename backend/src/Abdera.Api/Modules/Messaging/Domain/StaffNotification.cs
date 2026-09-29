@@ -13,6 +13,10 @@ public enum StaffNotificationType
     // Tamamlanan dersin ders notu (yorumu) hâlâ girilmemiş - tek bir olayı değil, süren bir
     // eksiği anlatan HATIRLATMA: öğretmen başına tek satır, iş bitene kadar tazelenir.
     LessonNoteMissing,
+    // Bitmiş dersin yoklaması girilmemiş: "öğrenci geldi mi?" - ders başına bir satır, zilde
+    // Geldi/Gelmedi düğmeleriyle cevaplanır. Okundu işaretlemekle kapanmaz; yalnızca yoklama
+    // girilince (ya da ders iptal edilince) kapanır (AttendanceReminderJob).
+    AttendanceMissing,
 }
 
 // docs/03-erd.md - Messaging > staff_notifications. WhatsApp tarafındaki NotificationJob
