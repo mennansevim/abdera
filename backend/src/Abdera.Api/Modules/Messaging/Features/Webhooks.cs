@@ -3,6 +3,7 @@ using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Attendance.Features;
 
 namespace Abdera.Api.Modules.Messaging.Features;
 
@@ -36,7 +37,7 @@ public static class Webhooks
 
     private static async Task<IResult> ReceiveAsync(
         HttpRequest request, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler,
-        IWhatsAppClient whatsAppClient)
+        IWhatsAppClient whatsAppClient, IStaffNotifier staffNotifier)
     {
         request.EnableBuffering();
         string rawBody;
@@ -55,7 +56,7 @@ public static class Webhooks
             return Results.Unauthorized();
         }
 
-        await ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient);
+        await ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient, staffNotifier);
 
         // docs/06-whatsapp.md kuralı: webhook her koşulda hızlı 2xx döner.
         return Results.Ok();
@@ -63,7 +64,7 @@ public static class Webhooks
 
     internal static async Task ProcessPayloadAsync(
         string rawBody, AbderaDbContext db, IClock clock, IConfiguration config, INotificationScheduler scheduler,
-        IWhatsAppClient whatsAppClient)
+        IWhatsAppClient whatsAppClient, IStaffNotifier staffNotifier)
     {
         using var document = JsonDocument.Parse(rawBody);
         var message = TryExtractMessage(document);
@@ -104,7 +105,7 @@ public static class Webhooks
 
             if (message.ButtonPayload is { } buttonPayload)
             {
-                await HandleRsvpButtonAsync(buttonPayload, guardian.Id, db, clock, config);
+                await HandleRsvpButtonAsync(buttonPayload, guardian.Id, db, clock, config, staffNotifier);
             }
             else
             {
@@ -121,7 +122,8 @@ public static class Webhooks
         await db.SaveChangesAsync();
     }
 
-    private static async Task HandleRsvpButtonAsync(string buttonPayload, Guid guardianId, AbderaDbContext db, IClock clock, IConfiguration config)
+    private static async Task HandleRsvpButtonAsync(
+        string buttonPayload, Guid guardianId, AbderaDbContext db, IClock clock, IConfiguration config, IStaffNotifier staffNotifier)
     {
         var signingKey = config["WhatsApp:PayloadSigningKey"] ?? "";
         if (!RsvpButtonPayload.TryVerify(buttonPayload, signingKey, out var action, out var lessonId))
@@ -147,7 +149,10 @@ public static class Webhooks
             db.LessonRsvps.Add(rsvp);
         }
 
+        var previous = rsvp.Response;
         rsvp.Respond(response, RsvpSource.WhatsApp, clock.UtcNow);
+        // "Gelemiyor" / "gecikecek" yanıtı dersin öğretmenine ekran içi bildirim düşer.
+        await RsvpStaffNotice.NotifyAsync(staffNotifier, db, clock, lessonId, previous, response);
     }
 
     // docs/00-master-prompt.md deterministik intent'ler: ders/aidat/telafi/okula yaz.

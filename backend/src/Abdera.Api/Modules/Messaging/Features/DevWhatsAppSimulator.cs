@@ -21,17 +21,17 @@ public static class DevWhatsAppSimulator
 
     private static async Task<IResult> SimulateTextAsync(
         SimulateTextRequest request, AbderaDbContext db, IClock clock, IConfiguration config,
-        INotificationScheduler scheduler, IWhatsAppClient whatsAppClient)
+        INotificationScheduler scheduler, IWhatsAppClient whatsAppClient, IStaffNotifier staffNotifier)
     {
         var normalizedFrom = PhoneNumberNormalizer.Normalize(request.FromPhoneNumber);
         var rawBody = BuildMetaTextPayload(normalizedFrom, request.Body);
-        await Webhooks.ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient);
+        await Webhooks.ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient, staffNotifier);
         return Results.Ok();
     }
 
     private static async Task<IResult> SimulateRsvpAsync(
         SimulateRsvpRequest request, AbderaDbContext db, IClock clock, IConfiguration config,
-        INotificationScheduler scheduler, IWhatsAppClient whatsAppClient)
+        INotificationScheduler scheduler, IWhatsAppClient whatsAppClient, IStaffNotifier staffNotifier)
     {
         var signingKey = config["WhatsApp:PayloadSigningKey"] ?? "";
         var normalizedFrom = PhoneNumberNormalizer.Normalize(request.FromPhoneNumber);
@@ -43,7 +43,7 @@ public static class DevWhatsAppSimulator
             _ => "❌ Gelemiyorum",
         };
         var rawBody = BuildMetaButtonPayload(normalizedFrom, payload, buttonText);
-        await Webhooks.ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient);
+        await Webhooks.ProcessPayloadAsync(rawBody, db, clock, config, scheduler, whatsAppClient, staffNotifier);
         return Results.Ok();
     }
 

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Abdera.Api.Modules.Attendance.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,7 +37,8 @@ public static class Rsvp
         return Results.Ok(items);
     }
 
-    private static async Task<IResult> SetAsync(Guid lessonId, SetRequest request, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> SetAsync(
+        Guid lessonId, SetRequest request, AbderaDbContext db, IClock clock, IStaffNotifier staffNotifier)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -56,7 +58,9 @@ public static class Rsvp
             db.LessonRsvps.Add(rsvp);
         }
 
+        var previous = rsvp.Response;
         rsvp.Respond(request.Response, RsvpSource.Admin, clock.UtcNow);
+        await RsvpStaffNotice.NotifyAsync(staffNotifier, db, clock, lessonId, previous, request.Response);
         await db.SaveChangesAsync();
 
         var guardian = await db.Guardians.SingleAsync(g => g.Id == request.GuardianId);

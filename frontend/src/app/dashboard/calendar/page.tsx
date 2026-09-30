@@ -941,7 +941,7 @@ function GridDayColumn({
             onClick={() => onOpenLesson(lesson)}
             onDoubleClick={(event) => event.stopPropagation()}
             title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}${isPast ? " · Geçmiş ders" : ""}`}
-            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${isPast ? ", geçmiş ders" : ""}. Detayları aç`}
+            aria-label={`${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}${isPast ? ", geçmiş ders" : ""}${rsvpAlert(lesson) ? `, ${rsvpAlert(lesson)!.label}` : ""}. Detayları aç`}
             className={`pressable absolute z-10 flex flex-col overflow-hidden rounded-lg border border-black/[.04] border-l-4 px-2.5 py-1 text-left shadow-[0_1px_2px_rgba(80,48,24,.08)] transition-opacity ${draggable ? "cursor-grab active:cursor-grabbing" : ""} ${draggingId === lesson.id ? "opacity-20" : "hover:z-20 hover:shadow-md"} ${movingId === lesson.id ? "animate-pulse" : ""} ${isCancelled ? "opacity-55" : isPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
             style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem`, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
           >
@@ -960,6 +960,7 @@ function GridDayColumn({
             />
             <span className="relative flex min-w-0 items-center gap-1.5">
               <span className={`min-w-0 flex-1 truncate text-[.8rem] font-bold leading-tight ${isCancelled ? "line-through" : ""}`}>{split ? shortStudentName(lesson.studentName) : lesson.studentName}</span>
+              <RsvpAlertBadge lesson={lesson} />
               {active &&<span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--brand)]" aria-hidden="true" />}
             </span>
             <span className={`relative mt-0.5 block truncate text-[.75rem] tabular-nums opacity-80 ${isCancelled ? "line-through" : ""}`}>
@@ -1061,7 +1062,12 @@ function LessonGroupCard({ lessons, top, height, colors, now, onOpen }: { lesson
             );
           })}
         </span>
-        <span className="ml-auto shrink-0 rounded-full bg-[var(--foreground)] px-1.5 text-[.75rem] font-extrabold leading-[1.15rem] text-white">{lessons.length} ders</span>
+        {/* Gruptaki derslerden biri için veli olumsuz yanıt verdiyse: en ağır olanı göster. */}
+        {(() => {
+          const flagged = lessons.find((lesson) => lesson.rsvpResponse === "NotAttending" && rsvpAlert(lesson)) ?? lessons.find((lesson) => rsvpAlert(lesson));
+          return flagged ? <span className="ml-auto"><RsvpAlertBadge lesson={flagged} /></span> : null;
+        })()}
+        <span className={`${lessons.some((lesson) => rsvpAlert(lesson)) ? "" : "ml-auto "}shrink-0 rounded-full bg-[var(--foreground)] px-1.5 text-[.75rem] font-extrabold leading-[1.15rem] text-white`}>{lessons.length} ders</span>
       </span>
       <span className="truncate text-[.75rem] font-semibold tabular-nums text-[var(--muted)]">{formatTime(first)} – {formatTime(last)}</span>
     </button>
@@ -1100,6 +1106,7 @@ function LessonGroupDialog({ lessons, colors, isAdmin, now, onOpenLesson, onClos
                 <span className="relative min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
                     <span className={`truncate text-sm font-bold ${lesson.status === "Cancelled" ? "line-through" : ""}`}>{lesson.studentName}</span>
+                    <RsvpAlertBadge lesson={lesson} />
                     {active && <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--brand)]" aria-hidden="true" />}
                   </span>
                   <span className="mt-0.5 block truncate text-[.75rem] tabular-nums opacity-80">
@@ -1275,6 +1282,24 @@ function UpcomingLessonItem({ lesson, tone, now, first }: { lesson: CalendarLess
       </span>
       {first && <Icon name="chevron" className="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />}
     </article>
+  );
+}
+
+// Veli "gelemiyor" ya da "gecikecek" dediyse ders kartında ünlem görünür (kullanıcı isteği);
+// aynı durum öğretmene bildirim olarak da düşer (sunucu: RsvpStaffNotice). Yalnızca henüz
+// yapılmamış derslerde: tamamlanmış dersin RSVP'si artık uyarı değil.
+function rsvpAlert(lesson: CalendarLesson): { label: string; className: string } | null {
+  if (lesson.status !== "Normal" && lesson.status !== "Makeup") return null;
+  if (lesson.rsvpResponse === "NotAttending") return { label: "Veli: gelemiyor", className: "bg-[var(--danger)]" };
+  if (lesson.rsvpResponse === "AttendingLate") return { label: "Veli: gecikecek", className: "bg-[var(--warning-strong)]" };
+  return null;
+}
+
+function RsvpAlertBadge({ lesson }: { lesson: CalendarLesson }) {
+  const alert = rsvpAlert(lesson);
+  if (!alert) return null;
+  return (
+    <span role="img" aria-label={alert.label} title={alert.label} className={`grid h-4 w-4 shrink-0 place-items-center rounded-full text-[.7rem] font-black leading-none text-white ${alert.className}`}>!</span>
   );
 }
 

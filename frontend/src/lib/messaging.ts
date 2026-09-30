@@ -44,7 +44,8 @@ export interface PagedResponse<T> {
 // bunlar dışarı gönderilmez, oturumdaki kullanıcının kendi zilinde görünür.
 // AttendanceMissing: "öğrenci derse geldi mi?" sorusu - referenceId dersin id'si. Okundu
 // işaretlemekle kapanmaz, zildeki Geldi/Gelmedi ile yoklama girilince kapanır.
-export type StaffNotificationType = "LessonMoved" | "LessonCancelled" | "MakeupScheduled" | "StudentDeletionRequested" | "LessonNoteMissing" | "AttendanceMissing";
+// GuardianRsvp: veli derse gelemeyeceğini ya da gecikeceğini bildirdi - dersin öğretmenine düşer.
+export type StaffNotificationType = "LessonMoved" | "LessonCancelled" | "MakeupScheduled" | "StudentDeletionRequested" | "LessonNoteMissing" | "AttendanceMissing" | "GuardianRsvp";
 
 export type StaffNotification = {
   id: string;

@@ -17,6 +17,9 @@ public enum StaffNotificationType
     // Geldi/Gelmedi düğmeleriyle cevaplanır. Okundu işaretlemekle kapanmaz; yalnızca yoklama
     // girilince (ya da ders iptal edilince) kapanır (AttendanceReminderJob).
     AttendanceMissing,
+    // Veli derse gelemeyeceğini ya da gecikeceğini bildirdi (WhatsApp butonu, veli portalı ya da
+    // yöneticinin elle girişi). Ders başına tek satır; yanıt değişince tazelenir (RsvpStaffNotice).
+    GuardianRsvp,
 }
 
 // docs/03-erd.md - Messaging > staff_notifications. WhatsApp tarafındaki NotificationJob

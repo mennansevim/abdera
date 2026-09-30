@@ -4,6 +4,8 @@ using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Attendance.Features;
+using Abdera.Api.Modules.Messaging.Features;
 
 namespace Abdera.Api.Modules.People.Features;
 
@@ -111,7 +113,8 @@ public static class GuardianPortal
     }
 
     private static async Task<IResult> SetRsvpAsync(
-        Guid lessonId, SetRsvpRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid lessonId, SetRsvpRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        IStaffNotifier staffNotifier)
     {
         if (request.Response == RsvpResponse.Unknown)
         {
@@ -144,7 +147,9 @@ public static class GuardianPortal
         // serbestçe geçiş yapabilir - burada da (WhatsApp/Admin akışlarıyla aynı) bunu kısıtlamıyoruz;
         // "tekrar değiştirilemesin" isteği yalnızca frontend'de varsayılan kilitli görünüm olarak
         // uygulanıyor, backend invariant'ını bozmuyor.
+        var previous = rsvp.Response;
         rsvp.Respond(request.Response, RsvpSource.GuardianWeb, clock.UtcNow);
+        await RsvpStaffNotice.NotifyAsync(staffNotifier, db, clock, lessonId, previous, request.Response);
         await db.SaveChangesAsync();
 
         return Results.Ok(new SetRsvpResponse(lessonId, rsvp.Response, rsvp.RespondedAt!.Value));

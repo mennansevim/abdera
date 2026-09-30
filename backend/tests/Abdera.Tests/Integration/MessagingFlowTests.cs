@@ -48,7 +48,8 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Guid LessonId, Guid StudentId, Guid GuardianId, string GuardianPhone, Guid EnrollmentId,
         Guid TeacherId, Guid[] SpareInstrumentIds);
 
-    private static async Task<SeededLesson> SeedLessonAsync(HttpClient admin, string suffix)
+    // teacherEmail verilirse öğretmenin giriş hesabı da açılır (ekran içi bildirim alabilmesi için).
+    private static async Task<SeededLesson> SeedLessonAsync(HttpClient admin, string suffix, string? teacherEmail = null)
     {
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
@@ -56,7 +57,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var spares = instruments!.Where(i => i.Code is "GUITAR" or "VIOLIN").Select(i => i.Id).ToArray();
 
         var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
-                new Teachers.CreateRequest($"Öğretmen{suffix}", "Soyad", [piano.Id, .. spares], null)))
+                new Teachers.CreateRequest($"Öğretmen{suffix}", "Soyad", [piano.Id, .. spares], teacherEmail)))
             .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!.Teacher;
 
         var student = (await (await admin.PostAsJsonAsync("/api/students",
@@ -419,6 +420,109 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.True(page.Items.Count <= 1);
         Assert.Equal(1, page.Page);
         Assert.Equal(1, page.PageSize);
+    }
+
+    // Kullanıcı isteği: "Gelemiyor ya da Biraz gecikeceğiz cevabı gelirse ilgili öğretmene
+    // bildirim olarak gitsin." Ders başına tek satır; yanıt değiştikçe tazelenir ve okunmamışa
+    // döner. İlk yanıtı "geliyor" olan ders bildirim doğurmaz.
+    [Fact]
+    public async Task Negative_rsvp_notifies_the_lesson_teacher_and_follows_later_changes()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "rsvpnotice", "rsvp.notice@test.local");
+        using var client = _factory.CreateClient();
+
+        async Task TapAsync(string action) => (await client.PostAsJsonAsync("/api/dev/whatsapp/simulate-rsvp", new
+        {
+            fromPhoneNumber = seeded.GuardianPhone,
+            action,
+            lessonId = seeded.LessonId,
+        })).EnsureSuccessStatusCode();
+
+        async Task<List<StaffNotification>> NoticesAsync()
+        {
+            await using var db = await _factory.CreateDbContextAsync();
+            return await db.StaffNotifications.AsNoTracking()
+                .Where(n => n.Type == StaffNotificationType.GuardianRsvp && n.ReferenceId == seeded.LessonId)
+                .ToListAsync();
+        }
+
+        await TapAsync(RsvpButtonPayload.AttendingAction);
+        Assert.Empty(await NoticesAsync());
+
+        await TapAsync(RsvpButtonPayload.NotAttendingAction);
+        var notice = Assert.Single(await NoticesAsync());
+        Assert.Equal("Veli yanıtı: gelemiyor", notice.Title);
+        Assert.Contains("Öğrencirsvpnotice Soyad", notice.Body);
+        Assert.Null(notice.ReadAt);
+
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var teacherUserId = await db.Teachers.Where(t => t.Id == seeded.TeacherId).Select(t => t.UserId).SingleAsync();
+            Assert.Equal(teacherUserId, notice.UserId);
+            (await db.StaffNotifications.SingleAsync(n => n.Id == notice.Id)).MarkRead(DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        await TapAsync(RsvpButtonPayload.AttendingLateAction);
+        var late = Assert.Single(await NoticesAsync());
+        Assert.Equal(notice.Id, late.Id);
+        Assert.Equal("Veli yanıtı: biraz gecikecek", late.Title);
+        Assert.Null(late.ReadAt);
+
+        await TapAsync(RsvpButtonPayload.AttendingAction);
+        var corrected = Assert.Single(await NoticesAsync());
+        Assert.Equal("Veli yanıtını değiştirdi: geliyor", corrected.Title);
+        Assert.Null(corrected.ReadAt);
+    }
+
+    // Kullanıcı geri bildirimi: en son gönderilen mesaj listenin başında görünmeli. Eski sıra
+    // (scheduled_at DESC) aylar sonrasına planlanmış iptal satırlarını en üste koyuyordu.
+    // Sıra: gerçekleşenler (en son olan önce) -> bekleyenler (en yakın önce) -> iptaller.
+    [Fact]
+    public async Task Notifications_list_puts_the_latest_sent_first_then_upcoming_then_cancelled()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "siralama");
+        var phone = Abdera.Api.Shared.PhoneNumberNormalizer.Normalize(seeded.GuardianPhone);
+        // Öbür testlerin satırlarından bağımsız, her zaman "en yeni" olacak kadar ileri bir an.
+        var now = DateTimeOffset.UtcNow.AddYears(5);
+
+        NotificationJob Job(DateTimeOffset scheduledAt) => NotificationJob.Create(
+            NotificationJobType.PaymentReminder, phone, "ordering-test", Guid.NewGuid(), scheduledAt, now.AddDays(-10));
+
+        var olderSent = Job(now.AddDays(-3));
+        olderSent.Claim(now.AddDays(-3));
+        olderSent.MarkSent(now.AddDays(-3));
+        var latestSent = Job(now.AddDays(-5));
+        latestSent.Claim(now.AddHours(-1));
+        latestSent.MarkSent(now.AddHours(-1));
+        var soonPending = Job(now.AddDays(1));
+        var laterPending = Job(now.AddDays(30));
+        var farCancelled = Job(now.AddDays(90));
+        farCancelled.Cancel(now.AddMinutes(-5));
+
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            db.NotificationJobs.AddRange(farCancelled, laterPending, soonPending, olderSent, latestSent);
+            await db.SaveChangesAsync();
+        }
+
+        var firstPage = await admin.GetFromJsonAsync<PagedResponse<Notifications.NotificationJobResponse>>(
+            "/api/notifications?pageSize=1&page=1", TestJson.Options);
+        Assert.Equal(latestSent.Id, firstPage!.Items.Single().Id);
+
+        var ids = new List<Guid>();
+        for (var pageNumber = 1; ; pageNumber++)
+        {
+            var page = await admin.GetFromJsonAsync<PagedResponse<Notifications.NotificationJobResponse>>(
+                $"/api/notifications?pageSize=50&page={pageNumber}", TestJson.Options);
+            ids.AddRange(page!.Items.Select(item => item.Id));
+            if (page.Items.Count == 0 || ids.Count >= page.TotalCount) break;
+        }
+
+        var mine = new[] { latestSent.Id, olderSent.Id, soonPending.Id, laterPending.Id, farCancelled.Id };
+        Assert.Equal(mine, ids.Where(mine.Contains).ToArray());
     }
 
     [Fact]
