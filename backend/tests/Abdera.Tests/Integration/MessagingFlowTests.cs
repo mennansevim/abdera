@@ -625,9 +625,12 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Contains("devre dışı", webhookEvent.ProcessingError, StringComparison.OrdinalIgnoreCase);
         Assert.True(await db.WhatsAppMessages.AnyAsync(item =>
             item.ProviderMessageId == messageId && item.Direction == MessageDirection.Inbound));
+        // Yalnızca intent yanıtı aranır: seri bugün 17:00'den önce başladıysa arka plandaki
+        // dispatcher aynı veliye gerçekten bir ders hatırlatması ("... dersi bugün") gönderir. O
+        // mesaj bir NotificationJob'a bağlıdır; intent yanıtı değildir (CI'da Çarşamba akşamı düştü).
         Assert.False(await db.WhatsAppMessages.AnyAsync(item =>
             item.GuardianId == seeded.GuardianId && item.Direction == MessageDirection.Outbound &&
-            item.BodySnapshot.Contains("dersi")));
+            item.NotificationJobId == null && item.BodySnapshot.Contains("dersi")));
     }
 
     [Fact]
