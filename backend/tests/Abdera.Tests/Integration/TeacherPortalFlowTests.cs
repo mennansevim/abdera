@@ -414,4 +414,39 @@ public class TeacherPortalFlowTests : IClassFixture<AbderaWebApplicationFactory>
             Abdera.Api.Modules.Scheduling.Domain.LessonSeriesStatus.Active,
             await db.LessonSeries.Where(s => s.Id == otherSeries.Series.Id).Select(s => s.Status).SingleAsync());
     }
+
+    // Enstrümanın alt dalı (Gitar -> Elektro/Bas) kurs kaydında bir bilgi etiketidir.
+    // Öğretmen kendi kaydında girer/siler; başkasının kaydına dokunamaz, sınırı aşan metin reddedilir.
+    [Fact]
+    public async Task Teacher_sets_and_clears_the_instrument_variant_of_its_own_enrollment_only()
+    {
+        var admin = await CreateAdminClientAsync();
+        var mine = await SeedTeacherAsync(admin, "altdal");
+        var other = await SeedTeacherAsync(admin, "altdaloteki");
+
+        var created = await ReadAsync<Teachers.TeacherStudentResponse>(await AddStudentAsync(mine, "Altdal"));
+        var url = $"/api/students/{created.StudentId}/enrollments/{created.EnrollmentId}/instrument-variant";
+
+        var set = await ReadAsync<Enrollments.EnrollmentResponse>(await mine.Client.PutAsJsonAsync(
+            url, new Enrollments.SetInstrumentVariantRequest("  Elektro  ")));
+        Assert.Equal("Elektro", set.InstrumentVariant);
+
+        var listed = await ReadAsync<List<Enrollments.EnrollmentResponse>>(
+            await mine.Client.GetAsync($"/api/students/{created.StudentId}/enrollments"));
+        Assert.Equal("Elektro", listed.Single().InstrumentVariant);
+
+        var tooLong = await mine.Client.PutAsJsonAsync(
+            url, new Enrollments.SetInstrumentVariantRequest(new string('x', Enrollment.InstrumentVariantMaxLength + 1)));
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+
+        var foreign = await other.Client.PutAsJsonAsync(url, new Enrollments.SetInstrumentVariantRequest("Bas"));
+        Assert.Equal(HttpStatusCode.Forbidden, foreign.StatusCode);
+
+        var cleared = await ReadAsync<Enrollments.EnrollmentResponse>(await admin.PutAsJsonAsync(
+            url, new Enrollments.SetInstrumentVariantRequest("   ")));
+        Assert.Null(cleared.InstrumentVariant);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.Null(await db.Enrollments.Where(e => e.Id == created.EnrollmentId).Select(e => e.InstrumentVariant).SingleAsync());
+    }
 }

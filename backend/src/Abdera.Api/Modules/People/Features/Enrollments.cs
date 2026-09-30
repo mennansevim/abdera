@@ -18,8 +18,12 @@ public static class Enrollments
     // Aidat tutarını etkileyen iki alan (ders türü ve elle indirim) kayıt açıldıktan sonra
     // da değiştirilebilir - yeni bir kayıt açmak geçmiş aidatları kopardığı için doğru yol değil.
     public record UpdateRequest(CourseKind? CourseKind, decimal? ManualDiscountPercent, string? ManualDiscountReason);
+    // Enstrümanın alt dalı (Gitar -> Elektro/Bas). Ayrı uç: UpdateRequest'e eklenseydi alt dalı
+    // değiştiren her istek elle indirimi de yeniden yazmak zorunda kalırdı (o uç indirimi
+    // gönderilen değerle DEĞİŞTİRİR) ve uç Admin'e kapalı - alt dalı öğretmen de girebilmeli.
+    public record SetInstrumentVariantRequest(string? InstrumentVariant);
     public record EnrollmentResponse(
-        Guid Id, Guid StudentId, Guid TeacherId, Guid InstrumentId, CourseKind CourseKind,
+        Guid Id, Guid StudentId, Guid TeacherId, Guid InstrumentId, string? InstrumentVariant, CourseKind CourseKind,
         decimal? ManualDiscountPercent, string? ManualDiscountReason,
         EnrollmentStatus Status, DateOnly StartedAt, DateOnly? EndedAt);
 
@@ -34,6 +38,9 @@ public static class Enrollments
 
         app.MapPatch("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}", UpdateAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+
+        app.MapPut("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}/instrument-variant", SetInstrumentVariantAsync)
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         app.MapDelete("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}", EndAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
@@ -211,7 +218,32 @@ public static class Enrollments
         return Results.Ok(ToResponse(enrollment));
     }
 
+    // Aidatı, takvimi ve rızayı etkilemeyen bir bilgi etiketi - bu yüzden audit_log'a yazılmaz.
+    private static async Task<IResult> SetInstrumentVariantAsync(
+        Guid studentId, Guid enrollmentId, SetInstrumentVariantRequest request, ClaimsPrincipal principal,
+        AbderaDbContext db, IClock clock)
+    {
+        var enrollment = await db.Enrollments
+            .SingleOrDefaultAsync(e => e.Id == enrollmentId && e.StudentId == studentId)
+            ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
+
+        // Öğretmen yalnızca KENDİ kurs kaydının alt dalını değiştirir (J1).
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        if (teacherScope is { } scopedTeacherId && scopedTeacherId != enrollment.TeacherId)
+            throw new ForbiddenException("Bu kurs kaydı size ait değil.");
+
+        if (request.InstrumentVariant?.Trim() is { Length: > Enrollment.InstrumentVariantMaxLength })
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["instrumentVariant"] = [$"Alt dal en fazla {Enrollment.InstrumentVariantMaxLength} karakter olabilir."],
+            });
+
+        enrollment.SetInstrumentVariant(request.InstrumentVariant, clock.UtcNow);
+        await db.SaveChangesAsync();
+        return Results.Ok(ToResponse(enrollment));
+    }
+
     private static EnrollmentResponse ToResponse(Enrollment e) =>
-        new(e.Id, e.StudentId, e.TeacherId, e.InstrumentId, e.CourseKind,
+        new(e.Id, e.StudentId, e.TeacherId, e.InstrumentId, e.InstrumentVariant, e.CourseKind,
             e.ManualDiscountPercent, e.ManualDiscountReason, e.Status, e.StartedAt, e.EndedAt);
 }

@@ -127,10 +127,18 @@ export interface Enrollment {
   studentId: string;
   teacherId: string;
   instrumentId: string;
+  // Enstrümanın alt dalı (Gitar -> "Elektro", "Bas"): yalnızca bilgi etiketi, serbest metin.
+  instrumentVariant: string | null;
   status: EnrollmentStatus;
   startedAt: string;
   endedAt: string | null;
 }
+
+// Alt dal önerileri: alan serbest metin, bunlar yalnızca hızlı seçim. Anahtar enstrüman adı.
+export const INSTRUMENT_VARIANT_SUGGESTIONS: Record<string, string[]> = {
+  Gitar: ["Klasik", "Elektro", "Bas"],
+};
+export const INSTRUMENT_VARIANT_MAX_LENGTH = 40;
 
 export function useInstruments() {
   return useQuery({ queryKey: ["instruments"], queryFn: () => api.get<Instrument[]>("/api/instruments") });
@@ -508,6 +516,18 @@ export function useCreateEnrollment(studentId: string) {
       // aidat ekranı eski "Aidat açılmadı" durumunu göstermesin.
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["student-billing"] });
+    },
+  });
+}
+
+// Boş metin alt dalı kaldırır. Öğretmen yalnızca kendi kurs kaydında değiştirebilir (sunucu denetler).
+export function useSetInstrumentVariant(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ enrollmentId, instrumentVariant }: { enrollmentId: string; instrumentVariant: string | null }) =>
+      api.put<Enrollment>(`/api/students/${studentId}/enrollments/${enrollmentId}/instrument-variant`, { instrumentVariant }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
     },
   });
 }

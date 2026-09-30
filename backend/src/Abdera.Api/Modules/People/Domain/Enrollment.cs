@@ -15,6 +15,10 @@ public class Enrollment
     public Guid StudentId { get; private set; }
     public Guid TeacherId { get; private set; }
     public Guid InstrumentId { get; private set; }
+    // Enstrümanın alt dalı (Gitar -> "Elektro", "Bas"): yalnızca bilgi etiketi. Enstrüman
+    // tek kalır; öğretmen eşleşmesi, program kuralı ve aidat bu alana BAKMAZ (kullanıcı kararı:
+    // "gitar olsun ama öğrenci bazında hangi dersi aldığını belirtsek yeter").
+    public string? InstrumentVariant { get; private set; }
     // Aidat tutarının tek belirleyicisi (bkz. CourseKind). Varsayılan Birebir - okulun
     // derslerinin çoğunluğu birebir, grup yalnızca Resim gibi kurslarda kullanılıyor.
     public CourseKind CourseKind { get; private set; } = CourseKind.Individual;
@@ -66,6 +70,19 @@ public class Enrollment
 
         ManualDiscountPercent = percent;
         ManualDiscountReason = percent is null || string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        UpdatedAt = now;
+    }
+
+    public const int InstrumentVariantMaxLength = 40;
+
+    // Boş/boşluk metin alt dalı kaldırır.
+    public void SetInstrumentVariant(string? variant, DateTimeOffset now)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(variant) ? null : variant.Trim();
+        if (trimmed is { Length: > InstrumentVariantMaxLength })
+            throw new ArgumentException($"Alt dal en fazla {InstrumentVariantMaxLength} karakter olabilir.", nameof(variant));
+
+        InstrumentVariant = trimmed;
         UpdatedAt = now;
     }
 

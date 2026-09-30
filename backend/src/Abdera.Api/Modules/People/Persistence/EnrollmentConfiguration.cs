@@ -17,6 +17,7 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
         builder.Property(e => e.StudentId).HasColumnName("student_id");
         builder.Property(e => e.TeacherId).HasColumnName("teacher_id");
         builder.Property(e => e.InstrumentId).HasColumnName("instrument_id");
+        builder.Property(e => e.InstrumentVariant).HasColumnName("instrument_variant").HasMaxLength(Enrollment.InstrumentVariantMaxLength);
         builder.Property(e => e.CourseKind).HasColumnName("course_kind").HasConversion<string>().HasMaxLength(20).HasDefaultValue(CourseKind.Individual);
         builder.Property(e => e.ManualDiscountPercent).HasColumnName("manual_discount_percent").HasColumnType("numeric(5,2)");
         builder.Property(e => e.ManualDiscountReason).HasColumnName("manual_discount_reason").HasMaxLength(200);

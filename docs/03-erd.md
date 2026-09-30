@@ -136,6 +136,7 @@ enrollments
   student_id     uuid fk -> students(id)
   teacher_id     uuid fk -> teachers(id)
   instrument_id  uuid fk -> instruments(id)
+  instrument_variant varchar(40) null  -- alt dal etiketi (Gitar -> Elektro/Bas); kural/aidat bakmaz
   status         text        -- ACTIVE | PAUSED | ENDED
   started_at     date
   ended_at       date null

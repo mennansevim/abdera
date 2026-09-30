@@ -260,3 +260,7 @@ penceresi 09:00-21:00 oldu. "Uygun günler" arayüzünün yazdığı eski varsay
 `EnsureWithinAvailabilityAsync`'te reddediliyordu. Başka pencereler (elle/seed) değişmez.
 `Down()` aynı satırları `19:00`'a geri çeker. Arayüz tarafında pencerenin tek kaynağı
 `frontend/src/lib/scheduling.ts` (`SCHOOL_DAY_START`/`SCHOOL_DAY_END`).
+
+**AddEnrollmentInstrumentVariant** (People): `enrollments.instrument_variant varchar(40) NULL` - enstrümanın
+alt dalı (Gitar -> "Elektro", "Bas"). Yalnızca bilgi etiketi: enstrüman tek kalır; öğretmen eşleşmesi,
+"enstrüman başına tek program" kuralı ve aidat bu kolona bakmaz. `Down()` kolonu düşürür.

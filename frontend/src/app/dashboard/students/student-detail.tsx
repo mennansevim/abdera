@@ -16,11 +16,14 @@ import {
 import {
   useResetGuardianPassword,
   useCreateAndLinkGuardian,
+  INSTRUMENT_VARIANT_MAX_LENGTH,
+  INSTRUMENT_VARIANT_SUGGESTIONS,
   useEndEnrollment,
   useEnrollments,
   useInstruments,
   lookupGuardianByPhone,
   useLinkGuardian,
+  useSetInstrumentVariant,
   useStudentGuardians,
   useTeachers,
   useUpdateGuardian,
@@ -163,6 +166,7 @@ export function StudentDetail({
                   enrollmentId={enrollment.id}
                   teacherId={enrollment.teacherId}
                   instrumentName={instrument?.name ?? "Enstrüman"}
+                  instrumentVariant={enrollment.instrumentVariant}
                   teacherName={teacher ? `${teacher.firstName} ${teacher.lastName}` : "Öğretmen"}
                   series={lessonSeries?.find((item) => item.enrollmentId === enrollment.id) ?? null}
                   isAdmin={isAdmin}
@@ -350,8 +354,12 @@ function EditGuardianForm({ studentId, guardian, isAdmin, onClose }: { studentId
   );
 }
 
-function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, teacherName, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; teacherName: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
+function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, instrumentVariant, teacherName, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; instrumentVariant: string | null; teacherName: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
   const endEnrollment = useEndEnrollment(studentId);
+  const setVariant = useSetInstrumentVariant(studentId);
+  // null = kapalı; metin = düzenleniyor. Alt dal (Gitar -> Elektro/Bas) yalnızca bilgi etiketi.
+  const [variantDraft, setVariantDraft] = useState<string | null>(null);
+  const variantSuggestions = INSTRUMENT_VARIANT_SUGGESTIONS[instrumentName] ?? [];
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
@@ -367,11 +375,24 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
     }
   }
 
+  async function saveVariant(value: string) {
+    setError(null);
+    try {
+      await setVariant.mutateAsync({ enrollmentId, instrumentVariant: value.trim() || null });
+      setVariantDraft(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Alt dal kaydedilemedi.");
+    }
+  }
+
   return (
     <li className="px-3 py-2.5">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-bold">{instrumentName}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-sm font-bold">{instrumentName}</span>
+            {instrumentVariant && <span className="shrink-0 rounded-md border border-[var(--line)] bg-[var(--brand-soft)] px-1.5 py-0.5 text-[.7rem] font-bold text-[var(--brand-strong)]">{instrumentVariant}</span>}
+          </span>
           <span className="text-meta mt-0.5 block truncate">{teacherName}</span>
         </span>
         {(isAdmin || canManage) && (
@@ -381,6 +402,11 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
                 {canManage && (
                   <RowMenuItem icon="calendar" onClick={() => { close(); setEditingSchedule(true); }}>
                     {series ? "Ders saatini değiştir" : "Ders programı gir"}
+                  </RowMenuItem>
+                )}
+                {canManage && (
+                  <RowMenuItem icon="pencil" onClick={() => { close(); setError(null); setVariantDraft(instrumentVariant ?? ""); }}>
+                    {instrumentVariant ? "Alt dalı değiştir" : "Alt dal belirt"}
                   </RowMenuItem>
                 )}
                 {isAdmin && (
@@ -417,6 +443,44 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, tea
           </button>
         )}
       </div>
+
+      {variantDraft !== null && (
+        <form
+          onSubmit={(event) => { event.preventDefault(); void saveVariant(variantDraft); }}
+          className="mt-2 rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2.5"
+        >
+          <label className="text-micro text-[var(--muted)]">Alt dal
+            <input
+              value={variantDraft}
+              onChange={(event) => setVariantDraft(event.target.value)}
+              maxLength={INSTRUMENT_VARIANT_MAX_LENGTH}
+              placeholder={variantSuggestions.length ? `Örn. ${variantSuggestions.join(", ")}` : "Örn. başlangıç, ileri seviye"}
+              autoFocus
+              className="field mt-1 min-h-11 bg-white text-sm font-semibold"
+            />
+          </label>
+          {variantSuggestions.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {variantSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => setVariantDraft(suggestion)}
+                  aria-pressed={variantDraft.trim() === suggestion}
+                  className={`pressable min-h-9 rounded-lg border px-2.5 text-xs font-bold ${variantDraft.trim() === suggestion ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-[var(--line)] bg-white text-[var(--brand-strong)]"}`}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="text-meta mt-2">Yalnızca bilgi etiketidir; enstrüman {instrumentName} olarak kalır, aidat ve program değişmez. Boş bırakıp kaydedersen etiket kalkar.</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={() => { setVariantDraft(null); setError(null); }} disabled={setVariant.isPending} className="btn btn-quiet text-xs">Vazgeç</button>
+            <button type="submit" disabled={setVariant.isPending} className="btn btn-primary text-xs disabled:opacity-60">{setVariant.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
+          </div>
+        </form>
+      )}
 
       {editingSchedule && (
         <Modal
