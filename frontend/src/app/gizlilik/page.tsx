@@ -38,7 +38,7 @@ const sections: { title: string; body: string[] }[] = [
   {
     title: "WhatsApp bildirimleri",
     body: [
-      "Bildirimler Meta Platforms'un WhatsApp Business (Cloud API) hizmeti aracılığıyla, yalnızca bildirim almayı kabul eden velilere gönderilir. Tek istisna, öğrenci kaydı yapıldığında veliye giriş bilgilerini ileten tek seferlik karşılama mesajıdır. Mesajın iletilmesi için telefon numarası ve mesaj içeriği Meta'ya aktarılır.",
+      "Bildirimler Meta Platforms'un WhatsApp Business (Cloud API) hizmeti aracılığıyla, yalnızca bildirim almayı kabul eden velilere gönderilir. Tek istisna, öğrenci kaydı yapıldığında veliye gönderilen tek seferlik karşılama mesajıdır. Mesajın iletilmesi için telefon numarası ve mesaj içeriği Meta'ya aktarılır.",
       "Bildirimleri durdurmak için okulun WhatsApp hattına \"dur\", \"iptal\" veya \"stop\" yazmanız yeterlidir. Bekleyen tüm bildirimler iptal edilir ve tek bir teyit mesajı gönderilir.",
     ],
   },

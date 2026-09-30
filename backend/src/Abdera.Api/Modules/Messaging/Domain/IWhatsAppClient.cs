@@ -16,6 +16,17 @@ public interface IWhatsAppClient
         IReadOnlyList<string>? buttonPayloads = null,
         CancellationToken cancellationToken = default);
 
+    // Meta'nın "Kimlik Doğrulama" (Authentication) kategorisindeki şablonlar: gövdesi Meta'ya ait
+    // sabit kalıptır ("Doğrulama kodunuz: {{1}}") ve "Kodu kopyala" butonu taşır; kod hem gövde
+    // hem buton parametresi olarak gönderilmek ZORUNDA, aksi halde mesaj reddedilir. Meta tek
+    // kullanımlık kod içeren şablonu başka kategoride onaylamıyor, bu yüzden veli giriş kodu
+    // (guardian_login_otp) bu yoldan gider. Kod en fazla MaxAuthenticationCodeLength karakter.
+    Task<WhatsAppSendResult> SendAuthenticationCodeAsync(
+        string toPhoneNumber,
+        string templateName,
+        string code,
+        CancellationToken cancellationToken = default);
+
     Task<WhatsAppSendResult> SendFreeTextAsync(
         string toPhoneNumber,
         string body,
@@ -23,3 +34,9 @@ public interface IWhatsAppClient
 }
 
 public record WhatsAppSendResult(bool Success, string? ProviderMessageId, string? Error);
+
+public static class WhatsAppLimits
+{
+    // Meta: authentication şablonunun kod parametresi en fazla 15 karakter olabilir.
+    public const int MaxAuthenticationCodeLength = 15;
+}

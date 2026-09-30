@@ -4,7 +4,8 @@ namespace Abdera.Api.Modules.Messaging.Domain;
 // buradadır; bildirim job'larının şablonları NotificationMessageBuilder'da kalır.
 public static class WhatsAppTemplateNames
 {
-    // Veliye giriş bilgilerini (şifre) ileten şablon. Öğrenci ilk kaydedildiğinde gönderilen
-    // tek seferlik karşılama mesajı da budur - bkz. ConsentGatedWhatsAppClient (R2).
-    public const string GuardianPassword = "guardian_password";
+    // Öğrenci ilk kaydedildiğinde veliye giden tek seferlik karşılama mesajı: panel adresi ve
+    // "şifrenizi okul yönetiminden öğrenebilirsiniz". Şifre İÇERMEZ, bu yüzden Utility
+    // kategorisinde onaylanır. Onay kapalıyken de bir kez gider - bkz. ConsentGatedWhatsAppClient (R2).
+    public const string GuardianWelcome = "welcome_student";
 }

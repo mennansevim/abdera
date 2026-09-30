@@ -102,6 +102,63 @@ public class CloudApiWhatsAppClientTests
         Assert.Equal("body", components[0].GetProperty("type").GetString());
     }
 
+    // Meta "Kimlik Doğrulama" şablonu: kod gövdede ve "Kodu kopyala" butonunda (sub_type=url,
+    // index 0) aynı değerle gitmek zorunda - yalnızca gövde gönderilirse Meta mesajı reddeder.
+    [Fact]
+    public async Task SendAuthenticationCodeAsync_sends_the_code_in_body_and_copy_code_button()
+    {
+        var handler = new RecordingHandler(_ => JsonResponse(
+            HttpStatusCode.OK,
+            """{"messages":[{"id":"wamid.auth-1"}]}"""));
+        var client = CreateClient(handler);
+
+        var result = await client.SendAuthenticationCodeAsync("+905551234567", "guardian_login_otp", "482913");
+
+        Assert.True(result.Success);
+        using var document = JsonDocument.Parse(Assert.Single(handler.Requests).Body);
+        var template = document.RootElement.GetProperty("template");
+        Assert.Equal("guardian_login_otp", template.GetProperty("name").GetString());
+        Assert.Equal("tr", template.GetProperty("language").GetProperty("code").GetString());
+
+        var components = template.GetProperty("components").EnumerateArray().ToArray();
+        Assert.Equal(2, components.Length);
+        Assert.Equal("body", components[0].GetProperty("type").GetString());
+        Assert.Equal("482913", components[0].GetProperty("parameters")[0].GetProperty("text").GetString());
+        Assert.Equal("button", components[1].GetProperty("type").GetString());
+        Assert.Equal("url", components[1].GetProperty("sub_type").GetString());
+        Assert.Equal("0", components[1].GetProperty("index").GetString());
+        Assert.Equal("482913", components[1].GetProperty("parameters")[0].GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public async Task SendAuthenticationCodeAsync_refuses_a_code_longer_than_Meta_allows_without_calling_the_api()
+    {
+        var handler = new RecordingHandler(_ => JsonResponse(HttpStatusCode.OK, "{}"));
+        var client = CreateClient(handler);
+
+        var result = await client.SendAuthenticationCodeAsync("+905551234567", "guardian_login_otp", new string('a', 16));
+
+        Assert.False(result.Success);
+        Assert.Contains("15 karakterden uzun", result.Error);
+        Assert.Empty(handler.Requests);
+    }
+
+    // "HTTP 404" tek başına panelde neyin yanlış olduğunu söylemiyordu; Meta'nın sayısal kodu
+    // (kişisel veri taşımaz) okunur ve bilinen kodlar açıklanır.
+    [Fact]
+    public async Task Failure_reports_the_Meta_error_code_with_a_hint()
+    {
+        var handler = new RecordingHandler(_ => JsonResponse(
+            HttpStatusCode.NotFound,
+            """{"error":{"message":"(#132001) Template name does not exist in the translation","code":132001}}"""));
+        var client = CreateClient(handler);
+
+        var result = await client.SendAuthenticationCodeAsync("+905551234567", "guardian_login_otp", "482913");
+
+        Assert.False(result.Success);
+        Assert.Equal("HTTP 404, Meta kodu 132001: şablon Meta'da yok ya da Türkçe dilinde onaylı değil", result.Error);
+    }
+
     [Fact]
     public async Task SendFreeTextAsync_builds_text_contract_and_returns_provider_message_id()
     {

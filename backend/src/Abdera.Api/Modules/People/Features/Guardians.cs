@@ -159,13 +159,18 @@ public static class Guardians
     }
 
     // Veli şifresini ad soyaddan türeyen varsayılana döndürür (docs/10-decisions.md Q1,
-    // GuardianPasswordGenerator), hash'ler ve WhatsApp'tan gönderir. Veli kendi şifresini
+    // GuardianPasswordGenerator) ve hash'ler. Veli kendi şifresini
     // değiştirip unuttuğunda yöneticinin geri dönüş yolu. Düz metin yalnızca yanıtta bir kez
     // döner - loglanmaz.
     //
-    // R2: yeni veliye ilk gönderim onay kapalıyken de gider (tek seferlik karşılama mesajı);
-    // istisnayı ConsentGatedWhatsAppClient uygular, burada yalnızca borç kapatılır ve onaysız
-    // gönderim audit_log'a yazılır.
+    // R2: yeni veliye panel adresini ileten karşılama mesajı (welcome_student) onay kapalıyken
+    // de BİR KEZ gider; istisnayı ConsentGatedWhatsAppClient uygular, burada borç kapatılır ve
+    // onaysız gönderim audit_log'a yazılır.
+    //
+    // Şifrenin kendisi WhatsApp'tan GİTMEZ (kullanıcı kararı, R2): Meta şifre içeren şablonu
+    // yalnızca "Kimlik Doğrulama" kategorisinde kabul ediyor ve o şablon açılmayacak. Karşılama
+    // metni "şifrenizi okul yönetiminden öğrenebilirsiniz" der; yönetici şifreyi bu yanıttan
+    // görüp iletir.
     private static async Task<IResult> ResetPasswordAsync(
         Guid guardianId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
         IPasswordHasher<Guardian> passwordHasher, IWhatsAppClient whatsAppClient)
@@ -177,12 +182,15 @@ public static class Guardians
         guardian.SetPassword(passwordHasher.HashPassword(guardian, password), clock.UtcNow);
         await db.SaveChangesAsync();
 
-        var sendResult = await whatsAppClient.SendTemplateAsync(
-            guardian.PhoneNumber, WhatsAppTemplateNames.GuardianPassword,
-            new Dictionary<string, string> { ["password"] = password });
+        WhatsAppSendResult? welcomeResult = null;
+        if (guardian.WelcomeMessagePending)
+        {
+            welcomeResult = await whatsAppClient.SendTemplateAsync(
+                guardian.PhoneNumber, WhatsAppTemplateNames.GuardianWelcome,
+                new Dictionary<string, string> { ["guardian_name"] = guardian.FirstName });
+        }
 
-        var sentAsWelcome = sendResult.Success && guardian.WelcomeMessagePending;
-        if (sentAsWelcome)
+        if (welcomeResult is { Success: true })
         {
             var now = clock.UtcNow;
             guardian.MarkWelcomeMessageDelivered(now);
@@ -190,19 +198,22 @@ public static class Guardians
             {
                 db.AuditLogs.Add(AuditLog.Record(
                     AuthContext.GetUserId(principal), "guardian.welcome_message_sent", nameof(Guardian), guardian.Id, now,
-                    afterJson: JsonSerializer.Serialize(new { notificationConsent = false, template = WhatsAppTemplateNames.GuardianPassword })));
+                    afterJson: JsonSerializer.Serialize(new { notificationConsent = false, template = WhatsAppTemplateNames.GuardianWelcome })));
             }
             await db.SaveChangesAsync();
         }
 
-        // Gönderim başarısızsa (ör. bildirim onayı kapalı) "gönderildi" deme - yönetici şifreyi
-        // bu yanıttan görüp veliye kendisi iletir.
-        return Results.Ok(new ResetPasswordResponse(
-            guardian.Id, guardian.PhoneNumber, password,
-            sendResult.Success
-                ? sentAsWelcome && !guardian.NotificationConsent
-                    ? "Giriş bilgileri WhatsApp'tan gönderildi. Bildirim onayı kapalı olduğu için sonraki mesajlar gitmez."
-                    : "Şifre üretildi ve WhatsApp'tan gönderildi."
-                : $"Şifre üretildi ama WhatsApp'tan gönderilemedi ({sendResult.Error}). Veliye kendin ilet."));
+        // Gitmeyen bir şey için "gönderildi" deme - yönetici eksik kalanı bu yanıttan görüp
+        // veliye kendisi iletir.
+        var parts = new List<string> { "Şifre üretildi." };
+        if (welcomeResult is not null)
+        {
+            parts.Add(welcomeResult.Success
+                ? "Karşılama mesajı WhatsApp'tan gönderildi."
+                : $"Karşılama mesajı WhatsApp'tan gönderilemedi ({welcomeResult.Error}).");
+        }
+        parts.Add("Şifre WhatsApp'tan gönderilmez; veliye kendin ilet.");
+
+        return Results.Ok(new ResetPasswordResponse(guardian.Id, guardian.PhoneNumber, password, string.Join(" ", parts)));
     }
 }

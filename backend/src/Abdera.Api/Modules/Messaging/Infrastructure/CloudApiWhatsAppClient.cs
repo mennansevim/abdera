@@ -70,6 +70,38 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
         return SendAsync(payload, cancellationToken);
     }
 
+    public Task<WhatsAppSendResult> SendAuthenticationCodeAsync(
+        string toPhoneNumber, string templateName, string code, CancellationToken cancellationToken = default)
+    {
+        // Meta bu uzunluğu aşan kodu reddeder; çağrı yapmadan, nedeni okunur şekilde dön.
+        if (code.Length > WhatsAppLimits.MaxAuthenticationCodeLength)
+        {
+            return Task.FromResult(new WhatsAppSendResult(
+                false, null, $"Kod {WhatsAppLimits.MaxAuthenticationCodeLength} karakterden uzun; WhatsApp doğrulama şablonuyla gönderilemez."));
+        }
+
+        // Authentication şablonu sözleşmesi: kod gövdede VE "Kodu kopyala" butonunda (sub_type=url,
+        // index 0) aynı değerle gönderilir.
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "template",
+            template = new
+            {
+                name = templateName,
+                language = new { code = "tr" },
+                components = new object[]
+                {
+                    new { type = "body", parameters = new object[] { new { type = "text", text = code } } },
+                    new { type = "button", sub_type = "url", index = "0", parameters = new object[] { new { type = "text", text = code } } },
+                },
+            },
+        };
+
+        return SendAsync(payload, cancellationToken);
+    }
+
     public Task<WhatsAppSendResult> SendFreeTextAsync(string toPhoneNumber, string body, CancellationToken cancellationToken = default)
     {
         var payload = new
@@ -98,8 +130,11 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
                 // Sağlayıcı hata gövdesi telefon numarası, mesaj içeriği veya hesap ayrıntısı
                 // taşıyabilir. Production loguna ham gövdeyi yazma; durum kodu operasyonel
                 // teşhis ve retry kararı için yeterli, ayrıntı Meta panelinden izlenebilir.
-                logger.LogError("WhatsApp Cloud API hata döndü: {Status}", response.StatusCode);
-                return new WhatsAppSendResult(false, null, $"HTTP {(int)response.StatusCode}");
+                // Yalnızca Meta'nın sayısal hata kodu okunur (kişisel veri taşımaz) - "HTTP 404"
+                // tek başına panelde neyin yanlış olduğunu söylemiyordu.
+                var metaCode = await ReadMetaErrorCodeAsync(response, cancellationToken);
+                logger.LogError("WhatsApp Cloud API hata döndü: {Status} (Meta kodu {MetaCode})", response.StatusCode, metaCode);
+                return new WhatsAppSendResult(false, null, DescribeFailure((int)response.StatusCode, metaCode));
             }
 
             var result = await response.Content.ReadFromJsonAsync<CloudApiResponse>(cancellationToken: cancellationToken);
@@ -127,6 +162,44 @@ public class CloudApiWhatsAppClient(HttpClient httpClient, IOptions<WhatsAppOpti
             logger.LogError(ex, "WhatsApp Cloud API çağrısı başarısız oldu.");
             return new WhatsAppSendResult(false, null, "WhatsApp sağlayıcısına ulaşılamadı.");
         }
+    }
+
+    private static async Task<int?> ReadMetaErrorCodeAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var document = await System.Text.Json.JsonDocument.ParseAsync(
+                await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            return document.RootElement.TryGetProperty("error", out var error) &&
+                   error.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                   error.TryGetProperty("code", out var code) &&
+                   code.TryGetInt32(out var value)
+                ? value
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    // Sık görülen Meta kodları için ne yapılacağını söyleyen kısa açıklama; bilinmeyen kod
+    // numarasıyla gösterilir, kod yoksa eski biçim ("HTTP 400") korunur.
+    private static string DescribeFailure(int status, int? metaCode)
+    {
+        if (metaCode is null) return $"HTTP {status}";
+        var hint = metaCode switch
+        {
+            132001 => "şablon Meta'da yok ya da Türkçe dilinde onaylı değil",
+            132000 => "değişken sayısı Meta'daki şablonla uyuşmuyor",
+            132012 => "değişken biçimi Meta'daki şablonla uyuşmuyor",
+            132015 or 132016 => "şablon Meta tarafından durdurulmuş ya da devre dışı",
+            131026 => "mesaj bu numaraya teslim edilemiyor",
+            131047 => "24 saatlik yazışma penceresi kapalı",
+            190 => "erişim anahtarının süresi dolmuş ya da geçersiz",
+            _ => null,
+        };
+        return hint is null ? $"HTTP {status}, Meta kodu {metaCode}" : $"HTTP {status}, Meta kodu {metaCode}: {hint}";
     }
 
     private record CloudApiResponse(List<CloudApiMessage>? Messages);

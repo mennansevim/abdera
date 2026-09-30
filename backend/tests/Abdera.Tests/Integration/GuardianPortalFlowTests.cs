@@ -152,8 +152,9 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
             (await afterReset.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "sevimm"))).StatusCode);
     }
 
-    // docs/10-decisions.md R2: yeni veliye giriş bilgilerini ileten karşılama mesajı bildirim
-    // onayı kapalıyken de BİR KEZ gider; onay kapalı kalır ve sonraki hiçbir mesaj geçmez.
+    // docs/10-decisions.md R2: yeni veliye panel adresini ileten karşılama mesajı bildirim onayı
+    // kapalıyken de BİR KEZ gider; onay kapalı kalır ve sonraki hiçbir mesaj geçmez. Şifre
+    // varsayılan olarak WhatsApp'tan gönderilmez (kimlik doğrulama şablonları kapalı).
     [Fact]
     public async Task New_guardian_gets_one_welcome_message_without_consent_and_nothing_after()
     {
@@ -164,7 +165,7 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
             .Content.ReadFromJsonAsync<Guardians.GuardianResponse>(TestJson.Options))!;
         Assert.False(guardian.NotificationConsent);
 
-        // Karşılama borcu açıkken bile yalnızca şifre şablonu geçer; hatırlatma ve serbest metin geçmez.
+        // Karşılama borcu açıkken bile yalnızca karşılama şablonları geçer; hatırlatma ve serbest metin geçmez.
         await using (var gateDb = await _factory.CreateDbContextAsync())
         {
             var gate = new ConsentGatedWhatsAppClient(
@@ -173,11 +174,15 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
             var noParameters = new Dictionary<string, string>();
             Assert.False((await gate.SendTemplateAsync(guardian.PhoneNumber, "lesson_reminder_rsvp", noParameters)).Success);
             Assert.False((await gate.SendFreeTextAsync(guardian.PhoneNumber, "merhaba")).Success);
+            Assert.True((await gate.SendTemplateAsync(guardian.PhoneNumber, WhatsAppTemplateNames.GuardianWelcome, noParameters)).Success);
+            // Giriş kodu da doğrulama şablonuyla gider ama karşılama istisnası yalnızca şifre şablonunundur.
+            Assert.False((await gate.SendAuthenticationCodeAsync(guardian.PhoneNumber, "guardian_login_otp", "123456")).Success);
         }
 
         var first = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
             .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
-        Assert.Contains("WhatsApp'tan gönderildi", first.Message);
+        Assert.Contains("Karşılama mesajı WhatsApp'tan gönderildi.", first.Message);
+        Assert.Contains("Şifre WhatsApp'tan gönderilmez", first.Message);
 
         await using (var db = await _factory.CreateDbContextAsync())
         {
@@ -188,11 +193,21 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
                 a.Action == "guardian.welcome_message_sent" && a.EntityId == guardian.Id));
         }
 
-        // Borç kapandı: ikinci sıfırlama onay kapalı olduğu için gönderilmez.
+        // Borç kapandı: ikinci sıfırlamada karşılama mesajı yeniden denenmez.
         var second = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
             .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
-        Assert.Contains("gönderilemedi", second.Message);
-        Assert.Contains(ConsentGatedWhatsAppClient.ConsentDisabledError, second.Message);
+        Assert.DoesNotContain("Karşılama", second.Message);
+        Assert.Contains("Şifre WhatsApp'tan gönderilmez", second.Message);
+
+        // Borç kapandıktan sonra karşılama şablonları da onaya tabidir.
+        await using (var closedDb = await _factory.CreateDbContextAsync())
+        {
+            var closedGate = new ConsentGatedWhatsAppClient(
+                new FakeWhatsAppClient(NullLogger<FakeWhatsAppClient>.Instance), closedDb,
+                NullLogger<ConsentGatedWhatsAppClient>.Instance);
+            Assert.False((await closedGate.SendTemplateAsync(
+                guardian.PhoneNumber, WhatsAppTemplateNames.GuardianWelcome, new Dictionary<string, string>())).Success);
+        }
     }
 
     [Fact]

@@ -17,6 +17,10 @@ public class DisabledWhatsAppClient : IWhatsAppClient
         CancellationToken cancellationToken = default) =>
         Task.FromResult(new WhatsAppSendResult(false, null, DisabledError));
 
+    public Task<WhatsAppSendResult> SendAuthenticationCodeAsync(
+        string toPhoneNumber, string templateName, string code, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new WhatsAppSendResult(false, null, DisabledError));
+
     public Task<WhatsAppSendResult> SendFreeTextAsync(
         string toPhoneNumber,
         string body,

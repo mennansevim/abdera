@@ -124,8 +124,7 @@ public static class GuardianAuth
             db.GuardianLoginCodes.Add(GuardianLoginCode.Create(guardian.Id, hash, clock.UtcNow));
             await db.SaveChangesAsync();
 
-            await whatsAppClient.SendTemplateAsync(
-                guardian.PhoneNumber, OtpTemplateName, new Dictionary<string, string> { ["code"] = code });
+            await whatsAppClient.SendAuthenticationCodeAsync(guardian.PhoneNumber, OtpTemplateName, code);
 
             if (env.IsDevelopment())
             {

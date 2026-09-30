@@ -27,6 +27,18 @@ public class FakeWhatsAppClient(ILogger<FakeWhatsAppClient> logger) : IWhatsAppC
             Error: null));
     }
 
+    public Task<WhatsAppSendResult> SendAuthenticationCodeAsync(
+        string toPhoneNumber, string templateName, string code, CancellationToken cancellationToken = default)
+    {
+        // Kod/şifre loglanmaz - yalnızca gönderimin hangi şablonla yapıldığı.
+        logger.LogInformation("[FakeWhatsApp] doğrulama şablonu -> {Phone} | şablon={Template}", toPhoneNumber, templateName);
+
+        return Task.FromResult(new WhatsAppSendResult(
+            Success: true,
+            ProviderMessageId: $"fake-{Guid.NewGuid()}",
+            Error: null));
+    }
+
     public Task<WhatsAppSendResult> SendFreeTextAsync(string toPhoneNumber, string body, CancellationToken cancellationToken = default)
     {
         logger.LogInformation("[FakeWhatsApp] serbest metin -> {Phone} | {Body}", toPhoneNumber, body);
