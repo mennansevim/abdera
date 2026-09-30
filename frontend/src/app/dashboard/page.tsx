@@ -1,40 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Icon } from "@/components/icons";
+import { useMemo, useState } from "react";
+import { Icon, type IconName } from "@/components/icons";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
 import { useReceivables } from "@/lib/billing";
 import { useDashboardToday, type UpcomingBirthday } from "@/lib/dashboard";
-import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
+import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useNotifications } from "@/lib/messaging";
 import { useSystemHealth } from "@/lib/ops";
 import { useAttentionNeededStudents, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { Panel, StatStrip } from "@/components/ui";
-import { computeHourWindow, layoutDayLessons } from "@/lib/week-grid-layout";
 import { PendingLessonNotes } from "./pending-lesson-notes";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
-
-const HOUR_HEIGHT_REM = 3.6;
-// Ders kartının CSS minimum yüksekliği ve dakika karşılığı - çakışma yerleşimi kısa dersi bu
-// süre kadar uzun sayar, yoksa kart bir sonraki dersin üstüne biner (lib/week-grid-layout.ts).
-const LESSON_CARD_MIN_HEIGHT_REM = 1.85;
-const LESSON_CARD_MIN_MINUTES = Math.ceil((LESSON_CARD_MIN_HEIGHT_REM / HOUR_HEIGHT_REM) * 60);
-
-// Ders bloklarındaki katılım noktası ve haftalık ızgara başlığındaki gösterge için ortak sözlük -
-// teacher-today-lessons.tsx'teki StatusBadge ile aynı terimler (Geliyor/Cevap yok/Gelmiyor).
-function rsvpDotTone(lesson: CalendarLesson): { color: string; label: string } {
-  if (lesson.status !== "Normal") return { color: "transparent", label: "" };
-  if (lesson.rsvpResponse === "Attending") return { color: "var(--success)", label: "Geliyor" };
-  if (lesson.rsvpResponse === "AttendingLate") return { color: "var(--warning)", label: "Geç kalacak" };
-  if (lesson.rsvpResponse === "NotAttending") return { color: "var(--danger)", label: "Gelmiyor" };
-  return { color: "var(--warning)", label: "Cevap yok" };
-}
-
-const WEEKDAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma"];
 
 function weekStartFor(date: Date) {
   const result = new Date(date);
@@ -53,10 +34,6 @@ function addDays(date: Date, days: number) {
 function userName(email: string) {
   const first = email.split("@")[0].split(/[._-]/)[0];
   return first ? first.charAt(0).toLocaleUpperCase("tr-TR") + first.slice(1) : "";
-}
-
-function studentInitials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toLocaleUpperCase("tr-TR")).join("");
 }
 
 function formatMoney(value: number) {
@@ -83,6 +60,10 @@ function AdminDashboard({ email }: { email: string }) {
   const { data: failedNotifications } = useNotifications("Failed", 1, 1);
   const overdueReceivables = (receivables ?? []).filter((item) => item.status === "Overdue" || (item.status !== "Paid" && item.status !== "Cancelled" && new Date(`${item.dueDate}T23:59:59`) < new Date()));
   const overdueTotal = overdueReceivables.reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0);
+  // Yan panel (talepler, banka, doğum günleri...) her açılışta KAPALI başlar: ilk görünen ekran
+  // geniş takvim olsun (kullanıcı isteği). Kapalıyken dar şeritteki rozetler bekleyen iş olduğunu
+  // söyler; tercih bilerek saklanmıyor ki ekran her seferinde geniş takvimle açılsın.
+  const [railOpen, setRailOpen] = useState(false);
 
   return (
     <>
@@ -99,9 +80,9 @@ function AdminDashboard({ email }: { email: string }) {
         ]}
       />
 
-      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <WeeklySchedule weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} error={lessonsError} retrying={lessonsFetching} onRetry={() => void refetchLessons()} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
-        <AdminAttentionRail lessons={lessons ?? []} birthdays={today?.upcomingBirthdays} />
+      <div className={`grid items-start gap-3 ${railOpen ? "xl:grid-cols-[minmax(0,1fr)_20rem]" : "xl:grid-cols-[minmax(0,1fr)_3.5rem]"}`}>
+        <WeeklySummary weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} error={lessonsError} retrying={lessonsFetching} onRetry={() => void refetchLessons()} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
+        <AdminAttentionRail lessons={lessons ?? []} birthdays={today?.upcomingBirthdays} open={railOpen} onToggle={() => setRailOpen((value) => !value)} />
       </div>
     </>
   );
@@ -177,33 +158,36 @@ function SystemHealthBanner() {
   );
 }
 
-const RSVP_LEGEND: { color: string; label: string }[] = [
-  { color: "var(--success)", label: "Geliyor" },
-  { color: "var(--warning)", label: "Cevap yok" },
-  { color: "var(--danger)", label: "Gelmiyor" },
-];
+// Haftanın ÖZETİ: gün gün hangi enstrümandan kaç ders var, hangi öğretmenin kaç dersi var.
+// Eskiden burada takvim ekranının küçük bir kopyası (saat ızgarası) duruyordu; kullanıcı geri
+// bildirimi: "takvim ekranının aynısı olmamalı, özet olmalı". Ders ders ayrıntı ve her tür
+// işlem takvim ekranındadır ("Takvimi aç"); burası yalnızca sayar.
+const WEEKDAY_NAMES = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
-function WeeklySchedule({ weekStart, lessons: allLessons, loading, error, retrying, onRetry, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; error: boolean; retrying: boolean; onRetry: () => void; onWeekChange: (offset: number) => void }) {
-  const weekdays = Array.from({ length: 5 }, (_, index) => addDays(weekStart, index));
-  // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
-  // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bu eski kaydı ızgarada göstermeye devam
-  // etmek aynı dersin iki yerde birden görünmesine yol açıyordu ("taşıdığım ders eski yerinde de
-  // kalıyor" bulgusu) - `Rescheduled` artık burada, kaynakta filtreleniyor.
-  const lessons = useMemo(() => allLessons.filter((lesson) => lesson.status !== "Rescheduled"), [allLessons]);
+function countBy(lessons: CalendarLesson[], key: (lesson: CalendarLesson) => string) {
+  const counts = new Map<string, number>();
+  for (const lesson of lessons) counts.set(key(lesson), (counts.get(key(lesson)) ?? 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "tr-TR"));
+}
+
+function WeeklySummary({ weekStart, lessons: allLessons, loading, error, retrying, onRetry, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; error: boolean; retrying: boolean; onRetry: () => void; onWeekChange: (offset: number) => void }) {
+  // Ertelenen dersin eski satırı ve iptal edilen ders sayılmaz - takvim ızgarasıyla aynı kural.
+  const lessons = useMemo(() => allLessons.filter((lesson) => lesson.status !== "Rescheduled" && lesson.status !== "Cancelled"), [allLessons]);
   const lessonColors = useMemo(() => buildInstrumentColorMap(lessons.map((lesson) => lesson.instrumentName)), [lessons]);
-  const hourWindow = useMemo(() => computeHourWindow(lessons.filter((lesson) => weekdays.some((day) => new Date(lesson.startAt).toDateString() === day.toDateString()))), [lessons, weekdays]);
-  const [openLesson, setOpenLesson] = useState<CalendarLesson | null>(null);
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(weekStart, index);
+    return { date, name: WEEKDAY_NAMES[index]!, lessons: lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === date.toDateString()) };
+  // Pazar yalnızca dersi varsa gösterilir; okulun olağan haftası Pazartesi-Cumartesi.
+  }).filter((day, index) => index < 6 || day.lessons.length > 0);
+  const todayKey = new Date().toDateString();
 
   return (
     <section className="app-card min-w-0 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-          <h2 className="text-sm font-bold">Bu hafta</h2>
-          <span className="text-meta">{weekdays[0].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {weekdays[4].toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</span>
+          <h2 className="text-sm font-bold">Haftanın özeti</h2>
+          <span className="text-meta">{days[0]!.date.toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} – {days[days.length - 1]!.date.toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} · {lessons.length} ders</span>
           <Link href="/dashboard/calendar" className="text-[.75rem] font-bold text-[var(--brand)] hover:underline">Takvimi aç</Link>
-        </div>
-        <div className="ml-auto hidden flex-wrap items-center justify-end gap-3 md:flex">
-          {RSVP_LEGEND.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5 text-[.75rem] text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full" style={{ background: item.color }} aria-hidden="true" />{item.label}</span>)}
         </div>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={() => onWeekChange(-1)} className="icon-btn icon-btn-quiet" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
@@ -212,167 +196,57 @@ function WeeklySchedule({ weekStart, lessons: allLessons, loading, error, retryi
         </div>
       </div>
 
-      {/* Hata boş günler gibi görünmesin ("Planlanmış ders yok" yanıltıcı olur) - takvim
-          sayfasındaki hata kutusuyla aynı dil. */}
-      {loading ? <ScheduleSkeleton /> : error ? (
+      {/* Hata boş günler gibi görünmesin ("Ders yok" yanıltıcı olur). */}
+      {loading ? (
+        <div className="grid gap-2 border-t border-[var(--line)] p-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="skeleton h-40 rounded-xl" />)}</div>
+      ) : error ? (
         <div className="grid min-h-48 place-items-center border-t border-[var(--line)] p-8 text-center"><div><p className="text-sm font-bold">Ders programı yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={onRetry} disabled={retrying} className="btn btn-quiet mt-3 disabled:opacity-50">{retrying ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>
       ) : (
-        <>
-          {/* Izgara görünümü ≥768px'te (docs/14-ui-design-prompt.md B3.1) - önceden yalnızca ≥1280px'te
-              açılıyordu, 768-1279 arasında istenmeyen bir ajanda görünümüne düşüyordu. */}
-          <div className="hidden grid-cols-[3.2rem_repeat(5,minmax(0,1fr))] border-t border-[var(--line)] md:grid">
-            <div className="border-r border-[var(--line)]" />
-            {weekdays.map((day, index) => <div key={day.toISOString()} className={`border-r border-[var(--line)] px-2 py-1.5 text-center text-[.75rem] last:border-r-0 ${day.toDateString() === new Date().toDateString() ? "bg-[var(--today-tint)]" : ""}`}><span className="font-semibold text-[var(--muted)]">{WEEKDAYS[index]}</span> <span className="font-bold">{day.getDate()}</span></div>)}
-            <TimeLabels hourWindow={hourWindow} />
-            {weekdays.map((day) => <DayColumn key={day.toISOString()} day={day} lessons={lessons} colors={lessonColors} hourWindow={hourWindow} onOpen={setOpenLesson} />)}
-          </div>
-          <div className="space-y-3 border-t border-[var(--line)] p-3 md:hidden">
-            {weekdays.map((day, index) => {
-              const dayLessons = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString()).sort((a,b) => a.startAt.localeCompare(b.startAt));
-              return (
-                <div key={day.toISOString()}>
-                  <h3 className="mb-2 flex items-center gap-2 text-xs font-bold"><span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{day.getDate()}</span>{WEEKDAYS[index]}</h3>
-                  <div className="space-y-1.5">
-                    {dayLessons.map((lesson) => <AgendaLesson key={lesson.id} lesson={lesson} tone={lessonColors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} onOpen={setOpenLesson} />)}
-                    {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
+        <ol className={`grid gap-2 border-t border-[var(--line)] p-3 sm:grid-cols-2 md:grid-cols-3 ${days.length > 6 ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}>
+          {days.map((day) => {
+            const isToday = day.date.toDateString() === todayKey;
+            const byInstrument = countBy(day.lessons, (lesson) => lesson.instrumentName);
+            const byTeacher = countBy(day.lessons, (lesson) => lesson.teacherName);
+            const notComing = day.lessons.filter((lesson) => lesson.rsvpResponse === "NotAttending").length;
+            const late = day.lessons.filter((lesson) => lesson.rsvpResponse === "AttendingLate").length;
+            return (
+              <li key={day.date.toISOString()} className={`min-w-0 rounded-xl border p-3 ${isToday ? "border-[var(--brand)] bg-[var(--today-tint)]" : "border-[var(--line)] bg-white"}`}>
+                {/* Gün adı kesilmesin diye sayı alt satırda: yedi sütunda "Pazartesi" + "3 ders" yan yana sığmıyor. */}
+                <h3 className="text-xs font-bold">{day.name} <span className="font-semibold text-[var(--muted)]">{day.date.getDate()}</span></h3>
+                <p className={`mt-0.5 tabular-nums ${day.lessons.length ? "text-base font-extrabold text-[var(--foreground)]" : "text-[.75rem] font-semibold text-[var(--muted)]"}`}>{day.lessons.length ? `${day.lessons.length} ders` : "Ders yok"}</p>
+                {day.lessons.length > 0 && (
+                  <>
+                    <ul className="mt-2 flex flex-wrap gap-1" aria-label="Enstrümana göre ders sayısı">
+                      {byInstrument.map(([name, count]) => {
+                        const tone = lessonColors.get(name) ?? INSTRUMENT_TONES[0];
+                        return <li key={name} className="rounded-md border px-1.5 py-0.5 text-[.72rem] font-bold tabular-nums" style={{ background: tone.bg, borderColor: tone.border, color: tone.text }}>{count} {name}</li>;
+                      })}
+                    </ul>
+                    <ul className="mt-2 space-y-0.5 border-t border-[var(--line)] pt-2" aria-label="Öğretmene göre ders sayısı">
+                      {byTeacher.map(([name, count]) => (
+                        <li key={name} className="flex items-baseline justify-between gap-2 text-[.75rem]">
+                          <span className="min-w-0 truncate">{name}</span>
+                          <span className="shrink-0 font-bold tabular-nums text-[var(--muted)]">{count}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {(notComing > 0 || late > 0) && (
+                      <p className="mt-2 text-[.72rem] font-bold text-[var(--danger-strong)]">
+                        {[notComing > 0 ? `${notComing} gelemiyor` : null, late > 0 ? `${late} gecikecek` : null].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ol>
       )}
-
-      {openLesson && <LessonPopover lesson={openLesson} tone={lessonColors.get(openLesson.instrumentName) ?? INSTRUMENT_TONES[0]} onClose={() => setOpenLesson(null)} />}
     </section>
   );
 }
 
-function TimeLabels({ hourWindow }: { hourWindow: { startHour: number; endHour: number } }) {
-  const totalHours = hourWindow.endHour - hourWindow.startHour;
-  return (
-    <div className="relative border-r border-t border-[var(--line)] bg-[#fdf9f2]" style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
-      {Array.from({ length: totalHours + 1 }, (_, index) => (
-        <span key={index} className={`absolute right-2 text-[.75rem] tabular-nums text-[var(--muted)] ${index === 0 ? "translate-y-0" : index === totalHours ? "-translate-y-full" : "-translate-y-1/2"}`} style={{ top: `${(index / totalHours) * 100}%` }}>
-          {String(hourWindow.startHour + index).padStart(2, "0")}:00
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function DayColumn({ day, lessons, colors, hourWindow, onOpen }: { day: Date; lessons: CalendarLesson[]; colors: Map<string, InstrumentTone>; hourWindow: { startHour: number; endHour: number }; onOpen: (lesson: CalendarLesson) => void }) {
-  const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
-  const layout = useMemo(() => layoutDayLessons(entries, hourWindow, { minDurationMinutes: LESSON_CARD_MIN_MINUTES }), [entries, hourWindow]);
-  const isToday = day.toDateString() === new Date().toDateString();
-  const totalHours = hourWindow.endHour - hourWindow.startHour;
-  return (
-    <div className={`relative border-r border-t border-[var(--line)] last:border-r-0 ${isToday ? "bg-[var(--today-tint-strong)]" : "bg-[#fdf9f2]"}`} style={{ height: `${totalHours * HOUR_HEIGHT_REM}rem` }}>
-      {Array.from({ length: totalHours - 1 }, (_, index) => <span key={index} className="absolute inset-x-0 border-t border-dashed border-[#f3e4cd]" style={{ top: `${((index + 1) / totalHours) * 100}%` }} />)}
-      {entries.map((lesson) => {
-        const start = new Date(lesson.startAt);
-        const end = new Date(lesson.endAt);
-        const position = layout.get(lesson.id);
-        if (!position) return null;
-        const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
-        const dot = rsvpDotTone(lesson);
-        const isCancelled = lesson.status === "Cancelled";
-        const gapPct = 1.5;
-        const width = `calc(${100 / position.columns}% - ${gapPct}px)`;
-        const left = `calc(${(position.column / position.columns) * 100}% + ${gapPct / 2}px)`;
-        return (
-          <button
-            key={lesson.id}
-            type="button"
-            onClick={() => onOpen(lesson)}
-            title={`${lesson.studentName} · ${lesson.instrumentName} · ${lesson.teacherName}`}
-            className={`pressable absolute z-10 overflow-hidden rounded-md border-l-[3px] px-2 py-1 text-left shadow-sm hover:z-20 hover:shadow-md ${isCancelled ? "opacity-55" : ""}`}
-            style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem`, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}
-          >
-            {dot.label && <><span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-hidden="true" /><span className="sr-only">Katılım: {dot.label}</span></>}
-            <span className={`block text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`}>{start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span>
-            <span className={`mt-0.5 block truncate text-[.75rem] font-bold ${isCancelled ? "line-through" : ""}`}>{position.columns > 2 ? studentInitials(lesson.studentName) : lesson.studentName}</span>
-            <span className="block truncate text-[.75rem] opacity-75">{lesson.instrumentName}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function AgendaLesson({ lesson, tone, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; onOpen: (lesson: CalendarLesson) => void }) {
-  const start = new Date(lesson.startAt);
-  const end = new Date(lesson.endAt);
-  const dot = rsvpDotTone(lesson);
-  const isCancelled = lesson.status === "Cancelled";
-  return (
-    <button type="button" onClick={() => onOpen(lesson)} className={`pressable flex min-h-12 w-full items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-2.5 py-2 text-left ${isCancelled ? "opacity-60" : ""}`}>
-      <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: tone.border }} />
-      <span className={`w-20 shrink-0 text-[.75rem] font-bold tabular-nums ${isCancelled ? "line-through" : ""}`} style={{ color: tone.text }}>{start.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}–{end.toLocaleTimeString("tr-TR", {hour:"2-digit",minute:"2-digit"})}</span>
-      <span className="min-w-0 flex-1">
-        <span className={`block truncate text-xs font-bold ${isCancelled ? "line-through" : ""}`}>{lesson.studentName}</span>
-        <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
-      </span>
-      {dot.label && <><span className="shrink-0 h-1.5 w-1.5 rounded-full" style={{ background: dot.color }} aria-hidden="true" /><span className="sr-only">Katılım: {dot.label}</span></>}
-    </button>
-  );
-}
-
-function LessonPopover({ lesson, tone, onClose }: { lesson: CalendarLesson; tone: InstrumentTone; onClose: () => void }) {
-  const start = new Date(lesson.startAt);
-  const end = new Date(lesson.endAt);
-  const dot = rsvpDotTone(lesson);
-
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-  // Arka plan kaydırması kilitlenir, Escape kapatır, odak açılışta Kapat'a taşınıp kapanışta
-  // önceki öğeye döner. onClose her render'da yeni fonksiyon geldiği için ref'ten okunur -
-  // effect yalnızca açılış/kapanışta çalışır.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    closeButtonRef.current?.focus();
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onCloseRef.current(); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflow;
-      previouslyFocused?.focus();
-    };
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-[#2b1a10]/40 p-4 backdrop-blur-[2px]" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={`${lesson.studentName} ders detayı`} onClick={(event) => event.stopPropagation()} className="app-card w-full max-w-[22rem] overflow-hidden">
-        <div className="flex items-start justify-between gap-2 border-l-4 p-4" style={{ borderLeftColor: tone.border, background: tone.bg }}>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold" style={{ color: tone.text }}>{lesson.studentName}</p>
-            <p className="mt-0.5 text-[.75rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</p>
-          </div>
-          <button ref={closeButtonRef} type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>
-        </div>
-        <div className="space-y-2 p-4 text-sm">
-          <p className="flex items-center gap-2 text-[var(--foreground)]"><Icon name="clock" className="h-4 w-4 text-[var(--muted)]" />{start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · {start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</p>
-          <p className="flex items-center gap-2 text-[var(--foreground)]"><Icon name="teachers" className="h-4 w-4 text-[var(--muted)]" />{lesson.teacherName}</p>
-          {dot.label && <p className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: dot.color }} />{dot.label}</p>}
-        </div>
-        <div className="border-t border-[var(--line)] p-3">
-          <Link href="/dashboard/calendar" onClick={onClose} className="pressable flex min-h-11 items-center justify-center rounded-xl bg-[var(--brand)] text-xs font-bold text-white">Takvimde aç</Link>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ScheduleSkeleton() {
-  return <div className="grid gap-3 border-t border-[var(--line)] p-4 max-md:[&>*]:h-14 md:h-[21.5rem] md:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton rounded-xl" />)}</div>;
-}
-
-function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[]; birthdays?: UpcomingBirthday[] }) {
+function AdminAttentionRail({ lessons, birthdays, open, onToggle }: { lessons: CalendarLesson[]; birthdays?: UpcomingBirthday[]; open: boolean; onToggle: () => void }) {
   const { data: requests, isLoading } = usePendingChangeRequests();
   const { data: bankItems, isLoading: bankLoading } = useBankTransactions("NeedsReview", 1, 3);
   const approve = useApproveChangeRequest();
@@ -392,8 +266,42 @@ function AdminAttentionRail({ lessons, birthdays }: { lessons: CalendarLesson[];
     finally { setBusyId(null); }
   }
 
+  // Kapalı şerit: bölüm başına bir simge + sayı rozeti. Geniş ekranda sağda dikey, dar ekranda
+  // takvimin altında yatay durur; herhangi birine basmak paneli açar.
+  const birthdaysToday = birthdays?.filter((item) => item.daysUntil === 0).length ?? 0;
+  const sections = ([
+    { key: "requests", icon: "swap", label: "Değişiklik talepleri", count: requests?.length ?? 0, badge: "bg-[var(--warning-strong)]" },
+    { key: "bank", icon: "bank", label: "İncelenecek banka işlemleri", count: bankItems?.items.length ?? 0, badge: "bg-[var(--danger)]" },
+    { key: "students", icon: "alert-triangle", label: "İlgi gerektirebilecek öğrenciler", count: attentionStudents?.length ?? 0, badge: "bg-[var(--danger)]" },
+    { key: "birthdays", icon: "cake", label: birthdaysToday ? `Yaklaşan doğum günleri, ${birthdaysToday} tanesi bugün` : "Yaklaşan doğum günleri", count: birthdays?.length ?? 0, badge: "bg-[var(--brand)]" },
+  ] satisfies { key: string; icon: IconName; label: string; count: number; badge: string }[]).filter((section) => section.count > 0);
+
+  if (!open) {
+    return (
+      <aside aria-label="Dikkat gerektirenler" className="app-card flex flex-row flex-wrap items-center gap-1.5 p-1.5 xl:flex-col">
+        <button type="button" onClick={onToggle} aria-expanded={false} aria-label="Dikkat gerektirenler panelini aç" title="Paneli aç" className="icon-btn icon-btn-quiet">
+          <Icon name="chevrons-left" className="h-4 w-4 max-xl:rotate-[-90deg]" />
+        </button>
+        {railLoading && <span className="skeleton h-10 w-10 rounded-xl" aria-label="Dikkat gerektiren işler yükleniyor" />}
+        {allClear && <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--success-soft)] text-[var(--success-strong)]" role="img" aria-label="Bugün için her şey yolunda" title="Bugün için her şey yolunda"><Icon name="check" className="h-4 w-4" /></span>}
+        {!railLoading && sections.map((section) => (
+          <button key={section.key} type="button" onClick={onToggle} aria-label={`${section.label}: ${section.count}. Paneli aç`} title={`${section.label} (${section.count})`} className="pressable relative grid h-10 w-10 place-items-center rounded-xl text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
+            <Icon name={section.icon} className="h-[1.15rem] w-[1.15rem]" />
+            <span className={`absolute -right-0.5 -top-0.5 grid h-[1.1rem] min-w-[1.1rem] place-items-center rounded-full px-1 text-[.65rem] font-extrabold leading-none text-white ${section.badge}`} aria-hidden="true">{section.count > 9 ? "9+" : section.count}</span>
+          </button>
+        ))}
+      </aside>
+    );
+  }
+
   return (
-    <aside className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+    <aside aria-label="Dikkat gerektirenler" className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+      <div className="flex items-center justify-between gap-2 px-1 md:col-span-2 xl:col-span-1">
+        <h2 className="text-micro text-[var(--muted)]">Dikkat gerektirenler</h2>
+        <button type="button" onClick={onToggle} aria-expanded aria-label="Dikkat gerektirenler panelini kapat" title="Paneli kapat" className="icon-btn icon-btn-quiet">
+          <Icon name="chevrons-right" className="h-4 w-4 max-xl:rotate-[-90deg]" />
+        </button>
+      </div>
       {railLoading && <div className="skeleton min-h-28 rounded-2xl md:col-span-2 xl:col-span-1" aria-label="Dikkat gerektiren işler yükleniyor" />}
 
       {allClear && (
