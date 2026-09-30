@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
-import { useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
+import { SCHOOL_DAY_END, SCHOOL_DAY_START, useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
 
 // Takvimin/telafi asistanının kullandığı gün sırası ve TR etiketleri (calendar/page.tsx ile
 // aynı) - Pazartesi'den başlar, backend'in DayOfWeek string'leriyle (Sunday/Monday/...) eşleşir.
@@ -15,10 +15,6 @@ const AVAILABILITY_DAYS: Array<{ key: string; label: string }> = [
   { key: "Saturday", label: "Cmt" },
   { key: "Sunday", label: "Paz" },
 ];
-// Okulun varsayılan çalışma penceresi - takvim ızgarasının da varsayılanı (week-grid-layout.ts
-// DEFAULT_START_HOUR/END_HOUR). Bir gün "açılırken" bu aralık kullanılır.
-const DEFAULT_AVAILABILITY_START = "09:00";
-const DEFAULT_AVAILABILITY_END = "19:00";
 
 // "Öğretmeni tıklayınca açılan sekme içinde uygun günler yeşil olsun, tek tıkla seçilebilsin"
 // - telafi/akıllı zamanlama önerileri (lib/smart-scheduling.ts) bu günleri kullanır: bir gün
@@ -51,7 +47,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
         // kaldır - arayüz bir günü "açık/kapalı" olarak modelliyor, birden fazla aralık değil.
         await Promise.all(existing.map((row) => deleteAvailability.mutateAsync(row.id)));
       } else {
-        await createAvailability.mutateAsync({ dayOfWeek: day, startTime: DEFAULT_AVAILABILITY_START, endTime: DEFAULT_AVAILABILITY_END });
+        await createAvailability.mutateAsync({ dayOfWeek: day, startTime: SCHOOL_DAY_START, endTime: SCHOOL_DAY_END });
       }
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Uygunluk güncellenemedi.");
@@ -77,7 +73,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
                 onClick={() => void toggleDay(day.key)}
                 disabled={busy}
                 aria-pressed={active}
-                title={active ? `${day.label}: uygun (${DEFAULT_AVAILABILITY_START}–${DEFAULT_AVAILABILITY_END}) - kapatmak için tıkla` : `${day.label}: uygun değil - açmak için tıkla`}
+                title={active ? `${day.label}: uygun (${SCHOOL_DAY_START}–${SCHOOL_DAY_END}) - kapatmak için tıkla` : `${day.label}: uygun değil - açmak için tıkla`}
                 className={`pressable min-h-11 w-14 rounded-lg border text-xs font-bold disabled:opacity-50 ${active ? "border-[var(--success-strong)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
               >
                 {day.label}
@@ -86,7 +82,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
           })}
         </div>
       )}
-      <p className="text-meta mt-2">Seçilen günlerde uygunluk saati: {DEFAULT_AVAILABILITY_START}–{DEFAULT_AVAILABILITY_END}</p>
+      <p className="text-meta mt-2">Seçilen günlerde uygunluk saati: {SCHOOL_DAY_START}–{SCHOOL_DAY_END}</p>
       <p className="text-meta mt-1">
         {!isLoading && !rowsByDay.size
           ? self

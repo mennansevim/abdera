@@ -253,3 +253,10 @@ yalnızca kolon varsayılanını geri alır - kapatılan onaylar ve iptal edilen
 büyük biçime getirilir ("miray SEVİM" -> "Miray Sevim", `Shared/PersonNameFormatter` ile aynı kural).
 Türkçe i/ı ayrımı locale'e bağlı `upper()` yerine `translate()` ile yapılır; SQL `postgres:16-alpine`
 üzerinde birim testteki örneklerle doğrulandı. `Down()` boş: özgün yazım saklanmaz.
+
+**WidenTeacherAvailabilityTo2100** (Scheduling, veri migration'ı - şema değişmez): okulun çalışma
+penceresi 09:00-21:00 oldu. "Uygun günler" arayüzünün yazdığı eski varsayılan satırlar
+(`09:00-19:00`) `21:00`'a genişletilir; aksi halde 19:00'dan sonra biten ders serisi
+`EnsureWithinAvailabilityAsync`'te reddediliyordu. Başka pencereler (elle/seed) değişmez.
+`Down()` aynı satırları `19:00`'a geri çeker. Arayüz tarafında pencerenin tek kaynağı
+`frontend/src/lib/scheduling.ts` (`SCHOOL_DAY_START`/`SCHOOL_DAY_END`).

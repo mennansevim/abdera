@@ -168,7 +168,7 @@ public static class DevelopmentMockData
                         teacher.Id,
                         (DayOfWeek)day,
                         new TimeOnly(16 + ((day + teachers.Count) % 2), 0),
-                        new TimeOnly(20, 0)));
+                        new TimeOnly(21, 0)));
                 }
             }
 

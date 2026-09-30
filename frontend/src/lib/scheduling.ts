@@ -158,6 +158,12 @@ export function useUpdateLesson() {
   });
 }
 
+// Okulun çalışma penceresi: öğretmenler 09:00-21:00 arasında ders verebilir. "Uygun günler"
+// bir günü açarken bu aralığı yazar; hiç uygunluk tanımlanmamış öğretmen için slot önerileri
+// (smart-scheduling.ts) de aynı pencereyi tarar. Saati değiştirirken tek yer burası.
+export const SCHOOL_DAY_START = "09:00";
+export const SCHOOL_DAY_END = "21:00";
+
 export interface TeacherAvailability {
   id: string;
   dayOfWeek: string;

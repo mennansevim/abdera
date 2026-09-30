@@ -1,4 +1,4 @@
-import type { CalendarLesson, TeacherAvailability } from "./scheduling";
+import { SCHOOL_DAY_END, SCHOOL_DAY_START, type CalendarLesson, type TeacherAvailability } from "./scheduling";
 
 export interface SuggestedSlot {
   start: Date;
@@ -39,7 +39,7 @@ function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: Calen
 // Gerçek bir davranış hatasının düzeltmesi: bu fonksiyon HER GÜN için AYRI AYRI "bu günde
 // eşleşen kayıt yoksa geniş bir varsayılan pencere kullan" diyordu. Yani bir öğretmen sadece
 // Salı/Perşembe için uygunluk tanımlasa bile, Pazartesi/Çarşamba/Cuma günleri için eşleşen
-// kayıt olmadığından hâlâ 10:00-21:00 varsayılanına düşüyor ve o günler de "uygun"
+// kayıt olmadığından hâlâ geniş varsayılan pencereye düşüyor ve o günler de "uygun"
 // gösteriliyordu - "yalnızca Salı/Perşembe" kısıtlaması pratikte hiçbir işe yaramıyordu.
 //
 // Doğru kural: öğretmenin HİÇ uygunluk kaydı yoksa (Öğretmenler ekranında hiçbir gün
@@ -50,7 +50,7 @@ function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: Calen
 function windowsForDay(day: Date, availability: TeacherAvailability[]) {
   const windows = availability.filter((item) => DAY_INDEX[item.dayOfWeek] === day.getDay());
   if (windows.length) return windows;
-  return availability.length ? [] : [{ id: "default", dayOfWeek: "", startTime: "10:00", endTime: "21:00" }];
+  return availability.length ? [] : [{ id: "default", dayOfWeek: "", startTime: SCHOOL_DAY_START, endTime: SCHOOL_DAY_END }];
 }
 
 // Öneriler tek bir güne yığılmasın diye. Önceki sürümde puan yalnızca "en yakın gün +
