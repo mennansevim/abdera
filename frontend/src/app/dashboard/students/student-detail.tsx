@@ -16,7 +16,6 @@ import {
 import {
   useResetGuardianPassword,
   useCreateAndLinkGuardian,
-  useCreateEnrollment,
   useEndEnrollment,
   useEnrollments,
   useInstruments,
@@ -34,7 +33,8 @@ import {
 
 // isAdmin=false (Teacher) iken veli bilgisi hiç istenmez - /api/students/{id}/guardians
 // Admin-only olduğu için Teacher'a 403 dönerdi (docs/04-permissions.md).
-// canManage: öğretmen artık KENDİ öğrencisinin velisini ve kursunu ekleyebiliyor (J1).
+// canManage: öğretmen KENDİ öğrencisinin velisini ekleyebiliyor (J1). Kurs kaydı buradan
+// AÇILMAZ: tek giriş noktası Öğretmenler sayfasındaki "Öğrenci ekle" (kullanıcı kararı).
 // isAdmin ise yalnızca geri alınamaz işlemler için ayrı tutuluyor - kurs kaldırma bir
 // silmedir ve yöneticide kalır (J2'nin aynı gerekçesi).
 export function StudentDetail({
@@ -45,7 +45,6 @@ export function StudentDetail({
 }: { student: Student; isAdmin: boolean; canManage?: boolean; onDelete?: () => void }) {
   const studentId = student.id;
   const [showGuardianForm, setShowGuardianForm] = useState(false);
-  const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
   const resetGuardianPassword = useResetGuardianPassword();
@@ -94,7 +93,6 @@ export function StudentDetail({
         {canManage && <RowMenu label={`${fullName} için işlemler`}>{(close) => <>
           {activeEnrollments.length > 0 && <RowMenuItem icon="calendar" onClick={() => { close(); setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__"); }}>Ders programı</RowMenuItem>}
           <RowMenuItem icon="pencil" onClick={() => { close(); setEditingStudent(true); }}>Bilgileri düzenle</RowMenuItem>
-          <RowMenuItem icon="plus" onClick={() => { close(); setShowEnrollmentForm(true); }}>Kurs ekle</RowMenuItem>
           <RowMenuItem icon="students" onClick={() => { close(); setShowGuardianForm(true); }}>Veli ekle</RowMenuItem>
           <RowMenuItem icon={student.status === "Active" ? "x" : "check"} onClick={() => { close(); toggleStatus(); }}>{student.status === "Active" ? "Pasife al" : "Yeniden aktif et"}</RowMenuItem>
           {onDelete && <><RowMenuSeparator /><RowMenuItem icon="x" tone="danger" onClick={() => { close(); onDelete(); }}>{isAdmin ? "Kalıcı olarak sil…" : "Silme talebi oluştur…"}</RowMenuItem></>}
@@ -153,7 +151,6 @@ export function StudentDetail({
         <section className="app-card relative">
           <div className="flex min-h-12 items-center gap-2 border-b border-[var(--line)] px-3 py-2">
             <div className="min-w-0 flex-1"><h3 className="text-sm font-bold">Kurslar</h3><p className="text-meta">{enrollmentsLoading ? "Yükleniyor…" : `${activeEnrollments.length} aktif kayıt`}</p></div>
-            {canManage && <button type="button" onClick={() => setShowEnrollmentForm(true)} className="pressable min-h-11 rounded-lg px-2.5 text-xs font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">+ Kurs</button>}
           </div>
           <ul className="divide-y divide-[var(--line)]">
             {activeEnrollments.map((enrollment) => {
@@ -174,7 +171,7 @@ export function StudentDetail({
               );
             })}
             {enrollmentsLoading && <li className="space-y-2 px-3 py-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</li>}
-            {!enrollmentsLoading && enrollments && !activeEnrollments.length && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz aktif kurs yok.</li>}
+            {!enrollmentsLoading && enrollments && !activeEnrollments.length && <li className="text-meta grid min-h-20 place-items-center px-4 py-6 text-center">Henüz aktif kurs yok. Kurs, Öğretmenler sayfasındaki “Öğrenci ekle” ile açılır.</li>}
           </ul>
         </section>
       </div>
@@ -182,9 +179,6 @@ export function StudentDetail({
       {canManage && (
         <>
           <AddGuardianForm studentId={studentId} isAdmin={isAdmin} open={showGuardianForm} onClose={() => setShowGuardianForm(false)} />
-          <Modal open={showEnrollmentForm} title="Kurs ekle" description="Öğretmen ve enstrümanı seçerek bu öğrenciye bağla." onClose={() => setShowEnrollmentForm(false)} size="sm">
-            <AddEnrollmentForm studentId={studentId} teachers={teachers ?? []} instruments={instruments ?? []} onClose={() => setShowEnrollmentForm(false)} />
-          </Modal>
           <Modal open={editingStudent} title="Öğrenciyi düzenle" onClose={() => setEditingStudent(false)} size="sm">
             <EditStudentForm student={student} isAdmin={isAdmin} onClose={() => setEditingStudent(false)} />
           </Modal>
@@ -627,59 +621,3 @@ function AddGuardianForm({ studentId, isAdmin, open, onClose }: { studentId: str
   );
 }
 
-function AddEnrollmentForm({
-  studentId,
-  teachers,
-  instruments,
-  onClose,
-}: {
-  studentId: string;
-  teachers: { id: string; firstName: string; lastName: string; instrumentIds: string[] }[];
-  instruments: { id: string; name: string }[];
-  onClose: () => void;
-}) {
-  const createEnrollment = useCreateEnrollment(studentId);
-  const [teacherId, setTeacherId] = useState("");
-  const [instrumentId, setInstrumentId] = useState("");
-  const [startedAt, setStartedAt] = useState(() => new Date().toISOString().slice(0, 10));
-  const [error, setError] = useState<string | null>(null);
-
-  const availableInstruments = teacherId
-    ? instruments.filter((i) => teachers.find((t) => t.id === teacherId)?.instrumentIds.includes(i.id))
-    : instruments;
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    try {
-      await createEnrollment.mutateAsync({ teacherId, instrumentId, startedAt });
-      setTeacherId("");
-      setInstrumentId("");
-      onClose();
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Kayıt oluşturulamadı.");
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-3.5">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="form-label">Öğretmen
-          <select value={teacherId} onChange={(e) => { setTeacherId(e.target.value); setInstrumentId(""); }} required className="field text-sm">
-            <option value="">Öğretmen seç</option>
-            {teachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
-          </select>
-        </label>
-        <label className="form-label">Enstrüman
-          <select value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} required disabled={!teacherId} className="field text-sm">
-            <option value="">Enstrüman seç</option>
-            {availableInstruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-          </select>
-        </label>
-      </div>
-      <label className="form-label">Başlangıç tarihi<input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} required className="field text-sm" /></label>
-      {error && <FormMessage tone="error">{error}</FormMessage>}
-      <FormActions onCancel={onClose} submitLabel="Kursu ekle" pending={createEnrollment.isPending} pendingLabel="Ekleniyor…" />
-    </form>
-  );
-}
