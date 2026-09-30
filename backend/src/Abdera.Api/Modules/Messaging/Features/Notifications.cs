@@ -30,19 +30,13 @@ public static class Notifications
         if (status is { } s) query = query.Where(j => j.Status == s);
 
         var totalCount = await query.CountAsync();
-        // Sıra "ne oldu, sırada ne var" sorusunu yanıtlar (kullanıcı geri bildirimi: en son
-        // gönderilen mesaj en üstte görünmeliydi; eski `scheduled_at DESC` sırası aylar sonrasına
-        // planlanmış iptal satırlarını başa koyuyordu):
-        //   1. Gerçekleşenler (gönderildi / başarısız / işleniyor) - en son olan en üstte.
-        //   2. Bekleyenler - en yakın planlanan önce.
-        //   3. İptal edilenler - en sonda.
+        // Ekranda görünen tek tarih "Planlanan" sütunu; liste de ona göre kesintisiz, yeniden
+        // eskiye sıralanır (kullanıcı geri bildirimi: durum gruplarına göre sıralama, tarihin
+        // 24 Eyl'den 7 Eki'ye atlamasına yol açıyordu). İptal edilenler en sonda kalır - aylar
+        // sonrasına planlanmış iptal satırları başı doldurmasın.
         var jobs = await query
-            .OrderBy(j =>
-                j.Status == NotificationJobStatus.Sent || j.Status == NotificationJobStatus.Failed || j.Status == NotificationJobStatus.Processing ? 0
-                : j.Status == NotificationJobStatus.Pending ? 1
-                : 2)
-            .ThenByDescending(j => j.Status == NotificationJobStatus.Pending ? (DateTimeOffset?)null : j.SentAt ?? j.UpdatedAt)
-            .ThenBy(j => j.ScheduledAt)
+            .OrderBy(j => j.Status == NotificationJobStatus.Cancelled ? 1 : 0)
+            .ThenByDescending(j => j.ScheduledAt)
             .ThenBy(j => j.Id)
             .Skip((normalizedPage - 1) * normalizedPageSize)
             .Take(normalizedPageSize)

@@ -476,11 +476,11 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Null(corrected.ReadAt);
     }
 
-    // Kullanıcı geri bildirimi: en son gönderilen mesaj listenin başında görünmeli. Eski sıra
-    // (scheduled_at DESC) aylar sonrasına planlanmış iptal satırlarını en üste koyuyordu.
-    // Sıra: gerçekleşenler (en son olan önce) -> bekleyenler (en yakın önce) -> iptaller.
+    // Kullanıcı geri bildirimi: liste ekrandaki "Planlanan" sütununa göre kesintisiz, yeniden
+    // eskiye akmalı - duruma göre gruplamak tarihi ortada atlatıyordu. Tek ayrım iptaller:
+    // aylar sonrasına planlanmış iptal satırları başı doldurmasın diye en sonda kalır.
     [Fact]
-    public async Task Notifications_list_puts_the_latest_sent_first_then_upcoming_then_cancelled()
+    public async Task Notifications_list_is_ordered_by_scheduled_time_newest_first_with_cancelled_last()
     {
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "siralama");
@@ -491,12 +491,13 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         NotificationJob Job(DateTimeOffset scheduledAt) => NotificationJob.Create(
             NotificationJobType.PaymentReminder, phone, "ordering-test", Guid.NewGuid(), scheduledAt, now.AddDays(-10));
 
-        var olderSent = Job(now.AddDays(-3));
-        olderSent.Claim(now.AddDays(-3));
-        olderSent.MarkSent(now.AddDays(-3));
-        var latestSent = Job(now.AddDays(-5));
-        latestSent.Claim(now.AddHours(-1));
-        latestSent.MarkSent(now.AddHours(-1));
+        var recentSent = Job(now.AddDays(-3));
+        recentSent.Claim(now.AddDays(-3));
+        recentSent.MarkSent(now.AddDays(-3));
+        // Daha erken planlanmış ama daha geç gönderilmiş: sırayı gönderim anı değil plan belirler.
+        var earlierPlannedSent = Job(now.AddDays(-5));
+        earlierPlannedSent.Claim(now.AddHours(-1));
+        earlierPlannedSent.MarkSent(now.AddHours(-1));
         var soonPending = Job(now.AddDays(1));
         var laterPending = Job(now.AddDays(30));
         var farCancelled = Job(now.AddDays(90));
@@ -504,13 +505,13 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         await using (var db = await _factory.CreateDbContextAsync())
         {
-            db.NotificationJobs.AddRange(farCancelled, laterPending, soonPending, olderSent, latestSent);
+            db.NotificationJobs.AddRange(farCancelled, soonPending, earlierPlannedSent, laterPending, recentSent);
             await db.SaveChangesAsync();
         }
 
         var firstPage = await admin.GetFromJsonAsync<PagedResponse<Notifications.NotificationJobResponse>>(
             "/api/notifications?pageSize=1&page=1", TestJson.Options);
-        Assert.Equal(latestSent.Id, firstPage!.Items.Single().Id);
+        Assert.Equal(laterPending.Id, firstPage!.Items.Single().Id);
 
         var ids = new List<Guid>();
         for (var pageNumber = 1; ; pageNumber++)
@@ -521,7 +522,7 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             if (page.Items.Count == 0 || ids.Count >= page.TotalCount) break;
         }
 
-        var mine = new[] { latestSent.Id, olderSent.Id, soonPending.Id, laterPending.Id, farCancelled.Id };
+        var mine = new[] { laterPending.Id, soonPending.Id, recentSent.Id, earlierPlannedSent.Id, farCancelled.Id };
         Assert.Equal(mine, ids.Where(mine.Contains).ToArray());
     }
 
