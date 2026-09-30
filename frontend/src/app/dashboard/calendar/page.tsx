@@ -8,7 +8,7 @@ import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/a
 import { useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
-import { useCalendar, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
+import { useCalendar, useEndLessonSeries, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { computeHourWindow, layoutDayLessons, type HourWindow, type LessonLayout } from "@/lib/week-grid-layout";
@@ -200,6 +200,10 @@ function useDialogBehavior(onClose: () => void, initialFocusRef: RefObject<HTMLE
   }, [initialFocusRef]);
 }
 
+function isShownOnCalendar(lesson: CalendarLesson) {
+  return lesson.status !== "Rescheduled" && lesson.status !== "Cancelled";
+}
+
 export default function CalendarPage() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
@@ -257,8 +261,10 @@ export default function CalendarPage() {
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Eski kaydı ızgarada göstermek aynı dersin
   // iki yerde birden görünmesine yol açıyordu - değişiklik geçmişi `/dashboard/change-requests`'te
   // zaten var, canlı takvimde tekrar göstermeye gerek yok.
-  const lessons = useMemo(() => (rawLessons ?? []).filter((lesson) => lesson.status !== "Rescheduled"), [rawLessons]);
-  const timelineLessons = useMemo(() => (rawTimelineLessons ?? []).filter((lesson) => lesson.status !== "Rescheduled"), [rawTimelineLessons]);
+  // İptal edilen ders de ızgarada gösterilmez: üstü çizili kart boş saati dolu gösteriyordu.
+  // Kayıt silinmez (denetim izi); telafisi araç çubuğundaki "Telafi planla" ile kurulur.
+  const lessons = useMemo(() => (rawLessons ?? []).filter(isShownOnCalendar), [rawLessons]);
+  const timelineLessons = useMemo(() => (rawTimelineLessons ?? []).filter(isShownOnCalendar), [rawTimelineLessons]);
   const visibleLessons = useMemo(() => lessons.filter((lesson) => {
     const matchesInstrument = instrumentFilter === "Hepsi" || lesson.instrumentName.toLocaleLowerCase("tr-TR") === instrumentFilter.toLocaleLowerCase("tr-TR");
     const matchesTeacher = teacherFilter === "all" || lesson.teacherId === teacherFilter;
@@ -1288,6 +1294,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const updateLesson = useUpdateLesson();
   const markAttendance = useMarkAttendance(lesson.id);
   const cancelLesson = useCancelLesson();
+  const endSeries = useEndLessonSeries();
   const { data: makeupCredits } = useMakeupCredits(lesson.status === "Cancelled" ? lesson.studentId : "");
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
@@ -1348,9 +1355,22 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
     }
   }
 
-  async function handleConfirmedAction() {
+  // scope "series": haftalık program bu dersle birlikte biter. Önce seri kapatılır, sonra bu
+  // ders iptal edilir - ikinci adım düşerse ders takvimde kalır ve tek ders olarak yeniden
+  // iptal edilebilir (ters sırada ders gizlenir, seriyi bitirecek giriş noktası kalmazdı).
+  async function handleConfirmedAction(scope: "single" | "series" = "single") {
     if (!confirmAction) return;
     setError(null);
+    const endsSeries = scope === "series" && confirmAction !== "absent" && Boolean(lesson.lessonSeriesId);
+    if (endsSeries) {
+      try {
+        // Sunucu "bu tarihten sonraki dersler"i dersin UTC gününe göre seçer; aynı günü gönder.
+        await endSeries.mutateAsync({ seriesId: lesson.lessonSeriesId!, effectiveUntil: start.toISOString().slice(0, 10) });
+      } catch (err) {
+        setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ders serisi sonlandırılamadı.");
+        return;
+      }
+    }
     try {
       if (confirmAction === "absent") {
         await markAttendance.mutateAsync({ status: "Absent", note: "Takvimden öğrenci gelmedi olarak işaretlendi." });
@@ -1362,10 +1382,11 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         const result = await cancelLesson.mutateAsync({
           lessonId: lesson.id,
           cancelledBy: "School",
-          reason: withMakeup ? "Takvimden telafi hakkıyla iptal edildi." : "Takvimden telafi hakkı verilmeden iptal edildi.",
+          reason: `${endsSeries ? "Ders serisi sonlandırıldı. " : ""}${withMakeup ? "Takvimden telafi hakkıyla iptal edildi." : "Takvimden telafi hakkı verilmeden iptal edildi."}`,
           grantMakeupCredit: withMakeup,
         });
-        onUpdated(result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders telafi hakkı verilmeden iptal edildi.");
+        const seriesNote = endsSeries ? " Haftalık program sona erdi, sonraki haftalar kaldırıldı." : "";
+        onUpdated((result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders telafi hakkı verilmeden iptal edildi.") + seriesNote);
         if (result.makeupCreditEarned) {
           onPlanMakeup(lesson);
           return;
@@ -1373,9 +1394,13 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
       }
       onClose();
     } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "İşlem tamamlanamadı.");
+      const detail = err instanceof ApiError ? (err.detail ?? err.title) : "İşlem tamamlanamadı.";
+      setError(endsSeries ? `Haftalık program sona erdi ama bu ders iptal edilemedi: ${detail} "Yalnız bu dersi iptal et" ile yeniden dene.` : detail);
     }
   }
+
+  const confirmPending = markAttendance.isPending || cancelLesson.isPending || endSeries.isPending;
+  const offersSeriesCancel = confirmAction !== null && confirmAction !== "absent" && Boolean(lesson.lessonSeriesId);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-end p-0 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Ders detayları">
@@ -1420,10 +1445,12 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
               <div className={`border-t border-[var(--line)] p-4 ${confirmAction === "absent" ? "bg-[var(--warning-soft)]" : "bg-[var(--danger-soft)]"}`}>
                 <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : confirmAction === "cancel-with-makeup" ? "Ders iptal edilip telafi hakkı tanımlansın mı?" : "Ders telafi hakkı verilmeden iptal edilsin mi?"}</p>
                 <p className="text-meta mt-1">{confirmAction === "absent" ? "Ders tamamlandı sayılır ve yoklama Gelmedi olarak kaydedilir." : confirmAction === "cancel-with-makeup" ? "Bu ders iptal edilir; öğrenci için kullanılabilir bir telafi hakkı oluşturulur." : "Bu ders iptal edilir ve öğrenciye telafi hakkı TANIMLANMAZ. Tatil, yanlış açılmış ders ya da velinin telafi istemediği durumlar için."}</p>
+                {offersSeriesCancel && <p className="text-meta mt-2">Bu ders haftalık bir programın parçası. Yalnız bu dersi ya da bu dersle birlikte tüm seriyi iptal edebilirsin: seri iptalinde program sona erer, sonraki haftaların dersleri kaldırılır ve bu gün/saat boşalır.</p>}
                 {error && <p role="alert" className="mt-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
-                <div className="mt-3 flex justify-end gap-2">
-                  <button type="button" onClick={() => { setConfirmAction(null); setError(null); }} disabled={markAttendance.isPending || cancelLesson.isPending} className="btn btn-quiet">Vazgeç</button>
-                  <button type="button" onClick={handleConfirmedAction} disabled={markAttendance.isPending || cancelLesson.isPending} className={`btn ${confirmAction === "absent" ? "btn-primary" : "bg-[var(--danger)] text-white"}`}>{markAttendance.isPending || cancelLesson.isPending ? "Kaydediliyor…" : "Onayla"}</button>
+                <div className="mt-3 flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => { setConfirmAction(null); setError(null); }} disabled={confirmPending} className="btn btn-quiet">Vazgeç</button>
+                  {offersSeriesCancel && <button type="button" onClick={() => handleConfirmedAction("series")} disabled={confirmPending} className="btn border border-[var(--danger)] bg-white text-[var(--danger-strong)]">{confirmPending ? "Kaydediliyor…" : "Tüm seriyi iptal et"}</button>}
+                  <button type="button" onClick={() => handleConfirmedAction("single")} disabled={confirmPending} className={`btn ${confirmAction === "absent" ? "btn-primary" : "bg-[var(--danger)] text-white"}`}>{confirmPending ? "Kaydediliyor…" : offersSeriesCancel ? "Yalnız bu dersi iptal et" : "Onayla"}</button>
                 </div>
               </div>
             )}

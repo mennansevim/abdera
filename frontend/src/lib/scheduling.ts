@@ -105,6 +105,22 @@ export function useRescheduleLessonSeries(studentId: string) {
   });
 }
 
+// Seriyi verilen tarihte bitirir (PATCH /api/lesson-series/{id}): o tarihten SONRAKİ planlı
+// dersler kaldırılır, program o gün/saati artık tutmaz. Takvimdeki "Tüm seriyi iptal et" bunu
+// kullanır; seçilen dersin kendisi ayrıca iptal edilir (bkz. LessonDetailsDialog).
+export function useEndLessonSeries() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ seriesId, effectiveUntil }: { seriesId: string; effectiveUntil: string }) =>
+      api.patch<unknown>(`/api/lesson-series/${seriesId}`, { effectiveUntil }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["student-lesson-series"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
+    },
+  });
+}
+
 // "Her hafta Pazartesi 18:00 · 45 dk" - künyedeki tek satırlık özet.
 export function formatWeeklySchedule(series: { dayOfWeek: string; startTime: string; durationMinutes: number }) {
   return `Her hafta ${DAY_NAMES_TR[series.dayOfWeek] ?? series.dayOfWeek} ${series.startTime.slice(0, 5)} · ${series.durationMinutes} dk`;
