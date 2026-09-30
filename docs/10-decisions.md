@@ -307,6 +307,13 @@ Kullanıcı isteği: "Veli yorumunu yapıcı metne çeviren yapay zekâ kısmın
 |---|---|---|
 | T1 | Şablon editörü kaldırıldı | Kullanıcı isteği: "şablonlar gereksiz, Meta'nın şablonu zaten statik, bunun dışına çıkamıyoruz; gereksiz tasarımları kaldıralım, otomasyon kalabilir". Mesaj Merkezi'ndeki şablon listesi/düzenleyici/önizleme ve `/api/message-templates` (GET/POST/PATCH) kaldırıldı. Panelde düzenlenen gövde telefona giden metni değiştirmiyordu; tek gerçek etkisi değişken sırasını (`MessageTemplate.OrderParameters`) Meta'daki onaylı şablondan kaydırıp gönderimi bozmaktı. `message_templates` tablosu kalır: dispatcher şablon adını, değişken sırasını ve `whatsapp_messages.body_snapshot` için gövdeyi oradan okur. Meta'da şablon değişirse gövde bir migration'la güncellenir. Sekme artık yalnızca "Otomasyon" (ders hatırlatması süresi, açık/kapalı, "Geç kalacağım" seçeneği). |
 
+## U — Sürüm takibi ve "Yenilikler" penceresi (2026-09-30)
+
+| # | Konu | Karar |
+|---|---|---|
+| U1 | Sürüm = canlıya alış | Kullanıcı isteği: "deploy olduğunda sürüm takibi de olsun, kullanıcıya gösterilsin yenilikler özetle". Her deploy bir sürümdür; adı canlıya alış günüdür (`2026.09.30`, aynı gün ikincisi `.2`). Kullanıcıya görünen notlar `frontend/src/data/releases.ts`'de tutulur (en yeni en üstte, en üstteki canlıdaki sürüm); `abdera-deploy` skill'i deploy'dan önce commit'lerden kullanıcı diliyle maddeleri yazar, başarılı deploy'dan sonra commit'i `v<sürüm>` etiketiyle işaretler. Yeni bağımlılık, tablo ya da uç nokta yok: notlar frontend'le birlikte derlenir. |
+| U2 | Kime, ne zaman | Yeni sürümden sonraki ilk açılışta "Yenilikler" penceresi kullanıcının görmediği sürümleri gösterir; ilk kez açan (yeni cihaz) yalnızca son sürümü görür. Madde başına `audience`: `admin` maddelerini öğretmen görmez; rolüne madde düşmeyen sürümde pencere açılmaz. "Görüldü" bilgisi tarayıcıda, kullanıcı başına tutulur (`abdera:seen-release:<userId>`) - kaybolursa en kötü ihtimalle not bir kez daha açılır, bu yüzden tabloya taşınmadı. Zorunlu şifre değişikliği ekranında ve otomasyon tarayıcısında (e2e, `navigator.webdriver`) açılmaz. Geçmiş notlar menünün altındaki sürüm bağlantısından `/dashboard/releases` sayfasında. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

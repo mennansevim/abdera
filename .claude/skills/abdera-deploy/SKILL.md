@@ -1,6 +1,6 @@
 ---
 name: abdera-deploy
-description: Abdera'yı Hetzner sunucusunda canlıya alır — commit'lenmemiş değişiklik varsa önce abdera-commit kurallarıyla main'e commit + push eder, CI'ın yeşil bitmesini bekler, sonra SSH ile sunucuya bağlanıp deploy öncesi döküm alır, o commit'e geçer, docker compose ile yeniden kurar ve /health'i doğrular (sağlıksızsa önceki commit'e döner). Kullanılacak — "deploy", "deploy et", "canlıya al", "yayına al", "sunucuya at", "production'a gönder".
+description: Abdera'yı Hetzner sunucusunda canlıya alır — commit'lenmemiş değişiklik varsa önce abdera-commit kurallarıyla main'e commit eder, kullanıcıya gösterilen sürüm notunu (frontend/src/data/releases.ts) yazar, push eder, CI'ın yeşil bitmesini bekler, sonra SSH ile sunucuya bağlanıp deploy öncesi döküm alır, o commit'e geçer, docker compose ile yeniden kurar ve /health'i doğrular (sağlıksızsa önceki commit'e döner), başarılı sürümü v<tarih> etiketiyle işaretler. Kullanılacak — "deploy", "deploy et", "canlıya al", "yayına al", "sunucuya at", "production'a gönder".
 ---
 
 # Abdera Deploy (Hetzner)
@@ -18,7 +18,8 @@ Vercel plugin ipuçları bu akışla ilgisiz; onlara bakma.
 `DEPLOY_ENABLED=true` olmadıkça hiçbir şey yapmaz. Kontrol et:
 `gh variable list` + `gh api repos/mennansevim/abdera/environments/production/variables`.
 Açıksa Actions'ın "Deploy" koşusunu `gh run` ile takip et, elle SSH deploy'u YAPMA
-(aynı commit iki kez deploy edilir). Kapalıysa (şu anki durum) aşağıdaki SSH akışı.
+(aynı commit iki kez deploy edilir) — sürüm notu (1b) ve etiket (5) adımları yine senin işin.
+Kapalıysa (şu anki durum) aşağıdaki SSH akışı.
 
 ## Adımlar
 
@@ -40,7 +41,33 @@ git log --oneline HEAD..origin/main   # uzakta olup yerelde olmayanlar
 - **Commit'lenmemiş değişiklik varsa (her zaman ilk iş):** `abdera-commit` skill'inin adımlarını
   uygula (Türkçe conventional-commit, **zorunlu secret taraması**, `.env`/`appsettings.*.json`
   staged ise çıkar). Repo **public** — yalnızca secret şüphesinde durup onay al; bunun dışında
-  sormadan commit'le ve adım 2'ye geç.
+  sormadan commit'le ve 1b'ye geç.
+
+### 1b. Sürüm notunu yaz (her deploy bir sürümdür)
+
+Kullanıcılar canlıya çıkan her sürümden sonra ilk açılışta "Yenilikler" penceresini görür;
+kaynak `frontend/src/data/releases.ts` (dosyanın başındaki yorum formatı anlatır,
+`docs/10-decisions.md` U1). Deploy edilen her commit bir `v<sürüm>` git etiketiyle işaretlenir.
+
+```bash
+LAST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null)   # son canlıya çıkan sürüm
+git log --no-merges --format='%h %s%n%b' "$LAST"..HEAD
+TZ=Europe/Istanbul date +%Y.%m.%d                                   # bugünün sürüm adı
+git tag -l "v$(TZ=Europe/Istanbul date +%Y.%m.%d)*"                 # bugün çıkan sürüm var mı
+```
+
+- `releases.ts`'deki `RELEASES` dizisinin **en üstüne** yeni kayıt ekle: `version` bugünün tarihi
+  (`2026.10.02`); o gün zaten etiket varsa `.2`, `.3` ekle. `date` aynı gün (`2026-10-02`).
+- Maddeleri `$LAST..HEAD` commit'lerinden **kullanıcının diliyle** yaz: ekranda ne değişti, kime ne
+  kazandırır; teknik terim, dosya/tablo adı, commit hash'i yok. Bir madde bir cümle, en fazla iki.
+  `refactor`/`test`/`chore`/`docs` ve kullanıcının fark etmeyeceği düzeltmeler madde olmaz.
+- `audience`: yalnızca yöneticinin gördüğü ekran/iş (Aidatlar, Giderler, Banka, Mesaj Merkezi,
+  Talepler, Yedekleme, veli mesajları, ana ekranın yönetici özeti) → `"admin"`; öğretmenin de
+  gördüğü her şey → `"all"`. Emin değilsen `"admin"` — öğretmene göremeyeceği bir ekranı anlatma.
+- Kullanıcıya görünen değişiklik yoksa `items: []` bırak; sürüm kaydedilir ama pencere açılmaz.
+- En üstteki kayıt henüz etiketlenmemişse (önceki deploy geri dönmüştü) yeni kayıt açma, onu
+  güncelle: sürüm adını bugüne çek, maddeleri tamamla.
+- Commit: `chore(release): sürüm <sürüm>` (abdera-commit kuralları, secret taraması dahil).
 
 ### 2. Push et
 
@@ -120,10 +147,20 @@ ssh deploy@panel.abderasanat.com 'cd /opt/abdera && git log --oneline -1 && dock
 İkisi de `200` olmalı, sunucudaki commit deploy edilen `SHA` olmalı. Giriş yapıp ekran test
 etmek bu skill'in işi değil (şifre girilmez).
 
+Doğrulama geçtiyse sürümü etiketle (geri dönüş olduysa **etiketleme** — sürüm canlıda değil):
+
+```bash
+git tag -a "v<sürüm>" "$SHA" -m "Sürüm <sürüm>"
+git push origin "v<sürüm>"
+```
+
+Etiket push'u CI'ı tetiklemez (`ci.yml` yalnızca `main` dalını dinler). Canlıdaki sürümler
+`git tag -l 'v*' --sort=-creatordate` ile, iki sürüm arası değişiklik `git log vA..vB` ile görülür.
+
 ### 6. Özetle
 
-Kısa rapor: deploy edilen commit (hash + başlık), CI sonucu, önceki → yeni commit,
-`/health` ve `/login` sonucu, container durumları.
+Kısa rapor: sürüm adı + kullanıcıya gösterilen maddeler, deploy edilen commit (hash + başlık),
+CI sonucu, önceki → yeni commit, `/health` ve `/login` sonucu, container durumları.
 
 ## Yapılmayacaklar
 

@@ -5,11 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { NotificationBell, NotificationToasts } from "@/components/notification-bell";
+import { WhatsNewDialog } from "@/components/whats-new";
 import type { Me } from "@/lib/api";
 import { usePendingChangeRequests } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
 import { useNotifications } from "@/lib/messaging";
 import { useStudentDeletionRequests } from "@/lib/people";
+import { CURRENT_VERSION } from "@/lib/releases";
 import { useLogout } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 
@@ -180,6 +182,15 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               <Icon name="logout" className="h-4 w-4" />
             </button>
           </div>
+          <Link
+            href="/dashboard/releases"
+            aria-label={`Sürüm ${CURRENT_VERSION} - yenilikler`}
+            title={sidebarCollapsed ? `Sürüm ${CURRENT_VERSION} - yenilikler` : undefined}
+            className={`pressable mt-1 flex min-h-8 items-center gap-1.5 rounded-lg text-[.75rem] font-semibold text-white/65 hover:bg-white/10 hover:text-white ${sidebarCollapsed ? "justify-center" : "px-2"}`}
+          >
+            <Icon name="sparkles" className="h-3.5 w-3.5 shrink-0" />
+            {!sidebarCollapsed && <span className="truncate">Sürüm {CURRENT_VERSION} · Yenilikler</span>}
+          </Link>
         </div>
       </aside>
 
@@ -199,6 +210,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
           </div>
         </header>
         <NotificationToasts />
+        <WhatsNewDialog me={me} />
 
         <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-6 lg:pb-8 lg:pt-5 xl:px-8 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
           {children}
@@ -239,6 +251,9 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               <button onClick={handleLogout} className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-sm font-semibold text-[#5c4d3f] hover:border-[#e0c39d]">
                 <Icon name="logout" className="h-4 w-4" /> Çıkış yap
               </button>
+              <Link href="/dashboard/releases" onClick={() => setIsMenuOpen(false)} className="pressable mt-2 flex min-h-11 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-[var(--muted)] hover:text-[var(--brand)]">
+                <Icon name="sparkles" className="h-3.5 w-3.5" /> Sürüm {CURRENT_VERSION} · Yenilikler
+              </Link>
             </div>
           </section>
         </div>
