@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useMe } from "@/lib/use-auth";
 import { Icon, type IconName } from "./icons";
@@ -251,14 +251,46 @@ export function SearchInput({ value, onChange, label, placeholder }: { value: st
 // Satır sonundaki "⋮" eylem menüsü. Bir satırda birden fazla eylem olduğunda hepsini yan
 // yana buton olarak dizmek listeyi okunmaz yapıyor; ikincil eylemler buraya toplanır.
 // Dışarı tıklama ve Esc ile kapanır, klavyeyle erişilebilir.
+//
+// Menü body'ye portal'lanır ve butona göre `fixed` konumlanır. Eskiden butonun yanında
+// `absolute` duruyordu; `overflow-hidden` taşıyan bir kartın (Öğrenciler listesi, Panel)
+// son satırında açılınca kartın alt kenarında kesiliyor, eylemlerin çoğu görünmüyordu.
+// Altta yer yoksa yukarı doğru açılır.
 export function RowMenu({ label, children }: { label: string; children: (close: () => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const button = containerRef.current?.getBoundingClientRect();
+      const menu = menuRef.current;
+      if (!button || !menu) return;
+      const gap = 4;
+      const margin = 8;
+      const below = button.bottom + gap;
+      const above = button.top - gap - menu.offsetHeight;
+      const fitsBelow = below + menu.offsetHeight <= window.innerHeight - margin;
+      menu.style.top = `${fitsBelow || above < margin ? below : above}px`;
+      menu.style.right = `${Math.max(margin, document.documentElement.clientWidth - button.right)}px`;
+      menu.style.visibility = "visible";
+    }
+    place();
+    window.addEventListener("resize", place);
+    // capture: sayfa değil iç içe bir kaydırma alanı (modal gövdesi) kaydığında da izle.
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (!containerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -286,10 +318,12 @@ export function RowMenu({ label, children }: { label: string; children: (close: 
       >
         <Icon name="more" className="h-5 w-5" />
       </button>
-      {open && (
-        <div role="menu" className="app-card absolute right-0 top-[calc(100%+.25rem)] z-30 w-52 overflow-hidden p-1">
+      {open && createPortal(
+        // z-[60]: Modal (z-50) içindeki bir satır menüsü de pencerenin üstünde kalsın.
+        <div ref={menuRef} role="menu" style={{ visibility: "hidden" }} className="app-card fixed z-[60] w-52 overflow-hidden p-1">
           {children(() => setOpen(false))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
