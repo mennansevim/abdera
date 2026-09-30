@@ -241,7 +241,7 @@ function NewStudentForm() {
               )}
             </div>
           )}
-          <p className="text-meta mt-2 text-[var(--muted)]">{useExistingGuardian ? "Mevcut velinin giriş bilgileri aynı kalır." : "Veliye giriş şifresi otomatik üretilir ve kayıttan sonra ekranda gösterilir. WhatsApp'tan yalnızca velinin bildirim onayı açıksa gider."}</p>
+          <p className="text-meta mt-2 text-[var(--muted)]">{useExistingGuardian ? "Mevcut velinin giriş bilgileri aynı kalır." : "Veliye giriş şifresi otomatik üretilir, kayıttan sonra ekranda gösterilir ve WhatsApp'tan bir kez gönderilir. Sonraki bildirimler için velinin bildirim onayı açılmalı."}</p>
         </Step>
 
         {error && <FormMessage tone="error">{error}</FormMessage>}

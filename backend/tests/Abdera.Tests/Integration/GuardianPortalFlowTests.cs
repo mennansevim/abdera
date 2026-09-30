@@ -10,6 +10,8 @@ using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Progress.Features;
 using Abdera.Api.Modules.Scheduling.Features;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Messaging.Infrastructure;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Abdera.Tests.Integration;
 
@@ -148,6 +150,49 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
         using var afterReset = _factory.CreateClient();
         Assert.Equal(HttpStatusCode.OK,
             (await afterReset.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "sevimm"))).StatusCode);
+    }
+
+    // docs/10-decisions.md R2: yeni veliye giriş bilgilerini ileten karşılama mesajı bildirim
+    // onayı kapalıyken de BİR KEZ gider; onay kapalı kalır ve sonraki hiçbir mesaj geçmez.
+    [Fact]
+    public async Task New_guardian_gets_one_welcome_message_without_consent_and_nothing_after()
+    {
+        var admin = await CreateAdminClientAsync();
+        const string rawPhone = "05557774321";
+        var guardian = (await (await admin.PostAsJsonAsync("/api/guardians",
+                new Guardians.CreateRequest("Karsilama", "Velisi", rawPhone)))
+            .Content.ReadFromJsonAsync<Guardians.GuardianResponse>(TestJson.Options))!;
+        Assert.False(guardian.NotificationConsent);
+
+        // Karşılama borcu açıkken bile yalnızca şifre şablonu geçer; hatırlatma ve serbest metin geçmez.
+        await using (var gateDb = await _factory.CreateDbContextAsync())
+        {
+            var gate = new ConsentGatedWhatsAppClient(
+                new FakeWhatsAppClient(NullLogger<FakeWhatsAppClient>.Instance), gateDb,
+                NullLogger<ConsentGatedWhatsAppClient>.Instance);
+            var noParameters = new Dictionary<string, string>();
+            Assert.False((await gate.SendTemplateAsync(guardian.PhoneNumber, "lesson_reminder_rsvp", noParameters)).Success);
+            Assert.False((await gate.SendFreeTextAsync(guardian.PhoneNumber, "merhaba")).Success);
+        }
+
+        var first = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
+            .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
+        Assert.Contains("WhatsApp'tan gönderildi", first.Message);
+
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var stored = await db.Guardians.AsNoTracking().SingleAsync(g => g.Id == guardian.Id);
+            Assert.False(stored.WelcomeMessagePending);
+            Assert.False(stored.NotificationConsent);
+            Assert.Equal(1, await db.AuditLogs.CountAsync(a =>
+                a.Action == "guardian.welcome_message_sent" && a.EntityId == guardian.Id));
+        }
+
+        // Borç kapandı: ikinci sıfırlama onay kapalı olduğu için gönderilmez.
+        var second = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
+            .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
+        Assert.Contains("gönderilemedi", second.Message);
+        Assert.Contains(ConsentGatedWhatsAppClient.ConsentDisabledError, second.Message);
     }
 
     [Fact]

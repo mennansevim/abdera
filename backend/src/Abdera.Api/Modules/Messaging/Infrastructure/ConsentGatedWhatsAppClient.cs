@@ -9,6 +9,12 @@ namespace Abdera.Api.Modules.Messaging.Infrastructure;
 // Kural tek tek çağıran yerlerde değil burada, gönderimin geçtiği tek noktada zorlanır ki
 // yeni bir gönderim yolu eklendiğinde unutulamasın. Numarası hiçbir veliye ait olmayan alıcıya
 // da gönderilmez: sistem yalnızca velilere yazar.
+//
+// Tek istisna (docs/10-decisions.md R2): yeni kaydedilen veliye giriş bilgilerini ileten
+// karşılama mesajı. Yalnızca guardian_password şablonu ve yalnızca velinin karşılama borcu
+// (guardians.welcome_message_pending) açıkken geçer; borcu kapatmak çağıranın işidir
+// (Guardians.ResetPasswordAsync). İstisna burada durur ki "onaysız ne gidebilir" sorusunun
+// yanıtı tek dosyada kalsın - yeni bir istisna eklemeden önce onay al.
 public class ConsentGatedWhatsAppClient(IWhatsAppClient inner, AbderaDbContext db, ILogger<ConsentGatedWhatsAppClient> logger)
     : IWhatsAppClient
 {
@@ -21,18 +27,21 @@ public class ConsentGatedWhatsAppClient(IWhatsAppClient inner, AbderaDbContext d
         IReadOnlyList<string>? buttonPayloads = null,
         CancellationToken cancellationToken = default)
     {
-        if (!await HasConsentAsync(toPhoneNumber, cancellationToken)) return Blocked(templateName);
+        var isWelcome = templateName == WhatsAppTemplateNames.GuardianPassword;
+        if (!await HasConsentAsync(toPhoneNumber, isWelcome, cancellationToken)) return Blocked(templateName);
         return await inner.SendTemplateAsync(toPhoneNumber, templateName, parameters, buttonPayloads, cancellationToken);
     }
 
     public async Task<WhatsAppSendResult> SendFreeTextAsync(string toPhoneNumber, string body, CancellationToken cancellationToken = default)
     {
-        if (!await HasConsentAsync(toPhoneNumber, cancellationToken)) return Blocked("free_text");
+        if (!await HasConsentAsync(toPhoneNumber, allowPendingWelcome: false, cancellationToken)) return Blocked("free_text");
         return await inner.SendFreeTextAsync(toPhoneNumber, body, cancellationToken);
     }
 
-    private Task<bool> HasConsentAsync(string phoneNumber, CancellationToken cancellationToken) =>
-        db.Guardians.AsNoTracking().AnyAsync(g => g.PhoneNumber == phoneNumber && g.NotificationConsent, cancellationToken);
+    private Task<bool> HasConsentAsync(string phoneNumber, bool allowPendingWelcome, CancellationToken cancellationToken) =>
+        db.Guardians.AsNoTracking().AnyAsync(
+            g => g.PhoneNumber == phoneNumber && (g.NotificationConsent || (allowPendingWelcome && g.WelcomeMessagePending)),
+            cancellationToken);
 
     private WhatsAppSendResult Blocked(string messageKind)
     {

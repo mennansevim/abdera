@@ -25,8 +25,6 @@ public static class Guardians
     // aynı) - admin ekranı gösterebilsin, agent doğrulama için kullanabilsin.
     public record ResetPasswordResponse(Guid Id, string PhoneNumber, string Password, string Message);
 
-    private const string PasswordTemplateName = "guardian_password";
-
     public static void MapGuardians(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/guardians").RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
@@ -164,8 +162,12 @@ public static class Guardians
     // GuardianPasswordGenerator), hash'ler ve WhatsApp'tan gönderir. Veli kendi şifresini
     // değiştirip unuttuğunda yöneticinin geri dönüş yolu. Düz metin yalnızca yanıtta bir kez
     // döner - loglanmaz.
+    //
+    // R2: yeni veliye ilk gönderim onay kapalıyken de gider (tek seferlik karşılama mesajı);
+    // istisnayı ConsentGatedWhatsAppClient uygular, burada yalnızca borç kapatılır ve onaysız
+    // gönderim audit_log'a yazılır.
     private static async Task<IResult> ResetPasswordAsync(
-        Guid guardianId, AbderaDbContext db, IClock clock,
+        Guid guardianId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
         IPasswordHasher<Guardian> passwordHasher, IWhatsAppClient whatsAppClient)
     {
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId)
@@ -176,15 +178,31 @@ public static class Guardians
         await db.SaveChangesAsync();
 
         var sendResult = await whatsAppClient.SendTemplateAsync(
-            guardian.PhoneNumber, PasswordTemplateName,
+            guardian.PhoneNumber, WhatsAppTemplateNames.GuardianPassword,
             new Dictionary<string, string> { ["password"] = password });
+
+        var sentAsWelcome = sendResult.Success && guardian.WelcomeMessagePending;
+        if (sentAsWelcome)
+        {
+            var now = clock.UtcNow;
+            guardian.MarkWelcomeMessageDelivered(now);
+            if (!guardian.NotificationConsent)
+            {
+                db.AuditLogs.Add(AuditLog.Record(
+                    AuthContext.GetUserId(principal), "guardian.welcome_message_sent", nameof(Guardian), guardian.Id, now,
+                    afterJson: JsonSerializer.Serialize(new { notificationConsent = false, template = WhatsAppTemplateNames.GuardianPassword })));
+            }
+            await db.SaveChangesAsync();
+        }
 
         // Gönderim başarısızsa (ör. bildirim onayı kapalı) "gönderildi" deme - yönetici şifreyi
         // bu yanıttan görüp veliye kendisi iletir.
         return Results.Ok(new ResetPasswordResponse(
             guardian.Id, guardian.PhoneNumber, password,
             sendResult.Success
-                ? "Şifre üretildi ve WhatsApp'tan gönderildi."
+                ? sentAsWelcome && !guardian.NotificationConsent
+                    ? "Giriş bilgileri WhatsApp'tan gönderildi. Bildirim onayı kapalı olduğu için sonraki mesajlar gitmez."
+                    : "Şifre üretildi ve WhatsApp'tan gönderildi."
                 : $"Şifre üretildi ama WhatsApp'tan gönderilemedi ({sendResult.Error}). Veliye kendin ilet."));
     }
 }

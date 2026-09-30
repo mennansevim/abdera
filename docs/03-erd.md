@@ -100,6 +100,7 @@ guardians
   phone_number             text unique   -- E.164 normalize edilmiş
   whatsapp_enabled         boolean default true
   notification_consent     boolean default true
+  welcome_message_pending  boolean default false  -- R2: tek seferlik karşılama mesajı borcu (yeni velide true)
   consent_updated_at       timestamptz
   conversation_window_expires_at  timestamptz null   -- A7: son gelen mesaj + 24s
   created_at               timestamptz

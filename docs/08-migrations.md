@@ -264,3 +264,7 @@ penceresi 09:00-21:00 oldu. "Uygun günler" arayüzünün yazdığı eski varsay
 **AddEnrollmentInstrumentVariant** (People): `enrollments.instrument_variant varchar(40) NULL` - enstrümanın
 alt dalı (Gitar -> "Elektro", "Bas"). Yalnızca bilgi etiketi: enstrüman tek kalır; öğretmen eşleşmesi,
 "enstrüman başına tek program" kuralı ve aidat bu kolona bakmaz. `Down()` kolonu düşürür.
+
+**AddGuardianWelcomeMessagePending** (People): `guardians.welcome_message_pending boolean NOT NULL DEFAULT false`
+(R2). Yeni veli uygulama tarafında `true` ile doğar; mevcut satırlar `false` kalır, yani migration öncesi
+hiçbir veliye onaysız mesaj gitmez. `Down()` kolonu düşürür.

@@ -17,6 +17,7 @@ public class GuardianConfiguration : IEntityTypeConfiguration<Guardian>
         builder.Property(g => g.WhatsappEnabled).HasColumnName("whatsapp_enabled").HasDefaultValue(true);
         builder.Property(g => g.NotificationConsent).HasColumnName("notification_consent").HasDefaultValue(false);
         builder.Property(g => g.ConsentUpdatedAt).HasColumnName("consent_updated_at");
+        builder.Property(g => g.WelcomeMessagePending).HasColumnName("welcome_message_pending").HasDefaultValue(false);
         builder.Property(g => g.ConversationWindowExpiresAt).HasColumnName("conversation_window_expires_at");
         builder.Property(g => g.SecurityStamp).HasColumnName("security_stamp").HasDefaultValueSql("gen_random_uuid()");
         // Nullable - şifresi henüz atanmamış veli yalnızca OTP ile girer (Karar F reversal).

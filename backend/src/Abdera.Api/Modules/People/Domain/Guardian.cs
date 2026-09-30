@@ -23,6 +23,11 @@ public class Guardian
     // işaretleyene kadar veliye hiçbir mesaj gitmez (ConsentGatedWhatsAppClient).
     public bool NotificationConsent { get; private set; }
     public DateTimeOffset ConsentUpdatedAt { get; private set; }
+    // R2: yeni veliye giriş bilgilerini ileten TEK karşılama mesajı onay kapalıyken de gider
+    // ("öğrenci ilk eklendiğinde veliye bildirim gitsin, sonra WhatsApp kapalı kalabilir").
+    // Yeni veli bu borçla doğar; mesaj başarıyla gönderilince kapanır ve bir daha açılmaz.
+    // Migration öncesi veliler false'tur - onlara onaysız hiçbir mesaj gitmez (R1 sürer).
+    public bool WelcomeMessagePending { get; private set; }
     public DateTimeOffset? ConversationWindowExpiresAt { get; private set; }
     // Cookie oturumu doğrulanırken (Program.cs OnValidatePrincipal) karşılaştırılır -
     // bkz. User.cs'teki aynı gerekçe (logout eski cookie'yi sunucuda geçersiz kılar).
@@ -50,6 +55,7 @@ public class Guardian
             WhatsappEnabled = true,
             NotificationConsent = false,
             ConsentUpdatedAt = now,
+            WelcomeMessagePending = true,
             SecurityStamp = Guid.NewGuid(),
             CreatedAt = now,
             UpdatedAt = now,
@@ -98,6 +104,13 @@ public class Guardian
     {
         NotificationConsent = consent;
         ConsentUpdatedAt = now;
+        UpdatedAt = now;
+    }
+
+    // Karşılama mesajı sağlayıcıya teslim edildi - onaysız gönderim hakkı bir kez kullanılır.
+    public void MarkWelcomeMessageDelivered(DateTimeOffset now)
+    {
+        WelcomeMessagePending = false;
         UpdatedAt = now;
     }
 
