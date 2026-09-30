@@ -2,7 +2,7 @@
 
 // docs/13 Pillar C — tek-ekran öğrenci kaydı. Öğrenci + öğretmen/enstrüman + (opsiyonel) ders
 // günü + veli tek sade ekranda; tek submit'te zincirlenir (useRegisterStudent). Başarıda
-// veliye üretilen şifre gösterilir (WhatsApp'tan da gönderilir).
+// veliye üretilen şifre ve sunucunun WhatsApp gönderim sonucu gösterilir.
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { AdminGate, FormMessage, onInvalidTurkish, PageHeader, resetValidity } from "@/components/ui";
@@ -137,7 +137,8 @@ function NewStudentForm() {
           </div>
           {result.guardian ? (
             <div className="rounded-xl bg-[var(--brand-soft)] p-4">
-              <p className="text-meta mb-2 font-semibold text-[var(--brand-strong)]">{"Veli giriş bilgileri (WhatsApp'tan gönderildi)"}</p>
+              <p className="text-meta mb-2 font-semibold text-[var(--brand-strong)]">Veli giriş bilgileri</p>
+              <p className="text-meta mb-2 text-[var(--brand-strong)]">{result.guardian.deliveryMessage}</p>
               <dl className="space-y-1 text-sm">
                 <div className="flex justify-between"><dt className="text-[var(--muted)]">Telefon (kullanıcı adı)</dt><dd className="font-mono font-semibold">{result.guardian.phoneNumber}</dd></div>
                 <div className="flex justify-between"><dt className="text-[var(--muted)]">Şifre</dt><dd className="font-mono font-semibold">{result.guardian.password}</dd></div>
@@ -240,7 +241,7 @@ function NewStudentForm() {
               )}
             </div>
           )}
-          <p className="text-meta mt-2 text-[var(--muted)]">{useExistingGuardian ? "Mevcut velinin giriş bilgileri aynı kalır." : "Veliye giriş şifresi otomatik üretilip WhatsApp'tan gönderilir; kayıttan sonra ekranda da gösterilir."}</p>
+          <p className="text-meta mt-2 text-[var(--muted)]">{useExistingGuardian ? "Mevcut velinin giriş bilgileri aynı kalır." : "Veliye giriş şifresi otomatik üretilir ve kayıttan sonra ekranda gösterilir. WhatsApp'tan yalnızca velinin bildirim onayı açıksa gider."}</p>
         </Step>
 
         {error && <FormMessage tone="error">{error}</FormMessage>}

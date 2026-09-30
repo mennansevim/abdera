@@ -384,6 +384,8 @@ export interface GuardianCredential {
   guardianId: string;
   phoneNumber: string;
   password: string;
+  // Sunucunun gönderim sonucu: veli onayı kapalıysa şifre WhatsApp'tan GİTMEZ, metin bunu söyler.
+  deliveryMessage: string;
 }
 
 export interface RegisterStudentInput {
@@ -465,7 +467,9 @@ export function useRegisterStudent() {
       return {
         studentId: created.studentId,
         enrollmentId: created.enrollmentId,
-        guardian: cred ? { guardianId, phoneNumber: cred.phoneNumber, password: cred.password } : null,
+        guardian: cred
+          ? { guardianId, phoneNumber: cred.phoneNumber, password: cred.password, deliveryMessage: cred.message }
+          : null,
         lessonScheduled,
         lessonWarning,
       };
