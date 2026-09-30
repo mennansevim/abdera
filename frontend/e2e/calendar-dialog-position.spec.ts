@@ -62,7 +62,9 @@ test("quick-add dialog stays centered regardless of the double-click position", 
   await expectCentered(page, dialog);
 });
 
-test("cancelled lesson opens a one-off makeup flow with available slots", async ({ page }) => {
+// İptal edilen ders takvim ızgarasında gösterilmez (kullanıcı kararı); telafisi araç
+// çubuğundaki "Telafi planla" ile kurulur - öğretmen oturumunda da.
+test("a cancelled lesson is hidden and its makeup is planned from the toolbar", async ({ page }) => {
   const now = new Date();
   const lessonStart = new Date(now);
   lessonStart.setHours(15, 0, 0, 0);
@@ -118,14 +120,11 @@ test("cancelled lesson opens a one-off makeup flow with available slots", async 
   });
 
   await page.goto("/dashboard/calendar");
-  await page.getByRole("button", { name: /Telafi Öğrencisi/ }).first().click();
-  const lessonDialog = page.getByRole("dialog", { name: "Ders detayları" });
-  await expect(lessonDialog.getByRole("button", { name: "Telafi dersi ekle" })).toBeVisible();
-  await lessonDialog.getByRole("button", { name: "Telafi dersi ekle" }).click();
+  await page.getByRole("button", { name: "Telafi planla", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Telafi Öğrencisi.*Detayları aç/ })).toHaveCount(0);
 
-  const makeupDialog = page.getByRole("dialog", { name: "Telafi Öğrencisi için telafi dersi" });
-  await expect(makeupDialog).toContainText("Tek derslik telafi");
-  await expect(makeupDialog).toContainText("Yalnızca iptal edilen ders gününden sonraki tarihler gösterilir.");
+  const makeupDialog = page.getByRole("dialog", { name: "Telafi planla" });
+  await makeupDialog.getByLabel("Öğrenci").selectOption("student-1");
   await expect(makeupDialog.getByText("Müsait saatler", { exact: true })).toBeVisible();
   await expect(makeupDialog.getByRole("button", { name: "Telafi dersini yerleştir" })).toBeEnabled();
   await makeupDialog.getByRole("button", { name: "Telafi dersini yerleştir" }).click();

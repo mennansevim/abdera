@@ -167,10 +167,13 @@ test.describe.serial("Abdera critical role flows", () => {
     const statusDialog = page.getByRole("dialog", { name: "Ders detayları" });
     await statusDialog.locator("label").filter({ hasText: "Durum" }).locator("select").selectOption("Cancelled");
     await statusDialog.getByRole("button", { name: "Değişiklikleri kaydet" }).click();
+    // İptal edilen ders takvim ızgarasında artık gösterilmez (kayıt silinmez, yalnızca gizlenir).
+    await expect(page.getByRole("dialog", { name: "Ders detayları" })).toBeHidden();
+    const calendarReloaded = page.waitForResponse((response) => response.url().includes("/api/calendar") && response.ok());
     await page.reload();
-    await page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}.*${targetLabel}`) }).first().click({ force: true });
-    await expect(page.getByText("İptal edildi", { exact: true })).toBeVisible();
-    await page.getByRole("dialog", { name: "Ders detayları" }).getByRole("button", { name: "Kapat", exact: true }).first().click();
+    await calendarReloaded;
+    await expect(page.getByRole("heading", { name: "Ders Programı" })).toBeVisible();
+    await expect(page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}.*${targetLabel}`) })).toHaveCount(0);
 
     // Aynı enstrümandan ikinci bir haftalık program açılamaz - saat farklı olsa bile (K9).
     const duplicateInstrumentSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {

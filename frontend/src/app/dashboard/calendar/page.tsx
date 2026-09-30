@@ -415,7 +415,10 @@ export default function CalendarPage() {
           {canSchedule && (
             <>
               <span className="mx-1 hidden h-6 w-px bg-[var(--line)] sm:block" aria-hidden="true" />
-              {isAdmin && <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet shrink-0 px-2.5 text-[.75rem] font-bold text-[var(--foreground)] 2xl:px-4 2xl:text-xs">Telafi planla</button>}
+              {/* Öğretmene de açık: iptal edilen ders kartı artık ızgarada olmadığı için kartın
+                  üstündeki "Telafi dersi ekle" girişine ulaşılamıyor; sonradan telafi planlamanın
+                  tek yolu bu düğme. Sunucu öğretmeni zaten kendi öğrencileriyle sınırlar. */}
+              <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet shrink-0 px-2.5 text-[.75rem] font-bold text-[var(--foreground)] 2xl:px-4 2xl:text-xs">Telafi planla</button>
               <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setMakeupContext(null); setQuickAddSlot(null); }} className="btn btn-primary shrink-0 px-2.5 text-[.75rem] font-bold 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
             </>
           )}
