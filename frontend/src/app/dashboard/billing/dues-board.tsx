@@ -25,7 +25,7 @@ import {
 import { CollectSheet } from "./collect-sheet";
 
 // Aidatlar ekranı (docs/10-decisions.md H17): iki görünüm, bir ödeme penceresi.
-//   Liste   - seçili ayın bekleyenleri; "Ödendi" tek dokunuşla ayı kapatır.
+//   Liste   - seçili ayın bekleyenleri; "Ödeme al" tek dokunuşla ayı kapatır.
 //   Çizelge - öğrenci × ay; yılın resmi ve geçmiş.
 // Görünüm seçimi sayfada durur ve hatırlanır (ilk açılışta telefonda Liste, geniş ekranda
 // Çizelge). Arama iki görünümde ortak: öğrenci, öğretmen, veli veya enstrüman adı.
@@ -198,7 +198,7 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
     <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
       {shown.map(({ row, state }) => <ListRow key={row.enrollmentId} row={row} state={state} month={month} onOpen={onOpen} onToast={onToast} />)}
     </ul>
-    <p className="text-meta px-3 py-3 text-xs">&quot;Ödendi&quot; ayı kayıttaki indirimle nakit kapatır. Birkaç ay almak, indirimi değiştirmek ya da geçmişi görmek için isme dokun.</p>
+    <p className="text-meta px-3 py-3 text-xs">&quot;Ödeme al&quot; ayın aidatını kayıttaki indirimle nakit olarak kaydeder. Birkaç ay almak, indirimi değiştirmek ya da geçmişi görmek için isme dokun.</p>
   </div>;
 }
 
@@ -244,7 +244,7 @@ function ListRow({ row, state, month, onOpen, onToast }: {
         message: `${row.studentName} · ${formatPeriod(month)}: ${formatMoney(result.total, result.currency)} alındı`,
         undo: paymentIds.length ? async () => {
           for (const paymentId of paymentIds)
-            await correct.mutateAsync({ paymentId, correctedAmount: 0, reason: "Ödendi'ye yanlışlıkla basıldı, hemen geri alındı" });
+            await correct.mutateAsync({ paymentId, correctedAmount: 0, reason: "Ödeme al'a yanlışlıkla basıldı, hemen geri alındı" });
           await queryClient.invalidateQueries({ queryKey: ["billing-board"] });
           onToast({ message: "Ödeme geri alındı" });
         } : undefined,
@@ -264,12 +264,12 @@ function ListRow({ row, state, month, onOpen, onToast }: {
         </span>
       </button>
       {state === "paid"
-        ? <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-xs font-extrabold text-[var(--success-strong)]">✓ {cell?.lastPaymentDate ? new Date(`${cell.lastPaymentDate}T00:00:00`).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" }) : "Ödendi"}</span>
+        ? <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-xs font-extrabold text-[var(--success-strong)]">✓ Ödendi{cell?.lastPaymentDate ? ` · ${new Date(`${cell.lastPaymentDate}T00:00:00`).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" })}` : ""}</span>
         : <>
           {remaining !== null && <span className={`shrink-0 text-right text-sm font-bold tabular-nums ${state === "late" || state === "partial" ? "text-[var(--danger-strong)]" : ""}`}>{formatMoney(remaining, cell?.currency ?? "TRY")}</span>}
           {remaining !== null && remaining > 0
-            ? <button type="button" onClick={quickPay} disabled={collect.isPending} className="btn shrink-0 bg-[var(--success)] text-white hover:bg-[var(--success-strong)]">{collect.isPending ? "…" : "Ödendi"}</button>
-            : <button type="button" onClick={() => onOpen(row, [month])} className="btn btn-quiet shrink-0">Tahsil et</button>}
+            ? <button type="button" onClick={quickPay} disabled={collect.isPending} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">{collect.isPending ? "Kaydediliyor…" : "Ödeme al"}</button>
+            : <button type="button" onClick={() => onOpen(row, [month])} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
         </>}
     </div>
     {error && <p role="alert" className="mt-1.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
