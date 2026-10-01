@@ -22,6 +22,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.02",
+    date: "2026-10-02",
+    items: [
+      { audience: "admin", text: "Aidatlar ekranı sadeleşti: üstteki Liste | Çizelge düğmesiyle ayın bekleyenlerini ya da tüm yılı öğrenci × ay olarak görürsün. Öğrenci, öğretmen veya veli adıyla arayabilirsin." },
+      { audience: "admin", text: "Listede öğrencinin yanındaki \"Ödendi\" ayın aidatını tek dokunuşla kapatır; yanlışlıkla bastıysan birkaç saniye içinde \"Geri al\"." },
+      { audience: "admin", text: "İsme ya da çizelgedeki bir aya dokununca tek bir ödeme penceresi açılır: birkaç ay seçip toplu ödeme alabilir, kardeş, çoklu kurs, peşin ve özel indirimi o an açıp kapatabilirsin. Kısmi ödeme ve geçmiş ödemeler de buradadır." },
+      { audience: "all", text: "Yoklamada \"Mazeretli\" işaretlenen ders öğrenciye telafi hakkı verir; telafi dersi ders gününden sonraki 21 gün içinde takvimden planlanabilir." },
+      { audience: "all", text: "Öğrenciler listesinde her öğrencinin son 4 haftalık yoklaması rozetlerle görünür." },
+    ],
+  },
+  {
     version: "2026.10.01",
     date: "2026-10-01",
     items: [
