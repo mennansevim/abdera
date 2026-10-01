@@ -6,6 +6,7 @@ import { AppLoader } from "@/components/app-loader";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
+import { readSavedEmail, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
 import { useDevAccounts, useLogin } from "@/lib/use-auth";
 
 type LoginRole = "Admin" | "Teacher" | "Guardian";
@@ -92,6 +93,10 @@ function LoginPageContent() {
   // Rol değişince önceki rolün seçimi geçersiz kalır; o durumda rolün ilk hesabı seçili sayılır.
   const selectedDevEmail = roleAccounts.some((account) => account.email === devEmail) ? devEmail : roleAccounts[0]?.email ?? "";
   const showAccountPicker = !!devAccounts && !usePassword;
+  const showForm = shouldChooseRole || (!destination && !isResolving);
+  // Tarayıcıdan gelen kimlik geç dönebilir; kullanıcı arada başka role geçtiyse eski yanıt yazılmaz.
+  const prefillRequest = useRef(0);
+  const initialPrefillDone = useRef(false);
 
   useEffect(() => {
     // Veli portalındaki "Ana giriş ekranı" bilinçli bir rol değiştirme isteğidir; bu
@@ -101,6 +106,38 @@ function LoginPageContent() {
     }
   }, [shouldChooseRole, destination, router]);
 
+  // Varsayılan seçili rol (Yönetici) için de bilgiler gelsin; oturum kontrolü bitmeden
+  // çalışmaz ki açık oturumla yönlenen kullanıcıya tarayıcının hesap seçicisi çıkmasın.
+  useEffect(() => {
+    if (!showForm || initialPrefillDone.current) return;
+    initialPrefillDone.current = true;
+    if (selectedRole !== "Guardian") prefillFor(selectedRole);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ekran açıldığında bir kez
+  }, [showForm]);
+
+  // Rol seçilince o rolün bilgileri doldurulur: demo yayınında demo hesabı, aksi halde bu
+  // cihazda o rolle son girilen e-posta ve tarayıcının kayıtlı şifresi (bkz. saved-logins.ts).
+  function prefillFor(role: StaffRole) {
+    const request = ++prefillRequest.current;
+    const demoEmail = demoEmailFor(role);
+    if (demoEmail) {
+      setEmail(demoEmail);
+      setPassword(demoPasswordFor(role));
+      return;
+    }
+    const savedEmail = readSavedEmail(role);
+    setEmail(savedEmail);
+    setPassword("");
+    // Bu cihazda o rolle hiç girilmediyse tarayıcının hesap seçicisi her dokunuşta açılmasın.
+    if (!savedEmail) return;
+    void requestSavedLogin(role).then((saved) => {
+      if (!saved || request !== prefillRequest.current) return;
+      setSelectedRole(saved.role);
+      setEmail(saved.email);
+      setPassword(saved.password);
+    });
+  }
+
   // Seçilen rol sunucuya gönderilir: hesabın rolü seçimle uyuşmuyorsa sunucu 403 döner ve
   // oturum hiç açılmaz. Eskiden yanıt sessizce kabul edilip seçim hesabın gerçek rolüne
   // çekiliyordu - "Yöneticiyim" seçip öğretmen bilgileriyle öğretmen ekranına düşmenin sebebi buydu.
@@ -108,6 +145,7 @@ function LoginPageContent() {
     setError(null);
     try {
       const result = await login.mutateAsync({ email: loginEmail, password: loginPassword, expectedRole: role, passwordless });
+      if (!passwordless) rememberLogin(role, loginEmail.trim().toLowerCase(), loginPassword);
       router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");
@@ -123,8 +161,7 @@ function LoginPageContent() {
       router.push("/parent");
       return;
     }
-    setEmail(demoEmailFor(role));
-    setPassword(demoPasswordFor(role));
+    prefillFor(role);
     requestAnimationFrame(() => emailRef.current?.focus());
   }
 
@@ -140,8 +177,7 @@ function LoginPageContent() {
     const next = roles[(currentIndex + step + roles.length) % roles.length]!;
     setSelectedRole(next);
     setError(null);
-    setEmail(demoEmailFor(next));
-    setPassword(demoPasswordFor(next));
+    prefillFor(next);
     roleRefs.current[next]?.focus();
   }
 
@@ -155,7 +191,7 @@ function LoginPageContent() {
     await submitLogin(email, password, selectedRole);
   }
 
-  if (!shouldChooseRole && (destination || isResolving)) {
+  if (!showForm) {
     return <SessionCheckLoading />;
   }
 
