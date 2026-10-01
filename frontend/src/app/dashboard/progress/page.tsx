@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { StudentLibrarySuggestions } from "@/components/music-library/student-suggestions";
 import { FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useStudents, type Student } from "@/lib/people";
+import { byDisplayName, useStudents, useTeacherOverviews, type Student, type Teacher } from "@/lib/people";
 import { buildProgressAnalysis, type PieceInsight, type ProgressAnalysis } from "@/lib/progress-analysis";
 import { useCreateProgressNote, useRevokeParentComment, useProgressSummary, useSetParentComment, useStudentProgress, type ProgressEntry } from "@/lib/progress";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
@@ -54,11 +54,19 @@ export default function ProgressPage() {
 function ProgressPageContent() {
   const { data: me } = useMe();
   const canWrite = me?.role === "Teacher";
+  const isAdmin = me?.role === "Admin";
   const { data: students, isLoading: studentsLoading, isError: studentsError, isFetching: studentsFetching, refetch: refetchStudents } = useStudents();
+  // Yönetici önce öğretmeni seçip yalnızca onun öğrencileri arasında gezinebilsin diye
+  // (~150 öğrencilik tek liste yavaş). Öğretmen oturumunda /api/students zaten yalnızca kendi
+  // öğrencilerini döndürür, seçici gösterilmez; /api/teachers/overview de yalnızca Admin'e açık.
+  const { data: teacherOverviews } = useTeacherOverviews(isAdmin);
   const searchParams = useSearchParams();
   // Yalnızca ilk yüklemede okunur (deep-link) - sonrasında seçim tamamen kullanıcı
   // etkileşimiyle yönetilir, URL'i her seçimde güncellemeye gerek yok.
   const [selectedStudentId, setSelectedStudentId] = useState(() => searchParams.get("studentId") ?? "");
+  // Oturumda saklanmaz: deep-link ile gelen öğrenci, hatırlanan bir öğretmenin listesinde
+  // yoksa sessizce başka öğrenciye düşerdi.
+  const [rosterTeacherId, setRosterTeacherId] = useState("all");
   const [showComposer, setShowComposer] = useState(false);
   const [timelineFilter, setTimelineFilter] = useSessionState<TimelineFilter>("abdera:progress:timeline", "all");
   const [teacherFilter, setTeacherFilter] = useSessionState("abdera:progress:teacher", "all");
@@ -66,8 +74,21 @@ function ProgressPageContent() {
   const [difficultyFilter, setDifficultyFilter] = useSessionState("abdera:progress:difficulty", "all");
   const [lastWorkedFrom, setLastWorkedFrom] = useSessionState("abdera:progress:worked-from", "");
 
-  const activeStudentId = selectedStudentId || students?.[0]?.id || "";
-  const activeStudent = students?.find((student) => student.id === activeStudentId);
+  // Yalnızca aktif öğrencisi olan öğretmenler listelenir; sayı seçenekte görünür.
+  const rosters = useMemo(() => {
+    const teachers = byDisplayName((teacherOverviews ?? []).map((overview) => overview.teacher));
+    const studentIdsByTeacher = new Map((teacherOverviews ?? []).map((overview) => [overview.teacher.id, new Set(overview.students.map((item) => item.studentId))]));
+    return teachers
+      .map((teacher) => ({ teacher, studentIds: studentIdsByTeacher.get(teacher.id) ?? new Set<string>() }))
+      .filter((roster) => roster.studentIds.size > 0);
+  }, [teacherOverviews]);
+  const activeRoster = rosters.find((roster) => roster.teacher.id === rosterTeacherId);
+  const visibleStudents = useMemo(
+    () => (activeRoster ? (students ?? []).filter((student) => activeRoster.studentIds.has(student.id)) : students ?? []),
+    [activeRoster, students]);
+  // Öğretmen değişince seçili öğrenci onun listesinde yoksa listenin ilkine geçilir.
+  const activeStudentId = visibleStudents.some((student) => student.id === selectedStudentId) ? selectedStudentId : visibleStudents[0]?.id ?? "";
+  const activeStudent = visibleStudents.find((student) => student.id === activeStudentId);
   const { data: progress, isLoading: progressLoading, isError: progressError, isFetching: progressFetching, refetch: refetchProgress } = useStudentProgress(activeStudentId);
 
   const calendarRange = useMemo(() => {
@@ -111,8 +132,11 @@ function ProgressPageContent() {
       />
 
       <StudentBar
-        students={students ?? []}
+        students={visibleStudents}
         student={activeStudent}
+        rosters={isAdmin ? rosters : undefined}
+        rosterTeacherId={activeRoster ? rosterTeacherId : "all"}
+        onRosterChange={(teacherId) => { setRosterTeacherId(teacherId); setShowComposer(false); setTimelineFilter("all"); }}
         noteCount={analysis.noteCount}
         lastEntryAt={progress?.lastEntryAt ?? null}
         isLoading={studentsLoading}
@@ -182,6 +206,9 @@ function ProgressPageContent() {
 function StudentBar({
   students,
   student,
+  rosters,
+  rosterTeacherId,
+  onRosterChange,
   noteCount,
   lastEntryAt,
   isLoading,
@@ -193,6 +220,9 @@ function StudentBar({
 }: {
   students: Student[];
   student?: Student;
+  rosters?: { teacher: Teacher; studentIds: Set<string> }[];
+  rosterTeacherId: string;
+  onRosterChange: (teacherId: string) => void;
   noteCount: number;
   lastEntryAt: string | null;
   isLoading: boolean;
@@ -215,7 +245,22 @@ function StudentBar({
 
   return (
     <section className="app-card p-3 sm:p-4" aria-label="Öğrenci">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {rosters && rosters.length > 0 && (
+          <select
+            aria-label="Öğretmen seç"
+            value={rosterTeacherId}
+            onChange={(event) => onRosterChange(event.target.value)}
+            className="field w-full truncate text-sm font-semibold sm:w-auto sm:max-w-[16rem] sm:pr-10"
+          >
+            <option value="all">Tüm öğretmenler</option>
+            {rosters.map(({ teacher, studentIds }) => (
+              <option key={teacher.id} value={teacher.id}>
+                {teacher.firstName} {teacher.lastName} · {studentIds.size} öğrenci
+              </option>
+            ))}
+          </select>
+        )}
         {/* Sr-only span'i saran <label>, tarayıcıda combobox'ın erişilebilir adını
             "Öğrenci seç" yerine SEÇİLİ SEÇENEĞİN metnine ("Kerem Aksoy" gibi) çeviriyordu -
             açık aria-label bu belirsizliği ortadan kaldırıyor. */}
