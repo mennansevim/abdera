@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import { useApproveChangeRequest, usePendingChangeRequests, useRejectChangeRequest } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
-import { useReceivables } from "@/lib/billing";
 import { useDashboardToday, type UpcomingBirthday } from "@/lib/dashboard";
 import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useNotifications } from "@/lib/messaging";
@@ -56,10 +55,7 @@ function AdminDashboard({ email }: { email: string }) {
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: lessons, isLoading: lessonsLoading, isError: lessonsError, isFetching: lessonsFetching, refetch: refetchLessons } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
   const { data: today, isLoading: statsLoading } = useDashboardToday();
-  const { data: receivables } = useReceivables();
   const { data: failedNotifications } = useNotifications("Failed", 1, 1);
-  const overdueReceivables = (receivables ?? []).filter((item) => item.status === "Overdue" || (item.status !== "Paid" && item.status !== "Cancelled" && new Date(`${item.dueDate}T23:59:59`) < new Date()));
-  const overdueTotal = overdueReceivables.reduce((total, item) => total + Math.max(0, item.amount - item.totalPaid), 0);
   // Yan panel (talepler, banka, doğum günleri...) her açılışta KAPALI başlar: ilk görünen ekran
   // geniş takvim olsun (kullanıcı isteği). Kapalıyken dar şeritteki rozetler bekleyen iş olduğunu
   // söyler; tercih bilerek saklanmıyor ki ekran her seferinde geniş takvimle açılsın.
@@ -75,7 +71,6 @@ function AdminDashboard({ email }: { email: string }) {
         items={[
           { key: "today", label: "Bugünkü ders", value: today?.todayLessons ?? 0, loading: statsLoading, href: "/dashboard/calendar" },
           { key: "requests", label: "Bekleyen değişiklik talebi", value: today?.pendingChangeRequests ?? 0, tone: today?.pendingChangeRequests ? "warning" : undefined, loading: statsLoading, href: "/dashboard/change-requests" },
-          { key: "overdue", label: "Vadesi geçen aidat", value: `₺${formatMoney(overdueTotal)}`, hint: `${overdueReceivables.length} kayıt`, tone: overdueReceivables.length ? "danger" : undefined, loading: statsLoading, href: "/dashboard/billing" },
           { key: "failed", label: "Gönderilemeyen bildirim", value: failedNotifications?.totalCount ?? 0, tone: failedNotifications?.totalCount ? "danger" : undefined, loading: statsLoading, href: "/dashboard/notifications" },
         ]}
       />
