@@ -22,6 +22,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.01",
+    date: "2026-10-01",
+    items: [
+      { audience: "all", text: "Giriş ekranında Yöneticiyim ya da Öğretmenim'i seçince o rolle bu cihazda en son kullanılan e-posta hazır gelir; telefonun kayıtlı şifresi de önerilir." },
+      { audience: "all", text: "Haftalık ders programı yeni bir gün ya da saate taşınınca veliye WhatsApp'tan haber verilir; dersin öğretmeni ve yöneticiler ekran içi bildirim alır." },
+      { audience: "all", text: "Ders taşıma penceresinde kaydederken yükleniyor göstergesi çıkar; taşıma olmazsa nedeni pencerenin içinde açıkça yazar." },
+      { audience: "admin", text: "Gelişim günlüğünde önce öğretmeni seçip yalnızca onun öğrencileri arasında gezinebilirsin." },
+      { audience: "admin", text: "Ana ekrandaki günün özetinden vadesi geçen aidat kartı kaldırıldı; geciken aidatlar Aidatlar ekranında görünmeye devam ediyor." },
+    ],
+  },
+  {
     version: "2026.09.30",
     date: "2026-09-30",
     items: [
