@@ -1361,7 +1361,10 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const markAttendance = useMarkAttendance(lesson.id);
   const cancelLesson = useCancelLesson();
   const endSeries = useEndLessonSeries();
-  const { data: makeupCredits } = useMakeupCredits(lesson.status === "Cancelled" ? lesson.studentId : "");
+  // Telafi hakkı iptal edilen derste ya da yoklaması "Mazeretli" girilmiş (dolayısıyla
+  // tamamlanmış) derste doğar; hangisi olduğuna sunucudaki hak kaydı karar verir.
+  const makeupSource = lesson.status === "Cancelled" || lesson.status === "Completed";
+  const { data: makeupCredits } = useMakeupCredits(makeupSource ? lesson.studentId : "");
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
   const [editing, setEditing] = useState(false);
@@ -1387,7 +1390,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const canEdit = canManage && lesson.status === "Normal";
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
   const canCancelWithMakeup = canManage && lesson.status === "Normal";
-  const canPlanMakeup = canManage && lesson.status === "Cancelled" && Boolean(makeupCredits?.some((credit) =>
+  const canPlanMakeup = canManage && makeupSource && Boolean(makeupCredits?.some((credit) =>
     credit.sourceLessonId === lesson.id && credit.status === "Available" && new Date(credit.expiresAt).getTime() >= now.getTime()));
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useDialogBehavior(onClose, closeButtonRef);

@@ -547,6 +547,111 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(sourceLessonDate.AddDays(1), DateOnly.FromDateTime(clock.ToSchoolLocal(makeupLesson.StartAt).Date));
     }
 
+    // Kullanıcı kuralı: "mazeretli diye işaretlendiyse 21 gün içinde telafi planlanabilir."
+    [Fact]
+    public async Task Excused_attendance_earns_a_21_day_makeup_credit_that_follows_attendance_corrections()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "exc1");
+        var pianoId = await GetPianoIdAsync(admin);
+        var clock = _factory.Services.GetRequiredService<IClock>();
+
+        var markResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Excused, "veli önceden haber verdi"));
+        Assert.Equal(HttpStatusCode.Created, markResponse.StatusCode);
+
+        var credit = (await (await admin.GetAsync($"/api/students/{seeded.StudentId}/makeup-credits"))
+            .Content.ReadFromJsonAsync<List<MakeupCredits.CreditResponse>>(TestJson.Options))!.Single();
+        Assert.Equal(MakeupCreditStatus.Available, credit.Status);
+        Assert.Equal(MakeupCreditEarnedReason.Excused, credit.EarnedReason);
+        var sourceLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(credit.SourceLessonStartAt).Date);
+        Assert.Equal(
+            LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(22), TimeOnly.MinValue, clock.SchoolTimeZone),
+            credit.ExpiresAt);
+
+        // "Geldi"ye düzeltilen dersin kullanılmamış hakkı geri alınır (satır silinmez).
+        var correctResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Present, null));
+        Assert.Equal(HttpStatusCode.OK, correctResponse.StatusCode);
+        Assert.Equal(MakeupCreditStatus.Revoked,
+            (await db.MakeupCredits.AsNoTracking().SingleAsync(c => c.Id == credit.Id)).Status);
+
+        // Yeniden "Mazeretli"ye düzeltilince yeni bir hak açılır; ikinci kez gönderim kopya açmaz.
+        await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Excused, null));
+        await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Excused, "tekrar"));
+        var renewed = await db.MakeupCredits.AsNoTracking()
+            .SingleAsync(c => c.SourceLessonId == seeded.LessonId && c.Status == MakeupCreditStatus.Available);
+
+        // 21 günlük pencerenin dışına telafi açılmaz.
+        var tooLate = LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(22), new TimeOnly(11, 0), clock.SchoolTimeZone);
+        var tooLateResponse = await admin.PostAsJsonAsync($"/api/makeup-credits/{renewed.Id}/use",
+            new MakeupCredits.UseRequest(seeded.TeacherId, pianoId, tooLate, 45));
+        Assert.Equal(HttpStatusCode.BadRequest, tooLateResponse.StatusCode);
+
+        var lastDay = LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(21), new TimeOnly(11, 0), clock.SchoolTimeZone);
+        var useResponse = await admin.PostAsJsonAsync($"/api/makeup-credits/{renewed.Id}/use",
+            new MakeupCredits.UseRequest(seeded.TeacherId, pianoId, lastDay, 45));
+        Assert.Equal(HttpStatusCode.OK, useResponse.StatusCode);
+        Assert.Equal(MakeupCreditStatus.Used,
+            (await db.MakeupCredits.AsNoTracking().SingleAsync(c => c.Id == renewed.Id)).Status);
+    }
+
+    [Fact]
+    public async Task Absent_attendance_earns_no_makeup_credit()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "abs1");
+
+        var markResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Absent, null));
+        Assert.Equal(HttpStatusCode.Created, markResponse.StatusCode);
+
+        var credits = await (await admin.GetAsync($"/api/students/{seeded.StudentId}/makeup-credits"))
+            .Content.ReadFromJsonAsync<List<MakeupCredits.CreditResponse>>(TestJson.Options);
+        Assert.Empty(credits!);
+    }
+
+    // Öğrenciler listesindeki "Son 4 hafta" rozetleri overview yanıtından beslenir.
+    [Fact]
+    public async Task Student_overview_carries_last_four_weeks_of_attendance()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "wk4");
+        var pianoId = await GetPianoIdAsync(admin);
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var now = clock.UtcNow;
+
+        // Geçmiş üç ders: biri geldi, biri mazeretli, biri yoklamasız. Beşinci haftaya
+        // düşen ders pencerenin dışında kalmalı.
+        var present = Lesson.CreateMakeup(seeded.StudentId, seeded.TeacherId, pianoId, now.AddDays(-1), now.AddDays(-1).AddMinutes(45), now);
+        var excused = Lesson.CreateMakeup(seeded.StudentId, seeded.TeacherId, pianoId, now.AddDays(-8), now.AddDays(-8).AddMinutes(45), now);
+        var notMarked = Lesson.CreateMakeup(seeded.StudentId, seeded.TeacherId, pianoId, now.AddDays(-15), now.AddDays(-15).AddMinutes(45), now);
+        var tooOld = Lesson.CreateMakeup(seeded.StudentId, seeded.TeacherId, pianoId, now.AddDays(-36), now.AddDays(-36).AddMinutes(45), now);
+        db.Lessons.AddRange(present, excused, notMarked, tooOld);
+        db.LessonAttendances.Add(LessonAttendance.Create(present.Id, AttendanceStatus.Present, seeded.TeacherId, null, now));
+        db.LessonAttendances.Add(LessonAttendance.Create(excused.Id, AttendanceStatus.Excused, seeded.TeacherId, null, now));
+        db.LessonAttendances.Add(LessonAttendance.Create(tooOld.Id, AttendanceStatus.Absent, seeded.TeacherId, null, now));
+        await db.SaveChangesAsync();
+
+        var overview = (await admin.GetFromJsonAsync<List<Students.StudentOverviewResponse>>("/api/students/overview", TestJson.Options))!
+            .Single(item => item.Student.Id == seeded.StudentId);
+        var weeks = overview.RecentAttendance!;
+
+        Assert.Equal(4, weeks.Count);
+        var currentWeekStart = StudentWeeklyLessonPolicy.StartOfWeek(DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date));
+        Assert.Equal(currentWeekStart, weeks[^1].WeekStart);
+        Assert.Equal(currentWeekStart.AddDays(-21), weeks[0].WeekStart);
+        Assert.Equal(1, weeks.Sum(week => week.PresentCount));
+        Assert.Equal(1, weeks.Sum(week => week.ExcusedCount));
+        // Serinin bugünkü dersi (pazartesi/çarşamba akşamı koşulursa) de yoklamasız sayılabilir.
+        Assert.True(weeks.Sum(week => week.NotMarkedCount) >= 1);
+        Assert.Equal(0, weeks.Sum(week => week.AbsentCount));
+    }
+
     [Fact]
     public async Task Guardian_cancelling_less_than_24_hours_before_earns_no_credit()
     {

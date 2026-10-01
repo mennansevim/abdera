@@ -6,6 +6,8 @@ public enum MakeupCreditEarnedReason
 {
     GuardianCancelled24H,
     SchoolCancelled,
+    // Yoklamada "Mazeretli" işaretlenen ders (docs/10-decisions.md A2 altındaki satır).
+    Excused,
 }
 
 public enum MakeupCreditStatus
@@ -13,6 +15,9 @@ public enum MakeupCreditStatus
     Available,
     Used,
     Expired,
+    // Hakkı doğuran durum geri alındı (ör. "Mazeretli" yoklaması "Geldi"ye düzeltildi).
+    // Satır silinmez; neden artık kullanılamadığı kayıtta kalır.
+    Revoked,
 }
 
 // docs/03-erd.md - Billing > makeup_credits. Billing modülünün Phase 3'te açılan tek dilimi -
@@ -34,14 +39,19 @@ public class MakeupCredit
 
     public static MakeupCredit Earn(
         Guid studentId, Guid sourceLessonId, MakeupCreditEarnedReason reason,
-        DateTimeOffset now, int validDays) => new()
+        DateTimeOffset now, int validDays) =>
+        Earn(studentId, sourceLessonId, reason, now, expiresAt: now.AddDays(validDays));
+
+    public static MakeupCredit Earn(
+        Guid studentId, Guid sourceLessonId, MakeupCreditEarnedReason reason,
+        DateTimeOffset now, DateTimeOffset expiresAt) => new()
     {
         Id = Guid.NewGuid(),
         StudentId = studentId,
         SourceLessonId = sourceLessonId,
         EarnedReason = reason,
         EarnedAt = now,
-        ExpiresAt = now.AddDays(validDays),
+        ExpiresAt = expiresAt,
         Status = MakeupCreditStatus.Available,
     };
 
@@ -56,6 +66,15 @@ public class MakeupCredit
         Status = MakeupCreditStatus.Used;
         UsedLessonId = usedLessonId;
         UsedAt = now;
+    }
+
+    // Yalnızca henüz kullanılmamış hak geri alınır: telafi dersi zaten planlandıysa o ders
+    // takvimde durur, hak "Used" kalır.
+    public bool Revoke()
+    {
+        if (Status != MakeupCreditStatus.Available) return false;
+        Status = MakeupCreditStatus.Revoked;
+        return true;
     }
 
     public void ExpireIfPastDue(DateTimeOffset now)

@@ -112,7 +112,9 @@ export function MakeupScheduler({
         availability: availability ?? [],
         lessons: lessons ?? [],
         limit: 9,
-      })
+      // Hak son geçerlilik anından sonraya ders açmaz (mazeretli derste ders gününden
+      // itibaren 21 gün) - sunucu da aynı sınırı uygular (MakeupCredits.UseAsync).
+      }).filter((slot) => !activeCredit || slot.start.getTime() < new Date(activeCredit.expiresAt).getTime())
     : [];
   const slotsLoading = availabilityLoading || lessonsLoading;
 
@@ -152,10 +154,10 @@ export function MakeupScheduler({
         <div className="rounded-xl border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-4 py-3">
           <p className="text-sm font-bold">{context.studentName}</p>
           <p className="mt-1 text-[.75rem] font-semibold text-[var(--brand-strong)]">{context.instrumentName} · {context.teacherName} · Tek derslik telafi</p>
-          <p className="mt-1 text-[.75rem] text-[var(--muted)]">Yalnızca iptal edilen ders gününden sonraki tarihler gösterilir.</p>
+          <p className="mt-1 text-[.75rem] text-[var(--muted)]">Yalnızca kaynak dersin gününden sonraki ve hakkın geçerli olduğu tarihler gösterilir.</p>
         </div>
       ) : (
-        <p className="text-meta">İptal edilen ders gününden sonraki 21 gün taranır; yalnızca kullanılabilir telafi hakkı olan öğrenciler listelenir.</p>
+        <p className="text-meta">İptal edilen ya da mazeretli işaretlenen dersin gününden sonraki 21 gün taranır; yalnızca kullanılabilir telafi hakkı olan öğrenciler listelenir.</p>
       )}
 
       {creditsLoading && <div className="grid gap-2 sm:grid-cols-3" aria-label="Telafi hakları yükleniyor">{[1, 2, 3].map((item) => <span key={item} className="skeleton h-14 rounded-xl" />)}</div>}

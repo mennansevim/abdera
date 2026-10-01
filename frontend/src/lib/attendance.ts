@@ -32,6 +32,8 @@ export function useMarkAttendance(lessonId: string) {
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
       // Yoklama girilince zildeki "öğrenci geldi mi?" sorusu sunucuda kapanır.
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      // "Mazeretli" telafi hakkı doğurur, ondan çıkan düzeltme hakkı geri alır.
+      queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
     },
   });
 }

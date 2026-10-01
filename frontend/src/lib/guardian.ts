@@ -82,7 +82,7 @@ export interface GuardianBillingEnrollment {
 export interface GuardianMakeupCredit {
   id: string;
   studentId: string;
-  earnedReason: "GuardianCancelled24H" | "SchoolCancelled";
+  earnedReason: "GuardianCancelled24H" | "SchoolCancelled" | "Excused";
   earnedAt: string;
   expiresAt: string;
 }

@@ -7,7 +7,7 @@ import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHea
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
-import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, useUpdateStudent, type Student, type StudentStatus } from "@/lib/people";
+import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, useUpdateStudent, type RecentAttendanceWeek, type Student, type StudentStatus } from "@/lib/people";
 import { DeleteStudentDialog, RequestStudentDeletionDialog } from "@/components/delete-person-dialog";
 import { StudentDetail } from "./student-detail";
 
@@ -105,7 +105,7 @@ export default function StudentsPage() {
           />
           {isAdmin && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet text-xs">Hızlı ekle</button>}
         </div>
-        {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span className="text-center">Durum</span></div>}
+        {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_7.5rem_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span title="Haftalık yoklama, eskiden yeniye: ✓ geldi · ✕ gelmedi · M mazeretli · ? yoklama girilmedi · – ders yok">Son 4 hafta</span><span className="text-center">Durum</span></div>}
         {isLoading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
         {!isLoading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğrenciler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!isLoading && !isError && visibleRows.length === 0 && (
@@ -116,20 +116,22 @@ export default function StudentsPage() {
           />
         )}
         {!isLoading && !isError && <ul className="divide-y divide-[var(--line)]">
-          {visibleRows.map(({ student, instruments }) => (
+          {visibleRows.map(({ student, instruments, recentAttendance }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
               <div className="px-2 py-0.5">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
-                className="pressable grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] md:grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_6rem]"
+                className="pressable grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] md:grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_7.5rem_6rem]"
                 aria-expanded={expandedId === student.id}
               >
                 <span className="min-w-0">
                   <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{student.firstName} {student.lastName}</span><Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expandedId === student.id ? "rotate-90" : ""}`} /></span>
                   <span className="text-meta mt-0.5 block truncate md:hidden">{student.birthDate} · {instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}{student.status === "Inactive" ? " · Pasif" : ""}</span>
+                  <AttendanceWeekBadges weeks={recentAttendance} className="mt-1 flex md:hidden" />
                 </span>
                 <span className="text-meta hidden tabular-nums md:block">{student.birthDate}</span>
                 <span className="text-meta hidden truncate md:block">{instruments.map((item) => item.instrumentName).join(", ") || "Kurs yok"}</span>
+                <AttendanceWeekBadges weeks={recentAttendance} className="hidden md:flex" />
                 <span className={`hidden justify-self-center rounded-full px-2 py-0.5 text-[.72rem] font-bold md:block ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{student.status === "Active" ? "Aktif" : "Pasif"}</span>
               </button>
               </div>
@@ -187,6 +189,52 @@ export default function StudentsPage() {
         </Modal>
       )}
     </div>
+  );
+}
+
+// Son 4 haftanın devamı, hafta başına bir rozet (eskiden yeniye). Haftada birden fazla ders
+// varsa rozet en dikkat isteyen durumu gösterir: gelmedi > mazeretli > yoklama girilmedi > geldi.
+// Ayrıntı (tarih aralığı + sayılar) rozetin title/aria-label'ında.
+const WEEK_BADGE = {
+  absent: { symbol: "✕", label: "gelmedi", className: "bg-[var(--danger-soft)] text-[var(--danger-strong)]" },
+  excused: { symbol: "M", label: "mazeretli", className: "bg-[var(--warning-soft)] text-[var(--warning-strong)]" },
+  notMarked: { symbol: "?", label: "yoklama girilmedi", className: "bg-[var(--surface-muted)] text-[var(--muted)]" },
+  present: { symbol: "✓", label: "geldi", className: "bg-[var(--success-soft)] text-[var(--success-strong)]" },
+  none: { symbol: "–", label: "ders yok", className: "border border-dashed border-[var(--line)] text-[var(--muted)]/70" },
+} as const;
+
+function weekState(week: RecentAttendanceWeek): keyof typeof WEEK_BADGE {
+  if (week.absentCount > 0) return "absent";
+  if (week.excusedCount > 0) return "excused";
+  if (week.notMarkedCount > 0) return "notMarked";
+  if (week.presentCount > 0) return "present";
+  return "none";
+}
+
+function weekLabel(week: RecentAttendanceWeek) {
+  const start = new Date(`${week.weekStart}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  const format = (date: Date) => date.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
+  const parts = [
+    week.presentCount && `${week.presentCount} geldi`,
+    week.absentCount && `${week.absentCount} gelmedi`,
+    week.excusedCount && `${week.excusedCount} mazeretli`,
+    week.notMarkedCount && `${week.notMarkedCount} yoklama girilmedi`,
+  ].filter(Boolean);
+  return `${format(start)} – ${format(end)}: ${parts.length ? parts.join(", ") : "ders yok"}`;
+}
+
+function AttendanceWeekBadges({ weeks, className }: { weeks?: RecentAttendanceWeek[]; className: string }) {
+  if (!weeks?.length) return null;
+  return (
+    <span role="list" aria-label="Son 4 hafta devam" className={`items-center gap-1 ${className}`}>
+      {weeks.map((week) => {
+        const badge = WEEK_BADGE[weekState(week)];
+        const label = weekLabel(week);
+        return <span key={week.weekStart} role="listitem" title={label} aria-label={label} className={`grid h-5 w-5 place-items-center rounded-md text-[.68rem] font-bold leading-none ${badge.className}`}>{badge.symbol}</span>;
+      })}
+    </span>
   );
 }
 

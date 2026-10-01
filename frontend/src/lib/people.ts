@@ -166,6 +166,16 @@ export interface StudentOverview {
   instruments: StudentInstrumentSummary[];
   // Aktif kurs kayıtlarının en erken başlangıcı (YYYY-MM-DD); aktif kurs yoksa null.
   enrolledSince: string | null;
+  // İçinde bulunulan hafta dahil son 4 takvim haftasının (Pzt–Paz) yoklama sayıları, eskiden yeniye.
+  recentAttendance: RecentAttendanceWeek[];
+}
+
+export interface RecentAttendanceWeek {
+  weekStart: string;
+  presentCount: number;
+  absentCount: number;
+  excusedCount: number;
+  notMarkedCount: number;
 }
 
 // Öğrenci listesindeki enstrüman rozetleri buna dayanır - useTeacherOverviews ile aynı

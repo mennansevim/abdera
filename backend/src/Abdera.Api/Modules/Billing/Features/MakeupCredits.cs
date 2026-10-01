@@ -96,6 +96,17 @@ public static class MakeupCredits
             });
         }
 
+        // Hakkın son geçerlilik anı yalnızca planlama anını değil, telafi dersinin kendisini de
+        // sınırlar: mazeretli dersin hakkı 21 gün içinde KULLANILIR, 21. günden sonraya ders açmaz.
+        if (request.StartAt >= credit.ExpiresAt)
+        {
+            var lastDay = clock.ToSchoolLocal(credit.ExpiresAt.AddTicks(-1)).ToString("dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["startAt"] = [$"Bu telafi hakkı {lastDay} tarihine kadar geçerli; telafi dersi bu tarihe kadar planlanmalı."],
+            });
+        }
+
         if (request.StartAt <= clock.UtcNow)
         {
             throw new ValidationFailedException(new Dictionary<string, string[]>

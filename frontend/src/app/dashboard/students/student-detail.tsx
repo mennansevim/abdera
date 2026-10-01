@@ -92,7 +92,7 @@ export function StudentDetail({
   return (
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span>{isAdmin && student.siblingDiscount && <span className="ml-1.5 rounded-full bg-[var(--success-soft)] px-1.5 py-0.5 text-[.75rem] font-bold text-[var(--success-strong)]">Kardeş indirimi</span>}</p>
+        <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span></p>
         <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet text-xs"><Icon name="activity" className="h-3.5 w-3.5" /> Gelişim</Link>
         {canManage && <RowMenu label={`${fullName} için işlemler`}>{(close) => <>
           {activeEnrollments.length > 0 && <RowMenuItem icon="calendar" onClick={() => { close(); setProgramEnrollmentId(activeEnrollments.length === 1 ? activeEnrollments[0]!.id : "__choose__"); }}>Ders programı</RowMenuItem>}
@@ -104,7 +104,7 @@ export function StudentDetail({
         </>}</RowMenu>}
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
         {canManage && (
           <section className="app-card relative">
             <div className="flex min-h-12 items-center gap-2 border-b border-[var(--line)] px-3 py-2">

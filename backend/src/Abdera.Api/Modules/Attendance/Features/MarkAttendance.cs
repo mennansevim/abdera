@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Attendance.Infrastructure;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Shared;
@@ -34,7 +35,7 @@ public static class MarkAttendance
     }
 
     private static async Task<IResult> MarkAsync(
-        Guid lessonId, MarkRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IStaffNotifier notifier)
+        Guid lessonId, MarkRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IConfiguration config, IStaffNotifier notifier)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -63,6 +64,10 @@ public static class MarkAttendance
                 db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_marked_by_admin", nameof(LessonAttendance), attendance.Id, clock.UtcNow));
             }
 
+            // Mazeretli ders telafi hakkı doğurur (docs/10-decisions.md A2 altındaki satır).
+            if (request.Status == AttendanceStatus.Excused)
+                await ExcusedMakeupCredit.SyncAsync(db, lesson, isExcused: true, clock, config, actorUserId);
+
             await db.SaveChangesAsync();
             return Results.Created($"/api/lessons/{lessonId}/attendance", ToResponse(attendance));
         }
@@ -70,8 +75,14 @@ public static class MarkAttendance
         // JsonSerializer kullanılır - elle string birleştirme hem kültüre hem kaçış (escaping)
         // karakterlerine karşı kırılgan (bkz. CLAUDE.md - BulkUpdate.cs'deki benzer düzeltme notu).
         var before = System.Text.Json.JsonSerializer.Serialize(new { status = existing.Status.ToString(), note = existing.Note });
+        var wasExcused = existing.Status == AttendanceStatus.Excused;
         existing.Correct(request.Status, lesson.TeacherId, request.Note, clock.UtcNow);
         db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_corrected", nameof(LessonAttendance), existing.Id, clock.UtcNow, beforeJson: before));
+
+        // Düzeltme Mazeretli'ye giriyor ya da ondan çıkıyorsa telafi hakkı da izler.
+        var isExcused = request.Status == AttendanceStatus.Excused;
+        if (wasExcused != isExcused)
+            await ExcusedMakeupCredit.SyncAsync(db, lesson, isExcused, clock, config, actorUserId);
 
         await db.SaveChangesAsync();
         return Results.Ok(ToResponse(existing));

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Abdera.Api.Modules.Attendance.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -32,7 +33,11 @@ public static class Students
     public record StudentInstrumentSummary(Guid InstrumentId, string InstrumentName);
     // EnrolledSince: aktif kurs kayıtlarının en erken başlangıcı - aidat listesi öğrencinin
     // hangi aylardan sorumlu olduğunu buradan bilir.
-    public record StudentOverviewResponse(StudentResponse Student, List<StudentInstrumentSummary> Instruments, DateOnly? EnrolledSince = null);
+    // RecentAttendance: içinde bulunulan hafta dahil son 4 haftanın yoklama sayıları, eskiden
+    // yeniye - listedeki "Son 4 hafta" rozetleri (RecentAttendanceWeeks).
+    public record StudentOverviewResponse(
+        StudentResponse Student, List<StudentInstrumentSummary> Instruments, DateOnly? EnrolledSince = null,
+        List<RecentAttendanceWeeks.Week>? RecentAttendance = null);
 
     public static void MapStudents(this IEndpointRouteBuilder app)
     {
@@ -49,7 +54,7 @@ public static class Students
         group.MapPatch("/{studentId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
-    private static async Task<IResult> OverviewAsync(ClaimsPrincipal principal, AbderaDbContext db)
+    private static async Task<IResult> OverviewAsync(ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
         var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
 
@@ -86,13 +91,16 @@ public static class Students
             .Distinct()
             .ToListAsync();
 
+        var recentAttendance = await RecentAttendanceWeeks.ForStudentsAsync(db, clock, studentIds, teacherScope);
+
         return Results.Ok(students.Select(student => new StudentOverviewResponse(
             student,
             instrumentsByStudent.Where(item => item.StudentId == student.Id)
                 .Select(item => new StudentInstrumentSummary(item.InstrumentId, item.InstrumentName))
                 .OrderBy(item => item.InstrumentName)
                 .ToList(),
-            enrolledSince.TryGetValue(student.Id, out var since) ? since : null)));
+            enrolledSince.TryGetValue(student.Id, out var since) ? since : null,
+            recentAttendance[student.Id])));
     }
 
     private static async Task<IResult> SearchAsync(string query, AbderaDbContext db)

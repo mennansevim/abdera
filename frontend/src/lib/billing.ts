@@ -222,12 +222,12 @@ export function useEndRecurringExpense() {
   });
 }
 
-export type MakeupCreditStatus ="Available" | "Used" | "Expired";
+export type MakeupCreditStatus = "Available" | "Used" | "Expired" | "Revoked";
 export interface MakeupCredit {
   id: string;
   studentId: string;
   sourceLessonId: string;
-  earnedReason: "GuardianCancelled24H" | "SchoolCancelled";
+  earnedReason: "GuardianCancelled24H" | "SchoolCancelled" | "Excused";
   earnedAt: string;
   expiresAt: string;
   status: MakeupCreditStatus;
