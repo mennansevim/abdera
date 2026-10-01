@@ -37,6 +37,8 @@ const TYPE_LABELS: Record<NotificationJobType, string> = {
   PaymentReminder: "Aidat hatırlatması",
   Birthday: "Doğum günü",
   PackageEnding: "Paket bitiyor",
+  InstrumentMaintenance: "Enstrüman bakımı",
+  LessonScheduleChanged: "Ders programı değişti",
 };
 
 export default function NotificationsPage() {

@@ -138,6 +138,8 @@ public static class LessonSeriesFeatures
         {
             await scheduler.CancelPendingAsync("lesson", stale.Id);
         }
+        // Bu programın henüz gönderilmemiş "program değişti" mesajı da artık geçersiz.
+        await scheduler.CancelPendingAsync("lesson_series", series.Id);
 
         db.AuditLogs.Add(AuditLog.Record(
             AuthContext.GetUserId(principal),
@@ -194,7 +196,7 @@ public static class LessonSeriesFeatures
     // dönük olarak "bu ders hep Pazartesi'ydi" yalanını söylerdi.
     private static async Task<IResult> RescheduleAsync(
         Guid seriesId, RescheduleRequest request, ClaimsPrincipal principal, AbderaDbContext db,
-        IClock clock, IConfiguration config, INotificationScheduler scheduler)
+        IClock clock, IConfiguration config, INotificationScheduler scheduler, IStaffNotifier staffNotifier)
     {
         if (request.DurationMinutes <= 0)
             throw new ValidationFailedException(new Dictionary<string, string[]> { ["durationMinutes"] = ["Ders süresi pozitif olmalı."] });
@@ -254,6 +256,20 @@ public static class LessonSeriesFeatures
             effectiveFrom, originalUntil, clock.UtcNow);
         db.LessonSeries.Add(replacement);
 
+        // Program değişti: veliye tek bir "ders programı değişti" mesajı, öğretmen + yöneticilere
+        // ekran içi bildirim (CLAUDE.md M4 - ders değiştiren her yol ikisini de yapar). Eski
+        // program için henüz gönderilmemiş bir program mesajı varsa artık yanlış bilgi verir.
+        await scheduler.CancelPendingAsync("lesson_series", series.Id);
+        var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, enrollment.StudentId);
+        if (primaryGuardianId is { } guardianId)
+        {
+            await scheduler.ScheduleAsync(
+                NotificationJobType.LessonScheduleChanged, "lesson_series", replacement.Id, guardianId, clock.UtcNow);
+        }
+        await LessonChangeNotice.NotifyScheduleChangedAsync(
+            staffNotifier, db, AuthContext.GetUserId(principal), enrollment.TeacherId, enrollment.StudentId,
+            series.DayOfWeek, series.StartTime, replacement.DayOfWeek, replacement.StartTime, replacement.Id);
+
         db.AuditLogs.Add(AuditLog.Record(
             AuthContext.GetUserId(principal),
             "lesson_series.rescheduled",
@@ -266,6 +282,7 @@ public static class LessonSeriesFeatures
         await db.SaveChangesAsync();
 
         var generation = await GenerateForSeriesAsync(replacement, enrollment, db, clock, config, scheduler);
+        await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new CreateResponse(ToResponse(replacement), generation));
     }
 

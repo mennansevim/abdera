@@ -234,6 +234,94 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.NotNull(rescheduledNotice);
     }
 
+    // Kullanıcı isteği: "program değişince veliye mesaj gitsin." Programı taşımak tek bir dersi
+    // değil haftalık programı değiştirir; veliye tek bir mesaj (lesson_rescheduled şablonu) gider,
+    // dersin öğretmeni ekranında görür (CLAUDE.md M4).
+    [Fact]
+    public async Task Rescheduling_a_series_sends_one_schedule_changed_message_and_notifies_the_teacher()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "prgdeg", teacherEmail: "prgdeg.ogretmen@abdera.test");
+        var seriesId = (await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId)).LessonSeriesId!.Value;
+
+        var movedResponse = await admin.PostAsJsonAsync($"/api/lesson-series/{seriesId}/reschedule",
+            new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Friday, new TimeOnly(18, 15), 45, null));
+        Assert.True(movedResponse.StatusCode == HttpStatusCode.OK, await movedResponse.Content.ReadAsStringAsync());
+        var moved = (await movedResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+
+        var job = Assert.Single(await db.NotificationJobs.AsNoTracking()
+            .Where(j => j.Type == NotificationJobType.LessonScheduleChanged && j.ReferenceId == moved.Series.Id)
+            .ToListAsync());
+        Assert.Equal("lesson_series", job.ReferenceType);
+
+        var teacherUserId = (await db.Teachers.AsNoTracking().SingleAsync(t => t.Id == seeded.TeacherId)).UserId;
+        Assert.True(await db.StaffNotifications.AnyAsync(n =>
+            n.UserId == teacherUserId && n.ReferenceType == "lesson_series" && n.ReferenceId == moved.Series.Id));
+
+        // Dispatcher (test override: saniyede bir) mesajı Fake istemciyle gönderir.
+        NotificationJob? finished = null;
+        for (var i = 0; i < 30 && finished is null; i++)
+        {
+            await Task.Delay(500);
+            var current = await db.NotificationJobs.AsNoTracking().SingleAsync(j => j.Id == job.Id);
+            if (current.Status is NotificationJobStatus.Sent or NotificationJobStatus.Failed) finished = current;
+        }
+        Assert.NotNull(finished);
+        Assert.True(finished!.Status == NotificationJobStatus.Sent, finished.LastError);
+        var outbound = await db.WhatsAppMessages.AsNoTracking().SingleAsync(m => m.NotificationJobId == job.Id);
+        // Meta'da onaylı lesson_rescheduled şablonu; haftalık bilgi "Yeni saat" satırında.
+        Assert.Contains("Ders Saati Değişikliği", outbound.BodySnapshot);
+        Assert.Contains("Yeni saat: Her Cuma 18:15 (ilk ders ", outbound.BodySnapshot);
+    }
+
+    [Fact]
+    public async Task Moving_a_series_again_cancels_the_unsent_message_about_the_previous_schedule()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "prgiki");
+        var seriesId = (await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId)).LessonSeriesId!.Value;
+
+        var first = (await (await admin.PostAsJsonAsync($"/api/lesson-series/{seriesId}/reschedule",
+                new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Thursday, new TimeOnly(17, 0), 45, null)))
+            .Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+        // Dispatcher'dan önce yakalamak için ilk mesaj ileriye ötelenir (gönderilmemiş durumda kalsın).
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE notification_jobs SET scheduled_at = {DateTimeOffset.UtcNow.AddHours(1)} WHERE reference_id = {first.Series.Id}");
+
+        var secondResponse = await admin.PostAsJsonAsync($"/api/lesson-series/{first.Series.Id}/reschedule",
+            new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Friday, new TimeOnly(17, 0), 45, null));
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        var second = (await secondResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+
+        var firstJob = await db.NotificationJobs.AsNoTracking().SingleAsync(j =>
+            j.Type == NotificationJobType.LessonScheduleChanged && j.ReferenceId == first.Series.Id);
+        Assert.Equal(NotificationJobStatus.Cancelled, firstJob.Status);
+        Assert.True(await db.NotificationJobs.AnyAsync(j =>
+            j.Type == NotificationJobType.LessonScheduleChanged && j.ReferenceId == second.Series.Id));
+    }
+
+    [Fact]
+    public async Task Rescheduling_a_series_sends_nothing_to_a_guardian_without_consent()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "prgriza");
+        var seriesId = (await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId)).LessonSeriesId!.Value;
+        (await admin.PatchAsJsonAsync($"/api/guardians/{seeded.GuardianId}",
+            new Guardians.UpdateRequest("Veliprgriza", "Soyad", seeded.GuardianPhone, NotificationConsent: false)))
+            .EnsureSuccessStatusCode();
+
+        var movedResponse = await admin.PostAsJsonAsync($"/api/lesson-series/{seriesId}/reschedule",
+            new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Friday, new TimeOnly(17, 0), 45, null));
+        Assert.Equal(HttpStatusCode.OK, movedResponse.StatusCode);
+        var moved = (await movedResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+
+        Assert.False(await db.NotificationJobs.AnyAsync(j =>
+            j.Type == NotificationJobType.LessonScheduleChanged && j.ReferenceId == moved.Series.Id));
+    }
+
     [Fact]
     public async Task Dispatcher_sends_a_due_job_through_fake_client_and_marks_it_sent()
     {

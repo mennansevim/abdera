@@ -36,6 +36,26 @@ internal static class LessonChangeNotice
             teacherId, actorUserId, StaffNotificationType.LessonMoved, "Ders saati değişti", body, "lesson", newLessonId);
     }
 
+    // Haftalık programın kendisi taşındı ("her Pazartesi 18:00 → her Cuma 18:15"). Referans
+    // yeni seri: her taşıma yeni seri açtığı için ekran içi bildirimin idempotency anahtarı da odur.
+    public static async Task NotifyScheduleChangedAsync(
+        IStaffNotifier notifier,
+        AbderaDbContext db,
+        Guid? actorUserId,
+        Guid teacherId,
+        Guid studentId,
+        DayOfWeek previousDay,
+        TimeOnly previousTime,
+        DayOfWeek newDay,
+        TimeOnly newTime,
+        Guid newSeriesId)
+    {
+        var body = $"{await StudentNameAsync(db, studentId)} · her {Weekly(previousDay, previousTime)} → her {Weekly(newDay, newTime)}";
+
+        await notifier.NotifyLessonStaffAsync(
+            teacherId, actorUserId, StaffNotificationType.LessonMoved, "Ders programı değişti", body, "lesson_series", newSeriesId);
+    }
+
     public static async Task NotifyCancelledAsync(
         IStaffNotifier notifier,
         AbderaDbContext db,
@@ -77,6 +97,12 @@ internal static class LessonChangeNotice
             .Where(student => student.Id == studentId)
             .Select(student => student.FirstName + " " + student.LastName)
             .SingleOrDefaultAsync() ?? "Öğrenci";
+
+    private static string Weekly(DayOfWeek day, TimeOnly time)
+    {
+        var culture = System.Globalization.CultureInfo.GetCultureInfo("tr-TR");
+        return $"{culture.DateTimeFormat.GetDayName(day)} {time.ToString("HH:mm", culture)}";
+    }
 
     private static string Format(IClock clock, DateTimeOffset instant) =>
         clock.ToSchoolLocal(instant).ToString("d MMMM dddd HH:mm", System.Globalization.CultureInfo.GetCultureInfo("tr-TR"));

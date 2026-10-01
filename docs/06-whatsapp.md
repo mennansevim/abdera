@@ -91,6 +91,19 @@ otomasyon) kapatılabilir (`NotificationAutomationSettings.AllowAttendingLateRes
 yalnızca ilk iki buton (index 0/1) gönderilir, üçüncüsü şablonun kendisinde tanımlı kalsa bile
 payload override edilmediği için tıklanırsa imza doğrulaması zaten geçersiz olur.
 
+### Ders programı değişikliği — `lesson_rescheduled` şablonuyla
+
+Haftalık program (`lesson_series`) yeni gün/saate taşındığında (`POST /api/lesson-series/{id}/reschedule`,
+takvimde "Bu ders ve tüm programı güncelle") birincil veliye bir kez gider. Job tipi
+`LessonScheduleChanged`, referans **yeni** seri (`reference_type = "lesson_series"`) - her taşıma
+yeni seri açtığı için idempotency anahtarı odur. Program tekrar taşınır veya sonlandırılırsa
+henüz gönderilmemiş mesaj iptal edilir. Olay tetiklemelidir, sessiz saate tabi değildir.
+
+Ayrı bir şablon onaylatılmadı: Meta'da onaylı `lesson_rescheduled` kullanılır ve haftalık bilgi
+`{{new_lesson_time}}` değişkenine yazılır - veli "Yeni saat: Her Cuma 18:15 (ilk ders 2 Ekim)"
+görür. Meta değişkenleri satır sonu içeremediği için bu metin tek satırdır. Tek bir dersin
+taşınmasında aynı değişken yalnızca tarih/saati taşır ("02 Ekim 18:15").
+
 ## Buton payload güvenliği
 
 Payload'da tahmin edilebilir dahili id kullanılmaz (`lesson_id=42` gibi). Bunun yerine imzalı/opak referans:

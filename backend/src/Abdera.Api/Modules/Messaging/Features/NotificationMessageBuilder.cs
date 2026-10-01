@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +26,7 @@ public static class NotificationMessageBuilder
             NotificationJobType.MakeupApproved => await BuildLessonMessageAsync(job, "makeup_approved", db, clock, config),
             NotificationJobType.PaymentReminder => await BuildPaymentMessageAsync(job, db, clock),
             NotificationJobType.InstrumentMaintenance => await BuildMaintenanceMessageAsync(job, db),
+            NotificationJobType.LessonScheduleChanged => await BuildScheduleChangeMessageAsync(job, db, clock),
             // ARC-2: Birthday/PackageEnding tanımlı ama hiçbir use-case tarafından
             // üretilmiyor (Faz 7'ye kaldı) - sessizce null dönüp yanıltıcı bir "kayıt
             // bulunamadı" hatasına düşmek yerine dispatcher'ın yakalayıp okunur bir
@@ -47,6 +49,46 @@ public static class NotificationMessageBuilder
             ["guardian_name"] = guardian.FirstName,
             ["instrument"] = instrument.Name,
             ["maintenance_type"] = setting.MaintenanceType,
+        });
+    }
+
+    // Haftalık program taşındı. Ayrı bir şablon onaylatmamak için Meta'da onaylı
+    // lesson_rescheduled kullanılır; tek yer tutucusu new_lesson_time haftalık bilgiyi taşır:
+    // "Yeni saat: Her Cuma 18:15 (ilk ders 2 Ekim)". İlk ders, yeni programın gönderim
+    // anından sonraki ilk dersidir; henüz ders üretilmemişse (tatil, izin) programın
+    // başlangıç tarihi yazılır. Meta değişkeni satır sonu içeremez - metin tek satır kalır.
+    private static async Task<BuiltMessage?> BuildScheduleChangeMessageAsync(NotificationJob job, AbderaDbContext db, IClock clock)
+    {
+        var series = await db.LessonSeries.SingleOrDefaultAsync(s => s.Id == job.ReferenceId);
+        if (series is null) return null;
+
+        var enrollment = await db.Enrollments.SingleAsync(e => e.Id == series.EnrollmentId);
+        var student = await db.Students.SingleAsync(s => s.Id == enrollment.StudentId);
+        var teacher = await db.Teachers.SingleAsync(t => t.Id == enrollment.TeacherId);
+        var instrument = await db.Instruments.SingleAsync(i => i.Id == enrollment.InstrumentId);
+        var guardian = await db.Guardians.SingleAsync(g => g.PhoneNumber == job.RecipientPhoneNumber);
+
+        var now = clock.UtcNow;
+        var firstLessonStart = await db.Lessons
+            .Where(l => l.LessonSeriesId == series.Id && l.Status == LessonStatus.Normal && l.StartAt > now)
+            .OrderBy(l => l.StartAt)
+            .Select(l => (DateTimeOffset?)l.StartAt)
+            .FirstOrDefaultAsync();
+
+        // Veliye görünen metin: tr-TR bilinçli (bkz. BuildPaymentMessageAsync notu).
+        var turkishCulture = new System.Globalization.CultureInfo("tr-TR");
+        var firstLesson = firstLessonStart is { } start
+            ? clock.ToSchoolLocal(start).ToString("d MMMM", turkishCulture)
+            : series.EffectiveFrom.ToString("d MMMM", turkishCulture);
+        var weekly = $"Her {turkishCulture.DateTimeFormat.GetDayName(series.DayOfWeek)} {series.StartTime.ToString("HH:mm", turkishCulture)}";
+
+        return new BuiltMessage("lesson_rescheduled", new Dictionary<string, string>
+        {
+            ["guardian_name"] = guardian.FirstName,
+            ["student_name"] = $"{student.FirstName} {student.LastName}",
+            ["instrument"] = instrument.Name,
+            ["new_lesson_time"] = $"{weekly} (ilk ders {firstLesson})",
+            ["teacher_name"] = $"{teacher.FirstName} {teacher.LastName}",
         });
     }
 

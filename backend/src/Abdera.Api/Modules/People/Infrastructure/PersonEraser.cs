@@ -194,10 +194,12 @@ public static class PersonEraser
         DELETE FROM notification_jobs
          WHERE reference_id IN (SELECT id FROM _les)
             OR reference_id IN (SELECT id FROM _rec)
+            OR reference_id IN (SELECT id FROM _ser)
             OR reference_id = @student_id;
         DELETE FROM staff_notifications
          WHERE reference_id IN (SELECT id FROM _les)
             OR reference_id IN (SELECT id FROM _rec)
+            OR reference_id IN (SELECT id FROM _ser)
             OR reference_id = @student_id;
 
         DELETE FROM receivables WHERE id IN (SELECT id FROM _rec);
@@ -278,10 +280,13 @@ public static class PersonEraser
            SET matched_receivable_id = NULL, status = 'NeedsReview'
          WHERE matched_receivable_id IN (SELECT id FROM _trec);
         DELETE FROM notification_jobs
-         WHERE reference_id IN (SELECT id FROM _tles) OR reference_id IN (SELECT id FROM _trec);
+         WHERE reference_id IN (SELECT id FROM _tles)
+            OR reference_id IN (SELECT id FROM _trec)
+            OR reference_id IN (SELECT id FROM _tser);
         DELETE FROM staff_notifications
          WHERE reference_id IN (SELECT id FROM _tles)
             OR reference_id IN (SELECT id FROM _trec)
+            OR reference_id IN (SELECT id FROM _tser)
             OR reference_id = @teacher_id;
         DELETE FROM receivables WHERE id IN (SELECT id FROM _trec);
 

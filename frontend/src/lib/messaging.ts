@@ -11,7 +11,9 @@ export type NotificationJobType =
   | "MakeupApproved"
   | "PaymentReminder"
   | "Birthday"
-  | "PackageEnding";
+  | "PackageEnding"
+  | "InstrumentMaintenance"
+  | "LessonScheduleChanged";
 
 export type NotificationJobStatus = "Pending" | "Processing" | "Sent" | "Failed" | "Cancelled";
 

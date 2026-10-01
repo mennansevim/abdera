@@ -49,6 +49,16 @@ public static class Notifications
             .Join(db.Instruments, row => row.InstrumentId, instrument => instrument.Id, (row, instrument) => new LessonDisplay(row.Id, row.StudentName, instrument.Name))
             .ToDictionaryAsync(row => row.LessonId);
 
+        // "Ders programı değişti" job'ları seriyi işaret eder; aynı öğrenci/enstrüman sütunu dolsun.
+        var seriesIds = jobs.Where(j => j.ReferenceType == "lesson_series").Select(j => j.ReferenceId).Distinct().ToList();
+        var seriesDisplays = await db.LessonSeries
+            .Where(s => seriesIds.Contains(s.Id))
+            .Join(db.Enrollments, series => series.EnrollmentId, enrollment => enrollment.Id, (series, enrollment) => new { series.Id, enrollment.StudentId, enrollment.InstrumentId })
+            .Join(db.Students, row => row.StudentId, student => student.Id, (row, student) => new { row.Id, row.InstrumentId, StudentName = student.FirstName + " " + student.LastName })
+            .Join(db.Instruments, row => row.InstrumentId, instrument => instrument.Id, (row, instrument) => new LessonDisplay(row.Id, row.StudentName, instrument.Name))
+            .ToListAsync();
+        foreach (var display in seriesDisplays) lessonDisplays[display.LessonId] = display;
+
         var recipientPhones = jobs.Select(j => j.RecipientPhoneNumber).Distinct().ToList();
         var guardianNames = await db.Guardians
             .Where(g => recipientPhones.Contains(g.PhoneNumber))

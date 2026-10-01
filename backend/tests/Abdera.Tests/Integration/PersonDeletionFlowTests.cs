@@ -4,6 +4,7 @@ using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Library.Features;
+using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.People.Infrastructure;
@@ -162,6 +163,14 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         // Test ortamında AI kapalı; önbellek satırı elle kurulur ki silme kapsamı sınansın.
         db.ProgressSummaries.Add(ProgressSummary.Create(
             seeded.StudentId, null, "Genel gelişim yorumu.", 1, DateTimeOffset.UtcNow, "test-model", DateTimeOffset.UtcNow));
+        // Program değişikliği mesajı ve bildirimi seriyi işaret eder (LessonScheduleChanged).
+        // Gönderilmiş, veli dışı bir numaraya giden satır: yalnızca seri koşulu bunu silebilir.
+        Assert.NotEmpty(seriesIds);
+        db.NotificationJobs.Add(NotificationJob.Create(
+            NotificationJobType.LessonScheduleChanged, "+905009998877", "lesson_series", seriesIds[0], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow));
+        db.StaffNotifications.Add(StaffNotification.Create(
+            await db.Users.Select(u => u.Id).FirstAsync(), StaffNotificationType.LessonMoved, "Ders programı değişti", "test",
+            "lesson_series", seriesIds[0], DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
         var deleted = await admin.DeleteAsync($"/api/students/{seeded.StudentId}?force=true");
@@ -188,8 +197,8 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.StudentPhotos.AnyAsync(p => p.StudentId == seeded.StudentId));
         Assert.False(await db.ShowItems.AnyAsync(i => i.StudentId == seeded.StudentId));
         Assert.False(await db.LibrarySuggestions.AnyAsync(l => l.StudentId == seeded.StudentId));
-        Assert.False(await db.NotificationJobs.AnyAsync(j => lessonIds.Contains(j.ReferenceId) || receivableIds.Contains(j.ReferenceId)));
-        Assert.False(await db.StaffNotifications.AnyAsync(n => lessonIds.Contains(n.ReferenceId) || receivableIds.Contains(n.ReferenceId)));
+        Assert.False(await db.NotificationJobs.AnyAsync(j => lessonIds.Contains(j.ReferenceId) || receivableIds.Contains(j.ReferenceId) || seriesIds.Contains(j.ReferenceId)));
+        Assert.False(await db.StaffNotifications.AnyAsync(n => lessonIds.Contains(n.ReferenceId) || receivableIds.Contains(n.ReferenceId) || seriesIds.Contains(n.ReferenceId)));
 
         // Başka öğrencisi olmayan veli de gider - kalırsa aynı numarayla yeniden kayıt
         // "Bu telefon numarasıyla kayıtlı bir veli zaten var" hatasına takılıyordu.

@@ -132,6 +132,7 @@ public class MessagingDomainTests
     [InlineData(NotificationJobType.LessonReminder, false)]
     [InlineData(NotificationJobType.LessonRescheduled, false)]
     [InlineData(NotificationJobType.MakeupApproved, false)]
+    [InlineData(NotificationJobType.LessonScheduleChanged, false)]
     public void QuietHours_AppliesTo_only_cron_triggered_types(NotificationJobType type, bool expected)
     {
         Assert.Equal(expected, QuietHours.AppliesTo(type));

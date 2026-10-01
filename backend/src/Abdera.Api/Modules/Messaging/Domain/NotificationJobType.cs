@@ -13,6 +13,11 @@ public enum NotificationJobType
     Birthday,
     PackageEnding,
     InstrumentMaintenance,
+    // Haftalık ders programı (lesson_series) yeni gün/saate taşındı. Referans YENİ seridir
+    // (reference_type="lesson_series"): her taşıma yeni bir seri açtığı için doğal idempotency
+    // anahtarı. Olay tetiklemeli, sessiz saate tabi değil. Meta'da onaylı lesson_rescheduled
+    // şablonuyla gider (NotificationMessageBuilder.BuildScheduleChangeMessageAsync).
+    LessonScheduleChanged,
 }
 
 public enum NotificationJobStatus
