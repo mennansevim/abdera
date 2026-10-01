@@ -33,37 +33,27 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
     expect(seed.ok()).toBeTruthy();
   });
 
-  test("ilk dönem ay/yıl menüleriyle değişir, modal çökmez ve tahsilat açık kalır", async ({ page }) => {
+  test("ödeme penceresi yıl değiştirince çökmez ve tahsilat açık kalır", async ({ page }) => {
     const browserErrors: Error[] = [];
     page.on("pageerror", (error) => browserErrors.push(error));
     await createBillingFixture(page);
 
-    const duesResponse = await page.request.get(`${apiUrl}/api/billing/dues`);
-    expect(duesResponse.ok()).toBeTruthy();
-    const dues = await duesResponse.json() as Array<{ studentId: string; enrollmentId: string; status: string }>;
-    const due = dues.find((item) => item.status !== "Cancelled");
-    expect(due).toBeTruthy();
-
     await page.goto("/dashboard/billing");
-    await page.getByRole("button", { name: "Tahsilat kaydet", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Tahsilat kaydet" });
-    await dialog.getByLabel("Öğrenci").selectOption(due!.studentId);
+    await page.getByRole("button", { name: "Çizelge", exact: true }).click();
+    // İlk öğrencinin adına dokun: pencere hiçbir ay seçili olmadan açılır.
+    await page.locator("table tbody th button").first().click();
+    const dialog = page.getByRole("dialog").first();
+    await expect(dialog.getByText("Hangi aylar?")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Önce ay seç" })).toBeDisabled();
 
-    const coursePicker = dialog.getByLabel("Hangi kurs?");
-    if (await coursePicker.isVisible()) await coursePicker.selectOption(due!.enrollmentId);
-
-    // İlk dönem artık iki açılır menü (MonthInput: ay + yıl) - boş bırakılamaz, bu yüzden
-    // eski "alanı temizle" senaryosu yerine menülerden başka bir dönem seçilir.
-    const monthPicker = dialog.getByLabel("İlk dönem - ay");
-    const yearPicker = dialog.getByLabel("İlk dönem - yıl");
-    await expect(monthPicker).toBeVisible();
-    await expect(yearPicker).toBeVisible();
-    await monthPicker.selectOption("1");
-    await yearPicker.selectOption(String(new Date().getFullYear()));
-    await expect(monthPicker).toHaveValue("1");
+    // Aralık + Ocak gibi yıl aşan peşin ödeme için pencere kendi yılını değiştirebilir.
+    const year = new Date().getFullYear();
+    await dialog.getByRole("button", { name: "Sonraki yıl" }).click();
+    await expect(dialog.getByText(String(year + 1), { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Önceki yıl" }).click();
+    await expect(dialog.getByText(String(year), { exact: true })).toBeVisible();
 
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText("İlk dönemi seçin")).toHaveCount(0);
     expect(browserErrors).toEqual([]);
   });
 

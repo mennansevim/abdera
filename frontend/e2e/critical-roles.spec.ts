@@ -205,28 +205,30 @@ test.describe.serial("Abdera critical role flows", () => {
     expect(billingRows.flatMap((row: { receivables: { period: string }[] }) => row.receivables)
       .some((receivable: { period: string }) => receivable.period === currentPeriod)).toBeTruthy();
 
-    // Aidat ekranı öğrenci-önce: tahsilat, öğrencinin "Detay" takviminde seçili ayın kartından alınır.
+    // Aidatlar ekranı (docs/10-decisions.md H17): Liste görünümünde öğrenciyi ara, ismine
+    // dokun; ödeme penceresi bu ay seçili açılır. "Farklı tutar alındı" ile 1 TL alınır ve
+    // "Kalanı borç kalsın" (varsayılan) kısmi ödeme olarak kaydedilir.
     await page.goto("/dashboard/billing");
-    await expect(page.getByRole("heading", { name: "Aidat yönetimi" })).toBeVisible();
-    await page.getByLabel("Öğrenci adına göre ara").fill(`Öğrenci ${suffix}`);
-    await page.getByRole("button", { name: "Detay" }).first().click();
-    await page.getByRole("button", { name: "Tahsilat", exact: true }).first().click();
-    const paymentForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Ödemeyi kaydet" }) });
-    await paymentForm.getByLabel("Tutar").fill("1");
+    await expect(page.getByRole("heading", { name: "Aidatlar", level: 1 })).toBeVisible();
+    await page.getByRole("button", { name: "Liste", exact: true }).click();
+    await page.getByLabel("Öğrenci, öğretmen veya veli ara").fill(`Öğrenci ${suffix}`);
+    await page.getByRole("listitem").filter({ hasText: `Deneme Öğrenci ${suffix}` }).getByRole("button").first().click();
+    const paymentForm = page.getByRole("dialog", { name: `Deneme Öğrenci ${suffix}` });
+    await paymentForm.getByRole("button", { name: "Farklı tutar alındı" }).click();
+    await paymentForm.getByLabel("Alınan tutar").fill("1");
+    await expect(paymentForm.getByRole("radio", { name: /Kalanı borç kalsın/ })).toBeChecked();
     // Kısmi ödemenin gerçekten kaydedildiğini sunucu yanıtından doğrula.
     const paymentSaved = page.waitForResponse((response) =>
-      response.url().includes("/api/receivables/") &&
-      response.url().endsWith("/payments") &&
+      response.url().includes("/api/enrollments/") &&
+      response.url().endsWith("/collections") &&
       response.request().method() === "POST");
-    await paymentForm.getByRole("button", { name: "Ödemeyi kaydet" }).click();
+    await paymentForm.getByRole("button", { name: /tahsil et$/ }).click();
     expect((await paymentSaved).ok()).toBeTruthy();
-    // Sunucuda aidat kısmi ödemeye düşer. Ekranda ayrı bir "Kısmi" rozeti yok (kullanıcı
-    // kuralı: yalnızca ödendi/ödenmedi) - kart kalan tutarı ve kaydedilen ödeme satırını gösterir.
     const afterPayment = await (await page.request.get(`${apiUrl}/api/students/${student.id}/billing`)).json();
     expect(afterPayment.flatMap((row: { receivables: { period: string; status: string }[] }) => row.receivables)
       .some((receivable: { period: string; status: string }) => receivable.period === currentPeriod && receivable.status === "Partial")).toBeTruthy();
     await expect(paymentForm).toHaveCount(0);
-    await expect(page.getByText(/ kaldı$/).first()).toBeVisible();
+    await expect(page.getByRole("listitem").filter({ hasText: `Deneme Öğrenci ${suffix}` }).getByText(/kısmi ödendi/)).toBeVisible();
   });
 
   // Kullanıcı isteği: "takvimde ders taşındığında ilgili öğretmenin ekranına bildirim

@@ -118,6 +118,9 @@ PUT    /api/notification-automation-settings     ✅ günceller; bekleyen Lesson
 
 GET    /api/enrollments/{enrollmentId}/prepay-preview ✅ H7/H8 - ?startPeriod=&months= - taban/indirim/net toplam, sunucu hesaplar
 POST   /api/enrollments/{enrollmentId}/prepay-plans   ✅ H8 - 1-24 ay peşin tahsilat; expectedTotal ekranla sunucu ayrışmışsa 409
+GET    /api/billing/board?year=2026                  ✅ H17 - Aidatlar ekranının tek kaynağı: yılın her kurs kaydı × ayı (durum, tutar, ödenen, son ödeme tarihi) + kardeş/çoklu kurs olguları
+GET    /api/enrollments/{enrollmentId}/collection-preview ✅ H17 - ?periods=2026-09&periods=2026-10&sibling=&multiCourse=&prepay=&manualPercent= - seçilen ayların sunucu hesabı
+POST   /api/enrollments/{enrollmentId}/collections    ✅ H17 - seçilen aylar + indirim seçimi (null = donmuş tutar), expectedTotal, agreedTotal (küsürat) veya partialAmount (tek ay, kısmi); Idempotency-Key zorunlu; tek transaction
 
 GET    /api/instrument-maintenance-settings      ✅ Admin; bakım periyodu/aktiflik/kanal ve rızalı veli sayısı
 PUT    /api/instruments/{instrumentId}/maintenance-setting ✅ Admin upsert + audit

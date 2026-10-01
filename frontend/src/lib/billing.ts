@@ -83,6 +83,7 @@ export function useUpdateEnrollmentBilling(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
       queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
       queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
     },
   });
@@ -329,6 +330,7 @@ export function useRecordPayment(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
     },
   });
 }
@@ -342,6 +344,7 @@ export function useCorrectPayment(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
     },
   });
 }
@@ -412,6 +415,132 @@ export function useCreatePrepayPlan(studentId: string, enrollmentId: string) {
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
       queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
+    },
+  });
+}
+
+// Aidatlar ekranı (docs/10-decisions.md H17) - bir yılın her kurs kaydı × her ayı. Liste ve
+// Çizelge görünümleri aynı yanıttan çizilir (BillingBoard.cs).
+export interface BoardCell {
+  period: string;
+  receivableId: string;
+  status: ReceivableStatus;
+  amount: number;
+  totalPaid: number;
+  baseAmount: number;
+  discountPercent: number;
+  discountReason: string | null;
+  currency: string;
+  lastPaymentDate: string | null;
+}
+
+export interface BoardRow {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentName: string;
+  courseKind: CourseKind;
+  guardianNames: string;
+  siblingDiscount: boolean;
+  multiCourse: boolean;
+  manualDiscountPercent: number | null;
+  manualDiscountReason: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  enrollmentStatus: "Active" | "Ended";
+  cells: BoardCell[];
+}
+
+export function useBillingBoard(year: number) {
+  return useQuery({ queryKey: ["billing-board", year], queryFn: () => api.get<BoardRow[]>(`/api/billing/board?year=${year}`) });
+}
+
+// Tahsilat anındaki indirim seçimi (Collections.cs). Kardeş/çoklu kurs öğrencinin kaydından
+// bağımsız açılıp kapatılabilir; manualPercent doluysa ikisinin yerine geçer.
+export interface DiscountChoice {
+  sibling: boolean;
+  multiCourse: boolean;
+  prepay: boolean;
+  manualPercent: number | null;
+}
+
+export interface CollectionRow {
+  period: string;
+  receivableId: string | null;
+  status: ReceivableStatus | null;
+  baseAmount: number;
+  discountPercent: number;
+  discountReason: string | null;
+  amount: number;
+  alreadyPaid: number;
+  due: number;
+  repriced: boolean;
+  blockedReason: string | null;
+}
+
+export interface CollectionQuote {
+  enrollmentId: string;
+  studentName: string;
+  instrumentName: string;
+  courseKind: CourseKind;
+  currency: string;
+  defaults: { sibling: boolean; multiCourse: boolean; manualPercent: number | null; manualReason: string | null; siblingPercent: number; multiCoursePercent: number };
+  prepayPercent: number;
+  rows: CollectionRow[];
+  baseTotal: number;
+  total: number;
+  blockers: string[];
+}
+
+// Tutarı SUNUCU hesaplar; ekran her seçim değişikliğinde bu önizlemeyi gösterir ve tahsil
+// ederken gördüğü toplamı (expectedTotal) teyit eder.
+export function useCollectionPreview(enrollmentId: string, periods: string[], choice: DiscountChoice, options?: { enabled?: boolean }) {
+  const params = new URLSearchParams();
+  for (const period of periods) params.append("periods", period);
+  params.set("sibling", String(choice.sibling));
+  params.set("multiCourse", String(choice.multiCourse));
+  params.set("prepay", String(choice.prepay));
+  if (choice.manualPercent != null && choice.manualPercent > 0) params.set("manualPercent", String(choice.manualPercent));
+  return useQuery({
+    queryKey: ["collection-preview", enrollmentId, params.toString()],
+    queryFn: () => api.get<CollectionQuote>(`/api/enrollments/${enrollmentId}/collection-preview?${params.toString()}`),
+    enabled: !!enrollmentId && periods.length > 0 && (options?.enabled ?? true),
+    placeholderData: (previous) => previous,
+  });
+}
+
+export interface CollectionResult {
+  total: number;
+  currency: string;
+  prepayPlanId: string | null;
+  receivables: Receivable[];
+  replayed: boolean;
+}
+
+// discounts = null: listedeki tek dokunuş "Ödendi" - açılmış ay donmuş tutarıyla tahsil edilir.
+export function useCollect() {
+  const queryClient = useQueryClient();
+  const attempts = useRef(new Map<string, string>());
+  return useMutation({
+    mutationFn: ({ enrollmentId, ...body }: { enrollmentId: string; periods: string[]; discounts: DiscountChoice | null; paymentDate: string; method: PaymentMethod; note?: string; expectedTotal?: number; agreedTotal?: number; partialAmount?: number }) => {
+      const fingerprint = JSON.stringify({ enrollmentId, ...body });
+      const idempotencyKey = attempts.current.get(fingerprint) ?? crypto.randomUUID();
+      attempts.current.set(fingerprint, idempotencyKey);
+      return api.post<CollectionResult>(`/api/enrollments/${enrollmentId}/collections`, body, {
+        headers: { "Idempotency-Key": idempotencyKey },
+      }).then((result) => {
+        attempts.current.delete(fingerprint);
+        return result;
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+      queryClient.invalidateQueries({ queryKey: ["collection-preview"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
     },
   });
 }
