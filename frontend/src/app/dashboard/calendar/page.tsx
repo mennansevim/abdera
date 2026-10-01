@@ -7,6 +7,7 @@ import { ApiError } from "@/lib/api";
 import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/attendance";
 import { useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
+import { errorMessage } from "@/lib/library";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { useCalendar, useEndLessonSeries, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
@@ -498,6 +499,10 @@ function WeeklyGrid({
   const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [openLesson, setOpenLesson] = useState<CalendarLesson | null>(null);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
+  // Taşıma hatası pencerenin İÇİNDE gösterilir: toast pencerenin arka planında kalıyordu ve
+  // kullanıcı işlemin neden olmadığını göremiyordu (pencere açık, hiçbir şey değişmiyor).
+  const [moveScope, setMoveScope] = useState<"single" | "series" | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const rescheduleSeries = useRescheduleLessonSeries(pendingMove?.lesson.studentId ?? "");
 
   function showToast(tone: "success" | "error", text: string) {
@@ -617,6 +622,8 @@ function WeeklyGrid({
     if (!pendingMove) return;
     const { lesson, newStart, newEnd } = pendingMove;
     setMovingId(lesson.id);
+    setMoveScope(scope);
+    setMoveError(null);
     try {
       if (scope === "series" && lesson.lessonSeriesId) {
         await rescheduleSeries.mutateAsync({
@@ -643,10 +650,18 @@ function WeeklyGrid({
       }
       setPendingMove(null);
     } catch (err) {
-      showToast("error", err instanceof ApiError ? (err.detail ?? err.title) : "Ders taşınamadı.");
+      // Doğrulama hatasında detail yalnızca "Doğrulama hatası." der; asıl neden (ör. öğretmenin
+      // uygunluk penceresi dışında) errors alanındadır.
+      setMoveError(errorMessage(err, "Ders taşınamadı."));
     } finally {
       setMovingId(null);
+      setMoveScope(null);
     }
+  }
+
+  function closeMoveDialog() {
+    setPendingMove(null);
+    setMoveError(null);
   }
 
   if (loading) {
@@ -656,7 +671,9 @@ function WeeklyGrid({
   return (
     <section className="app-card min-w-0 overflow-hidden">
       {toast && (
-        <div role="status" className={`fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-40 flex items-center gap-2 rounded-xl border px-4 py-2.5 text-[.75rem] font-semibold shadow-lg xl:static xl:inset-auto xl:rounded-none xl:border-x-0 xl:border-t-0 xl:border-b xl:shadow-none ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
+        // Her ekranda yüzer: masaüstünde kartın tepesine gömülü olduğunda akşam saatine kaydırmış
+        // kullanıcı onayı hiç görmüyordu.
+        <div role="status" className={`fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[90] mx-auto flex max-w-lg items-center gap-2 rounded-xl border px-4 py-2.5 text-[.75rem] font-semibold shadow-lg xl:bottom-6 ${toast.tone === "success" ? "border-[color:var(--success-soft)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[color:var(--danger-soft)] bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>
           <Icon name={toast.tone === "success" ? "check" : "x"} className="h-3.5 w-3.5 shrink-0" />
           {toast.text}
         </div>
@@ -665,9 +682,10 @@ function WeeklyGrid({
       {pendingMove && (
         <MoveDecisionDialog
           move={pendingMove}
-          pending={reschedule.isPending || updateLesson.isPending || rescheduleSeries.isPending}
+          pendingScope={moveScope}
+          error={moveError}
           onChoose={commitPendingMove}
-          onClose={() => setPendingMove(null)}
+          onClose={closeMoveDialog}
         />
       )}
 
@@ -736,9 +754,10 @@ function FloatingDragPreview({ preview, tone }: { preview: { x: number; y: numbe
   return <div aria-hidden="true" className="pointer-events-none fixed z-[70] w-44 -translate-x-1/2 -translate-y-[calc(100%+.8rem)] overflow-hidden rounded-xl border-l-4 px-3 py-2.5 text-left shadow-[0_16px_40px_rgba(58,42,31,.25)]" style={{ left: preview.x, top: preview.y, background: tone.bg, borderLeftColor: tone.border, color: tone.text }}><span className="block rounded-lg bg-white/85 px-2 py-1 text-center text-xs font-extrabold tabular-nums shadow-sm">{preview.label}</span><span className="mt-2 block truncate text-xs font-bold">{preview.lesson.studentName}</span><span className="mt-0.5 block truncate text-[.75rem] opacity-75">{preview.lesson.instrumentName} · {preview.lesson.teacherName}</span></div>;
 }
 
-function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: PendingMove; pending: boolean; onChoose: (scope: "single" | "series") => void; onClose: () => void }) {
+function MoveDecisionDialog({ move, pendingScope, error, onChoose, onClose }: { move: PendingMove; pendingScope: "single" | "series" | null; error: string | null; onChoose: (scope: "single" | "series") => void; onClose: () => void }) {
   const source = new Date(move.lesson.startAt);
   const hasSeries = Boolean(move.lesson.lessonSeriesId);
+  const pending = pendingScope !== null;
   const firstActionRef = useRef<HTMLButtonElement>(null);
   // İşlem sürerken Escape pencereyi kapatmasın - arka plan butonu da aynı nedenle disabled.
   useDialogBehavior(pending ? () => {} : onClose, firstActionRef);
@@ -752,16 +771,32 @@ function MoveDecisionDialog({ move, pending, onChoose, onClose }: { move: Pendin
         <p className="text-meta mt-2 leading-relaxed">
           {source.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(source)} → {move.newStart.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} {formatTime(move.newStart)}
         </p>
-        <div className="mt-4 grid gap-2">
-          <button ref={firstActionRef} type="button" onClick={() => onChoose("single")} disabled={pending} className="pressable min-h-12 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
-            {pending ? "Güncelleniyor…" : "Yalnız bu dersi taşı"}
+        {error && (
+          <p role="alert" className="mt-3 flex items-start gap-2 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-sm font-semibold text-[var(--danger-strong)]">
+            <Icon name="x" className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </p>
+        )}
+        <div className="mt-4 grid gap-2" aria-busy={pending}>
+          <button ref={firstActionRef} type="button" onClick={() => onChoose("single")} disabled={pending} className="pressable flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">
+            {pendingScope === "single" && <ButtonSpinner />}
+            {pendingScope === "single" ? "Ders taşınıyor…" : "Yalnız bu dersi taşı"}
           </button>
-          {hasSeries && <button type="button" onClick={() => onChoose("series")} disabled={pending} className="pressable min-h-12 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60">Bu ders ve tüm programı güncelle</button>}
+          {hasSeries && (
+            <button type="button" onClick={() => onChoose("series")} disabled={pending} className="pressable flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60">
+              {pendingScope === "series" && <ButtonSpinner />}
+              {pendingScope === "series" ? "Program güncelleniyor…" : "Bu ders ve tüm programı güncelle"}
+            </button>
+          )}
           <button type="button" onClick={onClose} disabled={pending} className="pressable min-h-11 rounded-xl px-4 text-sm font-bold text-[var(--muted)] disabled:opacity-60">Vazgeç</button>
         </div>
       </section>
     </div>
   );
+}
+
+function ButtonSpinner() {
+  return <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent" />;
 }
 
 function QuickAddLessonPopover({ slot, onCreated, onClose }: { slot: QuickAddSlot; onCreated: (summary: string) => void; onClose: () => void }) {
@@ -1200,7 +1235,10 @@ function UpcomingLessonsRail({
         ) : (
           <>
             {activeLessons.length ? (
-              <div className="space-y-2">
+              // Takvim altında tam genişlikteyken aynı anda süren dersler yan yana dizilir, satırda
+              // en fazla 5 (sütun genişliği satırın 1/5'inden küçük olamaz). Daha az ders satırı
+              // paylaşarak doldurur; 2xl'deki dar yan sütunda 13rem tek sütuna düşürür.
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(max(13rem,calc((100%_-_4*0.5rem)/5)),1fr))] gap-2">
                 {activeLessons.map((lesson) => (
                   <ActiveLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} now={now} />
                 ))}
@@ -1245,7 +1283,7 @@ function ActiveLessonCard({ lesson, tone, now }: { lesson: CalendarLesson; tone:
   return (
     <article className="overflow-hidden rounded-xl border shadow-sm" style={{ borderColor: tone.border, background: tone.bg, color: tone.text }}>
       <div className="p-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <span className="rounded-full bg-white/75 px-2 py-1 text-[.75rem] font-extrabold uppercase tracking-[.08em]">Şu an derste</span>
           <span className="text-[.75rem] font-bold tabular-nums">{formatTime(start)}–{formatTime(end)}</span>
         </div>
@@ -1339,15 +1377,16 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const eligibleEnrollments = enrollments?.filter((item) => item.status === "Active" && item.instrumentId === lesson.instrumentId) ?? [];
   const eligibleTeacherIds = new Set(eligibleEnrollments.map((item) => item.teacherId));
   const eligibleTeachers = teachers?.filter((teacher) => teacher.status === "Active" && eligibleTeacherIds.has(teacher.id)) ?? [];
-  // Admin takvimdeki her PLANLI dersi iptal edebilir, telafi tanımlayabilir ve
-  // güncelleyebilir - dersin saati geçmiş olsa bile. Yanlış girilmiş bir dersi düzeltmenin
-  // tek yolu buydu ve düğmeler saat geçince kayboluyordu. Öğretmen için eski kural sürüyor:
-  // yalnızca kendi dersi ve yalnızca ders başlamadan önce.
+  // Admin ve öğretmen takvimdeki her PLANLI dersi iptal edebilir, telafi tanımlayabilir ve
+  // güncelleyebilir - dersin saati gelmiş ya da geçmiş olsa bile. Öğretmende düğmeler ders
+  // başlayınca kayboluyordu ve derste olan öğrenciye telafi tanımlayamıyordu (kullanıcı isteği).
+  // Öğretmen yalnızca kendi dersini görür ve geçmişe TAŞIYAMAZ: sunucu (CancelLesson/UpdateLesson)
+  // öğretmeni kendi dersiyle, taşımayı da gelecek bir saatle sınırlar; handleSave aynısını önden söyler.
   // Tamamlanmış/iptal edilmiş ders hiç kimsede düzenlenmez - bu bir yetki değil, domain
   // invariant'ı (Lesson.Cancel / UpdateLesson `Status != Normal` ile reddeder).
-  const canEdit = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() >= now.getTime());
+  const canEdit = canManage && lesson.status === "Normal";
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
-  const canCancelWithMakeup = canManage && lesson.status === "Normal" && (isAdmin || start.getTime() > now.getTime());
+  const canCancelWithMakeup = canManage && lesson.status === "Normal";
   const canPlanMakeup = canManage && lesson.status === "Cancelled" && Boolean(makeupCredits?.some((credit) =>
     credit.sourceLessonId === lesson.id && credit.status === "Available" && new Date(credit.expiresAt).getTime() >= now.getTime()));
   const closeButtonRef = useRef<HTMLButtonElement>(null);
