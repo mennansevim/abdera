@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.02.2",
+    date: "2026-10-02",
+    items: [
+      { audience: "admin", text: "Aidatlar listesinde tahsilat düğmesinin adı \"Ödeme al\" oldu. Yeşil artık yalnızca ödemesi alınmış öğrencilerin \"✓ Ödendi\" rozetinde görünür." },
+    ],
+  },
+  {
     version: "2026.10.02",
     date: "2026-10-02",
     items: [
