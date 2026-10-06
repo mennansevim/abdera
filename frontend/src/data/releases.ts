@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.06",
+    date: "2026-10-06",
+    items: [
+      { audience: "all", text: "Oturumun süresi dolduğunda uygulama artık seni hemen giriş ekranına alır ve nedenini yazar. Böylece \"Geldi\" gibi düğmeler sessizce çalışmaz hale gelmez; tekrar giriş yapıp kaldığın yerden devam edersin." },
+    ],
+  },
+  {
     version: "2026.10.02.2",
     date: "2026-10-02",
     items: [
