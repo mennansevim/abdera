@@ -5,7 +5,7 @@ import { api, ApiError } from "./api";
 import type { LoginResponse, Me, UserRole } from "./api";
 import { clearSessionData } from "./session-reset";
 
-const ME_QUERY_KEY = ["auth", "me"] as const;
+export const ME_QUERY_KEY = ["auth", "me"] as const;
 
 export function useMe() {
   return useQuery<Me, ApiError>({

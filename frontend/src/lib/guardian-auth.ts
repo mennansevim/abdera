@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "./api";
+import { api, ApiError, onSessionLost } from "./api";
 import { clearSessionData } from "./session-reset";
 
 const GUARDIAN_ME_QUERY_KEY = ["guardian", "me"] as const;
@@ -31,9 +31,23 @@ export function useGuardianMe() {
 // oturum yokken önce örnek veli girişini dener. Endpoint kapalıysa normal OTP ekranına geçilir.
 export function useRequireGuardianAuth() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: guardian, isLoading, isError } = useGuardianMe();
   const { mutate: openDemoGuardian, isPending: isDemoLoginPending } = useDebugGuardianLogin();
   const attemptedDemoLogin = useRef(false);
+
+  // Portal açıkken oturum düşerse ilk 401'de giriş ekranına dön (personel panelindeki
+  // use-require-auth.ts ile aynı kural). Yalnızca bu sekmede açık bir veli oturumu varken:
+  // açılıştaki 401 aşağıdaki örnek veli girişi denemesine bırakılır.
+  useEffect(() => {
+    let handled = false;
+    return onSessionLost(() => {
+      if (handled || queryClient.getQueryData(GUARDIAN_ME_QUERY_KEY) === undefined) return;
+      handled = true;
+      clearSessionData(queryClient);
+      router.replace("/parent/login");
+    });
+  }, [queryClient, router]);
 
   useEffect(() => {
     if (!isError || attemptedDemoLogin.current) return;

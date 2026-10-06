@@ -83,6 +83,9 @@ function LoginPageContent() {
   const [devEmail, setDevEmail] = useState("");
   const { destination, isResolving } = useSessionDestination();
   const shouldChooseRole = searchParams.get("chooseRole") === "1";
+  // Panel açıkken oturum düştüyse kullanıcı buraya atılır (bkz. use-require-auth.ts); neden
+  // atıldığını bilmezse "uygulama beni çıkardı" diye bir hata sanıyor.
+  const sessionExpired = searchParams.get("expired") === "1";
   const emailRef = useRef<HTMLInputElement>(null);
   const roleRefs = useRef<Partial<Record<StaffRole, HTMLButtonElement | null>>>({});
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
@@ -266,6 +269,7 @@ function LoginPageContent() {
                 </>
               )}
 
+              {sessionExpired && !error && <p role="status" className="mt-3 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-xs font-medium text-[var(--warning-strong)]">Oturumun sona erdi. Kaldığın yerden devam etmek için tekrar giriş yap.</p>}
               {error && <p role="alert" className="mt-3 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
 
               <button type="submit" disabled={login.isPending} className="pressable mt-5 min-h-12 w-full rounded-xl bg-[var(--brand)] px-4 text-sm font-bold text-white shadow-[0_6px_14px_rgba(217,102,42,.2)] hover:bg-[var(--brand-strong)] disabled:cursor-wait disabled:opacity-60">

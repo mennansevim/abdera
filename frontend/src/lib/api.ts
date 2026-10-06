@@ -56,6 +56,30 @@ const FALLBACK_MESSAGES: Record<number, { title: string; detail: string }> = {
   503: { title: "Sunucu meşgul", detail: "Sunucu şu an yanıt vermiyor; birazdan tekrar dene." },
 };
 
+// Oturum düşünce (süre doldu, başka cihazda çıkış yapıldı, şifre değişti) sunucu her isteğe
+// 401 döner. Önceden bunu yalnızca /api/auth/me sorgusu fark ediyordu, o da yalnızca sekme
+// odağa gelince tazeleniyordu: açık kalan ekranda zil yoklaması sessizce 401 alıyor, eski
+// veriyle çizilen "öğrenci derse geldi mi?" kartındaki Geldi'ye basılınca istek reddediliyor
+// ve öğretmen ancak çıkış-giriş yapınca devam edebiliyordu. Artık herhangi bir 401 dinleyiciye
+// haber verir; personel paneli ve veli portalı dinleyip kullanıcıyı giriş ekranına atar.
+//
+// Bu uçlardaki 401 oturum kaybı değil, girilen şifrenin/kodun yanlış olduğu anlamına gelir.
+const CREDENTIAL_CHECK_PATHS = new Set([
+  "/api/auth/login",
+  "/api/dev/auth/login",
+  "/api/auth/change-password",
+  "/api/guardian/login",
+  "/api/guardian/otp/request",
+  "/api/guardian/otp/verify",
+  "/api/guardian/debug-login",
+]);
+const sessionLostListeners = new Set<() => void>();
+
+export function onSessionLost(listener: () => void): () => void {
+  sessionLostListeners.add(listener);
+  return () => sessionLostListeners.delete(listener);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -71,6 +95,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Ağ hatası: fetch reddedilir ve çağıran ekranlar `err instanceof ApiError` kontrolü
     // yaptığı için ham TypeError "Bir hata oluştu"ya düşüyordu.
     throw new ApiError(0, "Sunucuya ulaşılamadı", "İnternet bağlantını kontrol et; sorun sürerse sunucunun çalıştığından emin ol.");
+  }
+
+  if (response.status === 401 && !CREDENTIAL_CHECK_PATHS.has(path)) {
+    sessionLostListeners.forEach((listener) => listener());
   }
 
   if (!response.ok) {
