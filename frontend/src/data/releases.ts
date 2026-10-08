@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.08.5",
+    date: "2026-10-08",
+    items: [
+      { audience: "all", text: "Bugün ekranındayken köşede bildirim kartı açılmaz; yeni bildirimler zilde sayılır ve başka bir ekrana geçince kart olarak görünür." },
+      { audience: "all", text: "Bir dersin notunu yazınca zildeki \"yorumu bekliyor\" hatırlatması hemen güncellenir; notu girilmiş dersler artık listede sayılmaz." },
+    ],
+  },
+  {
     version: "2026.10.08.4",
     date: "2026-10-08",
     items: [
