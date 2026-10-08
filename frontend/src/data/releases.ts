@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.08.6",
+    date: "2026-10-08",
+    items: [
+      { audience: "all", text: "Bugün ekranındaki ders kartında notu girilmiş ders \"Not girildi\", yoklaması alınmış ders \"Yoklama alındı\" olarak işaretlenir; hangi derse not yazdığın tek bakışta görünür." },
+      { audience: "all", text: "Notu girilmiş derse dokununca önce kaydedilen not açılır; aynı not yanlışlıkla ikinci kez kaydedilmez, istersen \"Ek not yaz\" ile yeni not ekleyebilirsin." },
+    ],
+  },
+  {
     version: "2026.10.08.5",
     date: "2026-10-08",
     items: [
