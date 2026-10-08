@@ -156,6 +156,52 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.Forbidden, progressResponse.StatusCode);
     }
 
+    // "Ders devam ediyor" kısayolu: eser en son eser yazılmış nottan, ödev en son nottan gelir;
+    // ilk dersin öncesi yoktur; başka öğretmen öneriyi de okuyamaz.
+    [Fact]
+    public async Task Previous_note_carries_last_piece_and_latest_homework_for_the_continue_shortcut()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "progress-previous");
+        var unrelated = await SeedLessonAsync(admin, "progress-previous-other");
+        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword);
+        using var unrelatedTeacher = await LoginTeacherAsync(unrelated.TeacherEmail, unrelated.TeacherTemporaryPassword);
+
+        var lessons = (await teacher.GetFromJsonAsync<List<Calendar.LessonResponse>>(
+                $"/api/calendar?from={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"))}" +
+                $"&to={Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(90).ToString("O"))}",
+                TestJson.Options))!
+            .Where(lesson => lesson.StudentId == seeded.StudentId)
+            .OrderBy(lesson => lesson.StartAt)
+            .Take(3)
+            .ToList();
+        Assert.Equal(3, lessons.Count);
+
+        Assert.Equal(HttpStatusCode.Created, (await teacher.PostAsJsonAsync($"/api/lessons/{lessons[0].Id}/notes",
+            new LessonNotes.CreateRequest("Gam", null, "Gam her gün", "Tempo",
+                PieceTitle: "Für Elise", PieceDifficulty: 3, PieceComposer: "Beethoven", PieceStatus: RepertoireStatus.Learning))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await teacher.PostAsJsonAsync($"/api/lessons/{lessons[1].Id}/notes",
+            new LessonNotes.CreateRequest("Ritim", "Odaklıydı", "Etüt 3", null))).StatusCode);
+
+        var first = await teacher.GetFromJsonAsync<LessonNotes.PreviousResponse>(
+            $"/api/lessons/{lessons[0].Id}/notes/previous", TestJson.Options);
+        Assert.Null(first!.Previous);
+
+        var third = (await teacher.GetFromJsonAsync<LessonNotes.PreviousResponse>(
+            $"/api/lessons/{lessons[2].Id}/notes/previous", TestJson.Options))!.Previous!;
+        Assert.Equal(lessons[1].StartAt, third.LessonStartAt);
+        Assert.Equal("Ritim", third.Practiced);
+        Assert.Equal("Etüt 3", third.Homework);
+        Assert.Null(third.NextGoal);
+        Assert.Equal("Für Elise", third.PieceTitle);
+        Assert.Equal("Beethoven", third.PieceComposer);
+        Assert.Equal(3, third.PieceDifficulty);
+        Assert.Equal(RepertoireStatus.Learning, third.PieceStatus);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await unrelatedTeacher.GetAsync($"/api/lessons/{lessons[2].Id}/notes/previous")).StatusCode);
+    }
+
     [Fact]
     public async Task Progress_timeline_is_newest_first_and_empty_student_has_null_last_entry()
     {

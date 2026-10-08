@@ -133,6 +133,7 @@ export function useCreateProgressNote(studentId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-progress", studentId] });
       queryClient.invalidateQueries({ queryKey: ["student-progress-summary", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["previous-lesson-note"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });

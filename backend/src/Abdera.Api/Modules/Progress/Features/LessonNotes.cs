@@ -30,6 +30,23 @@ public static class LessonNotes
 
     public record ParentCommentRequest(string ParentComment, bool Approve);
 
+    // Not formundaki "Ders devam ediyor" kısayolu için: aynı öğrencinin aynı enstrümandaki bir
+    // önceki dersinden taşınabilecek alanlar. Eser alanları en son eser yazılmış nottan gelir
+    // (her not eser içermez; araya eser yazılmamış bir not girdi diye eser kaybolmamalı),
+    // ödev/hedef/çalışılan ise en son nottan. Kullanıcı isteği: "bir önceki şarkıya devam
+    // ettiklerinde bunu seçemiyorlar".
+    public record PreviousNoteResponse(
+        DateTimeOffset LessonStartAt,
+        string? Practiced,
+        string? Homework,
+        string? NextGoal,
+        string? PieceTitle,
+        string? PieceComposer,
+        int? PieceDifficulty,
+        RepertoireStatus? PieceStatus);
+
+    public record PreviousResponse(PreviousNoteResponse? Previous);
+
     public record LessonNoteResponse(
         Guid Id,
         Guid LessonId,
@@ -55,6 +72,7 @@ public static class LessonNotes
     {
         app.MapGet("/api/lessons/{lessonId:guid}/notes", ListAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPost("/api/lessons/{lessonId:guid}/notes", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        app.MapGet("/api/lessons/{lessonId:guid}/notes/previous", PreviousAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPut("/api/lesson-notes/{noteId:guid}/parent-comment", SetParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPost("/api/lesson-notes/{noteId:guid}/parent-comment/revoke", RevokeParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
@@ -70,6 +88,44 @@ public static class LessonNotes
             .ToListAsync();
 
         return Results.Ok(noteRows.Select(ToResponse));
+    }
+
+    private static async Task<IResult> PreviousAsync(Guid lessonId, ClaimsPrincipal principal, AbderaDbContext db)
+    {
+        var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
+            ?? throw new NotFoundException("Ders bulunamadı.");
+        await EnsureTeacherOwnsLessonAsync(lesson.TeacherId, principal, db);
+
+        // "Önceki" bu dersten önce BAŞLAYAN dersler: eski bir derse not sonradan yazılırken
+        // ondan sonraki derslerin notu öneri olarak gelmesin. Öğretmen değişmiş olabilir -
+        // aynı öğrenci + enstrüman yeterli.
+        var earlierNotes = db.LessonNotes
+            .Join(db.Lessons, note => note.LessonId, earlier => earlier.Id,
+                (note, earlier) => new { Note = note, Lesson = earlier })
+            .Where(x => x.Lesson.StudentId == lesson.StudentId
+                && x.Lesson.InstrumentId == lesson.InstrumentId
+                && x.Lesson.StartAt < lesson.StartAt)
+            .OrderByDescending(x => x.Lesson.StartAt)
+            .ThenByDescending(x => x.Note.CreatedAt);
+
+        var latest = await earlierNotes.FirstOrDefaultAsync();
+        if (latest is null) return Results.Ok(new PreviousResponse(null));
+
+        // Arşive kaldırılmış (bitmiş) eser "devam" önerisi olmaz.
+        var latestPiece = await earlierNotes
+            .Where(x => x.Note.PieceTitle != null && x.Note.PieceStatus != RepertoireStatus.Archived)
+            .Select(x => x.Note)
+            .FirstOrDefaultAsync();
+
+        return Results.Ok(new PreviousResponse(new PreviousNoteResponse(
+            latest.Lesson.StartAt,
+            latest.Note.Practiced,
+            latest.Note.Homework,
+            latest.Note.NextGoal,
+            latestPiece?.PieceTitle,
+            latestPiece?.PieceComposer,
+            latestPiece?.PieceDifficulty,
+            latestPiece?.PieceStatus)));
     }
 
     private static async Task<IResult> CreateAsync(

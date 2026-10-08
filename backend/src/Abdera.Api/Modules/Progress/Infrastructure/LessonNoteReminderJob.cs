@@ -13,12 +13,13 @@ namespace Abdera.Api.Modules.Progress.Infrastructure;
 // Yorum bekleyen dersleri öğretmenin zilindeki hatırlatmaya dönüştürür
 // (StaffNotificationType.LessonNoteMissing). Öğretmen başına TEK satır: "3 dersin notu eksik"
 // her ders için ayrı bir bildirim olsaydı günde beş ders veren bir öğretmenin zili bununla
-// dolardı. Satır iş bitene kadar tazelenir ve okulun yerel günü başına en fazla bir kez
-// okunmamışa döner; öğretmen eksikleri kapatınca kendiliğinden okundu sayılır.
+// dolardı. Satır iş bitene kadar tazelenir ve en fazla ÜÇ GÜNDE BİR (okulun yerel takvimiyle)
+// okunmamışa döner; öğretmen eksikleri kapatınca kendiliğinden okundu sayılır. Kullanıcı
+// isteği: "not hatırlatması her gün olmasın, 3 günde bir olabilir".
 //
 // BillingDailyJob kalıbı: kalıcı container'da LessonNoteReminderWorker, serverless yayında
 // (Runtime:Serverless=true) Vercel Cron -> LessonNoteReminderCron aynı RunAsync'i çağırır.
-// Yalnızca ekran içi bildirim - e-posta gönderilmez (her gün yinelenen bir dürtü için e-posta
+// Yalnızca ekran içi bildirim - e-posta gönderilmez (yinelenen bir dürtü için e-posta
 // fazla; ders değişikliği e-postaları M4'teki tek seferlik olaylar için).
 public static class LessonNoteReminderJob
 {
@@ -26,6 +27,10 @@ public static class LessonNoteReminderJob
     // öğretmen başına tek hatırlatma satırını veritabanı düzeyinde de garanti eder.
     // PersonEraser öğretmen silinirken reference_id = teacher_id satırlarını zaten temizliyor.
     public const string ReferenceType = "teacher";
+    // Okunmuş hatırlatma en son öne çıktığı yerel günden bu kadar gün sonra yeniden açılır
+    // (pazartesi düştüyse perşembe). Ekrandaki "Yorum bekleyen dersler" kartı her gün görünür
+    // kalır; seyrekleşen yalnızca zildeki dürtü.
+    public const int ResurfaceEveryDays = 3;
     private const int NamedLessonsInBody = 3;
     // staff_notifications.body HasMaxLength(500) ile birebir - uzun öğrenci adları sütunu
     // taşırırsa tur DbUpdateException ile düşerdi.
@@ -52,10 +57,11 @@ public static class LessonNoteReminderJob
     private static async Task<Result> RunOnceAsync(
         AbderaDbContext db, IClock clock, IStaffNotifier notifier, CancellationToken cancellationToken)
     {
-        // "Günde bir kez dürt" sınırı okulun yerel takvimine göre: bugün (Europe/Istanbul)
-        // başlamadan önce son kez tazelenmiş hatırlatma yeniden okunmamışa döner.
+        // "Üç günde bir dürt" sınırı okulun yerel takvimine göre: iki gün önceki yerel günün
+        // (Europe/Istanbul) başlangıcından önce son kez öne çıkmış hatırlatma yeniden okunmamışa döner.
         var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
-        var todayStartUtc = LessonGenerator.ToUtcInstant(todayLocal, TimeOnly.MinValue, clock.SchoolTimeZone);
+        var resurfaceThresholdUtc = LessonGenerator.ToUtcInstant(
+            todayLocal.AddDays(-(ResurfaceEveryDays - 1)), TimeOnly.MinValue, clock.SchoolTimeZone);
 
         // Giriş hesabı olmayan öğretmenin zili yok (IStaffNotifier de satır açmazdı).
         var teacherIds = await db.Teachers
@@ -79,7 +85,7 @@ public static class LessonNoteReminderJob
             pendingLessons += pending.Count;
             if (await notifier.RemindTeacherAsync(
                     teacherId, StaffNotificationType.LessonNoteMissing, Title(pending.Count), Body(pending, clock),
-                    ReferenceType, teacherId, resurfaceIfUpdatedBefore: todayStartUtc))
+                    ReferenceType, teacherId, resurfaceIfSurfacedBefore: resurfaceThresholdUtc))
                 reminded++;
         }
 

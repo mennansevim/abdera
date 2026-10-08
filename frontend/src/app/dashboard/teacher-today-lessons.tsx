@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
-import { useCreateChangeRequest, useCreateLessonNote, useMarkAttendance, type AttendanceStatus } from "@/lib/attendance";
+import { useCreateChangeRequest, useCreateLessonNote, useMarkAttendance, type AttendanceStatus, type PieceStatus } from "@/lib/attendance";
 import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 
@@ -108,6 +109,9 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   const [nextGoal, setNextGoal] = useState("");
   const [pieceTitle, setPieceTitle] = useState("");
   const [pieceDifficulty, setPieceDifficulty] = useState("");
+  // "Ders devam ediyor" ile taşınan eserin besteci/durumu - formda alanı yok; eser adı elle
+  // değiştirilirse başka bir esere ait olacağından gönderilmez.
+  const [carriedPiece, setCarriedPiece] = useState<{ title: string; composer?: string; status?: PieceStatus } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showChangeForm, setShowChangeForm] = useState(false);
@@ -115,6 +119,18 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   // Yoklaması girilmiş (tamamlanmış) derse yalnızca not eklenir - notu sonradan yazmak
   // "Yorum bekleyen dersler" hatırlatmasının istediği şey, bu yüzden kart kilitlenmez.
   const attendanceTaken = lesson.status === "Completed";
+
+  function applyQuick(patch: QuickNotePatch) {
+    if (patch.note !== undefined) setNote(patch.note);
+    if (patch.practiced !== undefined) setPracticed(patch.practiced);
+    if (patch.homework !== undefined) setHomework(patch.homework);
+    if (patch.nextGoal !== undefined) setNextGoal(patch.nextGoal);
+    if (patch.pieceDifficulty !== undefined) setPieceDifficulty(patch.pieceDifficulty);
+    if (patch.pieceTitle !== undefined) {
+      setPieceTitle(patch.pieceTitle);
+      setCarriedPiece({ title: patch.pieceTitle, composer: patch.pieceComposer, status: patch.pieceStatus });
+    }
+  }
 
   async function handleSave() {
     if (!status && !practiced && !note && !homework && !nextGoal && !pieceTitle) {
@@ -124,7 +140,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
     setError(null);
     try {
       if (status) await markAttendance.mutateAsync({ status, note: note || undefined });
-      if (practiced || note || homework || nextGoal || pieceTitle) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined, pieceTitle: pieceTitle || undefined, pieceDifficulty: pieceDifficulty ? Number(pieceDifficulty) : undefined });
+      if (practiced || note || homework || nextGoal || pieceTitle) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined, pieceTitle: pieceTitle || undefined, pieceDifficulty: pieceDifficulty ? Number(pieceDifficulty) : undefined, ...(carriedPiece && carriedPiece.title === pieceTitle ? { pieceComposer: carriedPiece.composer, pieceStatus: carriedPiece.status } : {}) });
       setSaved(true);
       window.setTimeout(onDone, 650);
     } catch (err) {
@@ -150,6 +166,7 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
               })}
             </div>
           </div>}
+          <QuickNoteBar lessonId={lesson.id} draft={{ note, practiced, homework, nextGoal, pieceTitle }} onApply={applyQuick} />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Öğretmen notu <span className="font-medium">· yalnızca ekip görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
+import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { StudentLibrarySuggestions } from "@/components/music-library/student-suggestions";
 import { FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -465,6 +466,17 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
   const [error, setError] = useState<string | null>(null);
   const activeLessonId = lessonId || lessons[0]?.id || "";
 
+  function applyQuick(patch: QuickNotePatch) {
+    if (patch.note !== undefined) setNote(patch.note);
+    if (patch.practiced !== undefined) setPracticed(patch.practiced);
+    if (patch.homework !== undefined) setHomework(patch.homework);
+    if (patch.nextGoal !== undefined) setNextGoal(patch.nextGoal);
+    if (patch.pieceTitle !== undefined) setPieceTitle(patch.pieceTitle);
+    if (patch.pieceDifficulty !== undefined) setPieceDifficulty(patch.pieceDifficulty);
+    if (patch.pieceComposer !== undefined) setPieceComposer(patch.pieceComposer);
+    if (patch.pieceStatus !== undefined) setPieceStatus(patch.pieceStatus);
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!activeLessonId) { setError("Notu bağlamak için bir ders seçmelisin."); return; }
@@ -481,6 +493,7 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
   return <form onSubmit={handleSubmit}>
     {!lessons.length ? <p className="text-sm text-[var(--muted)]">Bu öğrenci için yakın tarihli ders bulunamadı. Önce takvimden bir ders oluşturmalısın.</p> : <div className="grid gap-3.5">
       <label className="form-label sm:max-w-md">Ders<select value={activeLessonId} onChange={(event) => setLessonId(event.target.value)} className="field text-sm">{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{formatDate(lesson.startAt, true)} · {formatTime(lesson.startAt)} · {lesson.instrumentName}</option>)}</select></label>
+      <QuickNoteBar key={activeLessonId} lessonId={activeLessonId} draft={{ note, practiced, homework, nextGoal, pieceTitle }} onApply={applyQuick} />
       <div className="grid gap-3 sm:grid-cols-2"><label className="form-label"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label><label className="form-label"><span>Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-sm" placeholder="Örn. Bach · Minuet in G" /></label></div>
       {pieceTitle && <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="form-label">Besteci<input value={pieceComposer} onChange={(event) => setPieceComposer(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Eser durumu<select value={pieceStatus} onChange={(event) => setPieceStatus(event.target.value as typeof pieceStatus)} className="field bg-white text-sm"><option value="Learning">Çalışılıyor</option><option value="Polishing">Pekiştiriliyor</option><option value="PerformanceReady">Sahneye hazır</option><option value="Archived">Arşivlendi</option></select></label><label className="form-label">Hedef tarih<input type="date" value={pieceTargetDate} onChange={(event) => setPieceTargetDate(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Nota / bağlantı<input type="url" value={pieceResourceUrl} onChange={(event) => setPieceResourceUrl(event.target.value)} placeholder="https://…" className="field bg-white text-sm" /></label><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)] sm:col-span-2 lg:col-span-4"><input type="checkbox" checked={pieceResourceVisibleToGuardian} onChange={(event) => setPieceResourceVisibleToGuardian(event.target.checked)} disabled={!pieceResourceUrl} /> Bağlantıyı veli portalında göster</label></div>}
       <label className="form-label rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-3"><span>Öğretmen notu <span className="font-medium">· yalnızca okul ekibi görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y bg-white text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /><span className="text-meta mt-1.5 block">Bu alan veli portalına gönderilmez. Veliye paylaşılacak metin, kayıt sonrasında ayrı olarak hazırlanır ve onaylanır.</span></label>

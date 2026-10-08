@@ -6,7 +6,7 @@ namespace Abdera.Api.Modules.Progress.Features;
 
 // Vercel Cron'un günlük çağırdığı uç (vercel.json "crons") - serverless yayında
 // LessonNoteReminderWorker çalışmadığı için yorum hatırlatması buradan tazelenir. Kalıcı
-// container kurulumunda gereksiz ama zararsız (idempotent, günde bir kez okunmamışa döndürür).
+// container kurulumunda gereksiz ama zararsız (idempotent, en fazla üç günde bir okunmamışa döndürür).
 // Kimlik doğrulama: CronAuth (CRON_SECRET yoksa 404, yanlış sırla 401).
 public static class LessonNoteReminderCron
 {

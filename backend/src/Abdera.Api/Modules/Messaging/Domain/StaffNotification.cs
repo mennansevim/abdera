@@ -75,9 +75,9 @@ public class StaffNotification
     // Hatırlatma satırının (LessonNoteMissing gibi) metnini tazeler. Olay bildirimlerinden
     // farkı: aynı referans için ikinci satır açılmaz, var olan satır güncellenir. resurface
     // verildiğinde satır okunmamışa döner ve CreatedAt "hatırlatmanın tazelendiği an" olur -
-    // liste/zil bu alana göre sıraladığı için hatırlatma yeniden öne çıkar. Çağıran günde en
-    // fazla bir kez resurface eder (LessonNoteReminderJob), yoksa aynı gün içindeki her tur
-    // okunmuş bir hatırlatmayı tekrar okunmamış yapardı.
+    // liste/zil bu alana göre sıraladığı için hatırlatma yeniden öne çıkar. Çağıran resurface'i
+    // seyrek tutar (LessonNoteReminderJob: üç günde bir), yoksa her tur okunmuş bir
+    // hatırlatmayı tekrar okunmamış yapardı.
     public void RefreshReminder(string title, string body, DateTimeOffset now, bool resurface)
     {
         if (string.IsNullOrWhiteSpace(title)) throw new ArgumentException("Bildirim başlığı boş olamaz.", nameof(title));

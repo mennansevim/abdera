@@ -39,9 +39,10 @@ public interface IStaffNotifier
 
     // Tekrarlayan hatırlatma (olay değil, süren bir eksik): aynı referans için satır yoksa
     // açar, varsa metnini günceller - böylece zil "3 dersin notu eksik" yerine her ders için
-    // ayrı bir satır göstermez. resurfaceIfUpdatedBefore verilir ve satır o andan önce
-    // güncellenmişse hatırlatma okunmamışa döner (günde bir kez dürtmek için çağıran okulun
-    // yerel gün başlangıcını geçirir).
+    // ayrı bir satır göstermez. resurfaceIfSurfacedBefore verilir ve hatırlatma en son o andan
+    // önce öne çıkmışsa (CreatedAt - RefreshReminder her öne çıkışta tazeler) okunmamışa döner.
+    // UpdatedAt değil: tur her tik'te metni tazelediği için UpdatedAt hep yeni kalır ve
+    // "birkaç günde bir dürt" eşiği hiç aşılmazdı.
     /// <returns>Hatırlatma gerçekten düştüyse (yeni açıldı veya okunmamışa döndü) true.</returns>
     Task<bool> RemindTeacherAsync(
         Guid teacherId,
@@ -50,7 +51,7 @@ public interface IStaffNotifier
         string body,
         string referenceType,
         Guid referenceId,
-        DateTimeOffset? resurfaceIfUpdatedBefore = null);
+        DateTimeOffset? resurfaceIfSurfacedBefore = null);
 
     // Hatırlatılacak bir şey kalmadığında (öğretmen eksikleri tamamladı) bekleyen hatırlatmayı
     // okundu sayar - aksi hâlde zil rozeti bitmiş bir iş için saymaya devam ederdi.
@@ -149,7 +150,7 @@ public class StaffNotifier(
         string body,
         string referenceType,
         Guid referenceId,
-        DateTimeOffset? resurfaceIfUpdatedBefore = null)
+        DateTimeOffset? resurfaceIfSurfacedBefore = null)
     {
         if (await ResolveTeacherUserIdAsync(teacherId) is not { } recipientId) return false;
 
@@ -166,7 +167,7 @@ public class StaffNotifier(
             return true;
         }
 
-        var resurface = resurfaceIfUpdatedBefore is { } threshold && existing.UpdatedAt < threshold;
+        var resurface = resurfaceIfSurfacedBefore is { } threshold && existing.CreatedAt < threshold;
         existing.RefreshReminder(title, body, clock.UtcNow, resurface);
         return resurface;
     }

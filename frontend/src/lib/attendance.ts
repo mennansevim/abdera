@@ -38,18 +38,43 @@ export function useMarkAttendance(lessonId: string) {
   });
 }
 
+export type PieceStatus = "Learning" | "Polishing" | "PerformanceReady" | "Archived";
+
 export function useCreateLessonNote(lessonId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { practiced?: string; note?: string; homework?: string; nextGoal?: string; pieceTitle?: string; pieceDifficulty?: number }) =>
+    mutationFn: (body: { practiced?: string; note?: string; homework?: string; nextGoal?: string; pieceTitle?: string; pieceDifficulty?: number; pieceComposer?: string; pieceStatus?: PieceStatus }) =>
       api.post(`/api/lessons/${lessonId}/notes`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+      // Bu not, sonraki derslerin "Ders devam ediyor" önerisi olur.
+      queryClient.invalidateQueries({ queryKey: ["previous-lesson-note"] });
       // Son eksik not yazılınca sunucu zildeki hatırlatmayı kapatır; yoklaması girilmemiş derse
       // yazılan not yoklamayı "geldi" olarak işler ve "öğrenci geldi mi?" sorusunu da kapatır.
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
     },
+  });
+}
+
+// Not formundaki "Ders devam ediyor" kısayolu: aynı öğrencinin aynı enstrümandaki bir önceki
+// dersinden taşınacak alanlar (LessonNotes.PreviousAsync). Önceki not yoksa previous null.
+export interface PreviousLessonNote {
+  lessonStartAt: string;
+  practiced: string | null;
+  homework: string | null;
+  nextGoal: string | null;
+  pieceTitle: string | null;
+  pieceComposer: string | null;
+  pieceDifficulty: number | null;
+  pieceStatus: PieceStatus | null;
+}
+
+export function usePreviousLessonNote(lessonId: string) {
+  return useQuery({
+    queryKey: ["previous-lesson-note", lessonId],
+    queryFn: () => api.get<{ previous: PreviousLessonNote | null }>(`/api/lessons/${lessonId}/notes/previous`),
+    enabled: Boolean(lessonId),
   });
 }
 

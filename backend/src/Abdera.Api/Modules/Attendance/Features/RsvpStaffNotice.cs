@@ -47,7 +47,7 @@ internal static class RsvpStaffNotice
 
         await notifier.RemindTeacherAsync(
             lesson.TeacherId, StaffNotificationType.GuardianRsvp, title, $"{studentName} · {when}",
-            "lesson", lessonId, resurfaceIfUpdatedBefore: DateTimeOffset.MaxValue);
+            "lesson", lessonId, resurfaceIfSurfacedBefore: DateTimeOffset.MaxValue);
     }
 
     // Takvimdeki ünlem işaretiyle aynı koşul (frontend: rsvpNeedsAttention).

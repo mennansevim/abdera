@@ -18,8 +18,9 @@ namespace Abdera.Tests.Integration;
 
 // Kullanıcı isteği: "öğretmenlere tamamlanan dersler ile ilgili yorum girmelerini
 // hatırlatmalara ekleyelim eğer girmedilerse." Uçtan uca: yoklaması GELDİ girilmiş ama notu
-// yazılmamış ders öğretmenin listesine ve zilindeki tek hatırlatmaya düşer; aynı gün ikinci
-// tur okunmuş hatırlatmayı yeniden açmaz, ertesi gün açar; not yazılınca hatırlatma kapanır.
+// yazılmamış ders öğretmenin listesine ve zilindeki tek hatırlatmaya düşer; aynı gün ve ertesi
+// gün okunmuş hatırlatma yeniden açılmaz, üç gün sonra açılır ("her gün olmasın, 3 günde bir");
+// not yazılınca hatırlatma kapanır.
 public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFactory>
 {
     private const string CronPath = "/api/internal/cron/lesson-note-reminders";
@@ -78,7 +79,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
             .SetProperty(l => l.EndAt, startAt.AddMinutes(45)));
 
     [Fact]
-    public async Task Completed_lesson_without_a_note_is_reminded_once_a_day_until_the_note_is_written()
+    public async Task Completed_lesson_without_a_note_is_reminded_every_three_days_until_the_note_is_written()
     {
         var admin = _factory.CreateClient();
         (await admin.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "Test1234!"))).EnsureSuccessStatusCode();
@@ -118,7 +119,8 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
         Assert.Equal(reminder.Id, sameDay.Id);
         Assert.NotNull(sameDay.ReadAt);
 
-        // Ertesi gün: not hâlâ yok -> hatırlatma yeniden okunmamış.
+        // Ertesi gün: not hâlâ yok ama son dürtüşün üzerinden üç gün geçmedi -> okunmuş kalır.
+        // UpdatedAt eski görünse bile belirleyici olan son öne çıkış (CreatedAt).
         await using (var db = await _factory.CreateDbContextAsync())
         {
             await db.StaffNotifications.Where(n => n.Id == reminder.Id).ExecuteUpdateAsync(set => set
@@ -128,7 +130,18 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
         Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
         var nextDay = await SingleReminderAsync(teacher);
         Assert.Equal(reminder.Id, nextDay.Id);
-        Assert.Null(nextDay.ReadAt);
+        Assert.NotNull(nextDay.ReadAt);
+
+        // Üç gün sonra: not hâlâ yok -> hatırlatma yeniden okunmamış.
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            await db.StaffNotifications.Where(n => n.Id == reminder.Id).ExecuteUpdateAsync(set => set
+                .SetProperty(n => n.CreatedAt, DateTimeOffset.UtcNow.AddDays(-LessonNoteReminderJob.ResurfaceEveryDays)));
+        }
+        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        var threeDaysLater = await SingleReminderAsync(teacher);
+        Assert.Equal(reminder.Id, threeDaysLater.Id);
+        Assert.Null(threeDaysLater.ReadAt);
 
         // Son eksik yazılınca liste boşalır ve hatırlatma turu beklemeden kapanır.
         Assert.Equal(HttpStatusCode.Created, (await teacher.PostAsJsonAsync($"/api/lessons/{seeded.PresentLessonId}/notes",
@@ -141,7 +154,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
         await using (var db = await _factory.CreateDbContextAsync())
         {
             await db.StaffNotifications.Where(n => n.Id == reminder.Id).ExecuteUpdateAsync(set => set
-                .SetProperty(n => n.UpdatedAt, DateTimeOffset.UtcNow.AddDays(-1)));
+                .SetProperty(n => n.CreatedAt, DateTimeOffset.UtcNow.AddDays(-LessonNoteReminderJob.ResurfaceEveryDays)));
         }
         Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
         Assert.NotNull((await SingleReminderAsync(teacher)).ReadAt);
