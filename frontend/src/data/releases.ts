@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.08.2",
+    date: "2026-10-08",
+    items: [
+      { audience: "admin", text: "Müsaitlik ekranında bir saate dokununca her öğretmenin haftanın tüm boş aralıkları gün gün listelenir (ör. Per 15:00–21:00); bir aralığa dokunmak kayıt formunu o saatle açar. Doluluk yüzdesinin yerine velinin tercihine uyan boş süre yazar." },
+    ],
+  },
+  {
     version: "2026.10.08",
     date: "2026-10-08",
     items: [
