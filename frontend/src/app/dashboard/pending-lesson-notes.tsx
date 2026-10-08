@@ -9,10 +9,10 @@ import { usePendingLessonNotes, type PendingLessonNote } from "@/lib/progress";
 
 // Yorum bekleyen dersler: yoklaması "geldi" girilmiş ama notu yazılmamış, bitmiş dersler.
 // Kullanıcı isteği: "öğretmenlere tamamlanan dersler ile ilgili yorum girmelerini
-// hatırlatmalara ekleyelim eğer girmedilerse." Zildeki "n dersin yorumu bekliyor"
-// hatırlatması buraya (#yorum-bekleyen-dersler) getirir; not buradan yazılır ve ders listeden
-// düşer. Bekleyen ders yoksa kart hiç görünmez - boş bir "her şey yolunda" kutusu ana ekranı
-// kalabalıklaştırırdı.
+// hatırlatmalara ekleyelim eğer girmedilerse." Kart Gelişim ekranının başında durur; ana
+// ekrandan kaldırıldı ("bildirimleri ana ekrandan kaldır"). Zildeki "n dersin yorumu bekliyor"
+// hatırlatması buraya (/dashboard/progress#yorum-bekleyen-dersler) getirir; not buradan yazılır
+// ve ders listeden düşer. Bekleyen ders yoksa kart hiç görünmez.
 export function PendingLessonNotes() {
   const { data } = usePendingLessonNotes();
   const [openId, setOpenId] = useState<string | null>(null);

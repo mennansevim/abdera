@@ -33,8 +33,8 @@ const TYPE_META: Record<StaffNotificationType, { icon: IconName; tone: string; h
   LessonCancelled: { icon: "x", tone: "bg-[var(--danger-soft)] text-[var(--danger-strong)]", href: "/dashboard/calendar" },
   MakeupScheduled: { icon: "calendar", tone: "bg-[var(--success-soft)] text-[var(--success-strong)]", href: "/dashboard/calendar" },
   StudentDeletionRequested: { icon: "students", tone: "bg-[var(--brand-soft)] text-[var(--brand-strong)]", href: "/dashboard/change-requests" },
-  // Tek, tazelenen hatırlatma: notu yazılmamış dersler öğretmenin ana ekranındaki kartta listelenir.
-  LessonNoteMissing: { icon: "note", tone: "bg-[var(--warning-soft)] text-[var(--warning-strong)]", href: "/dashboard#yorum-bekleyen-dersler" },
+  // Tek, tazelenen hatırlatma: notu yazılmamış dersler öğretmenin Gelişim ekranındaki kartta listelenir.
+  LessonNoteMissing: { icon: "note", tone: "bg-[var(--warning-soft)] text-[var(--warning-strong)]", href: "/dashboard/progress#yorum-bekleyen-dersler" },
   // "Öğrenci geldi mi?" - satırın kendisi değil Geldi/Gelmedi düğmeleri cevaplar (AttendanceQuestion).
   AttendanceMissing: { icon: "students", tone: "bg-[var(--brand-soft)] text-[var(--brand-strong)]", href: "/dashboard/calendar" },
   // Veli "gelemiyor" / "gecikecek" dedi; takvimde aynı ders ünlemle işaretlidir.

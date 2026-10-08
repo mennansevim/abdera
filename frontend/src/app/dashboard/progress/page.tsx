@@ -13,6 +13,7 @@ import { useCreateProgressNote, useDeleteLessonNote, useRevokeParentComment, use
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
+import { PendingLessonNotes } from "../pending-lesson-notes";
 
 type TimelineFilter = "all" | "pieces" | "homework";
 
@@ -131,6 +132,10 @@ function ProgressPageContent() {
         title="Gelişim günlüğü"
         description="Ders notları, ödevler ve çalışılan eserler."
       />
+
+      {/* Ana ekrandan buraya taşındı (kullanıcı isteği: "bildirimleri ana ekrandan kaldır").
+          Liste yalnızca öğretmen hesabında vardır; yönetici için uç 403 döner. */}
+      {canWrite && <PendingLessonNotes />}
 
       <StudentBar
         students={visibleStudents}
