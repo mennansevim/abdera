@@ -5,8 +5,8 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
-import { useCreateChangeRequest, useCreateLessonNote, useMarkAttendance, type AttendanceStatus } from "@/lib/attendance";
-import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
+import { useCreateChangeRequest, useCreateLessonNote, useLessonNotes, useMarkAttendance, type AttendanceStatus, type LessonNoteSummary } from "@/lib/attendance";
+import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 
 export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
@@ -51,29 +51,75 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
     <div className="grid gap-3 xl:grid-cols-2">
       {lessons.slice().sort((a,b) => a.startAt.localeCompare(b.startAt)).map((lesson) => {
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
-        const start = new Date(lesson.startAt);
-        const end = new Date(lesson.endAt);
         return (
-          <article key={lesson.id} className="app-card relative overflow-hidden xl:self-start">
-            <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: tone.border }} aria-hidden="true" />
-            <div className="flex items-center gap-3 p-3 sm:p-4">
-              <span className="flex h-14 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-[var(--surface-muted)] text-center">
-                <span className="text-title tabular-nums leading-none">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
-                <span className="mt-1 text-[.75rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</span>
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2"><h2 className="truncate text-sm font-bold">{lesson.studentName}</h2><StatusBadge lesson={lesson} /></div>
-                <span className="text-meta mt-1 block">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
-              <button onClick={() => setExpanded(expanded?.id === lesson.id && expanded.mode === "attendance" ? null : { id: lesson.id, mode: "attendance" })} className="pressable flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-xs font-bold hover:bg-[var(--surface-muted)]"><Icon name="calendar" className="h-4 w-4" /> Yoklama Al</button>
-              <button onClick={() => setExpanded(expanded?.id === lesson.id && expanded.mode === "note" ? null : { id: lesson.id, mode: "note" })} className="pressable flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-xs font-bold hover:bg-[var(--surface-muted)]"><Icon name="note" className="h-4 w-4" /> Not Ekle</button>
-            </div>
-            {expanded?.id === lesson.id && <LessonActions lesson={lesson} initialMode={expanded.mode} onDone={() => setExpanded(null)} />}
-          </article>
+          <TodayLessonCard
+            key={lesson.id}
+            lesson={lesson}
+            tone={tone}
+            expandedMode={expanded?.id === lesson.id ? expanded.mode : null}
+            onToggle={(mode) => setExpanded(expanded?.id === lesson.id && expanded.mode === mode ? null : { id: lesson.id, mode })}
+            onDone={() => setExpanded(null)}
+          />
         );
       })}
+    </div>
+  );
+}
+
+function TodayLessonCard({ lesson, tone, expandedMode, onToggle, onDone }: {
+  lesson: CalendarLesson;
+  tone: InstrumentTone;
+  expandedMode: "attendance" | "note" | null;
+  onToggle: (mode: "attendance" | "note") => void;
+  onDone: () => void;
+}) {
+  const start = new Date(lesson.startAt);
+  const end = new Date(lesson.endAt);
+  const { data: notes } = useLessonNotes(lesson.id);
+  const hasNote = Boolean(notes?.length);
+  const attendanceTaken = lesson.status === "Completed";
+  const actionClass = "pressable flex min-h-11 items-center justify-center gap-2 rounded-xl border text-xs font-bold";
+  const idleClass = "border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]";
+  const doneClass = "border-[color:var(--success)]/40 bg-[var(--success-soft)] text-[var(--success-strong)]";
+  return (
+    <article className="app-card relative overflow-hidden xl:self-start">
+      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: tone.border }} aria-hidden="true" />
+      <div className="flex items-center gap-3 p-3 sm:p-4">
+        <span className="flex h-14 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-[var(--surface-muted)] text-center">
+          <span className="text-title tabular-nums leading-none">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
+          <span className="mt-1 text-[.75rem] font-semibold" style={{ color: tone.text }}>{lesson.instrumentName}</span>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2"><h2 className="truncate text-sm font-bold">{lesson.studentName}</h2><StatusBadge lesson={lesson} /></div>
+          <span className="text-meta mt-1 block">{start.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}–{end.toLocaleTimeString("tr-TR", { hour:"2-digit", minute:"2-digit" })}</span>
+        </div>
+      </div>
+      {/* Yapılmış iş düğmenin kendisinde görünür: "Yoklama Al / Not Ekle" her kartta aynı
+          kalınca öğretmen notunu yazdığı dersi ayırt edemiyor, zildeki "yorum bekliyor"
+          hatırlatmasını yanlış sanıyor ve aynı derse ikinci not giriyordu. */}
+      <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
+        <button onClick={() => onToggle("attendance")} aria-expanded={expandedMode === "attendance"} className={`${actionClass} ${attendanceTaken ? doneClass : idleClass}`}><Icon name={attendanceTaken ? "check" : "calendar"} className="h-4 w-4" /> {attendanceTaken ? "Yoklama alındı" : "Yoklama Al"}</button>
+        <button onClick={() => onToggle("note")} aria-expanded={expandedMode === "note"} className={`${actionClass} ${hasNote ? doneClass : idleClass}`}><Icon name={hasNote ? "check" : "note"} className="h-4 w-4" /> {hasNote ? "Not girildi" : "Not Ekle"}</button>
+      </div>
+      {expandedMode && <LessonActions lesson={lesson} initialMode={expandedMode} notes={notes ?? []} onDone={onDone} />}
+    </article>
+  );
+}
+
+function SavedNote({ note }: { note: LessonNoteSummary }) {
+  const rows = [
+    ["Not", note.note],
+    ["Çalışılan", note.practiced],
+    ["Ödev", note.homework],
+    ["Sonraki hedef", note.nextGoal],
+    ["Eser", note.pieceTitle],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-white p-3 text-xs">
+      <p className="text-meta mb-1.5 flex items-center gap-1.5 font-bold"><Icon name="check" className="h-3.5 w-3.5 text-[var(--success-strong)]" /> Kaydedilen not · {new Date(note.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</p>
+      <dl className="space-y-1">
+        {rows.map(([label, value]) => <div key={label}><dt className="inline font-bold">{label}: </dt><dd className="inline whitespace-pre-line text-[#5c4d3f]">{value}</dd></div>)}
+      </dl>
     </div>
   );
 }
@@ -98,7 +144,7 @@ function StatusBadge({ lesson }: { lesson: CalendarLesson }) {
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${rsvp.className}`}>{rsvp.label}</span>;
 }
 
-function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson; initialMode: "attendance" | "note"; onDone: () => void }) {
+function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: CalendarLesson; initialMode: "attendance" | "note"; notes: LessonNoteSummary[]; onDone: () => void }) {
   const markAttendance = useMarkAttendance(lesson.id);
   const createNote = useCreateLessonNote(lesson.id);
   const createChangeRequest = useCreateChangeRequest(lesson.id);
@@ -110,6 +156,9 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showChangeForm, setShowChangeForm] = useState(false);
+  // Notu girilmiş derste form kapalı başlar, önce kaydedilen not görünür: aynı notun yanlışlıkla
+  // ikinci kez gönderilmesini önler. Ek not bilinçli olarak "Ek not yaz" ile açılır.
+  const [writeExtraNote, setWriteExtraNote] = useState(false);
   const disabled = lesson.status === "Cancelled";
   // Yoklaması girilmiş (tamamlanmış) derse yalnızca not eklenir - notu sonradan yazmak
   // "Yorum bekleyen dersler" hatırlatmasının istediği şey, bu yüzden kart kilitlenmez.
@@ -139,6 +188,19 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   }
 
   if (disabled) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 text-xs text-[var(--muted)]">Bu ders iptal edildi; yeni işlem yapılamaz.</div>;
+
+  if (notes.length && !writeExtraNote && !saved && (initialMode === "note" || attendanceTaken)) {
+    return (
+      <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
+        {notes.slice(0, 2).map((item) => <SavedNote key={item.id} note={item} />)}
+        {notes.length > 2 && <p className="text-meta">Bu derste {notes.length - 2} not daha var; tamamı Gelişim ekranında.</p>}
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setWriteExtraNote(true)} className="btn btn-quiet"><Icon name="plus" className="h-4 w-4" /> Ek not yaz</button>
+          <Link href="/dashboard/progress" className="btn btn-quiet">Gelişim ekranında aç</Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">

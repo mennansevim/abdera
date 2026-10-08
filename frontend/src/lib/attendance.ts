@@ -53,7 +53,30 @@ export function useCreateLessonNote(lessonId: string) {
       // yazılan not yoklamayı "geldi" olarak işler ve "öğrenci geldi mi?" sorusunu da kapatır.
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["lesson-notes", lessonId] });
     },
+  });
+}
+
+export interface LessonNoteSummary {
+  id: string;
+  lessonId: string;
+  practiced: string | null;
+  note: string | null;
+  homework: string | null;
+  nextGoal: string | null;
+  pieceTitle: string | null;
+  createdAt: string;
+}
+
+// Bir derse yazılmış notlar (LessonNotes.ListAsync, en yeni önce). Bugün ekranındaki ders
+// kartı notu girilmiş dersi "Not girildi" diye ayırt etsin diye: kart her derste "Not Ekle"
+// yazınca öğretmen notu yazdığı dersi tanıyamıyor, aynı derse ikinci kez not giriyordu.
+export function useLessonNotes(lessonId: string) {
+  return useQuery({
+    queryKey: ["lesson-notes", lessonId],
+    queryFn: () => api.get<LessonNoteSummary[]>(`/api/lessons/${lessonId}/notes`),
+    enabled: Boolean(lessonId),
   });
 }
 

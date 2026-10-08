@@ -137,6 +137,7 @@ export function useCreateProgressNote(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["calendar"] });
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["lesson-notes"] });
     },
   });
 }
@@ -169,6 +170,8 @@ export function useDeleteLessonNote(studentId: string) {
       queryClient.invalidateQueries({ queryKey: ["student-progress-summary", studentId] });
       queryClient.invalidateQueries({ queryKey: ["previous-lesson-note"] });
       queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["lesson-notes"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
     },
   });
 }
