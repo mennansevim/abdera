@@ -45,7 +45,7 @@ export function useRequireGuardianAuth() {
       if (handled || queryClient.getQueryData(GUARDIAN_ME_QUERY_KEY) === undefined) return;
       handled = true;
       clearSessionData(queryClient);
-      router.replace("/parent/login");
+      router.replace("/parent/login?expired=1");
     });
   }, [queryClient, router]);
 

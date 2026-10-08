@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { BrandMark, Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import {
@@ -22,6 +22,18 @@ const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 // seçenek olarak korunur ("Şifreni bilmiyor musun?"). Demo yayınında örnek veli düğmesi vardır.
 type Mode = "password" | "otp-phone" | "otp-code";
 
+// Portal açıkken oturum düşen veli buraya `?expired=1` ile atılır (bkz. guardian-auth.ts).
+// useSearchParams statik sayfada Suspense sınırı ister ve hidrasyona kadar formun yerine boş
+// bir yedek çizdirirdi; adres çubuğu doğrudan okunur, sunucu çiziminde not yoktur.
+const noSubscription = () => () => {};
+function useSessionExpired() {
+  return useSyncExternalStore(
+    noSubscription,
+    () => new URLSearchParams(window.location.search).get("expired") === "1",
+    () => false,
+  );
+}
+
 export default function GuardianLoginPage() {
   const router = useRouter();
   const login = useGuardianLogin();
@@ -36,6 +48,7 @@ export default function GuardianLoginPage() {
   const [mode, setMode] = useState<Mode>("password");
   const [debugCode, setDebugCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const sessionExpired = useSessionExpired();
 
   async function handlePasswordLogin(event: FormEvent) {
     event.preventDefault();
@@ -110,6 +123,11 @@ export default function GuardianLoginPage() {
           <div className="mb-6">
             <h1 className="text-[1.05rem] font-bold tracking-[-0.015em]">{title}</h1>
             <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{subtitle}</p>
+            {sessionExpired && (
+              <p role="status" className="mt-3 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-xs font-medium text-[var(--warning-strong)]">
+                Oturumun sona erdi. Devam etmek için tekrar giriş yap.
+              </p>
+            )}
           </div>
 
           {/* --- Birincil: telefon + şifre --- */}
