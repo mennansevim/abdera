@@ -22,6 +22,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.08",
+    date: "2026-10-08",
+    items: [
+      { audience: "all", text: "Ders notu yazarken \"Ders devam ediyor\" düğmesi, öğrencinin bir önceki dersindeki eseri, ödevi ve hedefi forma tek dokunuşla taşır; aynı esere devam ettiğinde yeniden yazman gerekmez." },
+      { audience: "all", text: "Not formunda hızlı not düğmeleri var: \"Verimli bir ders oldu\", \"Ödevini yapmış\" gibi cümleleri ve gam, etüt, ritim gibi çalışılan konuları dokunarak ekleyip çıkarabilirsin." },
+      { audience: "all", text: "Notu girilmemiş dersler için zildeki hatırlatma artık her gün değil, üç günde bir gelir. Ana ekrandaki \"Yorum bekleyen dersler\" kartı her zamanki gibi görünür." },
+      { audience: "admin", text: "Yeni Müsaitlik ekranı: yeni bir veli geldiğinde enstrümana, ders süresine ve velinin tercihine göre hangi öğretmenin hangi saatte her hafta boş olduğunu tek bakışta görürsün. Bir saate dokununca boş öğretmenler listelenir; \"Kayıt aç\" yeni öğrenci formunu öğretmen, gün ve saat dolu olarak açar." },
+    ],
+  },
+  {
     version: "2026.10.06",
     date: "2026-10-06",
     items: [
