@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Icon, type IconName } from "./icons";
 import { Modal } from "./ui";
 import { ApiError } from "@/lib/api";
@@ -271,6 +271,7 @@ function writeSeen(value: string) {
 // Yeni bildirim düştüğünde ekranın köşesinde açılan kart + sekme başlığında okunmamış sayısı.
 // Uygulama kabuğuna (app-header) bir kez yerleştirilir.
 export function NotificationToasts() {
+  const pathname = usePathname();
   const { data } = useStaffNotifications();
   const markRead = useMarkStaffNotificationRead();
   const [toasts, setToasts] = useState<StaffNotification[]>([]);
@@ -333,7 +334,10 @@ export function NotificationToasts() {
     if (!toast.readAt) markRead.mutate(toast.id);
   }
 
-  if (!toasts.length) return null;
+  // "Bugün" ekranında (yönetici ve öğretmen ana ekranı) kart açılmaz (kullanıcı isteği: "bugün
+  // ekranında bildirimler gelmesin"). Yeni bildirimler kuyrukta bekler ve başka bir ekrana
+  // geçilince açılır; zildeki rozet ve sekme başlığındaki sayı burada da güncellenir.
+  if (!toasts.length || pathname === "/dashboard") return null;
 
   return (
     <div
