@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.08.4",
+    date: "2026-10-08",
+    items: [
+      { audience: "all", text: "\"Yorum bekleyen dersler\" listesi ana ekrandan kalktı; ana ekran doğrudan günün dersleriyle açılır. Liste artık öğretmenin Gelişim ekranının başında, zildeki hatırlatma da oraya götürür." },
+      { audience: "all", text: "Öğretmenler yanlış yazdıkları bir ders notunu Gelişim ekranında \"Notu sil\" ile kalıcı olarak silebilir." },
+      { audience: "admin", text: "Giderler ekranı \"Gelir ve gider\" oldu: Özet sekmesi aylara göre gelir, gider ve nakit akışını gösterir; Gelirler sekmesinde tahsil edilen aidatlar ödeme yöntemine göre listelenir." },
+    ],
+  },
+  {
     version: "2026.10.08.3",
     date: "2026-10-08",
     items: [
