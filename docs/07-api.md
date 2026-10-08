@@ -39,6 +39,7 @@ POST   /api/instruments                         ✅
 
 GET    /api/calendar                            ✅ ?from=&to=&teacherId=&instrumentId= - aralık en fazla 3 ay (ARC-3), aşarsa 400
 GET    /api/lessons                             ✅ /api/calendar ile aynı handler
+GET    /api/scheduling/open-slots               ✅ AdminOnly - ?instrumentId=&durationMinutes=(15-180, vars. 45)&from= - Müsaitlik ekranı: uygunluk penceresi eksi aktif ders serileri (haftalık boş başlangıç saatleri, 15 dk adım) + ilk boş tarih (izin/tatil/tek seferlik ders sonrası, 8 hafta). Uygunluk tanımlamamış öğretmen sayılmaz, adı ayrı döner
 POST   /api/lesson-series                       ✅ oluşturur + ilk rolling window'u üretir - Teacher yalnızca kendi enrollment'ı (K2)
 PATCH  /api/lesson-series/{seriesId}            ✅ seriyi sonlandırır (EffectiveUntil) - Teacher yalnızca kendi serisi
 POST   /api/lesson-series/{seriesId}/generate   ✅ eklendi - üretim penceresini elle uzatır - Teacher yalnızca kendi serisi

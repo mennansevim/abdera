@@ -195,6 +195,42 @@ export function useTeacherAvailability(teacherId: string, options?: { enabled?: 
   });
 }
 
+// Müsaitlik ekranı (OpenSlots.cs): öğretmenin uygunluk penceresi eksi aktif ders serileri,
+// yani her hafta boş olan başlangıç saatleri (15 dk adımlarla). firstOpenDate, izin/tatil/
+// telafi gibi tek seferlik engellerden sonraki ilk tarih; 8 haftada bulunamazsa null.
+export interface OpenSlot {
+  dayOfWeek: string;
+  startTime: string;
+  firstOpenDate: string | null;
+}
+
+export interface TeacherOpenSlots {
+  teacherId: string;
+  teacherName: string;
+  instrumentIds: string[];
+  weeklyLessonCount: number;
+  weeklyAvailableMinutes: number;
+  weeklyBookedMinutes: number;
+  upcomingTimeOff: { startsOn: string; endsOn: string; reason: string | null }[];
+  slots: OpenSlot[];
+}
+
+export interface OpenSlotsResponse {
+  from: string;
+  durationMinutes: number;
+  teachers: TeacherOpenSlots[];
+  teachersWithoutAvailability: { teacherId: string; teacherName: string }[];
+}
+
+export function useOpenSlots(params: { instrumentId: string; durationMinutes: number; from: string }) {
+  const search = new URLSearchParams({ durationMinutes: String(params.durationMinutes), from: params.from });
+  if (params.instrumentId) search.set("instrumentId", params.instrumentId);
+  return useQuery({
+    queryKey: ["open-slots", params],
+    queryFn: () => api.get<OpenSlotsResponse>(`/api/scheduling/open-slots?${search}`),
+  });
+}
+
 // Öğretmenler ekranındaki "uygun günler" tek-tık aç/kapa arayüzü bu ikisini kullanır: bir
 // günü açmak POST, kapatmak DELETE'tir - ayrı bir "toggle" ucu yok, backend zaten
 // create/delete olarak modelliyor (TeacherAvailabilities.cs).

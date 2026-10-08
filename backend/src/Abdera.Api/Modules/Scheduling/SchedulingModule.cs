@@ -14,5 +14,6 @@ public static class SchedulingModule
         app.MapChangeRequests();
         app.MapCancelLesson();
         app.MapUpdateLesson();
+        app.MapOpenSlots();
     }
 }

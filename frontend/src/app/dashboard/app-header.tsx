@@ -29,6 +29,7 @@ const CORE_LINKS: NavItem[] = [
 ];
 
 const ADMIN_LINKS: NavItem[] = [
+  { href: "/dashboard/availability", label: "Müsaitlik", icon: "clock", section: "Planlama" },
   { href: "/dashboard/change-requests", label: "Talepler", icon: "swap", section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
   { href: "/dashboard/costs", label: "Giderler", icon: "bank", section: "Finans" },

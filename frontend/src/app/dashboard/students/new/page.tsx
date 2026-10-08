@@ -3,8 +3,9 @@
 // docs/13 Pillar C — tek-ekran öğrenci kaydı. Öğrenci + öğretmen/enstrüman + (opsiyonel) ders
 // günü + veli tek sade ekranda; tek submit'te zincirlenir (useRegisterStudent). Başarıda
 // veliye üretilen şifre ve sunucunun WhatsApp gönderim sonucu gösterilir.
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Suspense, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AdminGate, FormMessage, onInvalidTurkish, PageHeader, resetValidity } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
@@ -33,12 +34,26 @@ function Step({ number, title, children }: { number: number; title: string; chil
 export default function NewStudentPage() {
   return (
     <AdminGate>
-      <NewStudentForm />
+      {/* useSearchParams App Router'da bir Suspense sınırı ister. */}
+      <Suspense>
+        <NewStudentForm />
+      </Suspense>
     </AdminGate>
   );
 }
 
 function NewStudentForm() {
+  // Müsaitlik ekranındaki "Kayıt aç" öğretmen, enstrüman, gün, saat, süre ve ilk boş tarihi
+  // buraya taşır; form yine aynı form, yalnızca ilk değerleri dolu gelir.
+  const searchParams = useSearchParams();
+  const prefill = {
+    teacherId: searchParams.get("teacherId") ?? "",
+    instrumentId: searchParams.get("instrumentId") ?? "",
+    day: searchParams.get("day"),
+    time: searchParams.get("time"),
+    duration: Number(searchParams.get("duration")) || 45,
+    startedAt: searchParams.get("startedAt"),
+  };
   const teachersQuery = useTeachers();
   const instrumentsQuery = useInstruments();
   const register = useRegisterStudent();
@@ -58,13 +73,14 @@ function NewStudentForm() {
   const [lastName, setLastName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   // eğitim
-  const [teacherId, setTeacherId] = useState("");
-  const [instrumentId, setInstrumentId] = useState("");
-  const [startedAt, setStartedAt] = useState(TODAY);
+  const [teacherId, setTeacherId] = useState(prefill.teacherId);
+  const [instrumentId, setInstrumentId] = useState(prefill.instrumentId);
+  const [startedAt, setStartedAt] = useState(prefill.startedAt ?? TODAY);
   // ders günü
-  const [scheduleNow, setScheduleNow] = useState(false);
-  const [dayOfWeek, setDayOfWeek] = useState("Monday");
-  const [startTime, setStartTime] = useState("16:00");
+  const [scheduleNow, setScheduleNow] = useState(Boolean(prefill.day && prefill.time));
+  const [dayOfWeek, setDayOfWeek] = useState(prefill.day ?? "Monday");
+  const [startTime, setStartTime] = useState(prefill.time ?? "16:00");
+  const [durationMinutes, setDurationMinutes] = useState(prefill.duration);
   // veli
   const [gFirstName, setGFirstName] = useState("");
   const [gLastName, setGLastName] = useState("");
@@ -90,7 +106,7 @@ function NewStudentForm() {
   function resetForm() {
     setFirstName(""); setLastName(""); setBirthDate("");
     setTeacherId(""); setInstrumentId(""); setStartedAt(TODAY);
-    setScheduleNow(false); setDayOfWeek("Monday"); setStartTime("16:00");
+    setScheduleNow(false); setDayOfWeek("Monday"); setStartTime("16:00"); setDurationMinutes(45);
     setGFirstName(""); setGLastName(""); setGPhone(""); setRelationship("Anne/Baba");
     setPhoneOwner(null); setUseExistingGuardian(false);
     setError(null); setResult(null);
@@ -108,7 +124,7 @@ function NewStudentForm() {
         startedAt,
         guardian: { firstName: gFirstName, lastName: gLastName || lastName, phoneNumber: gPhone, relationship },
         existingGuardianId: useExistingGuardian ? phoneOwner?.id : undefined,
-        lesson: scheduleNow ? { dayOfWeek, startTime: `${startTime}:00`, durationMinutes: 45 } : undefined,
+        lesson: scheduleNow ? { dayOfWeek, startTime: `${startTime}:00`, durationMinutes } : undefined,
       });
       setResult(res);
     } catch (err) {
@@ -168,7 +184,11 @@ function NewStudentForm() {
 
   return (
     <div className="mx-auto max-w-[640px] space-y-3">
-      <PageHeader title="Yeni öğrenci kaydı" description="Öğrenci, eğitim, ders günü ve veli bilgilerini tek ekranda gir." />
+      <PageHeader
+        title="Yeni öğrenci kaydı"
+        description="Öğrenci, eğitim, ders günü ve veli bilgilerini tek ekranda gir."
+        actions={<Link href="/dashboard/availability" className="btn btn-quiet"><Icon name="clock" className="h-4 w-4" />Boş saatlere bak</Link>}
+      />
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* 1) Öğrenci */}
         <Step number={1} title="Öğrenci">
@@ -212,7 +232,7 @@ function NewStudentForm() {
                 </select>
               </label>
               <label className="form-label">Saat<input type="time" className="field" value={startTime} onChange={(e) => setStartTime(e.target.value)} /></label>
-              <p className="text-meta sm:col-span-2 text-[var(--muted)]">Ders süresi 45 dk. Öğretmenin o saati doluysa uyarı verilir; öğrenci yine kaydedilir.</p>
+              <p className="text-meta sm:col-span-2 text-[var(--muted)]">Ders süresi {durationMinutes} dk. Öğretmenin o saati doluysa uyarı verilir; öğrenci yine kaydedilir.</p>
             </div>
           )}
         </Step>
