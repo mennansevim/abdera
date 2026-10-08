@@ -159,7 +159,7 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
     // "Ders devam ediyor" kısayolu: eser en son eser yazılmış nottan, ödev en son nottan gelir;
     // ilk dersin öncesi yoktur; başka öğretmen öneriyi de okuyamaz.
     [Fact]
-    public async Task Previous_note_carries_last_piece_and_latest_homework_for_the_continue_shortcut()
+    public async Task Previous_note_carries_the_latest_notes_practice_homework_and_piece_for_the_continue_shortcut()
     {
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "progress-previous");
@@ -187,16 +187,22 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
             $"/api/lessons/{lessons[0].Id}/notes/previous", TestJson.Options);
         Assert.Null(first!.Previous);
 
+        var second = (await teacher.GetFromJsonAsync<LessonNotes.PreviousResponse>(
+            $"/api/lessons/{lessons[1].Id}/notes/previous", TestJson.Options))!.Previous!;
+        Assert.Equal("Für Elise", second.PieceTitle);
+        Assert.Equal("Beethoven", second.PieceComposer);
+        Assert.Equal(3, second.PieceDifficulty);
+        Assert.Equal(RepertoireStatus.Learning, second.PieceStatus);
+
+        // Son notta eser yok: daha eski bir nottaki eser "devam" önerisi olarak geri gelmez.
         var third = (await teacher.GetFromJsonAsync<LessonNotes.PreviousResponse>(
             $"/api/lessons/{lessons[2].Id}/notes/previous", TestJson.Options))!.Previous!;
         Assert.Equal(lessons[1].StartAt, third.LessonStartAt);
         Assert.Equal("Ritim", third.Practiced);
         Assert.Equal("Etüt 3", third.Homework);
         Assert.Null(third.NextGoal);
-        Assert.Equal("Für Elise", third.PieceTitle);
-        Assert.Equal("Beethoven", third.PieceComposer);
-        Assert.Equal(3, third.PieceDifficulty);
-        Assert.Equal(RepertoireStatus.Learning, third.PieceStatus);
+        Assert.Null(third.PieceTitle);
+        Assert.Null(third.PieceComposer);
 
         Assert.Equal(HttpStatusCode.Forbidden,
             (await unrelatedTeacher.GetAsync($"/api/lessons/{lessons[2].Id}/notes/previous")).StatusCode);

@@ -456,13 +456,6 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
   const [note, setNote] = useState("");
   const [homework, setHomework] = useState("");
   const [nextGoal, setNextGoal] = useState("");
-  const [pieceTitle, setPieceTitle] = useState("");
-  const [pieceDifficulty, setPieceDifficulty] = useState("");
-  const [pieceComposer, setPieceComposer] = useState("");
-  const [pieceStatus, setPieceStatus] = useState<"Learning" | "Polishing" | "PerformanceReady" | "Archived">("Learning");
-  const [pieceTargetDate, setPieceTargetDate] = useState("");
-  const [pieceResourceUrl, setPieceResourceUrl] = useState("");
-  const [pieceResourceVisibleToGuardian, setPieceResourceVisibleToGuardian] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeLessonId = lessonId || lessons[0]?.id || "";
 
@@ -471,19 +464,15 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
     if (patch.practiced !== undefined) setPracticed(patch.practiced);
     if (patch.homework !== undefined) setHomework(patch.homework);
     if (patch.nextGoal !== undefined) setNextGoal(patch.nextGoal);
-    if (patch.pieceTitle !== undefined) setPieceTitle(patch.pieceTitle);
-    if (patch.pieceDifficulty !== undefined) setPieceDifficulty(patch.pieceDifficulty);
-    if (patch.pieceComposer !== undefined) setPieceComposer(patch.pieceComposer);
-    if (patch.pieceStatus !== undefined) setPieceStatus(patch.pieceStatus);
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!activeLessonId) { setError("Notu bağlamak için bir ders seçmelisin."); return; }
-    if (!note && !practiced && !homework && !nextGoal && !pieceTitle) { setError("En az bir gelişim alanı doldurmalısın."); return; }
+    if (!note && !practiced && !homework && !nextGoal) { setError("En az bir gelişim alanı doldurmalısın."); return; }
     setError(null);
     try {
-      await createNote.mutateAsync({ lessonId: activeLessonId, practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined, pieceTitle: pieceTitle || undefined, pieceDifficulty: pieceDifficulty ? Number(pieceDifficulty) : undefined, pieceComposer: pieceComposer || undefined, pieceStatus: pieceTitle ? pieceStatus : undefined, pieceTargetDate: pieceTargetDate || undefined, pieceResourceUrl: pieceResourceUrl || undefined, pieceResourceVisibleToGuardian });
+      await createNote.mutateAsync({ lessonId: activeLessonId, practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Gelişim notu kaydedilemedi.");
@@ -493,11 +482,10 @@ function ProgressComposer({ studentId, lessons, onClose }: { studentId: string; 
   return <form onSubmit={handleSubmit}>
     {!lessons.length ? <p className="text-sm text-[var(--muted)]">Bu öğrenci için yakın tarihli ders bulunamadı. Önce takvimden bir ders oluşturmalısın.</p> : <div className="grid gap-3.5">
       <label className="form-label sm:max-w-md">Ders<select value={activeLessonId} onChange={(event) => setLessonId(event.target.value)} className="field text-sm">{lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{formatDate(lesson.startAt, true)} · {formatTime(lesson.startAt)} · {lesson.instrumentName}</option>)}</select></label>
-      <QuickNoteBar key={activeLessonId} lessonId={activeLessonId} draft={{ note, practiced, homework, nextGoal, pieceTitle }} onApply={applyQuick} />
-      <div className="grid gap-3 sm:grid-cols-2"><label className="form-label"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label><label className="form-label"><span>Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-sm" placeholder="Örn. Bach · Minuet in G" /></label></div>
-      {pieceTitle && <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="form-label">Besteci<input value={pieceComposer} onChange={(event) => setPieceComposer(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Eser durumu<select value={pieceStatus} onChange={(event) => setPieceStatus(event.target.value as typeof pieceStatus)} className="field bg-white text-sm"><option value="Learning">Çalışılıyor</option><option value="Polishing">Pekiştiriliyor</option><option value="PerformanceReady">Sahneye hazır</option><option value="Archived">Arşivlendi</option></select></label><label className="form-label">Hedef tarih<input type="date" value={pieceTargetDate} onChange={(event) => setPieceTargetDate(event.target.value)} className="field bg-white text-sm" /></label><label className="form-label">Nota / bağlantı<input type="url" value={pieceResourceUrl} onChange={(event) => setPieceResourceUrl(event.target.value)} placeholder="https://…" className="field bg-white text-sm" /></label><label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)] sm:col-span-2 lg:col-span-4"><input type="checkbox" checked={pieceResourceVisibleToGuardian} onChange={(event) => setPieceResourceVisibleToGuardian(event.target.checked)} disabled={!pieceResourceUrl} /> Bağlantıyı veli portalında göster</label></div>}
+      <QuickNoteBar key={activeLessonId} lessonId={activeLessonId} draft={{ note, practiced, homework, nextGoal }} onApply={applyQuick} />
+      <label className="form-label"><span>Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-sm" placeholder="Örn. Sol majör gam, legato" /></label>
       <label className="form-label rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/55 p-3"><span>Öğretmen notu <span className="font-medium">· yalnızca okul ekibi görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} className="field resize-y bg-white text-sm" placeholder="Bugünkü ilerleme, güçlü taraflar ve dikkat edilmesi gerekenler…" /><span className="text-meta mt-1.5 block">Bu alan veli portalına gönderilmez. Veliye paylaşılacak metin, kayıt sonrasında ayrı olarak hazırlanır ve onaylanır.</span></label>
-      <div className="grid gap-3 sm:grid-cols-3"><label className="form-label"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="form-label"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label><label className="form-label"><span>Eser zorluğu <span className="font-medium">· isteğe bağlı</span></span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-sm"><option value="">Otomatik öner</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select><span className="block text-[.75rem] font-medium leading-relaxed">Boş bırakırsan ders notuna göre kural tabanlı önerilir.</span></label></div>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="form-label"><span>Ödev</span><textarea value={homework} onChange={(event) => setHomework(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki derse kadar" /></label><label className="form-label"><span>Sonraki hedef</span><textarea value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} rows={2} className="field resize-y text-sm" placeholder="Bir sonraki odak" /></label></div>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Gelişim notunu kaydet" pending={createNote.isPending} disabled={!lessons.length} />
     </div>}

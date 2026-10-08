@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
-import { useCreateLessonNote, type PieceStatus } from "@/lib/attendance";
+import { useCreateLessonNote } from "@/lib/attendance";
 import { usePendingLessonNotes, type PendingLessonNote } from "@/lib/progress";
 
 // Yorum bekleyen dersler: yoklaması "geldi" girilmiş ama notu yazılmamış, bitmiş dersler.
@@ -70,9 +70,6 @@ function PendingLessonNoteForm({ lessonId }: { lessonId: string }) {
   const [practiced, setPracticed] = useState("");
   const [homework, setHomework] = useState("");
   const [nextGoal, setNextGoal] = useState("");
-  const [pieceTitle, setPieceTitle] = useState("");
-  const [pieceDifficulty, setPieceDifficulty] = useState("");
-  const [carriedPiece, setCarriedPiece] = useState<{ title: string; composer?: string; status?: PieceStatus } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function applyQuick(patch: QuickNotePatch) {
@@ -80,15 +77,10 @@ function PendingLessonNoteForm({ lessonId }: { lessonId: string }) {
     if (patch.practiced !== undefined) setPracticed(patch.practiced);
     if (patch.homework !== undefined) setHomework(patch.homework);
     if (patch.nextGoal !== undefined) setNextGoal(patch.nextGoal);
-    if (patch.pieceDifficulty !== undefined) setPieceDifficulty(patch.pieceDifficulty);
-    if (patch.pieceTitle !== undefined) {
-      setPieceTitle(patch.pieceTitle);
-      setCarriedPiece({ title: patch.pieceTitle, composer: patch.pieceComposer, status: patch.pieceStatus });
-    }
   }
 
   async function handleSave() {
-    if (!note.trim() && !practiced.trim() && !homework.trim() && !nextGoal.trim() && !pieceTitle.trim()) {
+    if (!note.trim() && !practiced.trim() && !homework.trim() && !nextGoal.trim()) {
       setError("Kaydetmek için kısa bir not eklemelisin.");
       return;
     }
@@ -99,9 +91,6 @@ function PendingLessonNoteForm({ lessonId }: { lessonId: string }) {
         practiced: practiced.trim() || undefined,
         homework: homework.trim() || undefined,
         nextGoal: nextGoal.trim() || undefined,
-        pieceTitle: pieceTitle.trim() || undefined,
-        pieceDifficulty: pieceDifficulty ? Number(pieceDifficulty) : undefined,
-        ...(carriedPiece && carriedPiece.title === pieceTitle ? { pieceComposer: carriedPiece.composer, pieceStatus: carriedPiece.status } : {}),
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Kaydedilemedi.");
@@ -110,13 +99,11 @@ function PendingLessonNoteForm({ lessonId }: { lessonId: string }) {
 
   return (
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-3 sm:p-4">
-      <QuickNoteBar lessonId={lessonId} draft={{ note, practiced, homework, nextGoal, pieceTitle }} onApply={applyQuick} />
+      <QuickNoteBar lessonId={lessonId} draft={{ note, practiced, homework, nextGoal }} onApply={applyQuick} />
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Öğretmen notu <span className="font-medium">· yalnızca ekip görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Dersteki ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
         <label><span className="text-meta mb-1.5 block font-bold">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
         <label><span className="text-meta mb-1.5 block font-bold">Ödev</span><input value={homework} onChange={(event) => setHomework(event.target.value)} className="field text-xs" placeholder="Bir sonraki derse kadar" /></label>
-        <label><span className="text-meta mb-1.5 block font-bold">Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-xs" placeholder="Örn. Bach · Minuet in G" /></label>
-        <label><span className="text-meta mb-1.5 block font-bold">Eser zorluğu</span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-xs"><option value="">Belirtme</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5</option>)}</select></label>
         <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Sonraki hedef</span><input value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} className="field text-xs" placeholder="Bir sonraki dersin odağı" /></label>
       </div>
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] p-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}

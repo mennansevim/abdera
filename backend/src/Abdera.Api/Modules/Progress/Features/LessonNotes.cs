@@ -111,11 +111,13 @@ public static class LessonNotes
         var latest = await earlierNotes.FirstOrDefaultAsync();
         if (latest is null) return Results.Ok(new PreviousResponse(null));
 
-        // Arşive kaldırılmış (bitmiş) eser "devam" önerisi olmaz.
-        var latestPiece = await earlierNotes
-            .Where(x => x.Note.PieceTitle != null && x.Note.PieceStatus != RepertoireStatus.Archived)
-            .Select(x => x.Note)
-            .FirstOrDefaultAsync();
+        // Eser yalnızca EN SON nottan gelir. Not formlarında eser alanı artık yok (kullanıcı
+        // isteği: "çalışılan eser kısmını not girişinden kaldır"); geçmişte eser girilmiş en son
+        // notu aramak, öğrenci çoktan başka şeye geçmişken haftalar önceki eseri "devam" diye
+        // önermeye devam ederdi. Arşive kaldırılmış (bitmiş) eser de önerilmez.
+        var latestPiece = latest.Note.PieceTitle != null && latest.Note.PieceStatus != RepertoireStatus.Archived
+            ? latest.Note
+            : null;
 
         return Results.Ok(new PreviousResponse(new PreviousNoteResponse(
             latest.Lesson.StartAt,

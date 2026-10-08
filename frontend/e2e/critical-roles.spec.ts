@@ -304,7 +304,7 @@ test.describe.serial("Abdera critical role flows", () => {
     await page.getByRole("combobox", { name: "Öğrenci seç" }).selectOption({ label: "Lara Arslan" });
     await page.getByRole("button", { name: "Yeni gelişim notu" }).click();
     const note = `E2E öğretmen ham notu ${Date.now()}`;
-    await page.getByLabel("Çalınan eser").fill("E2E Minuet");
+    await page.getByLabel("Ne çalışıldı?").fill("E2E Minuet");
     await page.getByRole("textbox", { name: /Öğretmen notu/ }).fill(note);
     await page.getByRole("button", { name: "Gelişim notunu kaydet" }).click();
     const entry = page.locator("article").filter({ hasText: note }).first();

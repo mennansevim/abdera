@@ -5,7 +5,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
-import { useCreateChangeRequest, useCreateLessonNote, useMarkAttendance, type AttendanceStatus, type PieceStatus } from "@/lib/attendance";
+import { useCreateChangeRequest, useCreateLessonNote, useMarkAttendance, type AttendanceStatus } from "@/lib/attendance";
 import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 
@@ -107,11 +107,6 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
   const [note, setNote] = useState("");
   const [homework, setHomework] = useState("");
   const [nextGoal, setNextGoal] = useState("");
-  const [pieceTitle, setPieceTitle] = useState("");
-  const [pieceDifficulty, setPieceDifficulty] = useState("");
-  // "Ders devam ediyor" ile taşınan eserin besteci/durumu - formda alanı yok; eser adı elle
-  // değiştirilirse başka bir esere ait olacağından gönderilmez.
-  const [carriedPiece, setCarriedPiece] = useState<{ title: string; composer?: string; status?: PieceStatus } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showChangeForm, setShowChangeForm] = useState(false);
@@ -125,22 +120,17 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
     if (patch.practiced !== undefined) setPracticed(patch.practiced);
     if (patch.homework !== undefined) setHomework(patch.homework);
     if (patch.nextGoal !== undefined) setNextGoal(patch.nextGoal);
-    if (patch.pieceDifficulty !== undefined) setPieceDifficulty(patch.pieceDifficulty);
-    if (patch.pieceTitle !== undefined) {
-      setPieceTitle(patch.pieceTitle);
-      setCarriedPiece({ title: patch.pieceTitle, composer: patch.pieceComposer, status: patch.pieceStatus });
-    }
   }
 
   async function handleSave() {
-    if (!status && !practiced && !note && !homework && !nextGoal && !pieceTitle) {
+    if (!status && !practiced && !note && !homework && !nextGoal) {
       setError(initialMode === "attendance" && !attendanceTaken ? "Yoklama durumu seçmelisin." : "Kaydetmek için kısa bir not eklemelisin.");
       return;
     }
     setError(null);
     try {
       if (status) await markAttendance.mutateAsync({ status, note: note || undefined });
-      if (practiced || note || homework || nextGoal || pieceTitle) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined, pieceTitle: pieceTitle || undefined, pieceDifficulty: pieceDifficulty ? Number(pieceDifficulty) : undefined, ...(carriedPiece && carriedPiece.title === pieceTitle ? { pieceComposer: carriedPiece.composer, pieceStatus: carriedPiece.status } : {}) });
+      if (practiced || note || homework || nextGoal) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined });
       setSaved(true);
       window.setTimeout(onDone, 650);
     } catch (err) {
@@ -166,13 +156,11 @@ function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson
               })}
             </div>
           </div>}
-          <QuickNoteBar lessonId={lesson.id} draft={{ note, practiced, homework, nextGoal, pieceTitle }} onApply={applyQuick} />
+          <QuickNoteBar lessonId={lesson.id} draft={{ note, practiced, homework, nextGoal }} onApply={applyQuick} />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Öğretmen notu <span className="font-medium">· yalnızca ekip görür</span></span><textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} placeholder="Bugünkü ilerleme, dikkat edilmesi gerekenler…" className="field resize-y text-xs" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Ne çalışıldı?</span><input value={practiced} onChange={(event) => setPracticed(event.target.value)} className="field text-xs" placeholder="Örn. Gam ve etüt" /></label>
             <label><span className="text-meta mb-1.5 block font-bold">Ödev</span><input value={homework} onChange={(event) => setHomework(event.target.value)} className="field text-xs" placeholder="Bir sonraki derse kadar" /></label>
-            <label><span className="text-meta mb-1.5 block font-bold">Çalınan eser</span><input value={pieceTitle} onChange={(event) => setPieceTitle(event.target.value)} className="field text-xs" placeholder="Örn. Bach · Minuet in G" /></label>
-            <label><span className="text-meta mb-1.5 block font-bold">Eser zorluğu</span><select value={pieceDifficulty} onChange={(event) => setPieceDifficulty(event.target.value)} className="field text-xs"><option value="">Belirtme</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5</option>)}</select></label>
             <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Sonraki hedef</span><input value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} className="field text-xs" placeholder="Bir sonraki dersin odağı" /></label>
           </div>
           {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] p-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}

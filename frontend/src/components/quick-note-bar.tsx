@@ -2,26 +2,25 @@
 
 import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
-import { usePreviousLessonNote, type PieceStatus, type PreviousLessonNote } from "@/lib/attendance";
+import { usePreviousLessonNote, type PreviousLessonNote } from "@/lib/attendance";
 
 // Not formlarının üstündeki kısayollar. Kullanıcı isteği: "bir önceki şarkıya devam
 // ettiklerinde bunu seçemiyorlar, notlarda ders devam ediyor butonu gibi kısa yollar olabilir.
 // hızlıca butonlarla not ekleme olsun." Üç not formu da (bugünkü ders kartı, yorum bekleyen
 // dersler, gelişim sayfası) aynı çubuğu kullanır; form durumunu kendisi tutmaz, yalnızca
 // alanlara yazılacak değeri onApply ile bildirir.
+//
+// "Çalınan eser" alanı not formlarından kaldırıldı (kullanıcı isteği: "çalışılan eser kısmını
+// not girişinden kaldır, gerek yok"). Önceki dersin eseri artık ayrı bir alana değil,
+// "Ne çalışıldı?" metnine "<eser> (devam)" olarak taşınır.
 export interface QuickNoteDraft {
   note: string;
   practiced: string;
   homework: string;
   nextGoal: string;
-  pieceTitle: string;
 }
 
-export interface QuickNotePatch extends Partial<QuickNoteDraft> {
-  pieceDifficulty?: string;
-  pieceComposer?: string;
-  pieceStatus?: PieceStatus;
-}
+export type QuickNotePatch = Partial<QuickNoteDraft>;
 
 // Öğretmen notuna cümle olarak eklenir; ikinci dokunuş cümleyi geri alır.
 const NOTE_PHRASES = [
@@ -72,10 +71,10 @@ export function QuickNoteBar({ lessonId, draft, onApply }: { lessonId: string; d
 function ContinueButton({ previous, applied, onClick }: { previous: PreviousLessonNote; applied: boolean; onClick: () => void }) {
   const when = new Date(previous.lessonStartAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
   const carried = [
-    previous.pieceTitle && `Eser: ${previous.pieceTitle}`,
+    previousPracticed(previous),
     previous.homework && `Ödev: ${previous.homework}`,
     previous.nextGoal && `Hedef: ${previous.nextGoal}`,
-  ].filter(Boolean).join(" · ") || previous.practiced || "Önceki dersin notu";
+  ].filter(Boolean).join(" · ") || "Önceki dersin notu";
 
   return (
     <button
@@ -117,20 +116,19 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   );
 }
 
-// Önceki dersin eseri, ödevi ve hedefi taşınır - ama öğretmenin bu forma zaten yazdığı bir alan
-// ezilmez. Eser önceki dersle aynıysa "Ne çalışıldı?" boşsa eser adıyla doldurulur.
+// Önceki dersin "Ne çalışıldı?"sı, ödevi ve hedefi taşınır - ama öğretmenin bu forma zaten
+// yazdığı bir alan ezilmez. "Ne çalışıldı?" boş bırakılmış eski bir notta yalnızca eser adı
+// varsa (eser alanı kaldırılmadan önce yazılmış notlar) "<eser> (devam)" kullanılır. Sunucu
+// eseri yalnızca son nottan verir (LessonNotes.PreviousAsync); metin olduğu gibi kopyalandığı
+// için "(devam)" dersten derse zincirlenmez.
+function previousPracticed(previous: PreviousLessonNote) {
+  return previous.practiced || (previous.pieceTitle ? `${previous.pieceTitle} (devam)` : null);
+}
+
 function continuePatch(previous: PreviousLessonNote, draft: QuickNoteDraft): QuickNotePatch {
   const patch: QuickNotePatch = {};
-  if (previous.pieceTitle && !draft.pieceTitle.trim()) {
-    patch.pieceTitle = previous.pieceTitle;
-    patch.pieceComposer = previous.pieceComposer ?? undefined;
-    patch.pieceStatus = previous.pieceStatus ?? undefined;
-    if (previous.pieceDifficulty) patch.pieceDifficulty = String(previous.pieceDifficulty);
-  }
-  if (!draft.practiced.trim()) {
-    const practiced = previous.pieceTitle ? `${previous.pieceTitle} (devam)` : previous.practiced;
-    if (practiced) patch.practiced = practiced;
-  }
+  const practiced = previousPracticed(previous);
+  if (practiced && !draft.practiced.trim()) patch.practiced = practiced;
   if (previous.homework && !draft.homework.trim()) patch.homework = previous.homework;
   if (previous.nextGoal && !draft.nextGoal.trim()) patch.nextGoal = previous.nextGoal;
   return patch;
