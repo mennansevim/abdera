@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.08.3",
+    date: "2026-10-08",
+    items: [
+      { audience: "all", text: "Ders notu formu sadeleşti: \"Çalınan eser\" alanı kalktı. \"Ders devam ediyor\" artık önceki dersin \"Ne çalışıldı?\" bilgisini, ödevini ve hedefini taşır." },
+      { audience: "all", text: "Bir bildirim köşede kart olarak yalnızca bir kez açılır; tekrar hatırlatıldığında yalnızca zildeki sayıda görünür." },
+    ],
+  },
+  {
     version: "2026.10.08.2",
     date: "2026-10-08",
     items: [
