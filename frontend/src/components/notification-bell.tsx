@@ -20,7 +20,10 @@ import {
 //   2. Açılır kart: yeni bir bildirim düştüğünde ekranın köşesinde açılır ve üzerine
 //      tıklanana kadar kalır (kullanıcı isteği: "popup olarak gelsin, üzerine tıklayınca
 //      kaybolsun"); tıklamak bildirimi okundu da sayar (NotificationToasts). Sayfa açıkken
-//      dakikada iki kez yoklanır.
+//      dakikada iki kez yoklanır. Her bildirim bu tarayıcıda YALNIZCA BİR KEZ kart olur
+//      (kullanıcı isteği: "1 kere göründükten sonra göstermeyelim, bildirim içine badge
+//      olarak kalsın"): yeniden öne çıkan bir hatırlatma (LessonNoteMissing üç günde bir,
+//      RefreshReminder) zilde okunmamış sayılır ama kart olarak tekrar açılmaz.
 //   3. E-posta: sunucu tarafında, bildirim oluştuğu anda (IStaffNotifier.FlushEmailsAsync).
 // Panel, konumlandırma sorunu çıkarmaması için ortak Modal ile açılır - mobilde ve
 // masaüstünde aynı davranır.
@@ -226,7 +229,28 @@ export function NotificationBell({ variant = "sidebar" }: { variant?: "sidebar" 
 // silinirse (gizli sekme, temizlenen site verisi) ilk açılışta eski bildirimler kart olarak
 // fışkırmaz, sadece zilde sayılır. Bildirimin kendisi sunucuda; burada hiçbir şey kaybolmaz.
 const SEEN_KEY = "abdera:notifications:toasted-until";
+// Kart olarak gösterilmiş bildirim kimlikleri. Hatırlatmalar yeniden öne çıkarken createdAt'leri
+// tazelendiği için yalnızca zaman damgasına bakmak aynı kartı tekrar açıyordu.
+const TOASTED_IDS_KEY = "abdera:notifications:toasted-ids";
+const MAX_TOASTED_IDS = 300;
 const MAX_TOASTS = 3;
+
+function readToastedIds(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(TOASTED_IDS_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeToastedIds(ids: Set<string>) {
+  try {
+    window.localStorage.setItem(TOASTED_IDS_KEY, JSON.stringify([...ids].slice(-MAX_TOASTED_IDS)));
+  } catch {
+    // Depolama kapalıysa kimlikler bu oturum boyunca bellekte tutulur (shownIds).
+  }
+}
 
 function readSeen(): string | null {
   try {
@@ -250,12 +274,14 @@ export function NotificationToasts() {
   const { data } = useStaffNotifications();
   const markRead = useMarkStaffNotificationRead();
   const [toasts, setToasts] = useState<StaffNotification[]>([]);
-  const shownIds = useRef(new Set<string>());
+  const shownIds = useRef<Set<string> | null>(null);
   const baseline = useRef<number | undefined>(undefined);
   const unread = data?.unreadCount ?? 0;
 
   useEffect(() => {
     if (!data) return;
+    shownIds.current ??= new Set(readToastedIds());
+    const shown = shownIds.current;
     // Karşılaştırma zaman damgasının sayısal değeriyle: sunucu "+00:00", tarayıcı "Z" yazıyor,
     // metin olarak karşılaştırmak yanlış sonuç verebilirdi.
     const newest = data.items.reduce((max, item) => Math.max(max, Date.parse(item.createdAt) || 0), 0);
@@ -273,9 +299,10 @@ export function NotificationToasts() {
     }
 
     const since = baseline.current;
-    const fresh = data.items.filter((item) => !item.readAt && Date.parse(item.createdAt) > since && !shownIds.current.has(item.id));
+    const fresh = data.items.filter((item) => !item.readAt && Date.parse(item.createdAt) > since && !shown.has(item.id));
     if (fresh.length) {
-      fresh.forEach((item) => shownIds.current.add(item.id));
+      fresh.forEach((item) => shown.add(item.id));
+      writeToastedIds(shown);
       setToasts((current) => [...fresh, ...current].slice(0, MAX_TOASTS));
     }
     if (newest > since) {
