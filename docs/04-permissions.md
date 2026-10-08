@@ -29,6 +29,7 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 | Ders değişikliği onay/red | ✅ | ❌ | ❌ |
 | Yoklama işaretleme | ❌ (gerekirse override edebilir, audit'e düşer) | ✅ yalnızca kendi dersi | ❌ |
 | Ders notu / ödev / yetenek puanı girme | ❌ (salt okuma) | ✅ yalnızca kendi öğrencisi | ❌ |
+| Ders notu silme | ❌ | ✅ yalnızca kendi yazdığı not (kalıcı, audit'e düşer) | ❌ |
 | RSVP durumu görüntüleme | ✅ tümü | ✅ yalnızca kendi dersleri | ✅ yalnızca kendi cevabı |
 | RSVP ayarlama (Geliyorum/Gelemiyorum) | ✅ (herhangi bir veli adına, WhatsApp'ın yerini tutan geçici kanal) | ❌ | ✅ yalnızca kendi adına, kendi öğrencisinin dersi için (`POST /api/guardian/me/lessons/{id}/rsvp`) |
 | Aidat / tahsilat / ödeme kaydı | ✅ | ❌ | ❌ (kapsam dışı - hâlâ WhatsApp/mock) |

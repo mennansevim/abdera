@@ -11,8 +11,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Abdera.Api.Modules.Progress.Features;
 
 // docs/07-api.md POST /api/lessons/{lessonId}/notes. docs/04-permissions.md: "Ders notu ...
-// girme - Admin salt okuma, Teacher yalnızca kendi öğrencisi." Not silinmez/güncellenmez -
-// her giriş yeni bir satır (bir derse birden fazla not eklenebilir, ERD'de UNIQUE yok).
+// girme - Admin salt okuma, Teacher yalnızca kendi öğrencisi." Not güncellenmez - her giriş
+// yeni bir satır (bir derse birden fazla not eklenebilir, ERD'de UNIQUE yok). Yanlış yazılan
+// notu öğretmen kendisi silebilir (kullanıcı isteği: "öğretmenler notları silebilsin"); not
+// finansal kayıt değil, silme kalıcıdır ve audit_log'a yazılır.
 public static class LessonNotes
 {
     public record CreateRequest(
@@ -75,6 +77,7 @@ public static class LessonNotes
         app.MapGet("/api/lessons/{lessonId:guid}/notes/previous", PreviousAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPut("/api/lesson-notes/{noteId:guid}/parent-comment", SetParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPost("/api/lesson-notes/{noteId:guid}/parent-comment/revoke", RevokeParentCommentAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        app.MapDelete("/api/lesson-notes/{noteId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     private static async Task<IResult> ListAsync(Guid lessonId, ClaimsPrincipal principal, AbderaDbContext db)
@@ -282,6 +285,55 @@ public static class LessonNotes
             clock.UtcNow));
         await db.SaveChangesAsync();
         return Results.Ok(ToResponse(note));
+    }
+
+    private static async Task<IResult> DeleteAsync(
+        Guid noteId,
+        ClaimsPrincipal principal,
+        AbderaDbContext db,
+        IClock clock)
+    {
+        // Not girme gibi silme de yalnızca notu yazan öğretmenin işi; Admin salt okuma.
+        if (AuthContext.IsAdmin(principal))
+            throw new ForbiddenException("Ders notunu yalnızca yazan öğretmen silebilir.");
+        var note = await db.LessonNotes.SingleOrDefaultAsync(item => item.Id == noteId)
+            ?? throw new NotFoundException("Ders notu bulunamadı.");
+        var teacherId = await AuthContext.ResolveTeacherScopeAsync(principal, db)
+            ?? throw new ForbiddenException("Öğretmen kaydı bulunamadı.");
+        if (teacherId != note.TeacherId)
+            throw new ForbiddenException("Bu ders notu size ait değil.");
+
+        var studentId = await db.Lessons
+            .Where(lesson => lesson.Id == note.LessonId)
+            .Select(lesson => lesson.StudentId)
+            .SingleAsync();
+
+        db.LessonNotes.Remove(note);
+        // Not içeriği audit'e kopyalanmaz (oluşturmadaki gibi yalnızca bayraklar) - silinen
+        // metin başka bir tabloda yaşamaya devam etmesin.
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal),
+            "lesson_note.deleted",
+            nameof(LessonNote),
+            note.Id,
+            clock.UtcNow,
+            beforeJson: JsonSerializer.Serialize(new
+            {
+                note.LessonId,
+                note.TeacherId,
+                note.CreatedAt,
+                HasRawNote = note.Note is not null,
+                HasPiece = note.PieceTitle is not null,
+                HasParentComment = note.ParentComment is not null,
+                note.ParentCommentApprovedAt,
+            })));
+        // Kayıtlı "Genel gelişim" yorumu silinen notu da özetliyor olabilir; aylık yenileme
+        // politikası onu ay sonuna kadar göstermeye devam ederdi. Öğrencinin tüm kapsamlardaki
+        // önbelleği düşer, bir sonraki açılışta kalan notlardan yeniden üretilir.
+        db.ProgressSummaries.RemoveRange(
+            await db.ProgressSummaries.Where(summary => summary.StudentId == studentId).ToListAsync());
+        await db.SaveChangesAsync();
+        return Results.NoContent();
     }
 
     private static async Task EnsureTeacherOwnsLessonAsync(Guid lessonTeacherId, ClaimsPrincipal principal, AbderaDbContext db)

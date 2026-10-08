@@ -9,7 +9,7 @@ import { FormActions, FormMessage, Modal, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { byDisplayName, useStudents, useTeacherOverviews, type Student, type Teacher } from "@/lib/people";
 import { buildProgressAnalysis, type PieceInsight, type ProgressAnalysis } from "@/lib/progress-analysis";
-import { useCreateProgressNote, useRevokeParentComment, useProgressSummary, useSetParentComment, useStudentProgress, type ProgressEntry } from "@/lib/progress";
+import { useCreateProgressNote, useDeleteLessonNote, useRevokeParentComment, useProgressSummary, useSetParentComment, useStudentProgress, type ProgressEntry } from "@/lib/progress";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
@@ -710,8 +710,36 @@ function TimelineEntry({ entry, newer, studentId, canWrite }: { entry: ProgressE
       {carriedOver && <p className="mt-2 text-xs text-[var(--muted)]">{carriedOver}</p>}
 
       {canWrite && <ParentCommentEditor entry={entry} studentId={studentId} />}
+      {canWrite && <DeleteNoteButton entry={entry} studentId={studentId} />}
     </article>
   );
+}
+
+// Öğretmen gelişim ekranında yalnızca kendi notlarını görür (StudentProgress kapsamı), bu
+// yüzden her kayıtta silme gösterilebilir; sunucu ayrıca notun sahibini doğrular.
+function DeleteNoteButton({ entry, studentId }: { entry: ProgressEntry; studentId: string }) {
+  const deleteNote = useDeleteLessonNote(studentId);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    const warning = entry.parentCommentApprovedAt
+      ? "Bu ders notu ve veliye açılmış yorumu kalıcı olarak silinecek. Onaylıyor musun?"
+      : "Bu ders notu kalıcı olarak silinecek. Onaylıyor musun?";
+    if (!window.confirm(warning)) return;
+    setError(null);
+    try {
+      await deleteNote.mutateAsync(entry.id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail ?? err.title : "Ders notu silinemedi.");
+    }
+  }
+
+  return <div className="flex flex-wrap items-center justify-end gap-2">
+    {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+    <button type="button" onClick={() => void remove()} disabled={deleteNote.isPending} className="min-h-11 px-1 text-xs font-bold text-[var(--danger-strong)] disabled:opacity-50">
+      {deleteNote.isPending ? "Siliniyor…" : "Notu sil"}
+    </button>
+  </div>;
 }
 
 function ParentCommentEditor({ entry, studentId }: { entry: ProgressEntry; studentId: string }) {

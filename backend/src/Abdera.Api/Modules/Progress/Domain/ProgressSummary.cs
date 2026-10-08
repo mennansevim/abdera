@@ -4,8 +4,9 @@ namespace Abdera.Api.Modules.Progress.Domain;
 //
 // Yorum öğretmen notlarından AI ile üretilir; her ekran açılışında sağlayıcıya gitmemek için
 // son üretilen metin burada durur ve yalnızca kaynak notlar değiştiğinde yenilenir. Notlar
-// silinmez/güncellenmez (LessonNotes), bu yüzden "not sayısı + en yeni notun zamanı" parmak
-// izi yeni bir not girildiğini güvenle yakalar.
+// güncellenmez (LessonNotes), bu yüzden "not sayısı + en yeni notun zamanı" parmak izi yeni
+// bir not girildiğini güvenle yakalar. Not silinince bu satır da silinir (LessonNotes.DeleteAsync):
+// silinen notu özetleyen yorum ay sonuna kadar gösterilmesin.
 //
 // TeacherId kapsamı: öğretmen gelişim ekranında yalnızca KENDİ notlarını görür
 // (StudentProgress.ListAsync). Başka öğretmenin notlarından üretilmiş bir yorumu ona göstermek

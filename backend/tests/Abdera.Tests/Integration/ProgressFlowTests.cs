@@ -156,6 +156,66 @@ public class ProgressFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.Forbidden, progressResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task Teacher_deletes_own_note_and_it_disappears_from_lesson_and_progress_with_audit()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "progress-delete");
+        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword);
+        var kept = await CreateNoteAsync(teacher, seeded.LessonId, "Kalacak not");
+        var wrong = await CreateNoteAsync(teacher, seeded.LessonId, "Yanlış öğrenciye yazıldı");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await teacher.DeleteAsync($"/api/lesson-notes/{wrong.Id}")).StatusCode);
+
+        var notes = await teacher.GetFromJsonAsync<List<LessonNotes.LessonNoteResponse>>(
+            $"/api/lessons/{seeded.LessonId}/notes", TestJson.Options);
+        Assert.Equal(kept.Id, Assert.Single(notes!).Id);
+        Assert.Equal(HttpStatusCode.NotFound, (await teacher.DeleteAsync($"/api/lesson-notes/{wrong.Id}")).StatusCode);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var audit = await db.AuditLogs.SingleAsync(log => log.EntityId == wrong.Id && log.Action == "lesson_note.deleted");
+        Assert.DoesNotContain("Yanlış öğrenciye", audit.BeforeJson!);
+    }
+
+    [Fact]
+    public async Task Admin_and_other_teacher_cannot_delete_a_lesson_note()
+    {
+        var admin = await CreateAdminClientAsync();
+        var owner = await SeedLessonAsync(admin, "progress-delete-owner");
+        var unrelated = await SeedLessonAsync(admin, "progress-delete-stranger");
+        using var ownerTeacher = await LoginTeacherAsync(owner.TeacherEmail, owner.TeacherTemporaryPassword);
+        using var strangerTeacher = await LoginTeacherAsync(unrelated.TeacherEmail, unrelated.TeacherTemporaryPassword);
+        var note = await CreateNoteAsync(ownerTeacher, owner.LessonId, "Sahibinin notu");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.DeleteAsync($"/api/lesson-notes/{note.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await strangerTeacher.DeleteAsync($"/api/lesson-notes/{note.Id}")).StatusCode);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.True(await db.LessonNotes.AnyAsync(item => item.Id == note.Id));
+    }
+
+    // Silinen notu özetleyen yorum ay sonuna kadar gösterilmemeli: önbellek düşer, kalan
+    // notlardan yeniden üretilir.
+    [Fact]
+    public async Task Deleting_a_note_drops_the_cached_progress_summary()
+    {
+        var generator = new FakeSummaryGenerator();
+        using var factory = WithSummaryGenerator(generator);
+        var admin = await CreateAdminClientAsync(factory);
+        var seeded = await SeedLessonAsync(admin, "summary-delete");
+        using var teacher = await LoginTeacherAsync(seeded.TeacherEmail, seeded.TeacherTemporaryPassword, factory);
+        await CreateNotesAsync(teacher, seeded.LessonId, 4, "Ders notu");
+        var extra = await CreateNoteAsync(teacher, seeded.LessonId, "Silinecek not.");
+        Assert.Equal("Yorum #1", (await GetSummaryAsync(teacher, seeded.StudentId)).Summary);
+
+        (await teacher.DeleteAsync($"/api/lesson-notes/{extra.Id}")).EnsureSuccessStatusCode();
+        var after = await GetSummaryAsync(teacher, seeded.StudentId);
+
+        Assert.Equal("Yorum #2", after.Summary);
+        Assert.Equal(4, after.SourceNoteCount);
+        Assert.DoesNotContain(generator.Requests[1].Notes, item => item.Note == "Silinecek not.");
+    }
+
     // "Ders devam ediyor" kısayolu: eser en son eser yazılmış nottan, ödev en son nottan gelir;
     // ilk dersin öncesi yoktur; başka öğretmen öneriyi de okuyamaz.
     [Fact]

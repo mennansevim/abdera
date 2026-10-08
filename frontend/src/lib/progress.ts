@@ -157,3 +157,18 @@ export function useRevokeParentComment(studentId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["student-progress", studentId] }),
   });
 }
+
+// Öğretmen yalnızca kendi yazdığı notu silebilir (backend LessonNotes.DeleteAsync). Silme
+// "Genel gelişim" yorumunu ve yorum bekleyen ders listesini de etkiler.
+export function useDeleteLessonNote(studentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (noteId: string) => api.delete<void>(`/api/lesson-notes/${noteId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-progress", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["student-progress-summary", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["previous-lesson-note"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-lesson-notes"] });
+    },
+  });
+}

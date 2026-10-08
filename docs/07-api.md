@@ -64,6 +64,7 @@ GET    /api/lessons/{lessonId}/notes            ✅ Admin salt okuma, Teacher ke
 POST   /api/lessons/{lessonId}/notes            ✅ yalnızca Teacher
 PUT    /api/lesson-notes/{noteId}/parent-comment ✅ taslak kaydeder; Approve=true ise veliye açar
 POST   /api/lesson-notes/{noteId}/parent-comment/revoke ✅ onayı geri çeker, audit'e yazar
+DELETE /api/lesson-notes/{noteId}                 ✅ yalnızca notu yazan Teacher (Admin 403) - kalıcı siler, audit'e yazar, öğrencinin gelişim yorumu önbelleğini düşürür
 GET    /api/skill-definitions                        ✅ ortak + enstrümana özel yetenek tanımları (?instrumentId=)
 GET    /api/students/{studentId}/skill-assessments   ✅ Teacher kendi öğrencisi, Admin salt okuma
 POST   /api/students/{studentId}/skill-assessments   ✅ yalnızca Teacher; puan 1–5, ders bağı isteğe bağlı
