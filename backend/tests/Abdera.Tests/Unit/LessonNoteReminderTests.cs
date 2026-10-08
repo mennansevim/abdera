@@ -85,7 +85,7 @@ public class LessonNoteReminderTests
 
         Assert.Contains("Ada Yılmaz (22 Eylül), Can Demir (24 Eylül), Ece Kaya (25 Eylül) ve 2 ders daha", body);
         Assert.DoesNotContain("Mert Şahin", body);
-        Assert.Contains("Yorum bekleyen dersler", body);
+        Assert.Contains("Gelişim ekranındaki \"Yorum bekleyen dersler\"", body);
     }
 
     [Fact]

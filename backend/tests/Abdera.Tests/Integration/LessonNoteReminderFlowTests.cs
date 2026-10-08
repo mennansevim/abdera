@@ -40,12 +40,11 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
 
     // Öğretmen (giriş hesaplı) -> öğrenci -> kayıt -> seri; üretilen ilk iki ders geçmişe
     // taşınır, çünkü yalnızca BİTMİŞ ders yorum bekler.
-    private async Task<SeededLessons> SeedPastLessonsAsync(HttpClient admin)
+    private async Task<SeededLessons> SeedPastLessonsAsync(HttpClient admin, string teacherEmail = "note-reminder-teacher@test.local")
     {
         var instruments = await admin.GetFromJsonAsync<List<Instruments.InstrumentResponse>>("/api/instruments", TestJson.Options);
         var piano = instruments!.Single(i => i.Code == "PIANO");
 
-        var teacherEmail = "note-reminder-teacher@test.local";
         var teacher = (await (await admin.PostAsJsonAsync("/api/teachers",
                 new Teachers.CreateRequest("Yorum", "Öğretmen", [piano.Id], teacherEmail)))
             .Content.ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options))!;
@@ -158,6 +157,46 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
         }
         Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
         Assert.NotNull((await SingleReminderAsync(teacher)).ReadAt);
+    }
+
+    // Kullanıcı bildirimi: "not eklememe rağmen çıkıyor" - zildeki metin, notu az önce yazılmış
+    // dersleri üç saatlik turu bekleyene kadar saymaya devam ediyordu. Not yazılınca/silinince
+    // metin hemen güncellenir; okunmuş hatırlatma bu yüzden okunmamışa dönmez.
+    [Fact]
+    public async Task Writing_or_deleting_a_note_refreshes_the_reminder_text_without_resurfacing_it()
+    {
+        var admin = _factory.CreateClient();
+        (await admin.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "Test1234!"))).EnsureSuccessStatusCode();
+        var seeded = await SeedPastLessonsAsync(admin, "note-refresh-teacher@test.local");
+
+        using var teacher = _factory.CreateClient();
+        (await teacher.PostAsJsonAsync("/api/auth/login", new Login.Request(seeded.TeacherEmail, seeded.TeacherPassword))).EnsureSuccessStatusCode();
+        foreach (var lessonId in new[] { seeded.PresentLessonId, seeded.AbsentLessonId })
+            Assert.Equal(HttpStatusCode.Created, (await teacher.PostAsJsonAsync($"/api/lessons/{lessonId}/attendance",
+                new MarkAttendance.MarkRequest(AttendanceStatus.Present, null))).StatusCode);
+
+        using var cronFactory = WithCronSecret();
+        using var cron = cronFactory.CreateClient();
+        cron.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Secret);
+        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        var reminder = await SingleReminderAsync(teacher);
+        Assert.Equal("2 dersin yorumu bekliyor", reminder.Title);
+        Assert.Contains("Gelişim ekranındaki", reminder.Body);
+        Assert.Equal(HttpStatusCode.OK, (await teacher.PostAsync($"/api/me/notifications/{reminder.Id}/read", null)).StatusCode);
+
+        var created = await teacher.PostAsJsonAsync($"/api/lessons/{seeded.PresentLessonId}/notes",
+            new LessonNotes.CreateRequest("gam", "iyi gidiyor", null, null));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var note = (await created.Content.ReadFromJsonAsync<LessonNotes.LessonNoteResponse>(TestJson.Options))!;
+        var afterNote = await SingleReminderAsync(teacher);
+        Assert.Equal(reminder.Id, afterNote.Id);
+        Assert.Equal("1 dersin yorumu bekliyor", afterNote.Title);
+        Assert.NotNull(afterNote.ReadAt);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await teacher.DeleteAsync($"/api/lesson-notes/{note.Id}")).StatusCode);
+        var afterDelete = await SingleReminderAsync(teacher);
+        Assert.Equal("2 dersin yorumu bekliyor", afterDelete.Title);
+        Assert.NotNull(afterDelete.ReadAt);
     }
 
     private static async Task<StaffNotifications.StaffNotificationResponse> SingleReminderAsync(HttpClient teacher)

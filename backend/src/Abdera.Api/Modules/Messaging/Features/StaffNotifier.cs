@@ -53,6 +53,13 @@ public interface IStaffNotifier
         Guid referenceId,
         DateTimeOffset? resurfaceIfSurfacedBefore = null);
 
+    // Var olan hatırlatmanın metnini sessizce tazeler: satır AÇMAZ, okunmuşu okunmamışa
+    // DÖNDÜRMEZ. Öğretmen bir eksiği kapattığında zildeki metin hâlâ o dersi saymasın diye
+    // (LessonNoteReminderJob.RefreshForTeacherAsync); dürtmek turun işi.
+    /// <returns>Güncellenecek bir satır varsa true.</returns>
+    Task<bool> RefreshTeacherReminderTextAsync(
+        Guid teacherId, StaffNotificationType type, string title, string body, string referenceType, Guid referenceId);
+
     // Hatırlatılacak bir şey kalmadığında (öğretmen eksikleri tamamladı) bekleyen hatırlatmayı
     // okundu sayar - aksi hâlde zil rozeti bitmiş bir iş için saymaya devam ederdi.
     /// <returns>Okunmamış bir hatırlatma kapatıldıysa true.</returns>
@@ -170,6 +177,22 @@ public class StaffNotifier(
         var resurface = resurfaceIfSurfacedBefore is { } threshold && existing.CreatedAt < threshold;
         existing.RefreshReminder(title, body, clock.UtcNow, resurface);
         return resurface;
+    }
+
+    public async Task<bool> RefreshTeacherReminderTextAsync(
+        Guid teacherId, StaffNotificationType type, string title, string body, string referenceType, Guid referenceId)
+    {
+        if (await ResolveTeacherUserIdAsync(teacherId) is not { } recipientId) return false;
+
+        var existing = await db.StaffNotifications.SingleOrDefaultAsync(notification =>
+            notification.UserId == recipientId &&
+            notification.Type == type &&
+            notification.ReferenceType == referenceType &&
+            notification.ReferenceId == referenceId);
+        if (existing is null) return false;
+
+        existing.RefreshReminder(title, body, clock.UtcNow, resurface: false);
+        return true;
     }
 
     public async Task<bool> ClearTeacherReminderAsync(

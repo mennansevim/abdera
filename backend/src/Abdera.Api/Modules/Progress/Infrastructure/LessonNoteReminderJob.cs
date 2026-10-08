@@ -93,15 +93,21 @@ public static class LessonNoteReminderJob
         return new Result(teachersWithPending, pendingLessons, reminded, cleared);
     }
 
-    // Not kaydedilince çağrılır (LessonNotes.CreateAsync): öğretmenin son eksiği de kapandıysa
-    // zildeki hatırlatma bir sonraki turu beklemeden okundu sayılır. Hatırlatma AÇMAZ - o,
-    // günlük turun işi. SaveChanges çağırmaz (IStaffNotifier sözleşmesi); kaydetmek çağıranda.
-    /// <returns>Açık bir hatırlatma kapandıysa true.</returns>
-    public static async Task<bool> ClearIfDoneAsync(AbderaDbContext db, IClock clock, IStaffNotifier notifier, Guid teacherId)
+    // Not kaydedilince ya da silinince çağrılır (LessonNotes): zildeki hatırlatma bir sonraki
+    // turu beklemeden güncel listeyi anlatır. Son eksik de kapandıysa okundu sayılır; kalan
+    // varsa metni tazelenir ama okunmamışa DÖNMEZ - aksi hâlde notu yazılmış dersler zilde
+    // üç saate kadar "yorumu bekliyor" diye sayılmaya devam ediyordu. Hatırlatma AÇMAZ - o,
+    // turun işi. SaveChanges çağırmaz (IStaffNotifier sözleşmesi); kaydetmek çağıranda.
+    /// <returns>Hatırlatma satırı değiştiyse true.</returns>
+    public static async Task<bool> RefreshForTeacherAsync(AbderaDbContext db, IClock clock, IStaffNotifier notifier, Guid teacherId)
     {
-        if (await PendingLessonNotes.AnyForTeacherAsync(db, clock, teacherId)) return false;
-        return await notifier.ClearTeacherReminderAsync(
-            teacherId, StaffNotificationType.LessonNoteMissing, ReferenceType, teacherId);
+        var pending = await PendingLessonNotes.ListForTeacherAsync(db, clock, teacherId);
+        if (pending.Count == 0)
+            return await notifier.ClearTeacherReminderAsync(
+                teacherId, StaffNotificationType.LessonNoteMissing, ReferenceType, teacherId);
+        return await notifier.RefreshTeacherReminderTextAsync(
+            teacherId, StaffNotificationType.LessonNoteMissing, Title(pending.Count), Body(pending, clock),
+            ReferenceType, teacherId);
     }
 
     public static string Title(int pendingCount) =>
@@ -112,9 +118,9 @@ public static class LessonNoteReminderJob
     // Liste en eskiden yeniye geldiği için ilk sıradakiler en çok bekleyenler.
     public static string Body(IReadOnlyList<PendingLessonNotes.PendingLessonNoteResponse> pending, IClock clock)
     {
-        const string whereToAdd = "Ana ekrandaki \"Yorum bekleyen dersler\" kartından ekleyebilirsin.";
+        const string whereToAdd = "Gelişim ekranındaki \"Yorum bekleyen dersler\" kartından ekleyebilirsin.";
         // Kültür burada çözülür, statik alanda değil: ICU yoksa statik başlatıcı sınıfı (ve not
-        // kaydında çağrılan ClearIfDoneAsync'i) tamamen kullanılamaz hâle getirirdi.
+        // kaydında çağrılan RefreshForTeacherAsync'i) tamamen kullanılamaz hâle getirirdi.
         var turkish = CultureInfo.GetCultureInfo("tr-TR");
         var named = pending
             .Take(NamedLessonsInBody)

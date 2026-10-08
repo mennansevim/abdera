@@ -199,9 +199,9 @@ public static class LessonNotes
         await AttendanceFromNote.MarkPresentIfUnmarkedAsync(db, clock, notifier, lesson, AuthContext.GetUserId(principal));
         await db.SaveChangesAsync();
 
-        // Yorum bekleyen son ders de yazıldıysa zildeki hatırlatma hemen kapanır (not önce
-        // kaydedilmeli ki "bekleyen ders kaldı mı" sorgusu onu görsün).
-        if (await LessonNoteReminderJob.ClearIfDoneAsync(db, clock, notifier, lesson.TeacherId))
+        // Zildeki hatırlatma hemen güncellenir: yazılan ders listeden düşer, son eksik de
+        // yazıldıysa kapanır (not önce kaydedilmeli ki "bekleyen ders" sorgusu onu görsün).
+        if (await LessonNoteReminderJob.RefreshForTeacherAsync(db, clock, notifier, lesson.TeacherId))
             await db.SaveChangesAsync();
 
         return Results.Created($"/api/lessons/{lessonId}/notes/{note.Id}",
@@ -291,7 +291,8 @@ public static class LessonNotes
         Guid noteId,
         ClaimsPrincipal principal,
         AbderaDbContext db,
-        IClock clock)
+        IClock clock,
+        IStaffNotifier notifier)
     {
         // Not girme gibi silme de yalnızca notu yazan öğretmenin işi; Admin salt okuma.
         if (AuthContext.IsAdmin(principal))
@@ -333,6 +334,10 @@ public static class LessonNotes
         db.ProgressSummaries.RemoveRange(
             await db.ProgressSummaries.Where(summary => summary.StudentId == studentId).ToListAsync());
         await db.SaveChangesAsync();
+
+        // Silinen not dersi yeniden "yorum bekliyor" yapabilir: zildeki metin onu da saysın.
+        if (await LessonNoteReminderJob.RefreshForTeacherAsync(db, clock, notifier, note.TeacherId))
+            await db.SaveChangesAsync();
         return Results.NoContent();
     }
 
