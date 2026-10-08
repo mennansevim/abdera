@@ -32,7 +32,7 @@ const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/availability", label: "Müsaitlik", icon: "clock", section: "Planlama" },
   { href: "/dashboard/change-requests", label: "Talepler", icon: "swap", section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
-  { href: "/dashboard/costs", label: "Giderler", icon: "bank", section: "Finans" },
+  { href: "/dashboard/costs", label: "Gelir ve gider", icon: "bank", section: "Finans" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", section: "Finans" },
   { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", section: "İletişim" },
   { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
