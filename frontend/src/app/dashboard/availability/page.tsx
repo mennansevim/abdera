@@ -44,8 +44,32 @@ function fitsPreference(day: string, minutes: number, preference: Preference) {
 
 type CellTeacher = { teacher: TeacherOpenSlots; slots: OpenSlot[] };
 
-const loadPercent = (teacher: TeacherOpenSlots) =>
-  teacher.weeklyAvailableMinutes ? Math.round((teacher.weeklyBookedMinutes / teacher.weeklyAvailableMinutes) * 100) : 0;
+type FreeRange = { day: string; start: number; end: number; first: OpenSlot };
+
+// Sunucu 15 dakikalık adımlarla boş BAŞLANGIÇ saatlerini döner; art arda gelen başlangıçlar
+// tek bir boş aralıktır: ilk başlangıçtan son başlangıç + ders süresine kadar. Panel bu
+// aralıkları gösterir ("Cmt 14:45-21:00"), yalnızca seçilen yarım saati değil.
+function freeRanges(slots: OpenSlot[], durationMinutes: number, preference: Preference): FreeRange[] {
+  const ranges: FreeRange[] = [];
+  for (const slot of slots) {
+    const start = toMinutes(slot.startTime);
+    if (!fitsPreference(slot.dayOfWeek, start, preference)) continue;
+    const last = ranges[ranges.length - 1];
+    if (last && last.day === slot.dayOfWeek && start - (last.end - durationMinutes) === 15) {
+      last.end = start + durationMinutes;
+    } else {
+      ranges.push({ day: slot.dayOfWeek, start, end: start + durationMinutes, first: slot });
+    }
+  }
+  return ranges;
+}
+
+const rangeMinutes = (ranges: FreeRange[]) => ranges.reduce((total, range) => total + range.end - range.start, 0);
+const formatHours = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours && rest ? `${hours} sa ${rest} dk` : hours ? `${hours} sa` : `${rest} dk`;
+};
 
 export default function AvailabilityPage() {
   return <AdminGate><AvailabilityBoard /></AdminGate>;
@@ -122,9 +146,12 @@ function AvailabilityBoard() {
     .filter((item) => item.slot.firstOpenDate)
     .sort((a, b) => `${a.slot.firstOpenDate} ${a.slot.startTime}`.localeCompare(`${b.slot.firstOpenDate} ${b.slot.startTime}`))[0];
 
-  // Aynı saatte boş olanlar arasında en az dolu öğretmen başta: yükü dengeli dağıtmak için.
+  // Aynı saatte boş olanlar arasında velinin tercihine en çok boş vakti olan başta: en fazla
+  // seçeneği sunan öğretmen. (Önceki "doluluk %" tüm gün açık tanımlanan pencereye göre
+  // hesaplandığından okul sonrası seçeneği az olan öğretmeni boş gösteriyordu.)
   const selectedTeachers = [...(selected ? cells.get(`${selected.day}|${selected.row}`) ?? [] : [])]
-    .sort((a, b) => loadPercent(a.teacher) - loadPercent(b.teacher));
+    .map((entry) => ({ ...entry, ranges: freeRanges(entry.teacher.slots, durationMinutes, preference) }))
+    .sort((a, b) => rangeMinutes(b.ranges) - rangeMinutes(a.ranges));
 
   // Veliye okunacak/gönderilecek kısa liste: her günden en erken saat, en fazla beş seçenek.
   // Veli henüz kayıtlı değil, WhatsApp onayı yok - bu yüzden gönderim değil, panoya kopya.
@@ -217,6 +244,7 @@ function AvailabilityBoard() {
           panelRef={panelRef}
           selected={selected}
           entries={selectedTeachers}
+          preference={preference}
           instrumentId={instrumentId}
           durationMinutes={durationMinutes}
           instrumentNames={new Map((instrumentsQuery.data ?? []).map((i) => [i.id, i.name]))}
@@ -288,10 +316,11 @@ function Row({ row, days, cells, preference, selected, onSelect }: {
   );
 }
 
-function SelectedPanel({ panelRef, selected, entries, instrumentId, durationMinutes, instrumentNames }: {
+function SelectedPanel({ panelRef, selected, entries, preference, instrumentId, durationMinutes, instrumentNames }: {
   panelRef: RefObject<HTMLElement | null>;
   selected: { day: string; row: number } | null;
-  entries: CellTeacher[];
+  entries: (CellTeacher & { ranges: FreeRange[] })[];
+  preference: Preference;
   instrumentId: string;
   durationMinutes: number;
   instrumentNames: Map<string, string>;
@@ -299,10 +328,12 @@ function SelectedPanel({ panelRef, selected, entries, instrumentId, durationMinu
   if (!selected) {
     return (
       <aside ref={panelRef} className="app-card p-4">
-        <EmptyState icon="clock" title="Bir saat seç" description="Izgarada bir hücreye dokun; o saatte her hafta boş olan öğretmenler burada listelenir." />
+        <EmptyState icon="clock" title="Bir saat seç" description="Izgarada bir hücreye dokun; o saatte boş olan öğretmenler ve haftanın tüm boş aralıkları burada listelenir." />
       </aside>
     );
   }
+
+  const preferenceLabel = PREFERENCES.find((p) => p.key === preference)!.label.toLocaleLowerCase("tr-TR");
 
   return (
     <aside ref={panelRef} className="app-card scroll-mt-20 p-4" aria-live="polite">
@@ -312,39 +343,64 @@ function SelectedPanel({ panelRef, selected, entries, instrumentId, durationMinu
         <p className="text-meta mt-4 rounded-xl bg-[var(--surface-muted)] px-3 py-3">Bu saatte boş öğretmen yok. Yeşil hücrelere bak.</p>
       ) : (
         <ul className="mt-3 divide-y divide-[var(--line)]">
-          {entries.map(({ teacher, slots }) => {
-            const load = loadPercent(teacher);
+          {entries.map(({ teacher, slots, ranges }) => {
             const lessonInstrumentId = instrumentId || teacher.instrumentIds[0] || "";
+            const enrollHref = (slot: OpenSlot, minutes: number) => {
+              const params = new URLSearchParams({
+                teacherId: teacher.teacherId, instrumentId: lessonInstrumentId, day: slot.dayOfWeek, time: hhmm(minutes), duration: String(durationMinutes),
+              });
+              if (slot.firstOpenDate) params.set("startedAt", slot.firstOpenDate);
+              return `/dashboard/students/new?${params}`;
+            };
+            const days = WEEK_DAYS.filter((day) => ranges.some((range) => range.day === day));
             return (
               <li key={teacher.teacherId} className="py-3">
                 <p className="text-sm font-bold">{teacher.teacherName}</p>
                 <p className="text-meta">
-                  {teacher.instrumentIds.map((id) => instrumentNames.get(id)).filter(Boolean).join(", ")} · haftada {teacher.weeklyLessonCount} ders · doluluk %{load}
+                  {teacher.instrumentIds.map((id) => instrumentNames.get(id)).filter(Boolean).join(", ")} · haftada {teacher.weeklyLessonCount} ders
+                </p>
+                <p className="text-meta font-semibold text-[var(--success-strong)]">
+                  {preference === "any" ? "Haftada" : `${preferenceLabel[0]!.toLocaleUpperCase("tr-TR")}${preferenceLabel.slice(1)}`} {formatHours(rangeMinutes(ranges))} boş
                 </p>
                 {teacher.upcomingTimeOff.map((off) => (
                   <p key={off.startsOn} className="text-meta mt-1 font-semibold text-[var(--warning-strong)]">
                     İzinli: {formatDate(off.startsOn)} – {formatDate(off.endsOn)}
                   </p>
                 ))}
+
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {slots.map((slot) => {
-                    const time = slot.startTime.slice(0, 5);
-                    const params = new URLSearchParams({
-                      teacherId: teacher.teacherId, instrumentId: lessonInstrumentId, day: slot.dayOfWeek, time, duration: String(durationMinutes),
-                    });
-                    if (slot.firstOpenDate) params.set("startedAt", slot.firstOpenDate);
-                    return (
-                      <Link
-                        key={slot.startTime}
-                        href={`/dashboard/students/new?${params}`}
-                        className="pressable rounded-xl border border-[var(--line)] bg-white px-2.5 py-1.5 text-left hover:border-[var(--brand)]"
-                      >
-                        <span className="block text-xs font-bold">{time} · Kayıt aç</span>
-                        <span className="block text-[.75rem] text-[var(--muted)]">{slot.firstOpenDate ? `İlk ders ${formatDate(slot.firstOpenDate)}` : "8 hafta içinde boş tarih yok"}</span>
-                      </Link>
-                    );
-                  })}
+                  {slots.map((slot) => (
+                    <Link
+                      key={slot.startTime}
+                      href={enrollHref(slot, toMinutes(slot.startTime))}
+                      className="pressable rounded-xl border border-[var(--brand)] bg-[var(--brand-soft)] px-2.5 py-1.5 text-left"
+                    >
+                      <span className="block text-xs font-bold text-[var(--brand-strong)]">{slot.startTime.slice(0, 5)} · Kayıt aç</span>
+                      <span className="block text-[.75rem] text-[var(--muted)]">{slot.firstOpenDate ? `İlk ders ${formatDate(slot.firstOpenDate)}` : "8 hafta içinde boş tarih yok"}</span>
+                    </Link>
+                  ))}
                 </div>
+
+                <p className="text-meta mt-3 font-semibold">Haftanın tüm boş aralıkları</p>
+                <dl className="mt-1 space-y-1">
+                  {days.map((day) => (
+                    <div key={day} className={`flex items-start gap-2 rounded-lg px-1.5 py-1 ${day === selected.day ? "bg-[var(--surface-muted)]" : ""}`}>
+                      <dt className="w-9 shrink-0 pt-1 text-[.75rem] font-bold text-[var(--muted)]">{DAY_SHORT[day]}</dt>
+                      <dd className="flex flex-wrap gap-1">
+                        {ranges.filter((range) => range.day === day).map((range) => (
+                          <Link
+                            key={range.start}
+                            href={enrollHref(range.first, range.start)}
+                            title={`${DAY_NAMES_TR[day]} ${hhmm(range.start)} başlangıçla kayıt aç; saat formda değiştirilebilir`}
+                            className="pressable rounded-lg border border-[var(--line)] bg-white px-2 py-1 text-xs font-semibold tabular-nums hover:border-[var(--brand)] hover:text-[var(--brand)]"
+                          >
+                            {hhmm(range.start)}–{hhmm(range.end)}
+                          </Link>
+                        ))}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               </li>
             );
           })}
