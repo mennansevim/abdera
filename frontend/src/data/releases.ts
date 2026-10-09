@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.09.3",
+    date: "2026-10-09",
+    items: [
+      { audience: "admin", text: "Gelir ve gider ekranında yeni Kârlılık sekmesi: bu ay cebinde ne kaldığını ve son 6 ayın gidişini tek grafikte görürsün; öğretmen ücretleri ve sabit giderler düşülmüş hâliyle." },
+      { audience: "admin", text: "\"Bu ay ne yapmalı?\" bölümü okulun kendi verisine göre öneriler sunar, ayda bir de kısa bir yorum yazar. \"Düzeltilmesi gerekenler\" ise ücreti girilmemiş öğretmen, alınmamış yoklama gibi hesabı bozan eksikleri listeler." },
+      { audience: "admin", text: "\"Fikirlerim\"e yeni öğretmen, grup dersi, yeni branş ya da indirim kampanyası gibi fikirlerini yaz; yazdıkça aylık kâra ne katacağı hesaplanır. Deneysel \"Hedef belirle\" penceresi bunun yerine kaldırıldı." },
+    ],
+  },
+  {
     version: "2026.10.09.2",
     date: "2026-10-09",
     items: [
