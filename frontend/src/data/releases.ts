@@ -22,6 +22,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.09.2",
+    date: "2026-10-09",
+    items: [
+      { audience: "admin", text: "Yanlış tarihle girilmiş ödemelerin tarihi düzeltilebilir: Gelir ve gider > Gelirler'de \"Tarih düzelt\" ile ödemeleri seç, gerçek ödeme gününü gir. Geçen ay alınıp sonradan girilen paralar doğru ayın gelirine geçer; ödeme kaydı silinmez." },
+      { audience: "admin", text: "Tahsilat defteri günlere göre açılıp kapanır; her günün başlığında toplam, ödeme sayısı ve gecikmiş/peşin ödemeler görünür. Kendi ayı, Gecikmiş ve Peşin süzgeçleriyle aradığın ödemeyi daha kolay bulursun." },
+      { audience: "all", text: "Telefonda takvim, yoklama, öğrenci künyesi ve özet kartları ekrana sığar; yazılar ve tarih kutuları artık kesilmez ya da taşmaz." },
+      { audience: "admin", text: "Mesaj Merkezi telefonda tablo yerine okunaklı bir liste olarak açılır. Talepler menüden kalktı; bekleyen talepler Bugün ekranındaki karttan ve zilden açılır." },
+    ],
+  },
+  {
     version: "2026.10.09",
     date: "2026-10-09",
     items: [
