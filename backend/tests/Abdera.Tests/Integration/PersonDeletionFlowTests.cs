@@ -171,6 +171,10 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         db.StaffNotifications.Add(StaffNotification.Create(
             await db.Users.Select(u => u.Id).FirstAsync(), StaffNotificationType.LessonMoved, "Ders programı değişti", "test",
             "lesson_series", seriesIds[0], DateTimeOffset.UtcNow));
+        var correctedPayment = await db.Payments.FirstAsync(p => paymentIds.Contains(p.Id));
+        db.PaymentDateCorrections.Add(PaymentDateCorrection.Create(
+            correctedPayment.Id, correctedPayment.PaymentDate, correctedPayment.PaymentDate.AddDays(-1), "Geç işlendi",
+            DateOnly.MaxValue, await db.Users.Select(u => u.Id).FirstAsync(), DateTimeOffset.UtcNow));
         await db.SaveChangesAsync();
 
         var deleted = await admin.DeleteAsync($"/api/students/{seeded.StudentId}?force=true");
@@ -192,6 +196,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.Receivables.AnyAsync(r => receivableIds.Contains(r.Id)));
         Assert.False(await db.Payments.AnyAsync(p => paymentIds.Contains(p.Id)));
         Assert.False(await db.PaymentCorrections.AnyAsync(c => paymentIds.Contains(c.PaymentId)));
+        Assert.False(await db.PaymentDateCorrections.AnyAsync(c => paymentIds.Contains(c.PaymentId)));
         Assert.False(await db.MakeupCredits.AnyAsync(c => c.StudentId == seeded.StudentId));
         Assert.False(await db.StudentGuardians.AnyAsync(sg => sg.StudentId == seeded.StudentId));
         Assert.False(await db.StudentPhotos.AnyAsync(p => p.StudentId == seeded.StudentId));

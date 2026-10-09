@@ -29,6 +29,8 @@ export interface IncomeEntry {
   period: string;
   prepayPlanMonths: number | null;
   corrected: boolean;
+  // Tarihi düzeltilmiş ödemede ilk girilen tarih (date etkin tarihtir).
+  originalDate: string | null;
 }
 
 // Aidatlara düşen tahsilatları ödeme tarihine göre verir. Düzeltilmiş bir tahsilatın geçerli
@@ -48,6 +50,7 @@ export function collectedPayments(dues: BillingDue[]): IncomeEntry[] {
           id: payment.id, date: payment.paymentDate, amount: latest ? latest.amount : payment.amount, method: payment.method,
           reference: payment.reference, studentName: due.studentName, teacherName: due.teacherName, instrumentName: due.instrumentName,
           courseKind: due.courseKind, period: due.period, prepayPlanMonths: payment.prepayPlanMonths, corrected: Boolean(latest),
+          originalDate: payment.originalPaymentDate ?? null,
         };
       })
       .filter((entry) => entry.amount !== 0);
@@ -63,7 +66,7 @@ const BUCKET_HINT: Record<IncomeBucket, string> = {
   late: "Önceki ayların aidatı bu dönemde ödendi",
   advance: "Sonraki ayların aidatı bu dönemde peşin alındı",
 };
-const BUCKET_COLOR: Record<IncomeBucket, string> = { current: "var(--success)", late: "#b7791f", advance: "#3f6fb0" };
+export const BUCKET_COLOR: Record<IncomeBucket, string> = { current: "var(--success)", late: "#b7791f", advance: "#3f6fb0" };
 const BUCKETS: IncomeBucket[] = ["current", "late", "advance"];
 
 export function bucketOf(entry: Pick<IncomeEntry, "date" | "period">): IncomeBucket {

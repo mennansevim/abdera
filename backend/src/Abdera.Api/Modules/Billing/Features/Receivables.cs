@@ -26,7 +26,9 @@ public static class Receivables
         decimal? PreviousAmount = null,
         DateTimeOffset? RecordedAt = null,
         Guid? PrepayPlanId = null,
-        int? PrepayPlanMonths = null);
+        int? PrepayPlanMonths = null,
+        DateOnly? OriginalPaymentDate = null,
+        string? DateCorrectionReason = null);
     public record ReceivableResponse(
         Guid Id, Guid EnrollmentId, string Period, decimal Amount, string Currency,
         DateOnly DueDate, ReceivableStatus Status, decimal TotalPaid, List<PaymentSummary> Payments,
@@ -135,15 +137,45 @@ public static class Receivables
             payment => corrections.LastOrDefault(correction => correction.PaymentId == payment.Id)?.CorrectedAmount ?? payment.Amount);
     }
 
+    // Ödemenin etkin tarihi: en son tarih düzeltmesi, yoksa girildiği tarih (PaymentDateCorrection).
+    internal static async Task<Dictionary<Guid, DateOnly>> ComputeEffectivePaymentDatesAsync(
+        IEnumerable<Guid> paymentIds,
+        AbderaDbContext db)
+    {
+        var ids = paymentIds.Distinct().ToList();
+        var payments = await db.Payments.Where(payment => ids.Contains(payment.Id))
+            .Select(payment => new { payment.Id, payment.PaymentDate })
+            .ToListAsync();
+        var corrections = await LatestDateCorrectionsAsync(ids, db);
+        return payments.ToDictionary(
+            payment => payment.Id,
+            payment => corrections.TryGetValue(payment.Id, out var correction) ? correction.CorrectedDate : payment.PaymentDate);
+    }
+
+    private static async Task<Dictionary<Guid, PaymentDateCorrection>> LatestDateCorrectionsAsync(List<Guid> paymentIds, AbderaDbContext db)
+    {
+        var corrections = await db.PaymentDateCorrections
+            .Where(correction => paymentIds.Contains(correction.PaymentId))
+            .ToListAsync();
+        return corrections
+            .GroupBy(correction => correction.PaymentId)
+            .ToDictionary(group => group.Key, group => group.OrderBy(item => item.CreatedAt).ThenBy(item => item.Id).Last());
+    }
+
     internal static async Task<Dictionary<Guid, List<PaymentSummary>>> ComputePaymentsAsync(IEnumerable<Guid> receivableIds, AbderaDbContext db)
     {
         var ids = receivableIds.ToList();
-        var payments = await db.Payments
+        var stored = await db.Payments
             .Where(p => ids.Contains(p.ReceivableId))
-            .OrderByDescending(p => p.PaymentDate)
-            .ThenByDescending(p => p.CreatedAt)
             .ToListAsync();
-        var paymentIds = payments.Select(payment => payment.Id).ToList();
+        var paymentIds = stored.Select(payment => payment.Id).ToList();
+        var dateCorrections = await LatestDateCorrectionsAsync(paymentIds, db);
+        DateOnly EffectiveDate(Payment payment) =>
+            dateCorrections.TryGetValue(payment.Id, out var correction) ? correction.CorrectedDate : payment.PaymentDate;
+        var payments = stored
+            .OrderByDescending(EffectiveDate)
+            .ThenByDescending(p => p.CreatedAt)
+            .ToList();
         var corrections = await db.PaymentCorrections
             .Where(correction => paymentIds.Contains(correction.PaymentId))
             .OrderByDescending(correction => correction.CreatedAt)
@@ -156,10 +188,12 @@ public static class Receivables
                 var history = new List<PaymentSummary>
                 {
                     new(
-                        payment.Id, payment.Amount, payment.PaymentDate, payment.Method, payment.Reference, payment.Note,
+                        payment.Id, payment.Amount, EffectiveDate(payment), payment.Method, payment.Reference, payment.Note,
                         RecordedAt: payment.CreatedAt,
                         PrepayPlanId: payment.PrepayPlanId,
-                        PrepayPlanMonths: payment.PrepayPlanMonths),
+                        PrepayPlanMonths: payment.PrepayPlanMonths,
+                        OriginalPaymentDate: dateCorrections.ContainsKey(payment.Id) ? payment.PaymentDate : null,
+                        DateCorrectionReason: dateCorrections.TryGetValue(payment.Id, out var dateCorrection) ? dateCorrection.Reason : null),
                 };
                 history.AddRange(corrections
                     .Where(correction => correction.PaymentId == payment.Id)

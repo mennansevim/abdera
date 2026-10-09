@@ -161,6 +161,22 @@ public class BillingDomainTests
     }
 
     [Fact]
+    public void PaymentDateCorrection_rejects_future_unchanged_and_unexplained_dates()
+    {
+        var paymentId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var today = new DateOnly(2026, 10, 9);
+        var correction = PaymentDateCorrection.Create(paymentId, new DateOnly(2026, 10, 2), new DateOnly(2026, 9, 28), " Eylül'de alındı ", today, actorId, Now);
+
+        Assert.Equal(new DateOnly(2026, 10, 2), correction.PreviousDate);
+        Assert.Equal(new DateOnly(2026, 9, 28), correction.CorrectedDate);
+        Assert.Equal("Eylül'de alındı", correction.Reason);
+        Assert.Throws<ArgumentOutOfRangeException>(() => PaymentDateCorrection.Create(paymentId, today, today.AddDays(1), "ileri", today, actorId, Now));
+        Assert.Throws<ArgumentException>(() => PaymentDateCorrection.Create(paymentId, today, today, "aynı", today, actorId, Now));
+        Assert.Throws<ArgumentException>(() => PaymentDateCorrection.Create(paymentId, today, today.AddDays(-1), " ", today, actorId, Now));
+    }
+
+    [Fact]
     public void PaymentCorrection_preserves_before_and_after_amounts_and_requires_reason()
     {
         var paymentId = Guid.NewGuid();

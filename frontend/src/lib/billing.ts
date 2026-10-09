@@ -141,6 +141,9 @@ export interface PaymentRecord {
   recordedAt: string | null;
   prepayPlanId: string | null;
   prepayPlanMonths: number | null;
+  // Tarihi sonradan düzeltilmiş ödemede ilk girilen tarih; paymentDate etkin (düzeltilmiş) tarihtir.
+  originalPaymentDate?: string | null;
+  dateCorrectionReason?: string | null;
 }
 
 export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other";
@@ -342,6 +345,23 @@ export function useCorrectPayment(studentId: string) {
       api.post(`/api/payments/${paymentId}/corrections`, { correctedAmount, reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["student-billing", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+    },
+  });
+}
+
+// Ödeme tarihi düzeltmesi (PaymentCorrections.cs > CorrectDatesAsync). Tahsilat penceresi tarihi
+// "bugün" ile doldurur; geçen ay alınıp sonradan girilen para yanlış aya gelir yazılır. Ödeme satırı
+// değişmez, düzeltme ayrı kayıttır. Peşin plan parçalarını sunucu birlikte taşır.
+export function useCorrectPaymentDates() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { paymentIds: string[]; paymentDate: string; reason: string }) =>
+      api.post<{ paymentId: string; previousDate: string; correctedDate: string }[]>("/api/payments/date-corrections", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
       queryClient.invalidateQueries({ queryKey: ["billing-board"] });

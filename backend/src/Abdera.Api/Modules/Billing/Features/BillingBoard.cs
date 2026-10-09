@@ -71,11 +71,14 @@ public static class BillingBoard
             .ToListAsync();
         var receivableIds = receivables.Select(r => r.Id).ToList();
         var totals = await Receivables.ComputeTotalsPaidAsync(receivableIds, db);
-        var lastPayments = await db.Payments.AsNoTracking()
+        var boardPayments = await db.Payments.AsNoTracking()
             .Where(p => receivableIds.Contains(p.ReceivableId))
+            .Select(p => new { p.Id, p.ReceivableId })
+            .ToListAsync();
+        var paymentDates = await Receivables.ComputeEffectivePaymentDatesAsync(boardPayments.Select(p => p.Id), db);
+        var lastPayments = boardPayments
             .GroupBy(p => p.ReceivableId)
-            .Select(g => new { ReceivableId = g.Key, Last = g.Max(p => p.PaymentDate) })
-            .ToDictionaryAsync(x => x.ReceivableId, x => x.Last);
+            .ToDictionary(g => g.Key, g => g.Max(p => paymentDates[p.Id]));
 
         var pricer = await TuitionPricer.LoadAsync(db);
 

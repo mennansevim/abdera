@@ -387,6 +387,51 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(HttpStatusCode.Forbidden, byTeacher.StatusCode);
     }
 
+    // Geçen ay alınan para tahsilat penceresinin varsayılanı "bugün" ile işlenince gelir yanlış
+    // aya yazılır. Tarih düzeltmesi ödeme satırına dokunmaz; etkin tarih aidat listesine yansır
+    // (Gelir ve gider ekranı buradan okur). İleri tarih ve aynı tarih reddedilir.
+    [Fact]
+    public async Task Correcting_a_payment_date_moves_it_without_touching_the_payment_row()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "TarihDuzelt", piano);
+        var student = await CreateStudentAsync(admin, "TarihDuzelt");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+
+        var period = TestPeriods.Current(_factory.Services);
+        var receivable = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, period)));
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var enteredOn = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var payment = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
+            admin, receivable.Id,
+            new Payments.CreateRequest(receivable.Amount, enteredOn, PaymentMethod.Cash, null, null)));
+
+        var realDate = enteredOn.AddDays(-20);
+        var corrected = await admin.PostAsJsonAsync("/api/payments/date-corrections",
+            new PaymentCorrections.DateCorrectionRequest([payment.Id], realDate, "Eylül'de alındı, 2 Ekim'de girildi"));
+        Assert.Equal(HttpStatusCode.OK, corrected.StatusCode);
+
+        db.ChangeTracker.Clear();
+        Assert.Equal(enteredOn, (await db.Payments.AsNoTracking().SingleAsync(p => p.Id == payment.Id)).PaymentDate);
+        Assert.True(await db.AuditLogs.AsNoTracking().AnyAsync(log => log.Action == "payment.date_corrected" && log.EntityId == payment.Id));
+
+        var dues = await ReadAsync<List<StudentBilling.DueListItemResponse>>(await admin.GetAsync("/api/billing/dues"));
+        var listed = dues.Single(item => item.Id == receivable.Id).Payments.Single(item => item.Id == payment.Id);
+        Assert.Equal(realDate, listed.PaymentDate);
+        Assert.Equal(enteredOn, listed.OriginalPaymentDate);
+
+
+        var same = await admin.PostAsJsonAsync("/api/payments/date-corrections",
+            new PaymentCorrections.DateCorrectionRequest([payment.Id], realDate, "tekrar"));
+        Assert.Equal(HttpStatusCode.Conflict, same.StatusCode);
+        var future = await admin.PostAsJsonAsync("/api/payments/date-corrections",
+            new PaymentCorrections.DateCorrectionRequest([payment.Id], new DateOnly(2099, 1, 1), "ileri"));
+        Assert.Equal(HttpStatusCode.BadRequest, future.StatusCode);
+    }
+
     // --- Yıl başı peşin ödeme kampanyası ------------------------------------------
 
     // Toplu ödeme ekranı öğrenciyi /api/students/search ile bulur ve seçtiği satırın

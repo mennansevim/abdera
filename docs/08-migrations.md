@@ -268,3 +268,9 @@ alt dalı (Gitar -> "Elektro", "Bas"). Yalnızca bilgi etiketi: enstrüman tek k
 **AddGuardianWelcomeMessagePending** (People): `guardians.welcome_message_pending boolean NOT NULL DEFAULT false`
 (R2). Yeni veli uygulama tarafında `true` ile doğar; mevcut satırlar `false` kalır, yani migration öncesi
 hiçbir veliye onaysız mesaj gitmez. `Down()` kolonu düşürür.
+
+**AddPaymentDateCorrections** (Billing): `payment_date_corrections` tablosu - ödeme tarihinin
+düzeltilmesi, `payment_corrections` ile aynı yalnızca-ekleme ilkesiyle (`payments` satırı değişmez).
+Tahsilat penceresi tarihi "bugün" ile doldurduğu için geçen ay alınıp sonradan işlenen para yanlış aya
+gelir yazılıyordu. FK `payments(id)` Restrict, `(payment_id, created_at)` index, `CHECK (corrected_date <> previous_date)`.
+`PersonEraser` tabloyu ödemelerle birlikte temizler. `Down()` tabloyu düşürür.

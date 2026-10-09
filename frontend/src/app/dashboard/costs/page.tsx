@@ -13,8 +13,8 @@ import {
   useExpenses, useRecurringExpenses,
   type CourseKind, type Expense, type ExpenseCategory, type PaymentMethod, type RecurringExpense,
 } from "@/lib/billing";
-import { methodLabel } from "../billing/collect-sheet";
 import { BUCKET_LABEL, collectedPayments, downloadIncomeCsv, fileSlug, IncomeBreakdownModal, splitByBucket, type IncomeEntry } from "./income-breakdown";
+import { IncomeLedger } from "./income-ledger";
 import { RevenueTargetModal } from "./revenue-target";
 
 export default function CostsPage() {
@@ -309,7 +309,7 @@ function CostDashboard() {
           <Panel
             flush
             title="Tahsilat defteri"
-            meta={`${periodLabel(period)} · salt okunur`}
+            meta={`${periodLabel(period)} · ${listedIncome.length} ödeme`}
             actions={
               <>
                 <SearchInput value={incomeSearch} onChange={setIncomeSearch} label="Tahsilatlarda ara" placeholder="Öğrenci veya enstrüman" />
@@ -317,7 +317,7 @@ function CostDashboard() {
               </>
             }
           >
-            <IncomeLedger entries={listedIncome} scope={period.scope} loading={loading} />
+            <IncomeLedger entries={listedIncome} scope={period.scope} loading={loading} search={incomeSearch} />
           </Panel>
         </>
       )}
@@ -525,44 +525,6 @@ function CashFlowTable({ columns, showTotal, selected, onDrill, onIncome, loadin
         </table>
       </div>
       <p className="text-meta border-t border-[var(--line)] px-4 py-2">Gelir ödeme tarihine göre sayılır. &quot;plan&quot; sütunları gelecek aylar: yalnızca sabit giderler var, henüz ödenmedi.</p>
-    </div>
-  );
-}
-
-// Tahsilat defteri: aylıkta güne, yıllıkta aya göre gruplu; yalnızca okunur. Düzeltme gerekiyorsa
-// Aidatlar ekranındaki ödeme geçmişinden yapılır.
-function IncomeLedger({ entries, scope, loading }: { entries: IncomeEntry[]; scope: Scope; loading: boolean }) {
-  const groups = useMemo(() => {
-    const map = new Map<string, IncomeEntry[]>();
-    for (const entry of entries) {
-      const key = scope === "year" ? entry.date.slice(0, 7) : entry.date;
-      map.set(key, [...(map.get(key) ?? []), entry]);
-    }
-    return Array.from(map.entries());
-  }, [entries, scope]);
-
-  if (loading) return <p className="text-meta px-4 py-6 text-center">Yükleniyor…</p>;
-  if (!entries.length) return <p className="text-meta px-4 py-6 text-center">Bu dönemde tahsilat yok. Aidat tahsilatı Aidatlar ekranından yapılır.</p>;
-
-  return (
-    <div>
-      {groups.map(([key, rows]) => {
-        const [year, month, day] = key.split("-").map(Number);
-        const heading = scope === "year" ? `${MONTHS[month - 1]} ${year}` : `${day} ${MONTHS[month - 1]} ${year}, ${WEEKDAYS[(new Date(year, month - 1, day).getDay() + 6) % 7]}`;
-        return (
-          <LedgerGroup key={key} heading={heading} total={rows.reduce((sum, row) => sum + row.amount, 0)}>
-            {rows.map((entry) => (
-              <LedgerRow
-                key={entry.id}
-                title={entry.studentName}
-                meta={`${entry.instrumentName} · ${monthLabel(entry.period)} aidatı · ${methodLabel(entry.method)}${scope === "year" ? ` · ${Number(entry.date.slice(8, 10))} ${MONTHS_SHORT[month - 1]}` : ""}`}
-                amount={`+${entry.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} TRY`}
-                tone="success"
-              />
-            ))}
-          </LedgerGroup>
-        );
-      })}
     </div>
   );
 }

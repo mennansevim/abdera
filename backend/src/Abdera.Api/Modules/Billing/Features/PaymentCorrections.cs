@@ -18,10 +18,71 @@ public static class PaymentCorrections
         string Reason,
         DateTimeOffset CreatedAt);
 
+    public record DateCorrectionRequest(List<Guid> PaymentIds, DateOnly PaymentDate, string Reason);
+    public record DateCorrectionResponse(Guid PaymentId, DateOnly PreviousDate, DateOnly CorrectedDate);
+
     public static void MapPaymentCorrections(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/payments/{paymentId:guid}/corrections", CreateAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        app.MapPost("/api/payments/date-corrections", CorrectDatesAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+    }
+
+    // Tahsilat penceresi ödeme tarihini "bugün" ile doldurur; geçen ay alınan para sonradan
+    // işlenince gelir yanlış aya yazılır. Birden fazla ödeme tek istekte, tek transaction'da
+    // aynı tarihe çekilir. Peşin ödeme planının parçaları tek bir tahsilattır: biri seçilince
+    // planın tamamı birlikte taşınır, yoksa tek bir ödeme iki aya bölünürdü.
+    private static async Task<IResult> CorrectDatesAsync(
+        DateCorrectionRequest request,
+        ClaimsPrincipal principal,
+        AbderaDbContext db,
+        IClock clock)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (request.PaymentIds is not { Count: > 0 }) errors["paymentIds"] = ["En az bir ödeme seçilmeli."];
+        if (string.IsNullOrWhiteSpace(request.Reason)) errors["reason"] = ["Düzeltme nedeni zorunludur."];
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        if (request.PaymentDate > today) errors["paymentDate"] = ["Ödeme tarihi ileri bir gün olamaz."];
+        if (errors.Count > 0) throw new ValidationFailedException(errors);
+
+        var requestedIds = request.PaymentIds!.Distinct().ToList();
+        var selected = await db.Payments.Where(item => requestedIds.Contains(item.Id)).ToListAsync();
+        if (selected.Count != requestedIds.Count) throw new NotFoundException("Ödeme bulunamadı.");
+        var planIds = selected.Where(item => item.PrepayPlanId.HasValue).Select(item => item.PrepayPlanId!.Value).Distinct().ToList();
+        var payments = planIds.Count == 0
+            ? selected
+            : await db.Payments.Where(item => requestedIds.Contains(item.Id) || (item.PrepayPlanId.HasValue && planIds.Contains(item.PrepayPlanId.Value))).ToListAsync();
+
+        var receivableIds = payments.Select(item => item.ReceivableId).Distinct().ToList();
+        if (await db.Receivables.AnyAsync(item => receivableIds.Contains(item.Id) && item.Status == ReceivableStatus.Cancelled))
+            throw new ConflictException("İptal edilmiş bir aidatın ödemesinin tarihi düzeltilemez.");
+
+        var currentDates = await Receivables.ComputeEffectivePaymentDatesAsync(payments.Select(item => item.Id), db);
+        var changing = payments.Where(item => currentDates[item.Id] != request.PaymentDate).ToList();
+        if (changing.Count == 0) throw new ConflictException("Seçilen ödemelerin tarihi zaten bu gün.");
+
+        var actorId = AuthContext.GetUserId(principal);
+        var now = clock.UtcNow;
+        var results = new List<DateCorrectionResponse>();
+        foreach (var payment in changing)
+        {
+            var previous = currentDates[payment.Id];
+            var correction = PaymentDateCorrection.Create(payment.Id, previous, request.PaymentDate, request.Reason, today, actorId, now);
+            db.PaymentDateCorrections.Add(correction);
+            db.AuditLogs.Add(AuditLog.Record(
+                actorId,
+                "payment.date_corrected",
+                nameof(Payment),
+                payment.Id,
+                now,
+                JsonSerializer.Serialize(new { PaymentDate = previous }),
+                JsonSerializer.Serialize(new { PaymentDate = request.PaymentDate, Reason = correction.Reason, CorrectionId = correction.Id })));
+            results.Add(new DateCorrectionResponse(payment.Id, previous, request.PaymentDate));
+        }
+
+        await db.SaveChangesAsync();
+        return Results.Ok(results);
     }
 
     private static async Task<IResult> CreateAsync(

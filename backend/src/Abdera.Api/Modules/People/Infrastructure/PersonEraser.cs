@@ -183,6 +183,7 @@ public static class PersonEraser
             SELECT id FROM payments WHERE receivable_id IN (SELECT id FROM _rec);
 
         DELETE FROM payment_corrections WHERE payment_id IN (SELECT id FROM _pay);
+        DELETE FROM payment_date_corrections WHERE payment_id IN (SELECT id FROM _pay);
         DELETE FROM payments WHERE id IN (SELECT id FROM _pay);
 
         -- Banka işlemi harici bir kayıt: silinmez, yalnızca artık var olmayan aidata olan
@@ -275,6 +276,7 @@ public static class PersonEraser
             SELECT id FROM payments WHERE receivable_id IN (SELECT id FROM _trec);
 
         DELETE FROM payment_corrections WHERE payment_id IN (SELECT id FROM _tpay);
+        DELETE FROM payment_date_corrections WHERE payment_id IN (SELECT id FROM _tpay);
         DELETE FROM payments WHERE id IN (SELECT id FROM _tpay);
         UPDATE bank_incoming_transactions
            SET matched_receivable_id = NULL, status = 'NeedsReview'

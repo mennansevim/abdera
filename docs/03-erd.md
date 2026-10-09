@@ -339,6 +339,19 @@ payment_corrections
   -- Satırlar güncellenmez/silinmez; en yeni düzeltme ödemenin etkin tutarıdır.
   CHECK (corrected_amount > 0)
 
+payment_date_corrections
+  id                uuid pk
+  payment_id        uuid fk -> payments(id)
+  previous_date     date
+  corrected_date    date
+  reason            varchar(500)
+  created_by        uuid fk -> users(id)
+  created_at        timestamptz
+
+  -- Satırlar güncellenmez/silinmez; en yeni düzeltme ödemenin etkin tarihidir. Gelir
+  -- (Gelir ve gider ekranı) parayı etkin tarihin ayına yazar. Peşin plan parçaları birlikte taşınır.
+  CHECK (corrected_date <> previous_date)
+
 makeup_credits                          -- A2
   id                    uuid pk
   student_id            uuid fk -> students(id)
