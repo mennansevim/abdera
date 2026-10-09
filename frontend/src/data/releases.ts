@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.09",
+    date: "2026-10-09",
+    items: [
+      { audience: "admin", text: "Gelir ve gider ekranında Gelir kartının altında gelirin ne kadarının o ayın aidatı, ne kadarının peşin veya gecikmiş ödeme olduğu görünür; Aidatlar ekranındaki \"ödedi\" sayısıyla farkın nedeni artık açık." },
+      { audience: "admin", text: "Gelir rakamlarına dokununca ayrıntılı döküm açılır: dönem, enstrüman ve ödeme yöntemine göre kırılım ve ödeme listesi. Döküm Excel'de açılan dosya olarak indirilebilir." },
+      { audience: "admin", text: "Deneysel \"Hedef belirle\": aylık gelir hedefini gir, okulun kendi verisine göre tahsilat, indirim, enstrüman bazında yeni öğrenci ve fiyat adımlarıyla bir yol haritası önerilir." },
+    ],
+  },
+  {
     version: "2026.10.08.6",
     date: "2026-10-08",
     items: [
