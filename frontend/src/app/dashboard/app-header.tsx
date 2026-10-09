@@ -7,10 +7,8 @@ import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { NotificationBell, NotificationToasts } from "@/components/notification-bell";
 import { WhatsNewDialog } from "@/components/whats-new";
 import type { Me } from "@/lib/api";
-import { usePendingChangeRequests } from "@/lib/attendance";
 import { useBankTransactions } from "@/lib/banking";
 import { useNotifications } from "@/lib/messaging";
-import { useStudentDeletionRequests } from "@/lib/people";
 import { CURRENT_VERSION } from "@/lib/releases";
 import { useLogout } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
@@ -30,7 +28,6 @@ const CORE_LINKS: NavItem[] = [
 
 const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/availability", label: "Müsaitlik", icon: "clock", section: "Planlama" },
-  { href: "/dashboard/change-requests", label: "Talepler", icon: "swap", section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
   { href: "/dashboard/costs", label: "Gelir ve gider", icon: "bank", section: "Finans" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", section: "Finans" },
@@ -41,17 +38,14 @@ const ADMIN_LINKS: NavItem[] = [
 
 // "Dikkat gereken kayıt" noktası önceden üç linkte de `alert: true` olarak sabit kodlanmıştı -
 // hiçbir zaman sönmüyordu. Şimdi her link tam olarak dashboard'un "Bugün için her şey yolunda"
-// kartının kullandığı sayılara bakıyor (Talepler: ders değişikliği VEYA öğrenci silme talebi;
-// Banka: NeedsReview; Mesaj Merkezi: Failed). Yalnızca Admin bu linkleri gördüğü için sorgular
-// Teacher oturumunda hiç çalışmasın diye `enabled` ile kapatılır.
+// kartının kullandığı sayılara bakıyor (Banka: NeedsReview; Mesaj Merkezi: Failed). Talepler
+// menüden kalktı: sayfa Bugün ekranındaki kart ve zildeki bildirimden açılır. Yalnızca Admin bu
+// linkleri gördüğü için sorgular Teacher oturumunda hiç çalışmasın diye `enabled` ile kapatılır.
 function useAdminAlerts(enabled: boolean): Record<string, boolean> {
-  const { data: changeRequests } = usePendingChangeRequests({ enabled });
-  const { data: deletionRequests } = useStudentDeletionRequests("Pending", { enabled });
   const { data: bankItems } = useBankTransactions("NeedsReview", 1, 1, { enabled });
   const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled });
 
   return {
-    "/dashboard/change-requests": Boolean(changeRequests?.length) || Boolean(deletionRequests?.length),
     "/dashboard/banking": Boolean(bankItems?.items.length),
     "/dashboard/notifications": Boolean(failedNotifications?.totalCount),
   };
@@ -94,7 +88,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
     .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
   const navItem = (href: string) => links.find((link) => link.href === href)!;
   const mobilePrimary: NavItem[] = me.role === "Admin"
-    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), navItem("/dashboard/notifications")]
+    // Alt çubukta beş sütun ~70px: "Mesaj Merkezi" 375px'lik telefonda "Mesaj Merk…" diye kesiliyordu.
+    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), { ...navItem("/dashboard/notifications"), label: "Mesajlar" }]
     : [
         { ...navItem("/dashboard"), label: "Bugün" },
         { ...navItem("/dashboard/calendar"), label: "Takvimim" },
@@ -217,12 +212,14 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
           {children}
         </main>
 
+        {/* 320px'lik telefonda (iPhone SE) öğretmenin altı sekmesi ~53px'e düşer: yazı küçülür ki
+            "Takvimim"/"Öğrenciler" kesilmesin. */}
         {/* Öğretmende üst çubuk gizli (yalnızca alt menü var) - ders taşıma bildirimi her
             ekranda görünsün diye zil buraya bir sekme olarak giriyor. */}
-        <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${me.role === "Teacher" ? "grid-cols-6" : "grid-cols-5"} border-t border-black/5 bg-[rgba(255,253,249,.94)] px-2 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden`} aria-label="Mobil ana menü">
+        <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${me.role === "Teacher" ? "grid-cols-6" : "grid-cols-5"} border-t border-black/5 bg-[rgba(255,253,249,.94)] px-1 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden`} aria-label="Mobil ana menü">
           {mobilePrimary.map((link) => <MobileNavLink key={link.href} link={link} active={isActive(pathname, link.href)} />)}
           {me.role === "Teacher" && <NotificationBell variant="mobile" />}
-          <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
+          <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)] max-[359px]:text-[.66rem]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
             <Icon name={me.role === "Admin" ? "more" : "teachers"} className="h-[1.05rem] w-[1.05rem]" /><span>{me.role === "Admin" ? "Daha Fazla" : "Profil"}</span>
           </button>
         </nav>
@@ -265,7 +262,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
 
 function MobileNavLink({ link, active }: { link: NavItem; active: boolean }) {
   return (
-    <Link href={link.href} aria-current={active ? "page" : undefined} className={`pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
+    <Link href={link.href} aria-current={active ? "page" : undefined} className={`pressable flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium max-[359px]:text-[.66rem] ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
       <Icon name={link.icon} className="h-[1.05rem] w-[1.05rem]" /><span className="max-w-full truncate">{link.label}</span>
     </Link>
   );

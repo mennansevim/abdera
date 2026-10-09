@@ -403,13 +403,15 @@ export default function CalendarPage() {
               branşları listelenir (myInstrumentNames/instrumentFilters, yukarıda). */}
           <InstrumentFilterPicker filters={instrumentFilters} value={instrumentFilter} onChange={setInstrumentFilter} />
         </div>
-        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 border-t border-[var(--line)] pt-3 md:border-t-0 md:pt-0 xl:ml-auto xl:w-auto xl:shrink-0 xl:flex-nowrap" aria-label="Takvim kontrolleri">
+        {/* Mobilde iki düzenli satır: hafta gezinmesi + aralık, altında iki eşit eylem düğmesi.
+            Sağa yaslı serbest sarılmada düğmeler telefonda dağınık iki satıra düşüyordu. */}
+        <div className="flex w-full flex-wrap items-center gap-1.5 border-t border-[var(--line)] pt-3 md:justify-end md:border-t-0 md:pt-0 xl:ml-auto xl:w-auto xl:shrink-0 xl:flex-nowrap" aria-label="Takvim kontrolleri">
           <div className="flex shrink-0 items-center gap-1.5 rounded-[.9rem] bg-[var(--surface-muted)] p-1" aria-label="Hafta değiştir">
             <button type="button" onClick={() => setWeekStart((d) => addDays(d, -7))} className="icon-btn icon-btn-quiet" aria-label="Önceki hafta"><Icon name="arrow-left" className="h-4 w-4" /></button>
             <button type="button" onClick={() => setWeekStart((d) => addDays(d, 7))} className="icon-btn icon-btn-quiet" aria-label="Sonraki hafta"><Icon name="arrow-right" className="h-4 w-4" /></button>
           </div>
           <button type="button" onClick={() => setWeekStart(startOfWeek(new Date()))} disabled={isCurrentWeek} aria-pressed={isCurrentWeek} className="btn btn-quiet px-3 text-[.75rem] font-semibold disabled:cursor-default disabled:bg-[var(--brand-soft)] disabled:text-[var(--brand-strong)] disabled:opacity-70">Bugün</button>
-          <span aria-live="polite" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2 text-[.75rem] font-bold tabular-nums text-[#5c4d3f] 2xl:px-3 2xl:text-xs">
+          <span aria-live="polite" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--surface-muted)] px-2 max-md:flex-1 text-[.75rem] font-bold tabular-nums text-[#5c4d3f] 2xl:px-3 2xl:text-xs">
             <Icon name="calendar" className="hidden h-4 w-4 text-[var(--brand)] 2xl:block" />
             {formatWeekRange(weekStart, addDays(weekEnd, -1))}
           </span>
@@ -419,8 +421,10 @@ export default function CalendarPage() {
               {/* Öğretmene de açık: iptal edilen ders kartı artık ızgarada olmadığı için kartın
                   üstündeki "Telafi dersi ekle" girişine ulaşılamıyor; sonradan telafi planlamanın
                   tek yolu bu düğme. Sunucu öğretmeni zaten kendi öğrencileriyle sınırlar. */}
-              <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet shrink-0 px-2.5 text-[.75rem] font-bold text-[var(--foreground)] 2xl:px-4 2xl:text-xs">Telafi planla</button>
-              <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setMakeupContext(null); setQuickAddSlot(null); }} className="btn btn-primary shrink-0 px-2.5 text-[.75rem] font-bold 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
+              <div className="flex w-full gap-1.5 md:w-auto">
+                <button type="button" onClick={() => { setMakeupContext(null); setShowMakeupScheduler(true); setShowSeriesForm(false); setQuickAddSlot(null); }} className="btn btn-quiet shrink-0 px-2.5 text-[.75rem] font-bold text-[var(--foreground)] max-md:flex-1 2xl:px-4 2xl:text-xs">Telafi planla</button>
+                <button type="button" onClick={() => { setShowSeriesForm(true); setShowMakeupScheduler(false); setMakeupContext(null); setQuickAddSlot(null); }} className="btn btn-primary shrink-0 px-2.5 text-[.75rem] font-bold max-md:flex-1 2xl:px-4 2xl:text-xs"><Icon name="plus" className="hidden h-4 w-4 2xl:block" />Yeni ders</button>
+              </div>
             </>
           )}
         </div>
@@ -728,7 +732,7 @@ function WeeklyGrid({
       </div>
 
       {/* Tablet/mobil ajanda görünümü - tasarım kuralı: dar ekranda ızgara yerine dikey liste. */}
-      <div className="space-y-3 border-t border-[var(--line)] p-4 xl:hidden">
+      <div className="space-y-3 border-t border-[var(--line)] p-3 sm:p-4 xl:hidden">
         {weekDays.map((day, index) => {
           const dayLessons = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString()).sort((a, b) => a.startAt.localeCompare(b.startAt));
           return (
@@ -737,7 +741,7 @@ function WeeklyGrid({
                 <span className={`grid h-7 w-7 place-items-center rounded-lg ${day.toDateString() === new Date().toDateString() ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{day.getDate()}</span>
                 {WEEK_DAYS_TR[index]}
               </h3>
-              <div className="space-y-2 pl-9">
+              <div className="space-y-2 sm:pl-9">
                 {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} onOpen={() => setOpenLesson(lesson)} />)}
                 {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
               </div>
@@ -1161,16 +1165,22 @@ function LessonGroupDialog({ lessons, colors, isAdmin, now, onOpenLesson, onClos
 function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; onOpen: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
+  const time = `${formatTime(start)}–${formatTime(end)}`;
+  // Telefonda saat ayrı bir sütun değil, ikinci satırın başında durur: ayrı sütun + sol girinti +
+  // durum etiketi öğrenci adına ~60px bırakıyor, adlar "Lara Ar…" diye kesiliyordu.
   return (
-    <button type="button" onClick={onOpen} className={`pressable flex min-h-12 w-full items-center gap-3 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm hover:border-[var(--brand)] ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
-      <span className="h-9 w-1 rounded-full" style={{ background: tone.border }} />
-      <span className="w-20 shrink-0 text-[.75rem] font-bold tabular-nums" style={{ color: tone.text }}>{formatTime(start)}–{formatTime(end)}</span>
+    <button type="button" onClick={onOpen} className={`pressable flex min-h-12 w-full items-center gap-2.5 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm hover:border-[var(--brand)] sm:gap-3 ${active ? "border-[var(--brand)] ring-2 ring-[var(--brand)]/15" : "border-[var(--line)]"}`}>
+      <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: tone.border }} />
+      <span className="hidden w-20 shrink-0 text-[.75rem] font-bold tabular-nums sm:block" style={{ color: tone.text }}>{time}</span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="block truncate text-xs font-bold">{lesson.studentName}</span>
           {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] font-extrabold uppercase text-white">Şimdi</span>}
         </span>
-        <span className="block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}</span>
+        <span className="block truncate text-[.75rem] text-[var(--muted)]">
+          <span className="font-bold tabular-nums sm:hidden" style={{ color: tone.text }}>{time} · </span>
+          {lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}
+        </span>
       </span>
       <LessonStatusChip lesson={lesson} />
     </button>

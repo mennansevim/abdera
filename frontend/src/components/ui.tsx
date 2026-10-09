@@ -161,11 +161,12 @@ export function StatStrip({ label, items, footer, className = "" }: { label: str
             <>
               {item.active && <span aria-hidden className="absolute inset-x-0 top-0 h-0.5 bg-[var(--brand)]" />}
               <span className="block min-w-0">
-                <span className={`block truncate text-xs font-bold ${item.active ? "text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>{item.label}</span>
+                {/* Telefonda iki sütunlu ızgarada ~150px kalıyor: etiket kesilmek yerine alt satıra sarılır. */}
+                <span className={`block text-xs font-bold leading-snug sm:truncate ${item.active ? "text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>{item.label}</span>
                 {item.loading
                   ? <span className="skeleton mt-1 block h-6 w-16 rounded-md" />
                   : <span className={`block truncate text-lg font-bold tabular-nums tracking-[-.01em] ${item.tone ? TONE_TEXT[item.tone] : ""}`}>{item.value}</span>}
-                {item.hint && <span className="text-meta block truncate text-[.72rem]">{item.hint}</span>}
+                {item.hint && <span className="text-meta block text-[.72rem] leading-snug sm:truncate">{item.hint}</span>}
               </span>
             </>
           );

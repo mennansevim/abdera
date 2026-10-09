@@ -162,13 +162,16 @@ export default function AttendancePage() {
       {/* Filtre çubuğu: tarih aralığı + hızlı aralık + kişi seçimleri tek satırda. */}
       <section className="app-card p-3">
         <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-          <div className="min-w-0">
+          {/* Telefonda iki tarih kutusu satırı paylaşır: sabit 9.5rem'lik iki kutu + ayraç 375px'lik
+              ekranda kartın iç genişliğini aşıp sağdan taşıyordu. 320px'te tarih yazısı sığmadığı
+              için kutular alt alta iner (min-w + flex-wrap). */}
+          <div className="w-full min-w-0 sm:w-auto">
             <span className="text-micro text-[var(--muted)]">Tarih aralığı</span>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <input type="date" aria-label="Başlangıç" value={from} max={to || today} onChange={(event) => { setFrom(event.target.value); setPage(1); }} className="field w-[9.5rem] text-sm" />
-                <span className="text-[var(--muted)]">–</span>
-                <input type="date" aria-label="Bitiş" value={to} min={from} max={today} onChange={(event) => { setTo(event.target.value); setPage(1); }} className="field w-[9.5rem] text-sm" />
+              <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:flex-nowrap">
+                <input type="date" aria-label="Başlangıç" value={from} max={to || today} onChange={(event) => { setFrom(event.target.value); setPage(1); }} className="field min-w-[8.5rem] flex-1 text-sm sm:w-[9.5rem] sm:flex-none" />
+                <span className="text-[var(--muted)] max-[359px]:hidden">–</span>
+                <input type="date" aria-label="Bitiş" value={to} min={from} max={today} onChange={(event) => { setTo(event.target.value); setPage(1); }} className="field min-w-[8.5rem] flex-1 text-sm sm:w-[9.5rem] sm:flex-none" />
               </div>
               <Segmented
                 label="Hızlı aralık"

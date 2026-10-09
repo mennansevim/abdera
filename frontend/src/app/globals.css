@@ -179,6 +179,18 @@ textarea:focus-visible:not(.field) {
 
   select.field:disabled { opacity: .75; cursor: not-allowed; }
 
+  /* iOS Safari tarih/saat alanını yerel denetim olarak çizer: verilen genişliği yok sayıp
+     içeriğine göre büyür (dar bir satırda kartın dışına taşar), değeri de ortalar. Yerel
+     görünüm kapatılır, alan verilen genişliğe sığar ve değer diğer alanlar gibi sola yaslanır. */
+  input.field[type="date"],
+  input.field[type="time"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+  }
+  input.field[type="date"]::-webkit-date-and-time-value,
+  input.field[type="time"]::-webkit-date-and-time-value { text-align: left; }
+
   /* Safari sayı alanında yukarı/aşağı okları metnin içine sıkıştırıyor; tutar/ay sayısı
      klavyeyle yazılıyor, oklar yalnızca yer kaplıyor. */
   input.field[type="number"]::-webkit-inner-spin-button,

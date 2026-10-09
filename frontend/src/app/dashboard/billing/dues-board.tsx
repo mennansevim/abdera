@@ -260,17 +260,19 @@ function ListRow({ row, state, month, onOpen, onToast }: {
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-xs font-extrabold text-[var(--brand-strong)]">{initials(row.studentName)}</span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold">{row.studentName}</span>
-          <span className="text-meta block truncate text-xs">{row.instrumentName} · {row.teacherName}{tags.length ? ` · ${tags.join(" · ")}` : ""}</span>
+          <span className="text-meta line-clamp-2 text-xs">{row.instrumentName} · {row.teacherName}{tags.length ? ` · ${tags.join(" · ")}` : ""}</span>
         </span>
       </button>
       {state === "paid"
         ? <span className="shrink-0 rounded-full bg-[var(--success-soft)] px-2.5 py-1 text-xs font-extrabold text-[var(--success-strong)]">✓ Ödendi{cell?.lastPaymentDate ? ` · ${new Date(`${cell.lastPaymentDate}T00:00:00`).toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" })}` : ""}</span>
-        : <>
+        // Telefonda tutar düğmenin üstüne çıkar: yan yana durduklarında 320px'te öğrenci adına
+        // ~55px kalıyordu.
+        : <span className="flex shrink-0 flex-col items-end gap-1 min-[400px]:flex-row min-[400px]:items-center min-[400px]:gap-3">
           {remaining !== null && <span className={`shrink-0 text-right text-sm font-bold tabular-nums ${state === "late" || state === "partial" ? "text-[var(--danger-strong)]" : ""}`}>{formatMoney(remaining, cell?.currency ?? "TRY")}</span>}
           {remaining !== null && remaining > 0
             ? <button type="button" onClick={quickPay} disabled={collect.isPending} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">{collect.isPending ? "Kaydediliyor…" : "Ödeme al"}</button>
             : <button type="button" onClick={() => onOpen(row, [month])} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
-        </>}
+        </span>}
     </div>
     {error && <p role="alert" className="mt-1.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
   </li>;

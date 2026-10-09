@@ -149,7 +149,7 @@ export function NotificationBell({ variant = "sidebar" }: { variant?: "sidebar" 
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="pressable relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)]"
+          className="pressable relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)] max-[359px]:text-[.66rem]"
           aria-label={label}
         >
           <Icon name="bell" className="h-[1.05rem] w-[1.05rem]" />

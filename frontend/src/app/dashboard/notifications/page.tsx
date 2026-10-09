@@ -19,7 +19,8 @@ const STATUS_LABELS: Record<NotificationJobStatus, string> = {
   Processing: "işleniyor",
   Sent: "gönderildi",
   Failed: "başarısız",
-  Cancelled: "iptal edildi",
+  // Kısa tutulur: durum filtresi beş seçeneği 375px'lik telefona tek satırda sığdırmak zorunda.
+  Cancelled: "iptal",
 };
 
 const STATUS_COLORS: Record<NotificationJobStatus, string> = {
@@ -107,8 +108,25 @@ function ActivityPanel() {
       {isLoading && <div className="space-y-2 p-4">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
       {!isLoading && jobs?.length === 0 && <EmptyState icon="bell" title="Bu filtrede gönderim yok." />}
 
+      {/* Telefonda 8 sütunluk tablo yana kayıyordu: aynı bilgi satır kartı olarak listelenir. */}
       {!isLoading && !!jobs?.length && (
-        <div className="overflow-x-auto">
+        <ul className="divide-y divide-[var(--line)] md:hidden">
+          {jobs.map((job) => (
+            <li key={job.id} className="space-y-0.5 px-4 py-2.5 text-sm">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate font-semibold">{TYPE_LABELS[job.type] ?? job.type}</span>
+                <span className={`shrink-0 text-xs font-bold ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</span>
+              </div>
+              <p className="text-meta truncate">{[job.studentName, job.guardianName ?? job.recipientPhoneNumber].filter(Boolean).join(" · ")}</p>
+              <p className="text-meta">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")} · {new Date(job.scheduledAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+              {job.lastError && <details className="group text-meta"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>}
+              {job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet mt-1 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!isLoading && !!jobs?.length && (
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[60rem] text-sm">
             <thead>
               <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
@@ -194,7 +212,28 @@ function InboundPanel() {
       {!isLoading && events?.length === 0 && <EmptyState icon="bell" title="Bu filtrede olay yok." />}
 
       {!isLoading && !!events?.length && (
-        <div className="overflow-x-auto">
+        <ul className="divide-y divide-[var(--line)] md:hidden">
+          {events.map((event) => {
+            const isDelivery = !!event.deliveryStatus;
+            const error = event.processingError ?? event.deliveryError;
+            return (
+              <li key={event.id} className="space-y-0.5 px-4 py-2.5 text-sm">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate font-semibold">{event.guardianName ?? event.fromPhoneNumber ?? (isDelivery ? "Teslim bilgisi" : event.eventType)}</span>
+                  <span className={`shrink-0 text-xs font-bold ${event.deliveryStatus === "failed" ? "text-[var(--danger)]" : WEBHOOK_STATUS_COLORS[event.status]}`}>
+                    {event.deliveryStatus === "failed" ? "teslim edilemedi" : WEBHOOK_STATUS_LABELS[event.status]}
+                  </span>
+                </div>
+                <p className="text-meta">{new Date(event.receivedAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · {isDelivery ? "Teslim bilgisi" : event.fromPhoneNumber ? "Gelen mesaj" : event.eventType}</p>
+                <p className="break-words">{event.text || (isDelivery ? DELIVERY_LABELS[event.deliveryStatus!] ?? event.deliveryStatus : "—")}</p>
+                {error && <details className="group text-meta"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{error}</summary></details>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!isLoading && !!events?.length && (
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[56rem] text-sm">
             <thead>
               <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
