@@ -11,9 +11,11 @@ import { ApiError } from "@/lib/api";
 import {
   COURSE_KIND_LABEL, recurringAmountFor, useBillingDues, useChangeRecurringExpenseAmount, useCreateExpense, useCreateRecurringExpense, useEndRecurringExpense,
   useExpenses, useRecurringExpenses,
-  type BillingDue, type CourseKind, type Expense, type ExpenseCategory, type PaymentMethod, type RecurringExpense,
+  type CourseKind, type Expense, type ExpenseCategory, type PaymentMethod, type RecurringExpense,
 } from "@/lib/billing";
 import { methodLabel } from "../billing/collect-sheet";
+import { BUCKET_LABEL, collectedPayments, downloadIncomeCsv, fileSlug, IncomeBreakdownModal, splitByBucket, type IncomeEntry } from "./income-breakdown";
+import { RevenueTargetModal } from "./revenue-target";
 
 export default function CostsPage() {
   // useSearchParams App Router'da bir Suspense sınırı ister.
@@ -81,30 +83,6 @@ function periodLabel(period: Pick<Period, "scope" | "year" | "month">) {
   return period.scope === "year" ? String(period.year) : `${MONTHS[period.month]} ${period.year}`;
 }
 
-interface IncomeEntry { id: string; date: string; amount: number; method: PaymentMethod; studentName: string; instrumentName: string; courseKind: CourseKind; period: string }
-
-// Aidatlara düşen tahsilatları ödeme tarihine göre verir. Düzeltilmiş bir tahsilatın geçerli
-// tutarı en son düzeltmedir (sunucudaki ComputeEffectivePaymentAmountsAsync ile aynı kural);
-// düzeltme satırları ayrıca sayılmaz, yoksa para iki kez gelir yazılırdı. Sıfıra düzeltilmiş
-// (geri alınmış) tahsilat gelir değildir, listeden düşer.
-function collectedPayments(dues: BillingDue[]): IncomeEntry[] {
-  return dues.flatMap((due) => {
-    const corrections = due.payments.filter((payment) => payment.kind === "Correction");
-    return due.payments
-      .filter((payment) => payment.kind === "Payment")
-      .map((payment) => {
-        const latest = corrections
-          .filter((correction) => correction.correctsPaymentId === payment.id)
-          .sort((a, b) => (b.recordedAt ?? "").localeCompare(a.recordedAt ?? ""))[0];
-        return {
-          id: payment.id, date: payment.paymentDate, amount: latest ? latest.amount : payment.amount, method: payment.method,
-          studentName: due.studentName, instrumentName: due.instrumentName, courseKind: due.courseKind, period: due.period,
-        };
-      })
-      .filter((entry) => entry.amount !== 0);
-  }).sort((a, b) => b.date.localeCompare(a.date));
-}
-
 interface MonthTotal { key: string; recurring: number; oneOff: number; planned: boolean }
 
 // Aylık toplam = o aya düşen sabit kalemler + o ayın tek seferlik giderleri. Bugünden sonraki
@@ -139,6 +117,8 @@ function CostDashboard() {
   const payWeek = searchParams.get("hafta");
   const [view, setView] = useState<View>(payTeacherId !== null ? "expenses" : "summary");
   const [showCreate, setShowCreate] = useState(payTeacherId !== null);
+  const [breakdown, setBreakdown] = useState<{ title: string; entries: IncomeEntry[] } | null>(null);
+  const [showTarget, setShowTarget] = useState(false);
   function closeCreate() {
     setShowCreate(false);
     if (payTeacherId !== null) router.replace(pathname, { scroll: false });
@@ -188,6 +168,17 @@ function CostDashboard() {
     return { income, expenseTotal, toDate, net: income - toDate, pending, columns };
   }, [allRecurring, allExpenses, payments, dues, period, currentMonth]);
 
+  // Planlayıcının "aylık gider" tabanı: bu ayın sabit kalemleri + son üç tamamlanmış ayın tek
+  // seferlik ortalaması (öğretmen haftalık ödemeleri de gider defterine bu yolla düşer).
+  const monthlyExpense = useMemo(() => {
+    const lastThree = [1, 2, 3].map((back) => {
+      const total = today.getFullYear() * 12 + today.getMonth() - back;
+      return monthKey(Math.floor(total / 12), total % 12);
+    });
+    const oneOffAverage = allExpenses.filter((expense) => lastThree.includes(expense.expenseDate.slice(0, 7))).reduce((sum, expense) => sum + expense.amount, 0) / 3;
+    return allRecurring.reduce((sum, item) => sum + recurringAmountFor(item, currentMonth), 0) + oneOffAverage;
+  }, [allExpenses, allRecurring, currentMonth, today]);
+
   const needle = search.trim().toLocaleLowerCase("tr-TR");
   const matches = (text: string | null) => !needle || (text ?? "").toLocaleLowerCase("tr-TR").includes(needle);
   const dayKey = period.scope === "month" && period.day !== null ? `${monthKey(period.year, period.month)}-${pad(period.day)}` : null;
@@ -201,6 +192,8 @@ function CostDashboard() {
   const periodIncome = payments.filter((payment) => inPeriod(payment.date, period));
   const listedIncome = periodIncome.filter((payment) => !incomeNeedle
     || `${payment.studentName} ${payment.instrumentName}`.toLocaleLowerCase("tr-TR").includes(incomeNeedle));
+  const incomeSplit = splitByBucket(periodIncome);
+  const openBreakdown = (title: string, entries: IncomeEntry[]) => setBreakdown({ title, entries });
   const incomeBy = (methods: PaymentMethod[]) => periodIncome.filter((payment) => methods.includes(payment.method)).reduce((sum, payment) => sum + payment.amount, 0);
 
   const isCurrent = period.year === today.getFullYear() && (period.scope === "year" || period.month === today.getMonth());
@@ -236,6 +229,7 @@ function CostDashboard() {
             {view === "income"
               ? <Link href="/dashboard/billing" className="btn btn-quiet">Aidatlar ekranına git<Icon name="arrow-right" className="h-4 w-4" /></Link>
               : <button type="button" onClick={() => setShowCreate(true)} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Gider ekle</button>}
+            {view === "summary" && <button type="button" onClick={() => setShowTarget(true)} className="btn btn-quiet" title="Aylık gelir hedefi ve yol haritası (deneysel)"><Icon name="target" className="h-4 w-4" />Hedef belirle</button>}
           </>
         }
       />
@@ -269,7 +263,7 @@ function CostDashboard() {
           <StatStrip
             label="Dönem özeti"
             items={[
-              { key: "income", label: "Gelir", value: money(summary.income), loading, hint: "Tahsil edilen aidat · ödeme tarihine göre", tone: "success", onClick: () => setView("income") },
+              { key: "income", label: "Gelir", value: money(summary.income), loading, hint: "Tahsil edilen aidat · dökümü için dokun", tone: "success", onClick: () => openBreakdown(`${periodLabel(period)} geliri`, periodIncome) },
               { key: "expense", label: `Gider${summary.toDate === 0 && summary.expenseTotal > 0 ? " (planlanan)" : ""}`, value: money(summary.expenseTotal), loading, hint: "Sabit + tek seferlik", tone: "danger", onClick: () => { setCategory("all"); setView("expenses"); } },
               {
                 key: "net",
@@ -281,12 +275,22 @@ function CostDashboard() {
               },
               { key: "pending", label: "Bekleyen aidat", value: money(summary.pending), loading, hint: "Tüm dönemler · Aidatlar ekranından tahsil edilir", tone: "warning", href: "/dashboard/billing" },
             ]}
+            footer={!loading && summary.income > 0 && incomeSplit.current !== summary.income ? <IncomeSplitNote split={incomeSplit} period={period} onOpen={() => openBreakdown(`${periodLabel(period)} geliri`, periodIncome)} /> : undefined}
           />
           <Panel title="Gelir ve gider" meta={period.scope === "year" ? String(period.year) : `Son 6 ay · ${periodLabel(period)} dahil`}>
             <FlowBars columns={summary.columns} selected={period.scope === "month" ? monthKey(period.year, period.month) : null} onSelect={(key) => drill("income", key)} loading={loading} />
           </Panel>
-          <Panel flush title="Nakit akışı" meta="Hücreye dokun, o ayın kayıtları açılsın">
-            <CashFlowTable columns={summary.columns} showTotal={period.scope === "year"} selected={period.scope === "month" ? monthKey(period.year, period.month) : null} onDrill={drill} loading={loading} />
+          <Panel flush title="Nakit akışı" meta="Gelir hücresine dokun, döküm açılsın; gider hücresi o ayın kayıtlarına iner">
+            <CashFlowTable
+              columns={summary.columns}
+              showTotal={period.scope === "year"}
+              selected={period.scope === "month" ? monthKey(period.year, period.month) : null}
+              onDrill={drill}
+              onIncome={(key, kind) => openBreakdown(
+                `${kind ? `${COURSE_KIND_LABEL[kind]} aidat · ` : ""}${monthLabel(key)}`,
+                payments.filter((payment) => payment.date.startsWith(`${key}-`) && (!kind || payment.courseKind === kind)))}
+              loading={loading}
+            />
           </Panel>
         </>
       )}
@@ -296,7 +300,7 @@ function CostDashboard() {
           <StatStrip
             label="Tahsilat özeti"
             items={[
-              { key: "total", label: "Tahsil edilen", value: money(summary.income), loading, hint: `${periodIncome.length} ödeme · ödeme tarihine göre`, tone: "success" },
+              { key: "total", label: "Tahsil edilen", value: money(summary.income), loading, hint: `${periodIncome.length} ödeme · dökümü için dokun`, tone: "success", onClick: () => openBreakdown(`${periodLabel(period)} geliri`, periodIncome) },
               { key: "cash", label: "Nakit", value: money(incomeBy(["Cash"])), loading },
               { key: "transfer", label: "Havale", value: money(incomeBy(["Transfer"])), loading, hint: "Sanal IBAN eşleşmeleri dahil" },
               { key: "card", label: "Kart / diğer", value: money(incomeBy(["Card", "Other"])), loading },
@@ -306,7 +310,12 @@ function CostDashboard() {
             flush
             title="Tahsilat defteri"
             meta={`${periodLabel(period)} · salt okunur`}
-            actions={<SearchInput value={incomeSearch} onChange={setIncomeSearch} label="Tahsilatlarda ara" placeholder="Öğrenci veya enstrüman" />}
+            actions={
+              <>
+                <SearchInput value={incomeSearch} onChange={setIncomeSearch} label="Tahsilatlarda ara" placeholder="Öğrenci veya enstrüman" />
+                <button type="button" disabled={!listedIncome.length} onClick={() => downloadIncomeCsv(listedIncome, `gelir-dokumu-${fileSlug(periodLabel(period))}.csv`)} className="btn btn-quiet" title="Listelenen tahsilatları Excel/CSV olarak indir"><Icon name="download" className="h-4 w-4" />İndir</button>
+              </>
+            }
           >
             <IncomeLedger entries={listedIncome} scope={period.scope} loading={loading} />
           </Panel>
@@ -370,6 +379,9 @@ function CostDashboard() {
         </>
       )}
 
+      <IncomeBreakdownModal open={breakdown !== null} title={breakdown?.title ?? ""} entries={breakdown?.entries ?? []} onClose={() => setBreakdown(null)} />
+      <RevenueTargetModal open={showTarget} onClose={() => setShowTarget(false)} currentMonth={currentMonth} monthlyExpense={monthlyExpense} />
+
       <Modal open={showCreate} title="Gider ekle" onClose={closeCreate} size="sm">
         <CreateExpenseForm
           initialKind={payTeacherId !== null ? "weekly" : "recurring"}
@@ -382,6 +394,24 @@ function CostDashboard() {
         />
       </Modal>
     </div>
+  );
+}
+
+// Gelir kartının altındaki açıklama: rakam ödeme tarihine göre sayıldığı için bu dönemde
+// alınan peşin ve gecikmiş ödemeleri de içerir; Aidatlar ekranının "X/Y ödedi" sayacı ise
+// yalnızca dönemin kendi aidatına bakar. Fark burada adıyla gösterilir.
+function IncomeSplitNote({ split, period, onOpen }: { split: Record<"current" | "late" | "advance", number>; period: Period; onOpen: () => void }) {
+  const parts = [
+    { label: period.scope === "month" ? `${MONTHS[period.month]} aidatı` : BUCKET_LABEL.current, value: split.current },
+    { label: BUCKET_LABEL.advance.toLocaleLowerCase("tr-TR"), value: split.advance },
+    { label: BUCKET_LABEL.late.toLocaleLowerCase("tr-TR"), value: split.late },
+  ].filter((part) => part.value > 0);
+  return (
+    <button type="button" onClick={onOpen} className="pressable flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-[var(--line)] px-4 py-2 text-left text-[.75rem] hover:bg-[var(--surface-muted)]">
+      <span className="font-bold">Gelirin içinde:</span>
+      {parts.map((part, index) => <span key={part.label} className="tabular-nums">{index > 0 && "· "}{money(part.value)} {part.label}</span>)}
+      <span className="ml-auto inline-flex items-center gap-1 font-bold text-[var(--brand-strong)]">Döküm<Icon name="download" className="h-3.5 w-3.5" /></span>
+    </button>
   );
 }
 
@@ -431,9 +461,10 @@ function FlowBars({ columns, selected, onSelect, loading }: { columns: FlowColum
 
 // Muhasebe defteri görünümü: satır = ders türü / gider kategorisi, sütun = ay. Toplam ve net
 // satırları türetilmiştir; kategori hücreleri ilgili sekmeye o ay ve kategoriyle iner.
-function CashFlowTable({ columns, showTotal, selected, onDrill, loading }: {
+function CashFlowTable({ columns, showTotal, selected, onDrill, onIncome, loading }: {
   columns: FlowColumn[]; showTotal: boolean; selected: string | null; loading: boolean;
   onDrill: (target: "income" | "expenses", key: string, filter?: ExpenseCategory) => void;
+  onIncome: (key: string, kind: CourseKind | null) => void;
 }) {
   if (loading) return <p className="text-meta px-4 py-6 text-center">Yükleniyor…</p>;
   const incomeOf = (column: FlowColumn) => COURSE_KINDS.reduce((sum, kind) => sum + column.income[kind], 0);
@@ -454,10 +485,12 @@ function CashFlowTable({ columns, showTotal, selected, onDrill, loading }: {
       {showTotal && <td className="px-3 py-1.5 text-right font-semibold tabular-nums">{amount(total(pick))}</td>}
     </tr>
   );
-  const totalRow = (label: string, pick: (column: FlowColumn) => number, className = "") => (
+  const totalRow = (label: string, pick: (column: FlowColumn) => number, className = "", onCell?: (key: string) => void) => (
     <tr className={`border-t border-[var(--line)] bg-[var(--surface-muted)] font-bold ${className}`}>
       <th scope="row" className={`${sticky} bg-[var(--surface-muted)] py-2`}>{label}</th>
-      {columns.map((column) => <td key={column.key} className={`px-2 py-2 text-right tabular-nums ${column.planned ? "text-[var(--muted)] italic" : ""}`}>{pick(column) < 0 ? "−" : ""}{amount(Math.abs(pick(column)))}</td>)}
+      {columns.map((column) => onCell
+        ? <td key={column.key} className={`p-0 text-right ${column.planned ? "text-[var(--muted)] italic" : ""}`}><button type="button" onClick={() => onCell(column.key)} className="pressable w-full px-2 py-2 text-right tabular-nums hover:bg-[var(--surface)]" aria-label={`${label}, ${monthLabel(column.key)}: ${money(pick(column))} - döküm`}>{amount(pick(column))}</button></td>
+        : <td key={column.key} className={`px-2 py-2 text-right tabular-nums ${column.planned ? "text-[var(--muted)] italic" : ""}`}>{pick(column) < 0 ? "−" : ""}{amount(Math.abs(pick(column)))}</td>)}
       {showTotal && <td className="px-3 py-2 text-right tabular-nums">{total(pick) < 0 ? "−" : ""}{amount(Math.abs(total(pick)))}</td>}
     </tr>
   );
@@ -480,9 +513,9 @@ function CashFlowTable({ columns, showTotal, selected, onDrill, loading }: {
           </thead>
           <tbody>
             {COURSE_KINDS.map((kind) => (
-              <Fragment key={kind}>{dataRow(`${COURSE_KIND_LABEL[kind]} aidat`, (column) => column.income[kind], (key) => onDrill("income", key), "bg-[var(--success)]")}</Fragment>
+              <Fragment key={kind}>{dataRow(`${COURSE_KIND_LABEL[kind]} aidat`, (column) => column.income[kind], (key) => onIncome(key, kind), "bg-[var(--success)]")}</Fragment>
             ))}
-            {totalRow("Toplam gelir", incomeOf, "text-[var(--success-strong)]")}
+            {totalRow("Toplam gelir", incomeOf, "text-[var(--success-strong)]", (key) => onIncome(key, null))}
             {CATEGORIES.map((value) => (
               <Fragment key={value}>{dataRow(CATEGORY_LABEL[value], (column) => column.expense[value], (key) => onDrill("expenses", key, value), "bg-[var(--danger)]")}</Fragment>
             ))}
