@@ -170,6 +170,30 @@ CHECK (source_note_count > 0)
 öğretmenin yorumu not sayısı değiştiği için kendiliğinden yeniden üretilir. `Down()` yalnızca
 tabloyu düşürür.
 
+## growth_ideas, profit_commentaries (Kârlılık sekmesi)
+
+**AddProfitabilityModule** (Profitability modülü, `Modules/Profitability/Persistence/Migrations`):
+yöneticinin fikirleri ve aylık AI yorumu (`docs/10-decisions.md` V). Yalnızca yeni tablo; başka
+şemaya dokunmaz.
+
+```
+growth_ideas(id uuid PK, kind, title, note, status, instrument_id FK NULL, branch_name,
+             course_kind, students, teacher_rate_per_lesson numeric(12,2), discount_percent,
+             discount_months, already_coming_percent, price_change_percent, lost_students,
+             monthly_amount numeric(12,2), one_time_cost numeric(12,2), currency,
+             created_by, created_at, updated_at, xmin)
+CHECK (students IS NULL OR students BETWEEN 1 AND 200)
+CHECK (one_time_cost IS NULL OR one_time_cost >= 0)
+
+profit_commentaries(id uuid PK, period varchar(7), text varchar(2000), model,
+                    refresh_count, created_at, updated_at, xmin)
+UNIQUE (period)                              -- ay başına tek yorum
+CHECK (refresh_count BETWEEN 0 AND 3)        -- token sınırı
+```
+
+Kişiye/kayda/derse/aidata referans vermedikleri için `PersonEraser` kapsamı dışında. `Down()`
+iki tabloyu düşürür (yerelde ileri-geri-ileri denendi).
+
 ## library_pieces, library_suggestions (okulun eklediği eserler, öğrenciye öneri)
 
 **AddLibraryPiecesAndSuggestions** (Library modülü): öğretmen/yöneticinin kütüphaneye kendisinin

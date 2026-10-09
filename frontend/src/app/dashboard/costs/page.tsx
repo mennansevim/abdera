@@ -15,7 +15,7 @@ import {
 } from "@/lib/billing";
 import { BUCKET_LABEL, collectedPayments, downloadIncomeCsv, fileSlug, IncomeBreakdownModal, splitByBucket, type IncomeEntry } from "./income-breakdown";
 import { IncomeLedger } from "./income-ledger";
-import { RevenueTargetModal } from "./revenue-target";
+import { ProfitabilityView } from "./profitability";
 
 export default function CostsPage() {
   // useSearchParams App Router'da bir Suspense sınırı ister.
@@ -47,7 +47,7 @@ const SERIES = { recurring: "#d9662a", oneOff: "#9b3f6b" };
 // yine lejant ve ipucu metniyle de verilir.
 const FLOW = { income: "var(--success)", expense: "var(--danger)" };
 
-type View = "summary" | "income" | "expenses";
+type View = "summary" | "income" | "expenses" | "profit";
 type Scope = "month" | "year";
 // Seçili dönem: yıllık görünümde `month` yok sayılır. `day` yalnızca aylık takvimde bir güne
 // tıklanınca dolar ve defteri o güne daraltır.
@@ -118,7 +118,6 @@ function CostDashboard() {
   const [view, setView] = useState<View>(payTeacherId !== null ? "expenses" : "summary");
   const [showCreate, setShowCreate] = useState(payTeacherId !== null);
   const [breakdown, setBreakdown] = useState<{ title: string; entries: IncomeEntry[] } | null>(null);
-  const [showTarget, setShowTarget] = useState(false);
   function closeCreate() {
     setShowCreate(false);
     if (payTeacherId !== null) router.replace(pathname, { scroll: false });
@@ -168,17 +167,6 @@ function CostDashboard() {
     return { income, expenseTotal, toDate, net: income - toDate, pending, columns };
   }, [allRecurring, allExpenses, payments, dues, period, currentMonth]);
 
-  // Planlayıcının "aylık gider" tabanı: bu ayın sabit kalemleri + son üç tamamlanmış ayın tek
-  // seferlik ortalaması (öğretmen haftalık ödemeleri de gider defterine bu yolla düşer).
-  const monthlyExpense = useMemo(() => {
-    const lastThree = [1, 2, 3].map((back) => {
-      const total = today.getFullYear() * 12 + today.getMonth() - back;
-      return monthKey(Math.floor(total / 12), total % 12);
-    });
-    const oneOffAverage = allExpenses.filter((expense) => lastThree.includes(expense.expenseDate.slice(0, 7))).reduce((sum, expense) => sum + expense.amount, 0) / 3;
-    return allRecurring.reduce((sum, item) => sum + recurringAmountFor(item, currentMonth), 0) + oneOffAverage;
-  }, [allExpenses, allRecurring, currentMonth, today]);
-
   const needle = search.trim().toLocaleLowerCase("tr-TR");
   const matches = (text: string | null) => !needle || (text ?? "").toLocaleLowerCase("tr-TR").includes(needle);
   const dayKey = period.scope === "month" && period.day !== null ? `${monthKey(period.year, period.month)}-${pad(period.day)}` : null;
@@ -222,19 +210,22 @@ function CostDashboard() {
                 { value: "summary", label: "Özet", icon: "activity" },
                 { value: "income", label: "Gelirler", icon: "wallet" },
                 { value: "expenses", label: "Giderler", icon: "bank" },
+                { value: "profit", label: "Kârlılık", icon: "target" },
               ]}
               value={view}
               onChange={(value) => { setView(value); setPeriod((current) => ({ ...current, day: null })); }}
             />
             {view === "income"
               ? <Link href="/dashboard/billing" className="btn btn-quiet">Aidatlar ekranına git<Icon name="arrow-right" className="h-4 w-4" /></Link>
-              : <button type="button" onClick={() => setShowCreate(true)} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Gider ekle</button>}
-            {view === "summary" && <button type="button" onClick={() => setShowTarget(true)} className="btn btn-quiet" title="Aylık gelir hedefi ve yol haritası (deneysel)"><Icon name="target" className="h-4 w-4" />Hedef belirle</button>}
+              : view !== "profit" && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Gider ekle</button>}
           </>
         }
       />
 
-      <section className="app-card flex flex-wrap items-center gap-2 p-3" aria-label={view === "expenses" ? "Dönem ve kategori filtreleri" : "Dönem filtresi"}>
+      {/* Kârlılık sekmesi döneme bağlı değil: her zaman bu ay ve son 6 ay. */}
+      {view === "profit" && <ProfitabilityView />}
+
+      {view !== "profit" && <section className="app-card flex flex-wrap items-center gap-2 p-3" aria-label={view === "expenses" ? "Dönem ve kategori filtreleri" : "Dönem filtresi"}>
         <Segmented
           label="Görünüm"
           options={[{ value: "month", label: "Aylık" }, { value: "year", label: "Yıllık" }]}
@@ -256,7 +247,7 @@ function CostDashboard() {
             onChange={setCategory}
           />
         )}
-      </section>
+      </section>}
 
       {view === "summary" && (
         <>
@@ -380,7 +371,6 @@ function CostDashboard() {
       )}
 
       <IncomeBreakdownModal open={breakdown !== null} title={breakdown?.title ?? ""} entries={breakdown?.entries ?? []} onClose={() => setBreakdown(null)} />
-      <RevenueTargetModal open={showTarget} onClose={() => setShowTarget(false)} currentMonth={currentMonth} monthlyExpense={monthlyExpense} />
 
       <Modal open={showCreate} title="Gider ekle" onClose={closeCreate} size="sm">
         <CreateExpenseForm

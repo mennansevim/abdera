@@ -15,6 +15,9 @@ using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.People.Domain;
+using Abdera.Api.Modules.Profitability;
+using Abdera.Api.Modules.Profitability.Domain;
+using Abdera.Api.Modules.Profitability.Infrastructure;
 using Abdera.Api.Modules.Progress;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Progress.Infrastructure;
@@ -238,8 +241,8 @@ else
     builder.Services.AddSingleton<IEmailSender, FakeEmailSender>();
 }
 
-// --- AI (gelişim ekranındaki "Genel gelişim" yorumu): OPSİYONEL özellik. ---
-// Yapılandırılmadığında Disabled implementasyonu devreye girer ve gelişim ekranı yorum kutusu
+// --- AI (gelişim ekranındaki "Genel gelişim" yorumu ve kârlılık ekranının aylık yorumu): OPSİYONEL. ---
+// Yapılandırılmadığında Disabled implementasyonları devreye girer; iki ekran da yorum kutusu
 // olmadan eksiksiz çalışmaya devam eder.
 // WhatsApp/Banking ile aynı yapısal DI kararı, bu yüzden Build()'den önce okunuyor.
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
@@ -247,10 +250,12 @@ var aiProvider = builder.Configuration["Ai:Provider"] ?? "Disabled";
 if (string.Equals(aiProvider, "OpenAi", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddHttpClient<IProgressSummaryGenerator, OpenAiProgressSummaryGenerator>();
+    builder.Services.AddHttpClient<IProfitCommentaryGenerator, OpenAiProfitCommentaryGenerator>();
 }
 else
 {
     builder.Services.AddSingleton<IProgressSummaryGenerator, DisabledProgressSummaryGenerator>();
+    builder.Services.AddSingleton<IProfitCommentaryGenerator, DisabledProfitCommentaryGenerator>();
 }
 
 // --- Kimlik doğrulama: httpOnly cookie oturumu (docs/10-decisions.md B4 - JWT'nin
@@ -523,6 +528,7 @@ app.MapSchedulingModule();
 app.MapAttendanceModule();
 app.MapProgressModule();
 app.MapBillingModule();
+app.MapProfitabilityModule();
 app.MapShowModule();
 app.MapLibraryModule();
 app.MapMessagingModule();

@@ -269,6 +269,13 @@ docker compose --profile prod up -d
 - Profil belirtilmeden `docker compose up` bugünkü gibi 3000/8080 üzerinden çalışmaya devam
   eder; geliştirme akışı değişmez.
 
+### AI ile aylık kârlılık yorumu (opsiyonel)
+
+Aynı `Ai__*` ayarı, Gelir ve gider → **Kârlılık** sekmesindeki aylık yorumu da açar. Yorum ayda
+bir kez yazılıp `profit_commentaries`'e kaydedilir; yönetici ayda en fazla 3 kez yeniden
+yazdırabilir. Sağlayıcıya kişi adı gitmez, yalnızca toplu rakamlar. Kapalıyken sekmenin geri
+kalanı (kâr, tavsiyeler, eksikler, fikirler) aynen çalışır.
+
 ### AI ile "Genel gelişim" yorumu (opsiyonel)
 
 Gelişim ekranındaki "Genel gelişim" kartı, öğretmenlerin girdiği ders notlarından öğrencinin

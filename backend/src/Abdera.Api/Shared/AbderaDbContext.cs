@@ -6,6 +6,7 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.People.Domain;
+using Abdera.Api.Modules.Profitability.Domain;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Modules.Show.Domain;
@@ -55,6 +56,9 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PracticeAssignment> PracticeAssignments => Set<PracticeAssignment>();
     public DbSet<PracticeJournalEntry> PracticeJournalEntries => Set<PracticeJournalEntry>();
     public DbSet<ProgressSummary> ProgressSummaries => Set<ProgressSummary>();
+
+    public DbSet<GrowthIdea> GrowthIdeas => Set<GrowthIdea>();
+    public DbSet<ProfitCommentary> ProfitCommentaries => Set<ProfitCommentary>();
 
     public DbSet<MakeupCredit> MakeupCredits => Set<MakeupCredit>();
     public DbSet<TuitionRate> TuitionRates => Set<TuitionRate>();

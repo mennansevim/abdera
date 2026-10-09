@@ -12,6 +12,7 @@ Modules/
 ├── Progress/       ders notu, yetenek tanımı/değerlendirme, ödev
 ├── Messaging/       bildirim işi, WhatsApp mesajı/webhook, şablon
 ├── Banking/         sanal IBAN, gelen havale eşleştirme         ← yeni (E1, Phase 6)
+├── Profitability/   kârlılık özeti, fikirler, aylık AI yorumu    ← yeni (10-decisions V)
 └── Dashboard/       salt-okunur sorgu modeli (kendi tablosu yok)
 ```
 
@@ -19,6 +20,8 @@ Modules/
 
 ```
 Dashboard  → (okur) People, Scheduling, Attendance, Billing, Messaging
+Profitability → (okur) People, Scheduling, Billing - salt-okunur toplulaştırıcı (istisna 1);
+             yalnızca kendi tablolarına (growth_ideas, profit_commentaries) yazar
 Scheduling/Billing → (tetikler) Messaging'i `INotificationScheduler` portu üzerinden (Phase 5,
              uygulandı) - Messaging'in kendi entity'lerine doğrudan bağımlı olmadan job açar
 Messaging  → (yazar) Attendance'a - WhatsApp RSVP butonu `LessonRsvp` oluşturur/günceller
@@ -38,7 +41,7 @@ Auth       → hiçbir modüle bağımlı değil; herkes Auth'a bağımlı (kiml
 
 Kural: bir modül başka modülün **iç** entity'sine EF navigation property ile join atmaz. İhtiyaç varsa o modülün `Features/` altında sunduğu bir sorgu/servis üzerinden okunur. Örnek: `Billing`, hangi `Student`'ın adı olduğunu `People` modülünün `IPeopleLookup` benzeri küçük bir arayüzünden alır — `Student` entity'sini kendi DbSet'i gibi sorgulamaz.
 
-İstisna 1: `Dashboard` salt-okunur olduğu için doğrudan SQL/LINQ projeksiyonu ile birden fazla modülün tablosunu okuyabilir (kendi yazma yetkisi yoktur, sadece toplulaştırır).
+İstisna 1: `Dashboard` (ve aynı gerekçeyle `Profitability`) salt-okunur olduğu için doğrudan SQL/LINQ projeksiyonu ile birden fazla modülün tablosunu okuyabilir (kendi yazma yetkisi yoktur, sadece toplulaştırır).
 
 İstisna 2 — **yazma tarafı**: bir modülün Feature'ı, başka bir modülün Domain entity'sini kendi genel (public) factory metoduyla oluşturup tek `AbderaDbContext` üzerinden ekleyebilir — bu okuma tarafındaki navigation-property yasağının kapsamı dışında. İki örnek: `People/Features/Teachers.cs` bir `Auth.Domain.User` oluşturur (öğretmen giriş hesabı); `Scheduling/Features/CancelLesson.cs` bir `Billing.Domain.MakeupCredit` oluşturur (telafi kredisi). Bu, tek `DbContext`'li modüler monolitin doğal bir sonucu — mikroservis gibi API çağrısı simüle etmek burada anlamsız olurdu.
 
