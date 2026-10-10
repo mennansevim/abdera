@@ -22,6 +22,20 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.11",
+    date: "2026-10-11",
+    items: [
+      { audience: "all", text: "Yanlış girilen yoklamayı artık düzeltebilirsin: Bugün ekranındaki derste \"Düzelt\"e ya da takvimde derse dokun. \"Mazeretli\"ye çevrilen derse telafi hakkı açılır." },
+      { audience: "all", text: "Henüz başlamamış bir derse yoklama girilemez; öğrenci erken gelirse yoklama dersten 15 dakika önce açılır." },
+      { audience: "all", text: "Takvimde dersi iptal ederken \"Veli iptal etti\" seçeneği var: veli 24 saatten önce haber verdiyse telafi hakkı kendiliğinden açılır, daha geç haber verdiyse açılmaz." },
+      { audience: "all", text: "Öğrenci künyesinde ilgi gösterilmesi gereken öğrencinin nedenleri görünür: art arda \"gelemiyorum\" cevabı, bırakılan pratik günlüğü, düşen yetenek puanı." },
+      { audience: "admin", text: "Ana ekrandaki \"İlgi gerektirebilecek öğrenciler\" listesi devamsızlığın yanında bu nedenleri ve 3 ay ya da daha uzun süredir gecikmiş aidatı da gösterir." },
+      { audience: "admin", text: "Bir kursu sonlandırırken ayrılma nedeni soruluyor (taşındı, maddi nedenler, ilgisini kaybetti…); \"neden gidiyorlar\" sorusunun cevabı zamanla birikir." },
+      { audience: "admin", text: "Banka ekranında eşleşmeyen bir havaleyi aidata sayarken artık kimlik yazmıyorsun: velinin açık aidatları listelenir, birini seçmen yeterli." },
+      { audience: "admin", text: "Yeni öğrenci kaydında haftalık ders programı formdaki başlangıç tarihinden başlar." },
+    ],
+  },
+  {
     version: "2026.10.10.2",
     date: "2026-10-10",
     items: [
