@@ -52,6 +52,16 @@ function useAdminAlerts(enabled: boolean): Record<string, boolean> {
 }
 
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };
+// Hata bildir (docs/10-decisions.md W): veli hariç herkesin menüsünde, Sistem bölümünde.
+// Veli /parent altında ayrı bir kabukta olduğu için bu menüyü hiç görmez.
+const BUG_REPORT_LINK: NavItem = { href: "/dashboard/bug-report", label: "Hata bildir", icon: "bug", section: "Sistem" };
+
+// Hata bildir formunun "Hangi sayfada?" listesi menüden türer - ayrıca elle tutulan bir liste
+// olsaydı yeni sayfa eklendiğinde unutulurdu.
+export function navPagesFor(isAdmin: boolean): { href: string; label: string }[] {
+  return (isAdmin ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK])
+    .map(({ href, label }) => ({ href, label }));
+}
 const SECTION_ORDER: NavItem["section"][] = ["Genel", "Eğitim", "Planlama", "Finans", "İletişim", "Sistem"];
 const sidebarStorageOptions = { decode: (value: string) => value === "true" };
 
@@ -82,11 +92,14 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
   // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor.
   const links = (isAdmin
-    ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK]
-    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK])
+    ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK, BUG_REPORT_LINK]
+    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK, BUG_REPORT_LINK])
     .map((link) => (alerts[link.href] ? { ...link, alert: true } : link))
     .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
   const navItem = (href: string) => links.find((link) => link.href === href)!;
+  // Hata bildir linki bulunulan sayfayı taşır; form o sayfa seçili açılır.
+  const linkHref = (href: string) =>
+    href === BUG_REPORT_LINK.href && !pathname.startsWith(href) ? `${href}?from=${encodeURIComponent(pathname)}` : href;
   const mobilePrimary: NavItem[] = me.role === "Admin"
     // Alt çubukta beş sütun ~70px: "Mesaj Merkezi" 375px'lik telefonda "Mesaj Merk…" diye kesiliyordu.
     ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), { ...navItem("/dashboard/notifications"), label: "Mesajlar" }]
@@ -147,7 +160,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               ? index > 0 && <span className="mx-2 my-1.5 h-px bg-white/20" aria-hidden="true" />
               : <span className="mb-0.5 mt-2 px-3 text-[.75rem] font-bold uppercase tracking-[.12em] text-white/55 first:mt-0">{link.section}</span>)}
             <Link
-              href={link.href}
+              href={linkHref(link.href)}
               aria-current={isActive(pathname, link.href) ? "page" : undefined}
               aria-label={sidebarCollapsed ? link.label : undefined}
               title={sidebarCollapsed ? link.label : undefined}
@@ -237,7 +250,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               {links.map((link, index) => (
                 <Fragment key={link.href}>
                 {(index === 0 || links[index - 1]?.section !== link.section) && <span className="mb-1 mt-3 block px-3 text-[.75rem] font-bold uppercase tracking-[.1em] text-[var(--muted)] first:mt-1">{link.section}</span>}
-                <Link href={link.href} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[#5c4d3f] hover:bg-black/[.035]"}`}>
+                <Link href={linkHref(link.href)} onClick={() => setIsMenuOpen(false)} className={`pressable flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium ${isActive(pathname, link.href) ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[#5c4d3f] hover:bg-black/[.035]"}`}>
                   <Icon name={link.icon} className="h-5 w-5" /><span>{link.label}</span>{link.alert && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[var(--danger)]" />}
                 </Link>
                 </Fragment>

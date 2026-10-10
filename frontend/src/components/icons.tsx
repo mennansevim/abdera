@@ -41,7 +41,8 @@ export type IconName =
   | "guitar"
   | "violin"
   | "drums"
-  | "cake";
+  | "cake"
+  | "bug";
 
 const paths: Record<IconName, React.ReactNode> = {
   home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9M9 20v-6h6v6"/></>,
@@ -77,6 +78,7 @@ const paths: Record<IconName, React.ReactNode> = {
   // Gecikmiş aidat uyarısı için (Ders Programı ders kartları) - küçük, tanıdık bir ünlem işareti.
   "alert-triangle": <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></>,
   plus: <path d="M12 5v14M5 12h14"/>,
+  bug: <><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9.5 7V5.5a2.5 2.5 0 0 1 5 0V7M12 11v9M3 13h4M17 13h4M4 7.5l3 2M20 7.5l-3 2M4 19l3-2M20 19l-3-2"/></>,
   pencil: <><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m14.5 6.5 3 3"/></>,
   phone: <path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5L16 12l4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3.5 5.2 2 2 0 0 1 5.5 3h1Z"/>,
   // Veliye WhatsApp'tan yazma bağlantısı için - konuşma balonu içinde telefon ahizesi.

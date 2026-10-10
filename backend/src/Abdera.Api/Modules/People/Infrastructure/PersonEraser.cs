@@ -324,6 +324,8 @@ public static class PersonEraser
         CREATE TEMP TABLE _tuser ON COMMIT DROP AS
             SELECT user_id AS id FROM teachers WHERE id = @teacher_id AND user_id IS NOT NULL;
         UPDATE library_pieces SET created_by_user_id = NULL WHERE created_by_user_id IN (SELECT id FROM _tuser);
+        -- Hata bildirimi okulun kaydıdır ve kalır; yalnızca gönderen bağı kopar.
+        UPDATE bug_reports SET created_by_user_id = NULL WHERE created_by_user_id IN (SELECT id FROM _tuser);
         DELETE FROM teachers WHERE id = @teacher_id;
         DELETE FROM users WHERE id IN (SELECT id FROM _tuser);
         """;

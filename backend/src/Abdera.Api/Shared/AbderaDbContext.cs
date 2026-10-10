@@ -94,6 +94,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<SystemHealthStatus> SystemHealthStatuses => Set<SystemHealthStatus>();
+    public DbSet<BugReport> BugReports => Set<BugReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

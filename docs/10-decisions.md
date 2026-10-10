@@ -329,6 +329,18 @@ Kullanıcı isteği: "aylık gelir değil, net karlılık hesaplamak lazım; faz
 | V5 | İşleyiş eksikleri | Kural tabanlı, AI'sız: ücreti girilmemiş öğretmen, geçerli tarifesi olmayan ders türü, son 14 günün yoklaması alınmamış dersleri, bu ayın aidatı açılmamış kayıt, haftalık ders saati olmayan kayıt, çalışma saati girilmemiş öğretmen, 10 gün içinde süresi dolan telafi hakkı, az veri yüzünden varsayılan kalış süresi. |
 | V6 | Sadelik | Ekranda terim yok: "net kâr" yerine "cebinde kalan", "doluluk" yerine "boş saat", "katkı" yerine "kazandırır". Dört bölüm: bu ay cebinde kalan + son 6 ay grafiği, "Bu ay ne yapmalı?" (AI yorumu + hesaplanmış tavsiyeler), "Düzeltilmesi gerekenler", "Fikirlerim". Fikir formu yazdıkça sunucudan canlı önizleme alır (`POST /api/profitability/ideas/preview`). İngilizce gibi yeni branş H1'i bozmaz: mevcut Birebir/Grup tarifesini kullanır, yeni fiyat ekseni açılmadı. |
 
+## W — Hata bildir ve GitHub üzerinden task takibi (2026-10-10)
+
+Kullanıcı isteği: "hata bildir sayfası oluştur, hangi sayfada olduğunu girsinler, açıklamasını yazsınlar; önden doğrula, gerçekten problem varsa çözüm task'ı, yoksa makul bir feature ise feature task'ı aç; github üzerinden yönetelim". Task: [mennansevim/abdera#11](https://github.com/mennansevim/abdera/issues/11).
+
+| # | Konu | Karar |
+|---|---|---|
+| W1 | Kim, nereden | Yönetici + öğretmen, sol menünün **Sistem** bölümündeki "Hata bildir" maddesinden (telefonda açılır menüde). Veli göremez. Link bulunulan sayfayı `?from=` ile taşır, form o sayfa seçili açılır; sayfa listesi menüden türer (`navPagesFor`). |
+| W2 | Form | Tür (Bir şey çalışmıyor / Önerim var) + sayfa + açıklama (10–4000 karakter). Sürüm ve tarayıcı bilgisi otomatik eklenir. Ekran görüntüsü yok (kullanıcı: "anlatsın yeter"). |
+| W3 | Gönder-unut | Öğretmen kendi bildirimlerini ve durumlarını görmez; liste ve durum güncellemesi yalnızca Admin (`GET/PATCH /api/bug-reports`). |
+| W4 | Triage | Bildirimler `bug_reports`'ta birikir. Claude "bekleyen bildirimleri incele" denince her birini kodda/canlıda doğrular: gerçek sorun → `bug`, makul istek → `enhancement` issue'su açılır ve bildirim `Triaged` + issue numarasıyla işaretlenir; değilse `Rejected` + gerekçe. Sunucudan GitHub API'ye otomatik issue açılmaz: doğrulama adımı insan/Claude'da kalsın, yeni token ve dış bağımlılık gerekmesin. |
+| W5 | Saklama | Bildirim silinmez; gönderen öğretmen kalıcı silinirse yalnızca `created_by_user_id` null'lanır (`PersonEraser`). Para/takvim/rıza değiştirmediği için `audit_log`'a yazılmaz. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

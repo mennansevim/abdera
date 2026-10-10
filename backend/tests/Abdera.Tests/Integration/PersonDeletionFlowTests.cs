@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Library.Features;
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.People.Infrastructure;
@@ -304,6 +305,9 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         db.TeacherPayRates.Add(TeacherPayRate.Create(seeded.TeacherId, 300m, "TRY", null, now));
         db.TeacherWeeklyPayouts.Add(TeacherWeeklyPayout.Create(
             seeded.TeacherId, payWeek, 3, 300m, 900m, 900m, "TRY", payWeek.End, null, payoutExpense.Id, null, now));
+        // Hata bildirimi okulun kaydıdır: kalır, yalnızca gönderen bağı kopar.
+        var bugReport = BugReport.Create(userId!.Value, BugReportKind.Bug, "/dashboard", "Silinen öğretmenin bildirimi.", null, null, now);
+        db.BugReports.Add(bugReport);
         await db.SaveChangesAsync();
 
         var impact = await ReadAsync<PersonEraser.TeacherImpact>(
@@ -328,6 +332,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.TeacherPayRates.AnyAsync(r => r.TeacherId == seeded.TeacherId));
         Assert.False(await db.TeacherWeeklyPayouts.AnyAsync(p => p.TeacherId == seeded.TeacherId));
         Assert.True(await db.Expenses.AnyAsync(e => e.Id == payoutExpense.Id));
+        Assert.Null((await db.BugReports.AsNoTracking().SingleAsync(r => r.Id == bugReport.Id)).CreatedByUserId);
         // Öğrencinin kendisi durur - silinen öğretmendi.
         Assert.True(await db.Students.AnyAsync(s => s.Id == seeded.StudentId));
     }

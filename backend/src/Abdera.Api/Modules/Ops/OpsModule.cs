@@ -28,5 +28,6 @@ public static class OpsModule
     {
         app.MapBackupRuns();
         app.MapSystemHealth();
+        app.MapBugReports();
     }
 }
