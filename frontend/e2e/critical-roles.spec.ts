@@ -163,10 +163,11 @@ test.describe.serial("Abdera critical role flows", () => {
     // kalmış olabilir; benzersiz öğrenci adına bağlı hedefe doğrudan olay göndererek testin
     // temiz CI veritabanı dışında da deterministik kalmasını sağla.
     await movedLesson.click({ force: true });
-    await page.getByRole("button", { name: "Düzenle" }).click();
+    // İptal düzenleme formundan değil, telafi kararını açıkça soran iptal düğmelerinden yapılır
+    // (formdaki "Durum: İptal" soru sormadan telafi hakkı verdiği için kaldırıldı).
     const statusDialog = page.getByRole("dialog", { name: "Ders detayları" });
-    await statusDialog.locator("label").filter({ hasText: "Durum" }).locator("select").selectOption("Cancelled");
-    await statusDialog.getByRole("button", { name: "Değişiklikleri kaydet" }).click();
+    await statusDialog.getByRole("button", { name: "Telafisiz iptal" }).click();
+    await statusDialog.getByRole("button", { name: /^(Yalnız bu dersi iptal et|Onayla)$/ }).click();
     // İptal edilen ders takvim ızgarasında artık gösterilmez (kayıt silinmez, yalnızca gizlenir).
     await expect(page.getByRole("dialog", { name: "Ders detayları" })).toBeHidden();
     const calendarReloaded = page.waitForResponse((response) => response.url().includes("/api/calendar") && response.ok());
