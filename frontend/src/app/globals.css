@@ -97,6 +97,19 @@ a {
   touch-action: manipulation;
 }
 
+/* Tailwind v4'ün preflight'ı butonların imlecini `default`'a çekiyor (v3'te `pointer`'dı);
+   sekmeler ve butonlar üzerinde ok imleci görünüyordu (#12, hata bildirimi). `base`
+   katmanında: tek tek verilen `cursor-*` sınıfları ve .btn:disabled yine kazanır. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  label[for],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 /* .field:not() ile hariç tutuluyor - .field zaten kendi odak halkasını taşıyor (aşağıda,
    .field:focus). Bu kural katmansız (unlayered) olduğu için @layer components'i her zaman
    ezer (bkz. aşağıdaki not) - .field'ı da kapsasaydı iki halka üst üste binerdi (gerçek bir
