@@ -132,7 +132,21 @@ export interface Enrollment {
   status: EnrollmentStatus;
   startedAt: string;
   endedAt: string | null;
+  endReason?: EnrollmentEndReason | null;
+  endNote?: string | null;
 }
+
+// Kurs kaydı bitirilirken sorulan ayrılma nedeni (issue #14) - sunucudaki EnrollmentEndReason.
+export type EnrollmentEndReason = "Moved" | "Financial" | "LostInterest" | "ScheduleConflict" | "SwitchedInstrument" | "Other";
+export const ENROLLMENT_END_REASON_LABELS: Record<EnrollmentEndReason, string> = {
+  Moved: "Taşındı",
+  Financial: "Maddi nedenler",
+  LostInterest: "İlgisini kaybetti",
+  ScheduleConflict: "Program uymadı",
+  SwitchedInstrument: "Başka enstrümana / kursa geçti",
+  Other: "Diğer",
+};
+export const ENROLLMENT_END_NOTE_MAX_LENGTH = 500;
 
 // Alt dal önerileri: alan serbest metin, bunlar yalnızca hızlı seçim. Anahtar enstrüman adı.
 export const INSTRUMENT_VARIANT_SUGGESTIONS: Record<string, string[]> = {
@@ -548,9 +562,11 @@ export function useSetInstrumentVariant(studentId: string) {
 export function useEndEnrollment(studentId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (enrollmentId: string) =>
-      api.delete(`/api/students/${studentId}/enrollments/${enrollmentId}`),
+    mutationFn: ({ enrollmentId, reason, note }: { enrollmentId: string; reason: EnrollmentEndReason; note?: string }) =>
+      api.post(`/api/students/${studentId}/enrollments/${enrollmentId}/end`, { reason, note: note || null }),
     onSuccess: () => {
+      // Sonlanan kayıt "ilgi gerektirebilecek öğrenciler" listesinden düşer.
+      queryClient.invalidateQueries({ queryKey: ["students", "attention-needed"] });
       queryClient.invalidateQueries({ queryKey: ["enrollments", studentId] });
       queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });

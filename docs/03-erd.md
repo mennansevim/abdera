@@ -288,6 +288,12 @@ enrollments (ek kolonlar — H1/H5)
   manual_discount_reason   text null
 
   CHECK (manual_discount_percent IS NULL OR manual_discount_percent BETWEEN 0 AND 100)
+
+enrollments (ek kolonlar — ayrılma nedeni, issue #14)
+  end_reason  varchar(30) null    -- Moved | Financial | LostInterest | ScheduleConflict | SwitchedInstrument | Other
+  end_note    varchar(500) null
+
+  CHECK ((end_reason IS NULL AND end_note IS NULL) OR status = 'Ended')
 ```
 
 ## Billing — aidat ve tahsilat

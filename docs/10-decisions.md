@@ -341,6 +341,18 @@ Kullanıcı isteği: "hata bildir sayfası oluştur, hangi sayfada olduğunu gir
 | W4 | Triage | Bildirimler `bug_reports`'ta birikir. Claude "bekleyen bildirimleri incele" denince her birini kodda/canlıda doğrular: gerçek sorun → `bug`, makul istek → `enhancement` issue'su açılır ve bildirim `Triaged` + issue numarasıyla işaretlenir; değilse `Rejected` + gerekçe. Sunucudan GitHub API'ye otomatik issue açılmaz: doğrulama adımı insan/Claude'da kalsın, yeni token ve dış bağımlılık gerekmesin. |
 | W5 | Saklama | Bildirim silinmez; gönderen öğretmen kalıcı silinirse yalnızca `created_by_user_id` null'lanır (`PersonEraser`). Para/takvim/rıza değiştirmediği için `audit_log`'a yazılmaz. |
 
+## X — Ayrılma riski erken uyarısı ve ayrılma nedeni (2026-10-11)
+
+Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [mennansevim/abdera#14](https://github.com/mennansevim/abdera/issues/14).
+
+| # | Konu | Karar |
+|---|---|---|
+| X1 | Sinyaller | "İlgi gerektirebilecek öğrenciler" (`/api/students/attention-needed`) mevcut devamsızlık kuralına ek olarak: son 4 haftada 2+ "gelemiyorum" ya da 3+ "geç kalacağım" katılım cevabı; düzenli tutulan pratik günlüğünün 3 haftadır boş kalması; son 60 günde düşen yetenek puanı; 3+ ay gecikmiş aidat. Her sinyal skor değil okunabilir bir neden üretir. Kurallar ve eşikler tek yerde: `AttentionSignal` (saf, birim testli). |
+| X2 | Gürültü | Pratik günlüğü sinyali yalnızca önceki 8 haftada en az 2 kaydı olan öğrencide çalışır: günlüğü hiç kullanmayan aile uyarı üretmez. Aidat eşiği 3 ay (kullanıcı kararı): 1-2 ay geç ödeme sık, 2 aylık eşikte liste aidat listesine dönüşürdü. Ana ekrandaki gecikmiş aidat kartının kaldırılma kararı (sürüm 2026.10.01) bununla çelişmez; gecikme takibi yine Aidatlar ekranında. |
+| X3 | Yetki | Aidat sinyali yalnızca Admin için hesaplanır (aidat verisi Admin'e özel). Öğretmen yalnızca kendi aktif öğrencilerini, kendi derslerindeki devamsızlık/katılım cevaplarıyla görür. Pasif öğrenci ve sonlanmış kurs kaydı listede yer almaz. |
+| X4 | Ayrılma nedeni | Kurs kaydı arayüzden yalnızca nedenle bitirilir (`POST .../enrollments/{id}/end`): Taşındı / Maddi / İlgisini kaybetti / Program uymadı / Başka kursa geçti / Diğer + isteğe bağlı not (≤500). Neden ve not `enrollments`'ta ve `audit_log`'da saklanır. Eski `DELETE` ucu duruyor, nedeni boş bırakır. Öğrenciyi "Pasife al" kurs kayıtlarını bitirmediği için neden sormaz. |
+| X5 | Sonra | Ayrılma nedenlerinin dökümü ve kârlılıktaki varsayılan kalış süresinin (V5) gerçek bitişlerle değiştirilmesi bu adımın dışında; veri birikince ele alınacak. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

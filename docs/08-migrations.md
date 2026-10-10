@@ -298,3 +298,10 @@ düzeltilmesi, `payment_corrections` ile aynı yalnızca-ekleme ilkesiyle (`paym
 Tahsilat penceresi tarihi "bugün" ile doldurduğu için geçen ay alınıp sonradan işlenen para yanlış aya
 gelir yazılıyordu. FK `payments(id)` Restrict, `(payment_id, created_at)` index, `CHECK (corrected_date <> previous_date)`.
 `PersonEraser` tabloyu ödemelerle birlikte temizler. `Down()` tabloyu düşürür.
+
+**AddEnrollmentEndReason** (People): `enrollments.end_reason varchar(30) NULL` (enum metni:
+`Moved`/`Financial`/`LostInterest`/`ScheduleConflict`/`SwitchedInstrument`/`Other`) ve
+`enrollments.end_note varchar(500) NULL` - kurs kaydı bitirilirken ayrılma nedeni (issue #14).
+`CHECK ((end_reason IS NULL AND end_note IS NULL) OR status = 'Ended')`: neden yalnızca sonlanmış
+kayıtta dolu olabilir. Mevcut satırlar null kalır. Yeni tablo yok, `PersonEraser` değişmez.
+`Down()` kısıtı ve iki kolonu düşürür (yerel veritabanında geri alıp yeniden uygulanarak doğrulandı).

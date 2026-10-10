@@ -7,6 +7,18 @@ public enum EnrollmentStatus
     Ended,
 }
 
+// Kurs kaydı neden bitti (issue #14). Ayrılma analizinin ham verisi: "neden gidiyorlar"
+// sorusu tahmin yerine kayıttan yanıtlanabilsin. Liste kısa tutulur, ayrıntı nota yazılır.
+public enum EnrollmentEndReason
+{
+    Moved,
+    Financial,
+    LostInterest,
+    ScheduleConflict,
+    SwitchedInstrument,
+    Other,
+}
+
 // docs/03-erd.md - People > enrollments. Bir öğrencinin belirli bir öğretmenle belirli
 // bir enstrüman üzerindeki kaydı - LessonSeries ve aidat (Receivable) bunun üzerine kurulur.
 public class Enrollment
@@ -29,6 +41,10 @@ public class Enrollment
     public EnrollmentStatus Status { get; private set; } = EnrollmentStatus.Active;
     public DateOnly StartedAt { get; private set; }
     public DateOnly? EndedAt { get; private set; }
+    // Yalnızca sonlanmış kayıtta dolu olabilir (CK_enrollments_end_reason_only_when_ended).
+    // Eski DELETE ucuyla ya da nedeni bilinmeden sonlanan kayıtta null kalır.
+    public EnrollmentEndReason? EndReason { get; private set; }
+    public string? EndNote { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -55,10 +71,18 @@ public class Enrollment
         };
     }
 
-    public void End(DateOnly endedAt, DateTimeOffset now)
+    public const int EndNoteMaxLength = 500;
+
+    public void End(DateOnly endedAt, DateTimeOffset now, EnrollmentEndReason? reason = null, string? note = null)
     {
+        var trimmedNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (trimmedNote is { Length: > EndNoteMaxLength })
+            throw new ArgumentException($"Not en fazla {EndNoteMaxLength} karakter olabilir.", nameof(note));
+
         Status = EnrollmentStatus.Ended;
         EndedAt = endedAt;
+        EndReason = reason;
+        EndNote = trimmedNote;
         UpdatedAt = now;
     }
 
