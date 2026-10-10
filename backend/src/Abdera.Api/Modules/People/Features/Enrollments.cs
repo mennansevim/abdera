@@ -22,10 +22,14 @@ public static class Enrollments
     // değiştiren her istek elle indirimi de yeniden yazmak zorunda kalırdı (o uç indirimi
     // gönderilen değerle DEĞİŞTİRİR) ve uç Admin'e kapalı - alt dalı öğretmen de girebilmeli.
     public record SetInstrumentVariantRequest(string? InstrumentVariant);
+    // Kurs kaydını bitirirken ayrılma nedeni (issue #14). Neden zorunlu: "neden gidiyorlar"
+    // sorusunun cevabı ancak her bitişte sorulursa birikir.
+    public record EndRequest(EnrollmentEndReason Reason, string? Note);
     public record EnrollmentResponse(
         Guid Id, Guid StudentId, Guid TeacherId, Guid InstrumentId, string? InstrumentVariant, CourseKind CourseKind,
         decimal? ManualDiscountPercent, string? ManualDiscountReason,
-        EnrollmentStatus Status, DateOnly StartedAt, DateOnly? EndedAt);
+        EnrollmentStatus Status, DateOnly StartedAt, DateOnly? EndedAt,
+        EnrollmentEndReason? EndReason = null, string? EndNote = null);
 
     public static void MapEnrollments(this IEndpointRouteBuilder app)
     {
@@ -42,6 +46,9 @@ public static class Enrollments
         app.MapPut("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}/instrument-variant", SetInstrumentVariantAsync)
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
+        // Arayüzün yolu: nedenle birlikte bitirir. DELETE eski istemciler için duruyor (neden boş kalır).
+        app.MapPost("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}/end", EndWithReasonAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
         app.MapDelete("/api/students/{studentId:guid}/enrollments/{enrollmentId:guid}", EndAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
@@ -130,8 +137,21 @@ public static class Enrollments
         return Results.Ok(enrollments.Select(ToResponse));
     }
 
-    private static async Task<IResult> EndAsync(
-        Guid studentId, Guid enrollmentId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    private static Task<IResult> EndWithReasonAsync(
+        Guid studentId, Guid enrollmentId, EndRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        if (!Enum.IsDefined(request.Reason))
+            throw new ValidationFailedException(new Dictionary<string, string[]> { ["reason"] = ["Geçerli bir ayrılma nedeni seçin."] });
+        return EndCoreAsync(studentId, enrollmentId, request.Reason, request.Note, principal, db, clock);
+    }
+
+    private static Task<IResult> EndAsync(
+        Guid studentId, Guid enrollmentId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock) =>
+        EndCoreAsync(studentId, enrollmentId, null, null, principal, db, clock);
+
+    private static async Task<IResult> EndCoreAsync(
+        Guid studentId, Guid enrollmentId, EnrollmentEndReason? reason, string? note,
+        ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
         var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == enrollmentId && e.StudentId == studentId)
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
@@ -141,7 +161,7 @@ public static class Enrollments
 
         var now = clock.UtcNow;
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
-        enrollment.End(today < enrollment.StartedAt ? enrollment.StartedAt : today, now);
+        enrollment.End(today < enrollment.StartedAt ? enrollment.StartedAt : today, now, reason, note);
         db.AuditLogs.Add(AuditLog.Record(
             AuthContext.GetUserId(principal),
             "enrollment.ended",
@@ -149,7 +169,13 @@ public static class Enrollments
             enrollment.Id,
             now,
             JsonSerializer.Serialize(new { Status = EnrollmentStatus.Active.ToString(), EndedAt = (DateOnly?)null }),
-            JsonSerializer.Serialize(new { Status = enrollment.Status.ToString(), enrollment.EndedAt })));
+            JsonSerializer.Serialize(new
+            {
+                Status = enrollment.Status.ToString(),
+                enrollment.EndedAt,
+                EndReason = enrollment.EndReason?.ToString(),
+                enrollment.EndNote,
+            })));
 
         var series = await db.LessonSeries
             .Where(item => item.EnrollmentId == enrollmentId && item.Status == LessonSeriesStatus.Active)
@@ -245,5 +271,5 @@ public static class Enrollments
 
     private static EnrollmentResponse ToResponse(Enrollment e) =>
         new(e.Id, e.StudentId, e.TeacherId, e.InstrumentId, e.InstrumentVariant, e.CourseKind,
-            e.ManualDiscountPercent, e.ManualDiscountReason, e.Status, e.StartedAt, e.EndedAt);
+            e.ManualDiscountPercent, e.ManualDiscountReason, e.Status, e.StartedAt, e.EndedAt, e.EndReason, e.EndNote);
 }

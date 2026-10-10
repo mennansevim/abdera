@@ -19,7 +19,8 @@ GET    /api/students/{studentId}/guardians       ✅ eklendi - docs'ta yoktu, Pe
 POST   /api/students/{studentId}/guardians       ✅ eklendi
 GET    /api/students/{studentId}/enrollments     ✅ eklendi - Enrollment her zaman bir öğrenciye bağlı
 POST   /api/students/{studentId}/enrollments     ✅ eklendi - H16: aktif kayıt açılınca o ayın aidatı da hemen açılır (tarife yoksa kayıt yine 201, aidat açılmaz)
-DELETE /api/students/{studentId}/enrollments/{enrollmentId} ✅ kursu silmeden enrollment'ı sonlandırır
+POST   /api/students/{studentId}/enrollments/{enrollmentId}/end ✅ #14 - { reason, note? } ayrılma nedeniyle sonlandırır (arayüzün yolu); neden zorunlu, not ≤500
+DELETE /api/students/{studentId}/enrollments/{enrollmentId} ✅ kursu silmeden enrollment'ı sonlandırır (eski istemciler; neden boş kalır)
 GET    /api/students/attention-needed            ✅ Admin/Teacher scope; açıklanabilir son-devamsızlık sinyali
 
 GET    /api/guardians                           ✅

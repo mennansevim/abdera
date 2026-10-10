@@ -19,6 +19,9 @@ import {
   INSTRUMENT_VARIANT_MAX_LENGTH,
   INSTRUMENT_VARIANT_SUGGESTIONS,
   useCreateEnrollment,
+  ENROLLMENT_END_NOTE_MAX_LENGTH,
+  ENROLLMENT_END_REASON_LABELS,
+  useAttentionNeededStudents,
   useEndEnrollment,
   useEnrollments,
   useInstruments,
@@ -29,6 +32,7 @@ import {
   useTeachers,
   useUpdateGuardian,
   useUpdateStudent,
+  type EnrollmentEndReason,
   type GuardianPhoneLookup,
   type Student,
   type StudentGuardianLink,
@@ -72,6 +76,10 @@ export function StudentDetail({
   const { data: teachers } = useTeachers();
   const { data: instruments } = useInstruments();
   const updateStudent = useUpdateStudent();
+  // Ana ekrandaki "ilgi gerektirebilecek öğrenciler" listesinin bu öğrenciye düşen satırı:
+  // aynı sorgu önbellekten gelir, künyede ikinci bir hesap yapılmaz.
+  const { data: attentionStudents } = useAttentionNeededStudents();
+  const attention = attentionStudents?.find((item) => item.studentId === studentId);
   const activeEnrollments = enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [];
   const fullName = `${student.firstName} ${student.lastName}`;
   const selectedProgramEnrollment = activeEnrollments.find((enrollment) => enrollment.id === programEnrollmentId) ?? null;
@@ -103,6 +111,18 @@ export function StudentDetail({
           {onDelete && <><RowMenuSeparator /><RowMenuItem icon="x" tone="danger" onClick={() => { close(); onDelete(); }}>{isAdmin ? "Kalıcı olarak sil…" : "Silme talebi oluştur…"}</RowMenuItem></>}
         </>}</RowMenu>}
       </div>
+
+      {attention && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-[color:var(--danger)]/30 bg-[var(--danger-soft)]/60 px-3 py-2.5">
+          <Icon name="alert-triangle" className="mt-0.5 h-4 w-4 shrink-0 text-[var(--danger-strong)]" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-[var(--danger-strong)]">İlgi gerektirebilir</p>
+            <ul className="mt-0.5 text-[.75rem] leading-snug text-[var(--danger-strong)]">
+              {attention.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-2">
         {canManage && (
@@ -372,13 +392,17 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
   const variantSuggestions = INSTRUMENT_VARIANT_SUGGESTIONS[instrumentName] ?? [];
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
+  const [endReason, setEndReason] = useState<EnrollmentEndReason | "">("");
+  const [endNote, setEndNote] = useState("");
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function remove() {
+  async function remove(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!endReason) return;
     setError(null);
     try {
-      await endEnrollment.mutateAsync(enrollmentId);
+      await endEnrollment.mutateAsync({ enrollmentId, reason: endReason, note: endNote.trim() || undefined });
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Kurs kaldırılamadı.");
       setConfirming(false);
@@ -509,15 +533,26 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
         </Modal>
       )}
       {confirming && (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2">
+        // Ayrılma nedeni zorunlu: "neden gidiyorlar" sorusunun cevabı ancak her bitişte
+        // sorulursa birikir (issue #14).
+        <form onSubmit={remove} className="mt-2 space-y-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2.5">
           <p className="text-[.75rem] font-semibold text-[var(--danger-strong)]">Kurs sonlandırılsın mı? Gelecekteki dersler durdurulur.</p>
-          <span className="flex gap-2">
-            <button type="button" onClick={() => setConfirming(false)} className="btn btn-quiet text-xs">Vazgeç</button>
-            <button type="button" onClick={remove} disabled={endEnrollment.isPending} className="btn bg-[var(--danger)] text-xs text-white hover:bg-[var(--danger-strong)] disabled:opacity-50">
+          <label className="block text-[.75rem] font-bold text-[var(--foreground)]">Ayrılma nedeni
+            <select value={endReason} onChange={(event) => setEndReason(event.target.value as EnrollmentEndReason | "")} required className="field mt-1 min-h-11 bg-white text-sm">
+              <option value="">Neden seç</option>
+              {(Object.keys(ENROLLMENT_END_REASON_LABELS) as EnrollmentEndReason[]).map((reason) => <option key={reason} value={reason}>{ENROLLMENT_END_REASON_LABELS[reason]}</option>)}
+            </select>
+          </label>
+          <label className="block text-[.75rem] font-bold text-[var(--foreground)]">Not <span className="font-medium text-[var(--muted)]">· opsiyonel</span>
+            <input value={endNote} onChange={(event) => setEndNote(event.target.value)} maxLength={ENROLLMENT_END_NOTE_MAX_LENGTH} placeholder="Örn. dönem sonunda yeniden başlamak istiyor" className="field mt-1 bg-white text-sm" />
+          </label>
+          <span className="flex justify-end gap-2">
+            <button type="button" onClick={() => { setConfirming(false); setEndReason(""); setEndNote(""); }} className="btn btn-quiet text-xs">Vazgeç</button>
+            <button type="submit" disabled={!endReason || endEnrollment.isPending} className="btn bg-[var(--danger)] text-xs text-white hover:bg-[var(--danger-strong)] disabled:opacity-50">
               {endEnrollment.isPending ? "Sonlandırılıyor…" : "Sonlandır"}
             </button>
           </span>
-        </div>
+        </form>
       )}
       {error && <p role="alert" className="mt-2 text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
     </li>

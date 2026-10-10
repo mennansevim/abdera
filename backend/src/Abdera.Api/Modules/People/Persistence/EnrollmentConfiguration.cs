@@ -12,6 +12,9 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
         builder.ToTable(t => t.HasCheckConstraint(
             "CK_enrollments_manual_discount_percent",
             "manual_discount_percent IS NULL OR (manual_discount_percent >= 0 AND manual_discount_percent <= 100)"));
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_enrollments_end_reason_only_when_ended",
+            "(end_reason IS NULL AND end_note IS NULL) OR status = 'Ended'"));
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Id).HasColumnName("id");
         builder.Property(e => e.StudentId).HasColumnName("student_id");
@@ -24,6 +27,8 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
         builder.Property(e => e.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.StartedAt).HasColumnName("started_at");
         builder.Property(e => e.EndedAt).HasColumnName("ended_at");
+        builder.Property(e => e.EndReason).HasColumnName("end_reason").HasConversion<string>().HasMaxLength(30);
+        builder.Property(e => e.EndNote).HasColumnName("end_note").HasMaxLength(Enrollment.EndNoteMaxLength);
         builder.Property(e => e.CreatedAt).HasColumnName("created_at");
         builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 
