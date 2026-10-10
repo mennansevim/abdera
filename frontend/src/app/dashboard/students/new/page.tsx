@@ -12,7 +12,13 @@ import { ApiError } from "@/lib/api";
 import { lookupGuardianByPhone, useInstruments, useRegisterStudent, useTeachers, type GuardianPhoneLookup, type RegisterStudentResult } from "@/lib/people";
 import { DAY_NAMES_TR } from "@/lib/scheduling";
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// Yerel takvim günü: `toISOString()` UTC verir ve İstanbul'da 00:00-03:00 arası dünü gösterirdi.
+function localIsoDate() {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+const TODAY = localIsoDate();
 const DAY_KEYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Adım kartı. Eskiden <fieldset>+<legend> kullanılıyordu: tarayıcı legend'ı kartın üst

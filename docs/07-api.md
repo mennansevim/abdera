@@ -141,6 +141,7 @@ PUT    /api/teacher-payouts/rates/{teacherId}    ✅ öğretmenin ders başı ü
 POST   /api/guardians/{guardianId}/virtual-iban  ✅ Phase 6 (E1) - veliye sanal IBAN atar, aktifken tekrar atanamaz
 GET    /api/guardians/{guardianId}/virtual-iban  ✅ atanmışsa döner, yoksa 404
 GET    /api/bank-transactions                    ✅ ?status=&page=&pageSize= (varsayılan 50, en fazla 200) - yanıt {items,totalCount,page,pageSize} zarfında (ARC-3)
+GET    /api/bank-transactions/{transactionId}/candidates   ✅ Elle çözüm için velinin açık aidatları (dönem, öğrenci, enstrüman, kalan bakiye, tutarın sığıp sığmadığı)
 POST   /api/bank-transactions/{transactionId}/resolve   ✅ NeedsReview'ı elle bir Receivable'a bağlar (veya "hiçbirine sayma")
 POST   /api/webhooks/bank                        ✅ paylaşılan-sır başlığı ile doğrulama + idempotency + eşleştirme (gerçek sağlayıcı seçilince imza şeması değişecek)
 POST   /api/dev/bank/simulate-transaction        ✅ yalnızca Development - eşleştirme mantığını gerçek sağlayıcı olmadan test eder

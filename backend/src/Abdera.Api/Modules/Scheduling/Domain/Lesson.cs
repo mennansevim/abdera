@@ -159,10 +159,18 @@ public class Lesson
 
     // docs/05-state-models.md: "COMPLETED'a yalnızca LessonAttendance kaydı girildiğinde
     // geçilir" - bu yüzden Complete() yalnızca Attendance/MarkAttendance handler'ından çağrılır.
+    // Öğrenci birkaç dakika erken geldiğinde yoklama derse girmeden alınabilsin diye küçük bir pay.
+    // Ön yüz aynı değeri kullanır (frontend/src/lib/attendance.ts ATTENDANCE_OPENS_BEFORE_MINUTES).
+    public static readonly TimeSpan AttendanceOpensBeforeStart = TimeSpan.FromMinutes(15);
+
     public void Complete(DateTimeOffset now)
     {
         if (Status is LessonStatus.Cancelled)
             throw new ConflictException("İptal edilmiş bir derse yoklama girilemez.");
+        // Gün şeridinden ileri bir gün seçilip "Geldi" denebiliyordu: ders Completed olup
+        // öğretmenin haftalık ödemesine giriyor, yoklama hatırlatması da hiç sorulmuyordu.
+        if (StartAt - AttendanceOpensBeforeStart > now)
+            throw new ConflictException("Henüz başlamamış bir derse yoklama girilemez.");
 
         Status = LessonStatus.Completed;
         UpdatedAt = now;

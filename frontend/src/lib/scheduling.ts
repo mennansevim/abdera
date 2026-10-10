@@ -3,6 +3,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
+import type { AttendanceStatus } from "./attendance";
 
 export type LessonSeriesStatus = "Active" | "Ended";
 export type LessonStatus = "Normal" | "Rescheduled" | "Cancelled" | "Completed" | "Makeup";
@@ -139,6 +140,8 @@ export interface CalendarLesson {
   instrumentId: string;
   instrumentName: string;
   rsvpResponse?: "Unknown" | "Attending" | "AttendingLate" | "NotAttending" | null;
+  // Yoklaması girilmiş dersin güncel durumu; düzeltme ("Gelmedi" → "Mazeretli") buradan başlar.
+  attendanceStatus?: AttendanceStatus | null;
 }
 
 export function useCalendar(from: string, to: string) {

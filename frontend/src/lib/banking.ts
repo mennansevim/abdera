@@ -26,6 +26,28 @@ export interface BankTransaction {
   receivedAt: string;
   status: BankTransactionStatus;
   matchedReceivableId: string | null;
+  guardianName: string | null;
+}
+
+// Elle çözümde seçilebilecek aidat: havaleyi gönderen velinin öğrencilerine ait açık aidatlar.
+export interface BankTransactionCandidate {
+  receivableId: string;
+  period: string;
+  studentName: string;
+  instrumentName: string;
+  amount: number;
+  remainingBalance: number;
+  currency: string;
+  status: "Unpaid" | "Partial" | "Overdue";
+  fitsRemainingBalance: boolean;
+}
+
+export function useBankTransactionCandidates(transactionId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["bank-transaction-candidates", transactionId],
+    queryFn: () => api.get<BankTransactionCandidate[]>(`/api/bank-transactions/${transactionId}/candidates`),
+    enabled,
+  });
 }
 
 export function useGuardianVirtualIban(guardianId: string) {
@@ -74,6 +96,14 @@ export function useResolveBankTransaction() {
   return useMutation({
     mutationFn: ({ transactionId, receivableId }: { transactionId: string; receivableId: string | null }) =>
       api.post<BankTransaction>(`/api/bank-transactions/${transactionId}/resolve`, { receivableId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bank-transactions"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-transaction-candidates"] });
+      // Havale bir aidata işlenince Aidatlar ekranı da güncel görünmeli.
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["receivables"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
+    },
   });
 }

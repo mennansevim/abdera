@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, t
 import { createPortal } from "react-dom";
 import { Icon, InstrumentSilhouette, instrumentBadgeStyle } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { useCancelLesson, useMarkAttendance, useRescheduleLesson } from "@/lib/attendance";
+import { ATTENDANCE_LABELS, useCancelLesson, useMarkAttendance, useRescheduleLesson, type AttendanceStatus } from "@/lib/attendance";
 import { useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { errorMessage } from "@/lib/library";
@@ -1380,12 +1380,11 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const [editing, setEditing] = useState(false);
   const [studentId, setStudentId] = useState(lesson.studentId);
   const [teacherId, setTeacherId] = useState(lesson.teacherId);
-  const [statusValue, setStatusValue] = useState<"Normal" | "Cancelled">("Normal");
   const [dateValue, setDateValue] = useState(() => dateInputValue(start));
   const [timeValue, setTimeValue] = useState(() => timeInputValue(start));
   const [durationValue, setDurationValue] = useState(() => String(duration));
   const [error, setError] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<"absent" | "cancel-with-makeup" | "cancel-without-makeup" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"absent" | "cancel-with-makeup" | "cancel-without-makeup" | "cancel-by-guardian" | null>(null);
   const { data: enrollments } = useEnrollments(studentId);
   const eligibleEnrollments = enrollments?.filter((item) => item.status === "Active" && item.instrumentId === lesson.instrumentId) ?? [];
   const eligibleTeacherIds = new Set(eligibleEnrollments.map((item) => item.teacherId));
@@ -1399,7 +1398,10 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   // invariant'ı (Lesson.Cancel / UpdateLesson `Status != Normal` ile reddeder).
   const canEdit = canManage && lesson.status === "Normal";
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
+  const canCorrectAttendance = canManage && lesson.status === "Completed" && Boolean(lesson.attendanceStatus);
   const canCancelWithMakeup = canManage && lesson.status === "Normal";
+  // Yalnızca onay metni için: kararı sunucu verir (CancelLesson.cs, Policy:MakeupNoticeHours = 24).
+  const guardianNoticeEnough = start.getTime() - now.getTime() >= 24 * 60 * 60 * 1000;
   const canPlanMakeup = canManage && makeupSource && Boolean(makeupCredits?.some((credit) =>
     credit.sourceLessonId === lesson.id && credit.status === "Available" && new Date(credit.expiresAt).getTime() >= now.getTime()));
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -1426,7 +1428,9 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         teacherId,
         startAt: nextStart.toISOString(),
         durationMinutes: minutes,
-        status: statusValue,
+        // İptal bu formdan yapılmaz: iptal düğmeleri telafi kararını ve iptal edeni açıkça
+        // soruyor, buradaki "Durum: İptal" ise her zaman soru sormadan telafi hakkı veriyordu.
+        status: "Normal",
       });
       onUpdated();
       onClose();
@@ -1456,14 +1460,16 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         await markAttendance.mutateAsync({ status: "Absent", note: "Takvimden öğrenci gelmedi olarak işaretlendi." });
         onUpdated("Ders, öğrenci gelmedi olarak tamamlandı.");
       } else {
-        // Telafi kararı burada AÇIKÇA gönderilir; sunucudaki otomatik türetmeye bırakılmaz.
-        // "Telafisiz iptal" okul kaynaklı bir iptalde de kredi doğurmamalı.
+        // Okul iptalinde telafi kararı AÇIKÇA gönderilir; "Telafisiz iptal" okul kaynaklı bir
+        // iptalde de kredi doğurmamalı. Veli iptalinde karar sunucudaki 24 saat kuralınındır
+        // (docs/10-decisions.md A2): eskiden her iptal "School" gittiği için bu kural hiç işlemiyordu.
+        const byGuardian = confirmAction === "cancel-by-guardian";
         const withMakeup = confirmAction === "cancel-with-makeup";
         const result = await cancelLesson.mutateAsync({
           lessonId: lesson.id,
-          cancelledBy: "School",
-          reason: `${endsSeries ? "Ders serisi sonlandırıldı. " : ""}${withMakeup ? "Takvimden telafi hakkıyla iptal edildi." : "Takvimden telafi hakkı verilmeden iptal edildi."}`,
-          grantMakeupCredit: withMakeup,
+          cancelledBy: byGuardian ? "Guardian" : "School",
+          reason: `${endsSeries ? "Ders serisi sonlandırıldı. " : ""}${byGuardian ? "Veli dersi iptal etti." : withMakeup ? "Takvimden telafi hakkıyla iptal edildi." : "Takvimden telafi hakkı verilmeden iptal edildi."}`,
+          grantMakeupCredit: byGuardian ? undefined : withMakeup,
         });
         const seriesNote = endsSeries ? " Haftalık program sona erdi, sonraki haftalar kaldırıldı." : "";
         onUpdated((result.makeupCreditEarned ? "Ders iptal edildi ve öğrenciye telafi hakkı tanımlandı." : "Ders telafi hakkı verilmeden iptal edildi.") + seriesNote);
@@ -1476,6 +1482,19 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
     } catch (err) {
       const detail = err instanceof ApiError ? (err.detail ?? err.title) : "İşlem tamamlanamadı.";
       setError(endsSeries ? `Haftalık program sona erdi ama bu ders iptal edilemedi: ${detail} "Yalnız bu dersi iptal et" ile yeniden dene.` : detail);
+    }
+  }
+
+  // Yanlış girilen yoklama sonradan düzeltilir; sunucu düzeltmeyi audit'e yazar ve telafi
+  // hakkını yeni duruma göre açar ya da geri alır (MarkAttendance.cs).
+  async function handleCorrectAttendance(next: AttendanceStatus) {
+    setError(null);
+    try {
+      await markAttendance.mutateAsync({ status: next });
+      onUpdated(`Yoklama ${ATTENDANCE_LABELS[next]} olarak düzeltildi.`);
+      onClose();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Yoklama düzeltilemedi.");
     }
   }
 
@@ -1500,7 +1519,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
           <DetailItem label="Süre" value={`${duration} dakika`} />
           <DetailItem label="Öğretmen" value={lesson.teacherName} />
           <DetailItem label="Katılım" value={lesson.rsvpResponse === "Attending" ? "Geliyor" : lesson.rsvpResponse === "AttendingLate" ? "Geç kalacak" : lesson.rsvpResponse === "NotAttending" ? "Gelmiyor" : "Cevap bekleniyor"} />
-          <DetailItem label="Durum" value={lesson.status === "Cancelled" ? "İptal edildi" : lesson.status === "Completed" ? "Tamamlandı" : lesson.status === "Makeup" ? "Telafi" : "Planlandı"} />
+          <DetailItem label="Durum" value={lesson.status === "Cancelled" ? "İptal edildi" : lesson.status === "Completed" ? `Tamamlandı${lesson.attendanceStatus ? ` · ${ATTENDANCE_LABELS[lesson.attendanceStatus]}` : ""}` : lesson.status === "Makeup" ? "Telafi" : "Planlandı"} />
         </dl>
         {editing ? (
           <form onSubmit={handleSave} className="border-t border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
@@ -1510,7 +1529,6 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
               <label className="text-micro text-[var(--muted)]">Yeni tarih<input type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Yeni saat<input type="time" value={timeValue} onChange={(event) => setTimeValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" inputMode="numeric" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
-              {isAdmin && <label className="text-micro text-[var(--muted)]">Durum<select value={statusValue} onChange={(event) => setStatusValue(event.target.value as "Normal" | "Cancelled")} className="field mt-1 min-h-11 bg-white text-sm font-semibold"><option value="Normal">Planlandı</option><option value="Cancelled">İptal edildi</option></select></label>}
             </div>
             <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
@@ -1521,10 +1539,23 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
           </form>
         ) : (
           <>
+            {canCorrectAttendance && !confirmAction && (
+              <div className="border-t border-[var(--line)] px-4 py-3">
+                <p className="text-micro text-[var(--muted)]">Yoklamayı düzelt</p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {(["Present", "Absent", "Excused"] as const).map((item) => {
+                    const active = lesson.attendanceStatus === item;
+                    return <button key={item} type="button" aria-pressed={active} disabled={active || markAttendance.isPending} onClick={() => void handleCorrectAttendance(item)} className={`pressable min-h-11 rounded-xl border px-2 text-xs font-bold ${active ? "border-[color:var(--brand)] bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{ATTENDANCE_LABELS[item]}</button>;
+                  })}
+                </div>
+                <p className="text-meta mt-2">Mazeretli&apos;ye çevrilen derse 21 günlük telafi hakkı açılır; Mazeretli&apos;den çıkarsan kullanılmamış hak geri alınır.</p>
+                {error && <p role="alert" className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+              </div>
+            )}
             {confirmAction && (
               <div className={`border-t border-[var(--line)] p-4 ${confirmAction === "absent" ? "bg-[var(--warning-soft)]" : "bg-[var(--danger-soft)]"}`}>
-                <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : confirmAction === "cancel-with-makeup" ? "Ders iptal edilip telafi hakkı tanımlansın mı?" : "Ders telafi hakkı verilmeden iptal edilsin mi?"}</p>
-                <p className="text-meta mt-1">{confirmAction === "absent" ? "Ders tamamlandı sayılır ve yoklama Gelmedi olarak kaydedilir." : confirmAction === "cancel-with-makeup" ? "Bu ders iptal edilir; öğrenci için kullanılabilir bir telafi hakkı oluşturulur." : "Bu ders iptal edilir ve öğrenciye telafi hakkı TANIMLANMAZ. Tatil, yanlış açılmış ders ya da velinin telafi istemediği durumlar için."}</p>
+                <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : confirmAction === "cancel-with-makeup" ? "Ders iptal edilip telafi hakkı tanımlansın mı?" : confirmAction === "cancel-by-guardian" ? "Ders veli iptali olarak kaydedilsin mi?" : "Ders telafi hakkı verilmeden iptal edilsin mi?"}</p>
+                <p className="text-meta mt-1">{confirmAction === "absent" ? "Ders tamamlandı sayılır ve yoklama Gelmedi olarak kaydedilir." : confirmAction === "cancel-with-makeup" ? "Bu ders iptal edilir; öğrenci için kullanılabilir bir telafi hakkı oluşturulur." : confirmAction === "cancel-by-guardian" ? guardianNoticeEnough ? "Derse 24 saatten fazla var: veli zamanında haber verdiği için telafi hakkı oluşur." : "Derse 24 saatten az kaldı: kurala göre telafi hakkı oluşmaz. Yine de telafi vermek istersen \"İptal et + telafi\"yi seç." : "Bu ders iptal edilir ve öğrenciye telafi hakkı TANIMLANMAZ. Tatil, yanlış açılmış ders ya da velinin telafi istemediği durumlar için."}</p>
                 {offersSeriesCancel && <p className="text-meta mt-2">Bu ders haftalık bir programın parçası. Yalnız bu dersi ya da bu dersle birlikte tüm seriyi iptal edebilirsin: seri iptalinde program sona erer, sonraki haftaların dersleri kaldırılır ve bu gün/saat boşalır.</p>}
                 {error && <p role="alert" className="mt-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
                 <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -1539,6 +1570,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
             <div className="sticky bottom-0 z-10 grid grid-cols-2 gap-2 border-t border-[var(--line)] bg-[var(--surface)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex sm:flex-wrap sm:justify-end">
               {canMarkAbsent && <button type="button" onClick={() => setConfirmAction("absent")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--warning-strong)] sm:w-auto sm:px-4">Öğrenci gelmedi</button>}
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-with-makeup")} className="pressable min-h-11 w-full rounded-xl border border-[var(--danger)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">İptal et + telafi</button>}
+              {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-by-guardian")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">Veli iptal etti</button>}
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-without-makeup")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">Telafisiz iptal</button>}
               {canPlanMakeup && <button type="button" onClick={() => onPlanMakeup(lesson)} className="pressable inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-3 text-sm font-bold text-white sm:w-auto sm:px-4"><Icon name="plus" className="h-4 w-4" />Telafi dersi ekle</button>}
               {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--brand-strong)] sm:w-auto sm:px-5">Düzenle</button>}

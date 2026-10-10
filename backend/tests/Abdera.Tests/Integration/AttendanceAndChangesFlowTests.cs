@@ -37,6 +37,16 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         return client;
     }
 
+    // Üretilen dersler ileri tarihli; başlamamış derse yoklama girilemediği için (Lesson.Complete)
+    // yoklama testleri dersi önce iki saat öncesine alır.
+    private async Task MoveLessonToPastAsync(Guid lessonId)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var start = DateTimeOffset.UtcNow.AddHours(-2);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE lessons SET start_at = {start}, end_at = {start.AddMinutes(45)} WHERE id = {lessonId}");
+    }
+
     private record SeededLesson(Guid LessonId, Guid StudentId, Guid TeacherId, Guid GuardianId, string TeacherEmail, string TeacherTempPassword);
 
     // Her testin ihtiyaç duyduğu tam zinciri kurar: enstrüman -> öğretmen(giriş hesaplı) ->
@@ -95,6 +105,7 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         await using var db = await _factory.CreateDbContextAsync();
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "att1");
+        await MoveLessonToPastAsync(seeded.LessonId);
 
         using var teacherClient = _factory.CreateClient();
         var login = await teacherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(seeded.TeacherEmail, seeded.TeacherTempPassword));
@@ -124,6 +135,62 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(1, progress.EntryCount);
         Assert.Equal("Bach · Minuet in G", progress.Entries.Single().PieceTitle);
         Assert.Equal(4, progress.Entries.Single().PieceDifficulty);
+    }
+
+    // Kullanıcı kuralı: öğretmen "Gelmedi" girdiği yoklamayı sonradan "Mazeretli"ye çevirebilmeli.
+    [Fact]
+    public async Task Teacher_corrects_absent_to_excused_and_calendar_shows_the_corrected_status()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "att-fix");
+        await MoveLessonToPastAsync(seeded.LessonId);
+
+        using var teacherClient = _factory.CreateClient();
+        var login = await teacherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(seeded.TeacherEmail, seeded.TeacherTempPassword));
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var absent = await teacherClient.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Absent, null));
+        Assert.Equal(HttpStatusCode.Created, absent.StatusCode);
+        Assert.False(await db.MakeupCredits.AnyAsync(c => c.SourceLessonId == seeded.LessonId));
+
+        var excused = await teacherClient.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Excused, "veli sonradan haber verdi"));
+        Assert.Equal(HttpStatusCode.OK, excused.StatusCode);
+        Assert.True(await db.MakeupCredits.AnyAsync(c => c.SourceLessonId == seeded.LessonId && c.Status == MakeupCreditStatus.Available));
+        var attendanceId = (await db.LessonAttendances.AsNoTracking().SingleAsync(a => a.LessonId == seeded.LessonId)).Id;
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "lesson.attendance_corrected" && a.EntityId == attendanceId));
+
+        var from = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"));
+        var to = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(90).ToString("O"));
+        var lessons = await teacherClient.GetFromJsonAsync<List<Calendar.LessonResponse>>(
+            $"/api/calendar?from={from}&to={to}", TestJson.Options);
+        Assert.Equal(AttendanceStatus.Excused, lessons!.Single(l => l.Id == seeded.LessonId).AttendanceStatus);
+    }
+
+    // Gün şeridinden ileri bir gün seçilip "Geldi" denebiliyordu: ders Completed olup ödeme
+    // haftasına giriyordu. Başlamamış derse yoklama (Admin dahil) reddedilir, ders Normal kalır.
+    [Fact]
+    public async Task Attendance_cannot_be_marked_before_the_lesson_starts()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "att-future");
+
+        var early = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Present, null));
+        Assert.Equal(HttpStatusCode.Conflict, early.StatusCode);
+        Assert.Equal(LessonStatus.Normal, (await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId)).Status);
+        Assert.False(await db.LessonAttendances.AnyAsync(a => a.LessonId == seeded.LessonId));
+
+        // Öğrenci erken gelirse yoklama dersten 15 dk öncesine kadar açılır.
+        var soon = DateTimeOffset.UtcNow.AddMinutes(10);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE lessons SET start_at = {soon}, end_at = {soon.AddMinutes(45)} WHERE id = {seeded.LessonId}");
+        var onTime = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Present, null));
+        Assert.Equal(HttpStatusCode.Created, onTime.StatusCode);
     }
 
     [Fact]
@@ -554,6 +621,7 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         await using var db = await _factory.CreateDbContextAsync();
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "exc1");
+        await MoveLessonToPastAsync(seeded.LessonId);
         var pianoId = await GetPianoIdAsync(admin);
         var clock = _factory.Services.GetRequiredService<IClock>();
 
@@ -604,6 +672,7 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
     {
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLessonAsync(admin, "abs1");
+        await MoveLessonToPastAsync(seeded.LessonId);
 
         var markResponse = await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
             new MarkAttendance.MarkRequest(AttendanceStatus.Absent, null));

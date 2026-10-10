@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { AdminGate, EmptyState, FormActions, FormMessage, Modal, PageHeader, Pager, Panel, Segmented } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { formatMoney, formatPeriod } from "@/lib/billing-format";
 import { useGuardians } from "@/lib/people";
 import {
   useAssignVirtualIban,
+  useBankTransactionCandidates,
   useBankTransactions,
   useGuardianVirtualIban,
   useResolveBankTransaction,
@@ -144,17 +146,42 @@ function TransactionsSection() {
   );
 }
 
+// Tutarı kalan bakiyeyi aşan aday seçilemez: sunucu aşan ödemeyi zaten reddeder (BankTransactions.cs).
+function CandidateList({ transaction, value, onChange }: { transaction: BankTransaction; value: string; onChange: (receivableId: string) => void }) {
+  const { data: candidates, isLoading, isError } = useBankTransactionCandidates(transaction.id, true);
+  if (isLoading) return <div className="space-y-2">{Array.from({ length: 2 }, (_, index) => <div key={index} className="skeleton h-12 rounded-xl" />)}</div>;
+  if (isError) return <FormMessage tone="error">Açık aidatlar yüklenemedi.</FormMessage>;
+  if (!candidates?.length) return <p className="rounded-xl bg-[var(--surface-muted)] p-3 text-sm text-[var(--muted)]">Bu velinin açık aidatı yok. Havale başka bir şey içinse &ldquo;Hiçbirine sayma&rdquo;yı seçebilirsin.</p>;
+  return (
+    <fieldset className="max-h-72 space-y-2 overflow-y-auto">
+      <legend className="sr-only">Açık aidatlar</legend>
+      {candidates.map((candidate) => (
+        <label key={candidate.receivableId} className={`flex items-start gap-3 rounded-xl border p-3 text-sm ${candidate.fitsRemainingBalance ? "cursor-pointer border-[var(--line)] bg-white" : "cursor-not-allowed border-[var(--line)] bg-[var(--surface-muted)] opacity-60"} ${value === candidate.receivableId ? "border-[color:var(--brand)] ring-1 ring-[color:var(--brand)]" : ""}`}>
+          <input type="radio" name={`candidate-${transaction.id}`} value={candidate.receivableId} checked={value === candidate.receivableId} disabled={!candidate.fitsRemainingBalance} onChange={() => onChange(candidate.receivableId)} className="mt-1" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">{formatPeriod(candidate.period)} · {candidate.studentName}</span>
+            <span className="text-meta block">{candidate.instrumentName} · kalan {formatMoney(candidate.remainingBalance, candidate.currency)}{candidate.remainingBalance !== candidate.amount ? ` / ${formatMoney(candidate.amount, candidate.currency)}` : ""}{candidate.status === "Overdue" ? " · gecikmiş" : ""}</span>
+            {!candidate.fitsRemainingBalance && <span className="text-meta block text-[var(--danger-strong)]">Havale tutarı kalan bakiyeyi aşıyor.</span>}
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 function TransactionRow({ transaction }: { transaction: BankTransaction }) {
   const resolve = useResolveBankTransaction();
   const [receivableId, setReceivableId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [confirmingIgnore, setConfirmingIgnore] = useState(false);
+  const [choosing, setChoosing] = useState(false);
 
   async function handleResolve(receivableIdOrNull: string | null) {
     setError(null);
     try {
       await resolve.mutateAsync({ transactionId: transaction.id, receivableId: receivableIdOrNull });
       setConfirmingIgnore(false);
+      setChoosing(false);
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "İşlem çözülemedi.");
     }
@@ -163,7 +190,7 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
   return (
     <tr className="border-b border-[var(--line)] align-top last:border-0">
       <td className="text-meta px-4 py-2 whitespace-nowrap">{new Date(transaction.receivedAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
-      <td className="px-3 py-2 font-semibold">{transaction.senderName ?? "—"}</td>
+      <td className="px-3 py-2"><span className="font-semibold">{transaction.senderName ?? "—"}</span>{transaction.guardianName && <span className="text-meta block">Veli: {transaction.guardianName}</span>}</td>
       <td className="text-meta px-3 py-2">{transaction.description ?? "—"}</td>
       <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap">{transaction.amount.toLocaleString("tr-TR")} {transaction.currency}</td>
       <td className="px-3 py-2">
@@ -174,14 +201,9 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
       <td className="sticky right-0 bg-[var(--surface)] shadow-[-1px_0_0_var(--line)] px-3 py-2">
         {transaction.status === "NeedsReview" && (
           <div className="flex w-40 flex-col items-stretch gap-1.5 lg:w-auto lg:flex-row lg:items-center">
-            <input value={receivableId} onChange={(e) => setReceivableId(e.target.value)}
-              aria-label="Aidat ID"
-              placeholder="Aidat ID"
-              title="Aidat ID (Aidatlar sayfasından)"
-              className="field w-full text-xs lg:w-32" />
-            <button type="button" onClick={() => handleResolve(receivableId)} disabled={!receivableId || resolve.isPending}
+            <button type="button" onClick={() => { setError(null); setReceivableId(""); setChoosing(true); }} disabled={resolve.isPending}
               className="btn btn-primary px-2.5 text-xs">
-              Bu aidata say
+              Aidat seç
             </button>
             <button type="button" onClick={() => { setError(null); setConfirmingIgnore(true); }} disabled={resolve.isPending}
               className="btn btn-quiet px-2.5 text-xs">
@@ -189,7 +211,22 @@ function TransactionRow({ transaction }: { transaction: BankTransaction }) {
             </button>
           </div>
         )}
-        {error && !confirmingIgnore && <p role="alert" className="mt-1 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
+        {error && !confirmingIgnore && !choosing && <p role="alert" className="mt-1 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
+        {choosing && (
+          <Modal open title="Havale hangi aidata sayılsın?" onClose={() => setChoosing(false)} size="sm">
+            <form
+              onSubmit={(event) => { event.preventDefault(); if (receivableId) void handleResolve(receivableId); }}
+              className="space-y-3.5"
+            >
+              <p className="text-sm text-[var(--muted)]">
+                {transaction.amount.toLocaleString("tr-TR")} {transaction.currency}{transaction.guardianName ? ` · ${transaction.guardianName}` : ""}. Velinin öğrencilerine ait açık aidatlar:
+              </p>
+              <CandidateList transaction={transaction} value={receivableId} onChange={setReceivableId} />
+              {error && <FormMessage tone="error">{error}</FormMessage>}
+              <FormActions onCancel={() => setChoosing(false)} submitLabel="Bu aidata say" pending={resolve.isPending} pendingLabel="İşleniyor…" disabled={!receivableId} />
+            </form>
+          </Modal>
+        )}
         {confirmingIgnore && (
           <Modal open title="İşlem hiçbir aidata sayılmasın mı?" onClose={() => setConfirmingIgnore(false)} size="sm">
             <form

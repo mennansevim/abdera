@@ -473,7 +473,10 @@ export function useRegisterStudent() {
             dayOfWeek: input.lesson.dayOfWeek,
             startTime: input.lesson.startTime,
             durationMinutes: input.lesson.durationMinutes,
-            effectiveFrom: new Date().toISOString().slice(0, 10),
+            // Program formdaki başlangıç tarihinden başlar. Eskiden bugünün UTC tarihi gidiyordu:
+            // ileri tarihli kayıtta dersler hemen başlıyor, İstanbul'da 00:00-03:00 arası da dünden
+            // başlıyordu. Geçmiş bir tarih sorun değil: sunucu dersleri bugünden itibaren üretir.
+            effectiveFrom: input.startedAt,
           });
           lessonScheduled = true;
         } catch (err) {

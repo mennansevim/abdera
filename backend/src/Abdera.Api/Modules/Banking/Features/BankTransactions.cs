@@ -16,14 +16,22 @@ public static class BankTransactions
     public record TransactionResponse(
         Guid Id, Guid VirtualIbanId, Guid GuardianId, decimal Amount, string Currency,
         string? SenderName, string? Description, DateTimeOffset ReceivedAt,
-        BankIncomingTransactionStatus Status, Guid? MatchedReceivableId);
+        BankIncomingTransactionStatus Status, Guid? MatchedReceivableId, string? GuardianName = null);
 
     public record ResolveRequest(Guid? ReceivableId);
+
+    // Elle çözümde seçilebilecek aidat. Eskiden ekran bir "Aidat ID" (UUID) yazılmasını istiyordu
+    // ama kimlik arayüzün hiçbir yerinde görünmüyordu; işlem fiilen eşleştirilemiyordu.
+    // FitsRemainingBalance: gelen tutar kalan bakiyeyi aşmıyor; aşan aday ResolveAsync içinde reddedilir.
+    public record CandidateResponse(
+        Guid ReceivableId, string Period, string StudentName, string InstrumentName,
+        decimal Amount, decimal RemainingBalance, string Currency, ReceivableStatus Status, bool FitsRemainingBalance);
 
     public static void MapBankTransactions(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/bank-transactions").RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapGet("", ListAsync);
+        group.MapGet("/{transactionId:guid}/candidates", CandidatesAsync);
         group.MapPost("/{transactionId:guid}/resolve", ResolveAsync);
     }
 
@@ -42,12 +50,49 @@ public static class BankTransactions
             .ToListAsync();
         var virtualIbanIds = transactions.Select(t => t.VirtualIbanId).Distinct().ToList();
         var virtualIbans = await db.VirtualIbans.Where(v => virtualIbanIds.Contains(v.Id)).ToDictionaryAsync(v => v.Id, v => v.GuardianId);
+        var guardianIds = virtualIbans.Values.Distinct().ToList();
+        var guardianNames = await db.Guardians.Where(g => guardianIds.Contains(g.Id))
+            .ToDictionaryAsync(g => g.Id, g => g.FirstName + " " + g.LastName);
 
-        var items = transactions.Select(t => new TransactionResponse(
-            t.Id, t.VirtualIbanId, virtualIbans.GetValueOrDefault(t.VirtualIbanId), t.Amount, t.Currency,
-            t.SenderName, t.Description, t.ReceivedAt, t.Status, t.MatchedReceivableId)).ToList();
+        var items = transactions.Select(t =>
+        {
+            var guardianId = virtualIbans.GetValueOrDefault(t.VirtualIbanId);
+            return new TransactionResponse(
+                t.Id, t.VirtualIbanId, guardianId, t.Amount, t.Currency,
+                t.SenderName, t.Description, t.ReceivedAt, t.Status, t.MatchedReceivableId, guardianNames.GetValueOrDefault(guardianId));
+        }).ToList();
 
         return Results.Ok(new PagedResponse<TransactionResponse>(items, totalCount, normalizedPage, normalizedPageSize));
+    }
+
+    private static async Task<IResult> CandidatesAsync(Guid transactionId, AbderaDbContext db)
+    {
+        var transaction = await db.BankIncomingTransactions.SingleOrDefaultAsync(t => t.Id == transactionId)
+            ?? throw new NotFoundException("Banka işlemi bulunamadı.");
+        var guardianId = await db.VirtualIbans.Where(v => v.Id == transaction.VirtualIbanId).Select(v => v.GuardianId).SingleAsync();
+
+        var receivables = await Webhooks.LoadOpenReceivablesForGuardianAsync(guardianId, db);
+        var totals = await Receivables.ComputeTotalsPaidAsync(receivables.Select(r => r.Id), db);
+
+        var enrollmentIds = receivables.Select(r => r.EnrollmentId).Distinct().ToList();
+        var labels = await db.Enrollments
+            .Where(e => enrollmentIds.Contains(e.Id))
+            .Join(db.Students, e => e.StudentId, st => st.Id, (e, st) => new { e.Id, e.InstrumentId, StudentName = st.FirstName + " " + st.LastName })
+            .Join(db.Instruments, x => x.InstrumentId, i => i.Id, (x, i) => new { x.Id, x.StudentName, InstrumentName = i.Name })
+            .ToDictionaryAsync(x => x.Id);
+
+        var items = receivables
+            .Select(r =>
+            {
+                var remaining = r.Amount - totals.GetValueOrDefault(r.Id);
+                var label = labels.GetValueOrDefault(r.EnrollmentId);
+                return new CandidateResponse(
+                    r.Id, r.Period, label?.StudentName ?? "", label?.InstrumentName ?? "",
+                    r.Amount, remaining, r.Currency, r.Status, transaction.Amount <= remaining);
+            })
+            .OrderBy(c => c.Period).ThenBy(c => c.StudentName)
+            .ToList();
+        return Results.Ok(items);
     }
 
     private static async Task<IResult> ResolveAsync(
