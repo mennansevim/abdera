@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.10.2",
+    date: "2026-10-10",
+    items: [
+      { audience: "all", text: "Sekmelerin ve butonların üzerine gelince imleç artık el işaretine dönüşüyor; neye tıklanabildiği daha net görünüyor." },
+    ],
+  },
+  {
     version: "2026.10.10",
     date: "2026-10-10",
     items: [
