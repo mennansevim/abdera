@@ -14,7 +14,10 @@ public static class Calendar
     public record LessonResponse(
         Guid Id, Guid? LessonSeriesId, DateTimeOffset StartAt, DateTimeOffset EndAt, LessonStatus Status,
         Guid StudentId, string StudentName, Guid TeacherId, string TeacherName,
-        Guid InstrumentId, string InstrumentName, RsvpResponse? RsvpResponse);
+        Guid InstrumentId, string InstrumentName, RsvpResponse? RsvpResponse,
+        // Yoklaması girilmiş derste güncel durum: takvim ve Bugün ekranı "Gelmedi"yi sonradan
+        // "Mazeretli"ye çevirmek gibi düzeltmeleri bu değerden başlatır. Girilmemişse null.
+        AttendanceStatus? AttendanceStatus = null);
 
     public static void MapCalendar(this IEndpointRouteBuilder app)
     {
@@ -68,7 +71,7 @@ public static class Calendar
                 x.Lesson.Id, x.Lesson.LessonSeriesId, x.Lesson.StartAt, x.Lesson.EndAt, x.Lesson.Status,
                 x.Student.Id, x.Student.FirstName + " " + x.Student.LastName,
                 x.Teacher.Id, x.Teacher.FirstName + " " + x.Teacher.LastName,
-                x.Instrument.Id, x.Instrument.Name, null))
+                x.Instrument.Id, x.Instrument.Name, null, null))
             .ToListAsync();
 
         var lessonIds = lessons.Select(l => l.Id).ToList();
@@ -92,9 +95,14 @@ public static class Calendar
                 : row.HasNotAttending ? RsvpResponse.NotAttending
                 : RsvpResponse.Unknown);
 
+        var attendanceByLesson = await db.LessonAttendances
+            .Where(a => lessonIds.Contains(a.LessonId))
+            .ToDictionaryAsync(a => a.LessonId, a => a.Status);
+
         return Results.Ok(lessons.Select(lesson => lesson with
         {
             RsvpResponse = rsvpByLesson.GetValueOrDefault(lesson.Id),
+            AttendanceStatus = attendanceByLesson.TryGetValue(lesson.Id, out var status) ? status : null,
         }));
     }
 }

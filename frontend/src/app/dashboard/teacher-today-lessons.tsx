@@ -5,7 +5,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
-import { useCreateChangeRequest, useCreateLessonNote, useLessonNotes, useMarkAttendance, type AttendanceStatus, type LessonNoteSummary } from "@/lib/attendance";
+import { ATTENDANCE_LABELS, ATTENDANCE_OPENS_BEFORE_MINUTES, isAttendanceOpen, useCreateChangeRequest, useCreateLessonNote, useLessonNotes, useMarkAttendance, type AttendanceStatus, type LessonNoteSummary } from "@/lib/attendance";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 
@@ -98,7 +98,7 @@ function TodayLessonCard({ lesson, tone, expandedMode, onToggle, onDone }: {
           kalınca öğretmen notunu yazdığı dersi ayırt edemiyor, zildeki "yorum bekliyor"
           hatırlatmasını yanlış sanıyor ve aynı derse ikinci not giriyordu. */}
       <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
-        <button onClick={() => onToggle("attendance")} aria-expanded={expandedMode === "attendance"} className={`${actionClass} ${attendanceTaken ? doneClass : idleClass}`}><Icon name={attendanceTaken ? "check" : "calendar"} className="h-4 w-4" /> {attendanceTaken ? "Yoklama alındı" : "Yoklama Al"}</button>
+        <button onClick={() => onToggle("attendance")} aria-expanded={expandedMode === "attendance"} className={`${actionClass} ${attendanceTaken ? doneClass : idleClass}`}><Icon name={attendanceTaken ? "check" : "calendar"} className="h-4 w-4" /> {attendanceTaken ? lesson.attendanceStatus ? `Yoklama: ${ATTENDANCE_LABELS[lesson.attendanceStatus]}` : "Yoklama alındı" : "Yoklama Al"}</button>
         <button onClick={() => onToggle("note")} aria-expanded={expandedMode === "note"} className={`${actionClass} ${hasNote ? doneClass : idleClass}`}><Icon name={hasNote ? "check" : "note"} className="h-4 w-4" /> {hasNote ? "Not girildi" : "Not Ekle"}</button>
       </div>
       {expandedMode && <LessonActions lesson={lesson} initialMode={expandedMode} notes={notes ?? []} onDone={onDone} />}
@@ -159,10 +159,16 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
   // Notu girilmiş derste form kapalı başlar, önce kaydedilen not görünür: aynı notun yanlışlıkla
   // ikinci kez gönderilmesini önler. Ek not bilinçli olarak "Ek not yaz" ile açılır.
   const [writeExtraNote, setWriteExtraNote] = useState(false);
+  // Yanlış girilen yoklama ("Gelmedi" yerine "Mazeretli") buradan düzeltilir; sunucu aynı uçta
+  // düzeltmeyi audit'e yazar ve telafi hakkını yeni duruma göre açar ya da geri alır.
+  const [correcting, setCorrecting] = useState(false);
   const disabled = lesson.status === "Cancelled";
   // Yoklaması girilmiş (tamamlanmış) derse yalnızca not eklenir - notu sonradan yazmak
   // "Yorum bekleyen dersler" hatırlatmasının istediği şey, bu yüzden kart kilitlenmez.
   const attendanceTaken = lesson.status === "Completed";
+  const showStatusPicker = !attendanceTaken || correcting;
+  // Gün şeridinden ileri bir gün seçilince yoklama kapalı kalır; hazırlık notu yine yazılabilir.
+  const attendanceOpen = isAttendanceOpen(lesson.startAt);
 
   function applyQuick(patch: QuickNotePatch) {
     if (patch.note !== undefined) setNote(patch.note);
@@ -172,13 +178,18 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
   }
 
   async function handleSave() {
+    const statusChanged = status !== null && !(correcting && status === lesson.attendanceStatus);
+    if (correcting && !statusChanged && !practiced && !note && !homework && !nextGoal) {
+      setCorrecting(false);
+      return;
+    }
     if (!status && !practiced && !note && !homework && !nextGoal) {
-      setError(initialMode === "attendance" && !attendanceTaken ? "Yoklama durumu seçmelisin." : "Kaydetmek için kısa bir not eklemelisin.");
+      setError(initialMode === "attendance" && !attendanceTaken && attendanceOpen ? "Yoklama durumu seçmelisin." : "Kaydetmek için kısa bir not eklemelisin.");
       return;
     }
     setError(null);
     try {
-      if (status) await markAttendance.mutateAsync({ status, note: note || undefined });
+      if (status && statusChanged) await markAttendance.mutateAsync({ status, note: note || undefined });
       if (practiced || note || homework || nextGoal) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined });
       setSaved(true);
       window.setTimeout(onDone, 650);
@@ -189,13 +200,14 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
 
   if (disabled) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 text-xs text-[var(--muted)]">Bu ders iptal edildi; yeni işlem yapılamaz.</div>;
 
-  if (notes.length && !writeExtraNote && !saved && (initialMode === "note" || attendanceTaken)) {
+  if (notes.length && !writeExtraNote && !correcting && !saved && (initialMode === "note" || attendanceTaken)) {
     return (
       <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
         {notes.slice(0, 2).map((item) => <SavedNote key={item.id} note={item} />)}
         {notes.length > 2 && <p className="text-meta">Bu derste {notes.length - 2} not daha var; tamamı Gelişim ekranında.</p>}
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setWriteExtraNote(true)} className="btn btn-quiet"><Icon name="plus" className="h-4 w-4" /> Ek not yaz</button>
+          {attendanceTaken && <button type="button" onClick={() => { setCorrecting(true); setStatus(lesson.attendanceStatus ?? null); }} className="btn btn-quiet">Yoklamayı düzelt</button>}
           <Link href="/dashboard/progress" className="btn btn-quiet">Gelişim ekranında aç</Link>
         </div>
       </div>
@@ -206,17 +218,22 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
       {saved ? <p className="flex items-center gap-2 rounded-xl bg-[var(--success-soft)] p-3 text-xs font-bold text-[var(--success-strong)]"><Icon name="check" className="h-4 w-4" /> Ders bilgileri kaydedildi.</p> : (
         <>
-          {attendanceTaken ? (
-            <p className="flex items-center gap-2 rounded-xl bg-white p-3 text-xs font-semibold text-[var(--muted)]"><Icon name="check" className="h-4 w-4 text-[var(--success-strong)]" /> Yoklama alındı; bu derse not ekleyebilirsin.</p>
+          {!showStatusPicker ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-3 text-xs font-semibold text-[var(--muted)]">
+              <p className="flex items-center gap-2"><Icon name="check" className="h-4 w-4 text-[var(--success-strong)]" /> {lesson.attendanceStatus ? `Yoklama: ${ATTENDANCE_LABELS[lesson.attendanceStatus]}` : "Yoklama alındı"}; bu derse not ekleyebilirsin.</p>
+              <button type="button" onClick={() => { setCorrecting(true); setStatus(lesson.attendanceStatus ?? null); }} className="font-bold text-[var(--brand)] underline-offset-2 hover:underline">Düzelt</button>
+            </div>
+          ) : !attendanceOpen ? (
+            <p className="rounded-xl bg-white p-3 text-xs font-semibold text-[var(--muted)]">Yoklama ders başlamadan {ATTENDANCE_OPENS_BEFORE_MINUTES} dk önce açılır; şimdilik hazırlık notu yazabilirsin.</p>
           ) : <div>
-            <p className="mb-2 text-[.75rem] font-bold text-[var(--muted)]">Yoklama</p>
+            <p className="mb-2 text-[.75rem] font-bold text-[var(--muted)]">{correcting ? "Yoklamayı düzelt" : "Yoklama"}</p>
             <div className="grid grid-cols-3 gap-2">
               {(["Present","Absent","Excused"] as const).map((item) => {
-                const labels = { Present:"Geldi", Absent:"Gelmedi", Excused:"Mazeretli" };
                 const active = status === item;
-                return <button key={item} type="button" aria-pressed={active} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.75rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{labels[item]}</button>;
+                return <button key={item} type="button" aria-pressed={active} onClick={() => setStatus(item)} className={`pressable min-h-11 rounded-xl border px-2 text-[.75rem] font-bold ${active ? item === "Present" ? "border-[color:var(--success)] bg-[var(--success-soft)] text-[var(--success-strong)]" : item === "Absent" ? "border-[color:var(--danger)] bg-[var(--danger-soft)] text-[var(--danger-strong)]" : "border-[color:var(--warning)] bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)]"}`}>{ATTENDANCE_LABELS[item]}</button>;
               })}
             </div>
+            {correcting && <p className="text-meta mt-2">Mazeretli&apos;ye çevrilen derse 21 günlük telafi hakkı açılır; Mazeretli&apos;den çıkarsan kullanılmamış hak geri alınır.</p>}
           </div>}
           <QuickNoteBar lessonId={lesson.id} draft={{ note, practiced, homework, nextGoal }} onApply={applyQuick} />
           <div className="grid gap-3 sm:grid-cols-2">

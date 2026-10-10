@@ -217,9 +217,21 @@ public class BankingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var pending = await admin.GetFromJsonAsync<PagedResponse<BankTransactions.TransactionResponse>>(
             "/api/bank-transactions?status=NeedsReview", TestJson.Options);
         var transaction = pending!.Items.Single(t => t.GuardianId == seeded.GuardianId);
+        Assert.False(string.IsNullOrWhiteSpace(transaction.GuardianName));
+
+        // Ekran aidat kimliğini elle istemez: velinin açık aidatlarını aday olarak sunar.
+        var candidates = await admin.GetFromJsonAsync<List<BankTransactions.CandidateResponse>>(
+            $"/api/bank-transactions/{transaction.Id}/candidates", TestJson.Options);
+        var candidate = Assert.Single(candidates!);
+        Assert.Equal(seeded.ReceivableId, candidate.ReceivableId);
+        Assert.Equal("2026-09", candidate.Period);
+        Assert.Equal(800m, candidate.RemainingBalance);
+        Assert.True(candidate.FitsRemainingBalance);
+        Assert.False(string.IsNullOrWhiteSpace(candidate.StudentName));
+        Assert.False(string.IsNullOrWhiteSpace(candidate.InstrumentName));
 
         var resolveResponse = await admin.PostAsJsonAsync($"/api/bank-transactions/{transaction.Id}/resolve",
-            new BankTransactions.ResolveRequest(seeded.ReceivableId));
+            new BankTransactions.ResolveRequest(candidate.ReceivableId));
         Assert.Equal(HttpStatusCode.OK, resolveResponse.StatusCode);
 
         var receivable = await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == seeded.ReceivableId);

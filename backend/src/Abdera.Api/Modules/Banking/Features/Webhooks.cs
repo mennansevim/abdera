@@ -98,6 +98,21 @@ public static class Webhooks
         return providedBytes.Length == expectedBytes.Length && CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
     }
 
+    // Velinin öğrencilerine ait, hâlâ ödeme alabilecek aidatlar. Otomatik eşleştirme ile admin'in
+    // elle çözdüğü ekran (BankTransactions.CandidatesAsync) aynı aday kümesine bakar.
+    internal static async Task<List<Receivable>> LoadOpenReceivablesForGuardianAsync(Guid guardianId, AbderaDbContext db)
+    {
+        var enrollmentIds = await db.StudentGuardians
+            .Where(sg => sg.GuardianId == guardianId)
+            .Join(db.Enrollments, sg => sg.StudentId, e => e.StudentId, (sg, e) => e.Id)
+            .ToListAsync();
+
+        return await db.Receivables
+            .Where(r => enrollmentIds.Contains(r.EnrollmentId) &&
+                        (r.Status == ReceivableStatus.Unpaid || r.Status == ReceivableStatus.Partial || r.Status == ReceivableStatus.Overdue))
+            .ToListAsync();
+    }
+
     // docs/12-bank-integration.md "Uçtan uca akış" ve "Veli ↔ Receivable eşleştirme
     // algoritması" - hem gerçek webhook hem dev simülatörü (DevBankSimulator.cs) burayı
     // çağırır ki iki yol asla birbirinden sapmasın (abdera-notification skill'inin
@@ -118,15 +133,7 @@ public static class Webhooks
             iban.Id, provider, providerTransactionId, amount, currency, senderName, description, receivedAt, now);
         db.BankIncomingTransactions.Add(transaction);
 
-        var enrollmentIds = await db.StudentGuardians
-            .Where(sg => sg.GuardianId == iban.GuardianId)
-            .Join(db.Enrollments, sg => sg.StudentId, e => e.StudentId, (sg, e) => e.Id)
-            .ToListAsync();
-
-        var openReceivables = await db.Receivables
-            .Where(r => enrollmentIds.Contains(r.EnrollmentId) &&
-                        (r.Status == ReceivableStatus.Unpaid || r.Status == ReceivableStatus.Partial || r.Status == ReceivableStatus.Overdue))
-            .ToListAsync();
+        var openReceivables = await LoadOpenReceivablesForGuardianAsync(iban.GuardianId, db);
 
         var totals = await Receivables.ComputeTotalsPaidAsync(openReceivables.Select(r => r.Id), db);
         var candidates = openReceivables

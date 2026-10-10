@@ -32,8 +32,25 @@ public class LessonStateTransitionTests
     public void Cancel_throws_when_already_completed()
     {
         var lesson = CreateNormalLesson();
-        lesson.Complete(Now);
-        Assert.Throws<ConflictException>(() => lesson.Cancel(Now));
+        lesson.Complete(lesson.StartAt);
+        Assert.Throws<ConflictException>(() => lesson.Cancel(lesson.StartAt));
+    }
+
+    [Fact]
+    public void Complete_throws_before_the_lesson_starts()
+    {
+        var lesson = CreateNormalLesson();
+        Assert.Throws<ConflictException>(() => lesson.Complete(Now));
+        Assert.Throws<ConflictException>(() => lesson.Complete(lesson.StartAt - Lesson.AttendanceOpensBeforeStart - TimeSpan.FromMinutes(1)));
+        Assert.Equal(LessonStatus.Normal, lesson.Status);
+    }
+
+    [Fact]
+    public void Complete_is_allowed_shortly_before_start_for_an_early_student()
+    {
+        var lesson = CreateNormalLesson();
+        lesson.Complete(lesson.StartAt - Lesson.AttendanceOpensBeforeStart);
+        Assert.Equal(LessonStatus.Completed, lesson.Status);
     }
 
     [Fact]

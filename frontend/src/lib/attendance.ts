@@ -7,6 +7,16 @@ import type { PagedResponse } from "./messaging";
 
 export type AttendanceStatus = "Present" | "Absent" | "Excused";
 
+export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = { Present: "Geldi", Absent: "Gelmedi", Excused: "Mazeretli" };
+
+// Sunucudaki Lesson.AttendanceOpensBeforeStart ile aynı: öğrenci erken gelirse yoklama
+// dersten en fazla bu kadar önce alınabilir, daha önce sunucu 409 döner.
+export const ATTENDANCE_OPENS_BEFORE_MINUTES = 15;
+
+export function isAttendanceOpen(startAt: string, now: Date = new Date()) {
+  return new Date(startAt).getTime() - ATTENDANCE_OPENS_BEFORE_MINUTES * 60_000 <= now.getTime();
+}
+
 export interface Attendance {
   id: string;
   lessonId: string;
