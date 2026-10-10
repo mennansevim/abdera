@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.10",
+    date: "2026-10-10",
+    items: [
+      { audience: "all", text: "Menüde yeni \"Hata bildir\" sayfası: bir şey çalışmıyorsa ya da bir önerin varsa hangi sayfada olduğunu seçip kısaca anlat, gönder. Gerisini biz takip ediyoruz." },
+      { audience: "admin", text: "Hata bildir sayfasındaki \"Gelen bildirimler\" sekmesinde gelen bildirimleri, göreve dönüşenleri ve reddedilenleri görürsün." },
+    ],
+  },
+  {
     version: "2026.10.09.3",
     date: "2026-10-09",
     items: [
