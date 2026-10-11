@@ -22,6 +22,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.11.2",
+    date: "2026-10-11",
+    items: [
+      { audience: "all", text: "Öğretmenin Bugün ekranında haftalık özet var: bu hafta kaç dersin tamamlandığı, kaçının yoklamasının eksik olduğu ve haftanın ödenip ödenmediği görünür." },
+      { audience: "all", text: "Haftalık özeti açınca haftanın dersleri yoklama durumlarıyla listelenir; eksik yoklamayı girmek ya da \"Geldi\"yi \"Gelmedi\" veya \"Mazeretli\" yapmak tek dokunuş." },
+      { audience: "all", text: "Yoklamada \"Geldi + önceki dersten devam\" düğmesi geçen dersin çalışmasını, ödevini ve hedefini hazır getirir; Kaydet telefonda hep ekranın altında durur." },
+      { audience: "all", text: "Yarım bıraktığın ders notu sayfa yenilense de kaybolmaz; ders kartından veliyi tek dokunuşla arayabilir ya da WhatsApp'tan yazabilirsin." },
+      { audience: "all", text: "Bildirimlerdeki \"öğrenci geldi mi?\" sorusuna \"Mazeretli\" cevabı eklendi; giriş ekranı en son kullandığın rolle açılır." },
+      { audience: "all", text: "Abdera'yı telefonunun ana ekranına ekleyebilirsin: tarayıcı menüsünden \"Ana Ekrana Ekle\" dediğinde uygulama gibi tam ekran açılır." },
+    ],
+  },
+  {
     version: "2026.10.11",
     date: "2026-10-11",
     items: [
