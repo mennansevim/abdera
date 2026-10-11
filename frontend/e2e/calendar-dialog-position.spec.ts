@@ -37,6 +37,10 @@ test("quick-add dialog stays centered regardless of the double-click position", 
   });
 
   await page.goto("/dashboard/calendar");
+  // Gelecek haftaya geç: takvim geçmiş saate ders eklemeyi reddeder. Bu haftanın son sütunu
+  // pazar günü bugünün kendisidir ve tıklanan saat öğleden sonra geçmişte kalıyordu - test
+  // yalnızca pazar öğleden sonraları kırılıyordu (CI tarayıcısı UTC, boş takvimde pencere 12-18).
+  await page.getByRole("button", { name: "Sonraki hafta" }).click();
   const dayColumn = page.locator('[data-testid^="calendar-day-"]').last();
   await expect(dayColumn).toBeVisible();
   const dayBounds = await dayColumn.boundingBox();
