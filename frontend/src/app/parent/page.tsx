@@ -7,6 +7,8 @@ import { Icon, type IconName } from "@/components/icons";
 import { Modal, Notice } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { GuardianChangePasswordForm } from "./change-password-form";
+import { TermReportFactsView } from "@/components/term-report-facts";
+import { useGuardianTermReports } from "@/lib/term-reports";
 import { useGuardianLogout, useRequireGuardianAuth } from "@/lib/guardian-auth";
 import {
   useGuardianBilling,
@@ -498,9 +500,32 @@ function ProgressView({ studentId, progress, practiceJournal, loading }: { stude
   return <div><h1 className="text-lg font-bold">Gelişim</h1><p className="text-xs text-[var(--muted)]">Öğretmen notları, devamlılık, repertuvar ve çalışma günlüğü</p>
     <div className="mt-3 grid grid-cols-3 gap-2"><ParentMetric label="Katılım" value={`%${attendanceRate}`} tone="green" /><ParentMetric label="Devamsız" value={String(progress?.absentCount ?? 0)} tone={(progress?.absentCount ?? 0) > 1 ? "red" : "neutral"} /><ParentMetric label="Repertuvar" value={String(pieces.length)} tone="brand" /></div>
     {pieces.length > 0 && <section className="app-card mt-3 p-4"><p className="text-[.75rem] font-bold uppercase tracking-[.07em] text-[var(--muted)]">Çalışılan eserler</p><div className="mt-2 flex flex-wrap gap-1.5">{pieces.map((piece) => <span key={piece} className="rounded-full bg-[var(--brand-soft)] px-2.5 py-1.5 text-[.75rem] font-bold text-[var(--brand-strong)]">{piece}</span>)}</div></section>}
+    <GuardianTermReports studentId={studentId} />
     <PracticeJournalPanel studentId={studentId} journal={practiceJournal} />
     <section className="mt-3 space-y-2"><h2 className="text-xs font-bold">Öğretmen değerlendirmeleri</h2>{progress?.entries.map((entry) => <article key={entry.id} className="app-card p-4"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold">{entry.instrumentName}</p><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{entry.teacherName} · {new Date(entry.lessonStartAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })}</p></div>{entry.pieceDifficulty && <span className="rounded-full bg-[var(--surface-muted)] px-2 py-1 text-[.75rem] font-bold text-[var(--muted)]">Seviye {entry.pieceDifficulty}/5</span>}</div>{entry.parentComment && <p className="mt-3 text-xs leading-relaxed text-[#554e59]">{entry.parentComment}</p>}{entry.pieceTitle && <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-[.75rem]"><strong>{entry.pieceTitle}</strong>{entry.pieceComposer ? ` · ${entry.pieceComposer}` : ""}{entry.pieceResourceUrl && <a href={entry.pieceResourceUrl} target="_blank" rel="noreferrer" className="ml-2 font-bold text-[var(--brand)] underline">Nota / bağlantı</a>}</div>}{entry.practiced && <p className="mt-2 rounded-xl bg-[var(--surface-muted)] px-3 py-2 text-[.75rem] text-[var(--muted)]"><strong className="text-[var(--foreground)]">Çalışıldı:</strong> {entry.practiced}</p>}{entry.homework && <p className="mt-2 rounded-xl bg-[#fff3dd] px-3 py-2 text-[.75rem] text-[#7b5b20]"><strong>Ev çalışması:</strong> {entry.homework}</p>}{entry.nextGoal && <p className="mt-2 text-[.75rem] text-[var(--brand-strong)]"><strong>Sonraki hedef:</strong> {entry.nextGoal}</p>}</article>)}{!progress?.entries.length && <p className="app-card p-5 text-center text-xs text-[var(--muted)]">Henüz paylaşılmış gelişim değerlendirmesi yok.</p>}</section>
   </div>;
+}
+
+// Dönem karnesi (issue #15): yalnızca öğretmenin yayınladığı karneler, en yeni dönem önce.
+// Veriler yayın anındaki haliyle sabittir; karne yoksa bölüm hiç görünmez.
+function GuardianTermReports({ studentId }: { studentId: string | undefined }) {
+  const { data: reports } = useGuardianTermReports(studentId);
+  if (!reports?.length) return null;
+  return (
+    <section className="mt-3 space-y-2">
+      <h2 className="text-xs font-bold">Dönem karnesi</h2>
+      {reports.map((report) => (
+        <article key={report.id} className="app-card space-y-3 p-4">
+          <div>
+            <p className="text-xs font-bold">{report.term.label} · {report.facts.instrumentName}</p>
+            <p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{report.facts.teacherName} · {new Date(report.publishedAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}</p>
+          </div>
+          <p className="whitespace-pre-line text-xs leading-relaxed text-[#554e59]">{report.comment}</p>
+          <TermReportFactsView facts={report.facts} />
+        </article>
+      ))}
+    </section>
+  );
 }
 
 function PracticeJournalPanel({ studentId, journal }: { studentId: string | undefined; journal: PracticeJournal | undefined }) {

@@ -14,6 +14,7 @@ import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { PendingLessonNotes } from "../pending-lesson-notes";
+import { TermReportsPanel } from "./term-reports-panel";
 
 type TimelineFilter = "all" | "pieces" | "homework";
 
@@ -136,6 +137,7 @@ function ProgressPageContent() {
       {/* Ana ekrandan buraya taşındı (kullanıcı isteği: "bildirimleri ana ekrandan kaldır").
           Liste yalnızca öğretmen hesabında vardır; yönetici için uç 403 döner. */}
       {canWrite && <PendingLessonNotes />}
+      {(canWrite || isAdmin) && <TermReportsPanel isAdmin={isAdmin} />}
 
       <StudentBar
         students={visibleStudents}

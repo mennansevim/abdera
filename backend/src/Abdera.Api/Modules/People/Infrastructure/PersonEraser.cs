@@ -215,6 +215,7 @@ public static class PersonEraser
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM practice_journal_entries WHERE student_id = @student_id;
         DELETE FROM progress_summaries WHERE student_id = @student_id;
+        DELETE FROM term_reports WHERE student_id = @student_id;
         DELETE FROM show_items WHERE student_id = @student_id;
 
         DELETE FROM lessons WHERE id IN (SELECT id FROM _les);
@@ -258,6 +259,9 @@ public static class PersonEraser
         UPDATE lessons SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         UPDATE skill_assessments SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         UPDATE lesson_notes SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
+        -- Devirde karne silinmez: kurs kaydıyla yeni öğretmene geçer. Yayınlanmış karnenin
+        -- dondurulmuş verisindeki öğretmen adı (yazan kişi) değişmez.
+        UPDATE term_reports SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         UPDATE show_items SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         UPDATE library_suggestions SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         """;
@@ -299,6 +303,8 @@ public static class PersonEraser
         -- AI gelişim yorumu önbelleği: devirde notlar yeni öğretmene geçer, onun yorumu bir
         -- sonraki açılışta not sayısı değiştiği için kendiliğinden yeniden üretilir.
         DELETE FROM progress_summaries WHERE teacher_id = @teacher_id;
+        -- Dönem karnesi kurs kaydına ve onu yazan öğretmene bağlıdır; kayıtla birlikte gider.
+        DELETE FROM term_reports WHERE teacher_id = @teacher_id OR enrollment_id IN (SELECT id FROM _tenr);
         DELETE FROM lesson_rsvps WHERE lesson_id IN (SELECT id FROM _tles);
         DELETE FROM lesson_attendances WHERE lesson_id IN (SELECT id FROM _tles);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _tles);

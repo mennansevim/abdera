@@ -137,6 +137,12 @@ POST   /api/recurring-expenses/{id}/amounts      ✅ seçilen aydan itibaren yen
 POST   /api/recurring-expenses/{id}/end          ✅ kalemi lastMonth ayının sonunda bitirir
 GET    /api/teacher-payouts/week                 ✅ O1 - bir ödeme haftasının (pazartesi→cumartesi) öğretmen tablosu; ?weekStart= yoksa bu hafta
 POST   /api/teacher-payouts                      ✅ haftanın ödemesini Maaş gideri olarak yazar; (teacher_id, week_start) tekil, tutarı sunucu hesaplar
+GET    /api/term-reports                         ✅ Z - ?term=2025-1 (yoksa bu dönem): karne yazılacak kurs kayıtları ve durumları; öğretmen yalnızca kendi kayıtlarını görür
+GET    /api/enrollments/{id}/term-reports/{term}  ✅ Z - karne + dönem verileri (taslakta canlı, yayında dondurulmuş)
+PUT    /api/enrollments/{id}/term-reports/{term}  ✅ Z - { comment } taslağı kaydeder; yayındaysa 409
+POST   /api/enrollments/{id}/term-reports/{term}/publish    ✅ Z - verileri dondurup yayınlar; yorum zorunlu
+POST   /api/enrollments/{id}/term-reports/{term}/unpublish  ✅ Z - yayından kaldırır (veli artık görmez)
+GET    /api/guardian/me/students/{studentId}/term-reports   ✅ Z - veli: yalnızca yayınlanmış karneler
 GET    /api/teacher-payouts/my-week              ✅ Y1 - öğretmenin kendi ödeme haftası: tamamlanan/yoklaması eksik ders sayısı, Ödendi/Ödenmedi, haftanın başlamış dersleri yoklama durumlarıyla; tutar YOK. ?weekStart=
 PUT    /api/teacher-payouts/rates/{teacherId}    ✅ öğretmenin ders başı ücreti (öğretmen başına tek satır, eski değer audit'e)
 

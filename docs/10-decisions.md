@@ -365,6 +365,19 @@ Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [menn
 | Y4 | Ağ yükü | Bugün ekranı yalnızca seçili günü çeker (eskiden her 15 sn'de 22 gün), "sıradaki ders" yalnızca o gün ders yoksa bir kez sorulur; veli cevabı dakikada bir tazelenir. "Not girildi" rozeti takvim yanıtındaki `hasNote`'tan gelir, kart başına not isteği atılmaz. |
 | Y5 | Ana ekrana ekle | `app/manifest.ts` ile web uygulaması ana ekrana eklenebilir (tam ekran, `/dashboard`'dan açılır). Ayrı mobil uygulama değil; service worker/çevrimdışı önbellek bilinçli olarak yok (bayat yoklama göstermek göstermemekten kötü). Giriş ekranı bu cihazda son kullanılan rolle açılır; rol denetimi sunucuda bağlayıcı kalır. |
 
+## Z — Dönem karnesi (2026-10-11)
+
+Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [mennansevim/abdera#15](https://github.com/mennansevim/abdera/issues/15).
+
+| # | Konu | Karar |
+|---|---|---|
+| Z1 | Dönemler | Yılda iki karne (kullanıcı kararı: Ocak ve Haziran). 1. dönem Eylül–Ocak, 2. dönem Şubat–Haziran; Temmuz–Ağustos hiçbir döneme girmez, o aylarda ekran az önce biten 2. dönemi gösterir. Anahtar `2025-1` (öğretim yılının başladığı yıl + dönem no); hesabın tek yeri `ReportTerm`. Henüz başlamamış dönemin karnesi yazılamaz. |
+| Z2 | Kapsam | Karne **kurs kaydı** başınadır (öğrenci + öğretmen + enstrüman): iki enstrüman çalan öğrencinin iki öğretmeni ayrı karne yazar. `UNIQUE (enrollment_id, term)`. Öğretmen yalnızca kendi kaydının karnesini yazar; yönetici hepsini görür ve aynı işlemleri yapabilir (ayrılan öğretmen). |
+| Z3 | Yorum | **Yapay zekâ taslağı yok** (kullanıcı kararı): yorumu öğretmen yazar. L5 aynen geçerli - AI gelişim özeti veliye gitmez. |
+| Z4 | Veri ve donma | Dönemin verileri kayıttan otomatik gelir: devam (Geldi/Mazeretli/Gelmedi), çalışılan eserler (son notun durumu), yetenek puanlarının dönem içi ilk → son değeri, pratik günlüğü (gün + dakika). Taslakta canlı hesaplanır; **yayınlanınca `snapshot_json`'a donar** (fiyat snapshot ilkesi): veliye verilmiş karne sonradan girilen yoklama/not yüzünden değişmez. Yayındaki karne düzenlenemez; düzeltmek için yayından kaldırılıp yeniden yayınlanır. |
+| Z5 | Veliye ulaşma | Yalnızca veli portalı, Gelişim sekmesi (kullanıcı kararı). WhatsApp bildirimi yok, bu yüzden yeni şablon/bildirim tipi de yok. Veli taslağı hiç görmez. |
+| Z6 | Silme ve devir | `PersonEraser`: öğrenci silinince karneleri de gider; öğretmen devrinde karne kurs kaydıyla yeni öğretmene geçer (yayınlanmış karnedeki yazan öğretmen adı değişmez), devirsiz silmede kaydın karneleriyle birlikte gider. Para/takvim/rıza değiştirmediği için `audit_log`'a yazılmaz. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |
