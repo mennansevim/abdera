@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.11.4",
+    date: "2026-10-11",
+    items: [
+      { audience: "all", text: "Bir derse ait bildirime (ders taşındı, iptal, telafi, veli cevabı, \"öğrenci geldi mi?\") dokununca takvimde o dersin penceresi doğrudan açılır; kapatınca takvim o dersin haftasında kalır." },
+    ],
+  },
+  {
     version: "2026.10.11.3",
     date: "2026-10-11",
     items: [
