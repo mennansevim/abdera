@@ -125,7 +125,8 @@ function previousPracticed(previous: PreviousLessonNote) {
   return previous.practiced || (previous.pieceTitle ? `${previous.pieceTitle} (devam)` : null);
 }
 
-function continuePatch(previous: PreviousLessonNote, draft: QuickNoteDraft): QuickNotePatch {
+// Bugün kartındaki "Geldi + önceki dersten devam" kısayolu da aynı aktarımı kullanır.
+export function continuePatch(previous: PreviousLessonNote, draft: QuickNoteDraft): QuickNotePatch {
   const patch: QuickNotePatch = {};
   const practiced = previousPracticed(previous);
   if (practiced && !draft.practiced.trim()) patch.practiced = practiced;

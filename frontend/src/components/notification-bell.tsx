@@ -58,7 +58,7 @@ function AttendanceQuestion({ notification, onAnswered }: { notification: StaffN
   const markAttendance = useMarkAttendance(notification.referenceId);
   const [error, setError] = useState<string | null>(null);
 
-  function answer(status: "Present" | "Absent") {
+  function answer(status: "Present" | "Absent" | "Excused") {
     setError(null);
     markAttendance.mutate({ status }, {
       onSuccess: () => onAnswered?.(),
@@ -78,12 +78,17 @@ function AttendanceQuestion({ notification, onAnswered }: { notification: StaffN
           <span className="text-meta mt-1 block">{notification.body}</span>
         </span>
       </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-2 pl-11">
+      {/* Mazeretli de buradan girilir: telafi hakkı doğurur ve "Gelmedi" yanlışlıkla seçilip
+          sonradan düzeltilmek zorunda kalınmasın (issue #16). */}
+      <div className="mt-2.5 grid grid-cols-3 gap-2 pl-11">
         <button type="button" onClick={() => answer("Present")} disabled={pending} className="pressable min-h-10 rounded-lg bg-[var(--success-strong)] px-3 text-xs font-bold text-white disabled:opacity-60">
           {pending && markAttendance.variables?.status === "Present" ? "Kaydediliyor…" : "Geldi"}
         </button>
         <button type="button" onClick={() => answer("Absent")} disabled={pending} className="pressable min-h-10 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--danger-strong)] disabled:opacity-60">
           {pending && markAttendance.variables?.status === "Absent" ? "Kaydediliyor…" : "Gelmedi"}
+        </button>
+        <button type="button" onClick={() => answer("Excused")} disabled={pending} className="pressable min-h-10 rounded-lg border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--warning-strong)] disabled:opacity-60">
+          {pending && markAttendance.variables?.status === "Excused" ? "Kaydediliyor…" : "Mazeretli"}
         </button>
       </div>
       {error && <p role="alert" className="mt-2 pl-11 text-[.75rem] font-semibold text-[var(--danger-strong)]">{error}</p>}

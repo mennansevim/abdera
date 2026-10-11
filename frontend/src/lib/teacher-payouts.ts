@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
+import type { AttendanceStatus } from "./attendance";
 import type { TeacherStatus } from "./people";
 
 // Öğretmenlere haftalık ders ödemesi (docs/10-decisions.md O1). Ödeme haftası PAZARTESİ
@@ -56,6 +57,38 @@ export function useTeacherPayoutWeek(weekStart: string | null, options?: { enabl
     queryFn: () => api.get<TeacherPayoutWeek>(
       weekStart ? `/api/teacher-payouts/week?weekStart=${weekStart}` : "/api/teacher-payouts/week"),
     enabled: options?.enabled ?? true,
+  });
+}
+
+// Öğretmenin kendi ödeme haftası (issue #16): ders sayıları, ödeme durumu ve haftanın
+// başlamış dersleri yoklama durumlarıyla. Tutar yok (kullanıcı kararı). Anahtar
+// "teacher-payout-week" ile başlar: yoklama girildiğinde mevcut geçersizleştirme bunu da yeniler.
+export interface MyWeekLesson {
+  lessonId: string;
+  startAt: string;
+  studentName: string;
+  instrumentName: string;
+  status: "Normal" | "Rescheduled" | "Cancelled" | "Completed" | "Makeup";
+  attendanceStatus: AttendanceStatus | null;
+}
+
+export interface MyTeacherWeek {
+  weekStart: string;
+  weekEnd: string;
+  payDay: string;
+  isCurrentWeek: boolean;
+  completedLessons: number;
+  missingAttendanceLessons: number;
+  isPaid: boolean;
+  paidOn: string | null;
+  lessons: MyWeekLesson[];
+}
+
+export function useMyTeacherWeek(weekStart: string | null) {
+  return useQuery({
+    queryKey: ["teacher-payout-week", "mine", weekStart],
+    queryFn: () => api.get<MyTeacherWeek>(
+      weekStart ? `/api/teacher-payouts/my-week?weekStart=${weekStart}` : "/api/teacher-payouts/my-week"),
   });
 }
 
