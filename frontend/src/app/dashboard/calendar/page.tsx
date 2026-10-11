@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent, type MouseEvent, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icon, InstrumentSilhouette, instrumentBadgeStyle } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { ATTENDANCE_LABELS, useCancelLesson, useMarkAttendance, useRescheduleLesson, type AttendanceStatus } from "@/lib/attendance";
@@ -9,7 +10,7 @@ import { useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { errorMessage } from "@/lib/library";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
-import { useCalendar, useEndLessonSeries, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
+import { useCalendar, useEndLessonSeries, useLesson, useRescheduleLessonSeries, useUpdateLesson, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { computeHourWindow, layoutDayLessons, type HourWindow, type LessonLayout } from "@/lib/week-grid-layout";
@@ -205,8 +206,23 @@ function isShownOnCalendar(lesson: CalendarLesson) {
   return lesson.status !== "Rescheduled" && lesson.status !== "Cancelled";
 }
 
+// useSearchParams App Router'da bir Suspense sınırı ister (bkz. progress/page.tsx).
 export default function CalendarPage() {
+  return (
+    <Suspense>
+      <CalendarPageContent />
+    </Suspense>
+  );
+}
+
+function CalendarPageContent() {
   const { data: me } = useMe();
+  const router = useRouter();
+  // Bildirimden gelen ders (?lesson=<id>): ders penceresi doğrudan açılır, kapanınca takvim o
+  // dersin haftasına geçer. Eskiden her ders bildirimi genel takvime gidiyordu ve ilgili dersi
+  // haftalar arasında aramak gerekiyordu (issue #16 kapsam dışı notu).
+  const linkedLessonId = useSearchParams().get("lesson");
+  const { data: linkedLesson, isError: linkedLessonMissing } = useLesson(linkedLessonId);
   const isAdmin = me?.role === "Admin";
   // Öğretmen kendi ders programını girer (docs/10-decisions.md K2): seri açma ve boş slota
   // çift tıklama ona da açık. Kendi dersini tek seferlik ya da seri olarak taşıyabilir ve
@@ -232,6 +248,28 @@ export default function CalendarPage() {
   function announce(text: string) {
     setNotice(text);
     window.setTimeout(() => setNotice((current) => (current === text ? null : current)), 5000);
+  }
+
+  function planMakeup(lesson: CalendarLesson) {
+    setMakeupContext({
+      studentId: lesson.studentId,
+      studentName: lesson.studentName,
+      teacherId: lesson.teacherId,
+      teacherName: lesson.teacherName,
+      instrumentId: lesson.instrumentId,
+      instrumentName: lesson.instrumentName,
+      sourceLessonId: lesson.id,
+      sourceLessonStartAt: lesson.startAt,
+      durationMinutes: lessonDurationMinutes(lesson),
+    });
+    setShowMakeupScheduler(true);
+    setShowSeriesForm(false);
+    setQuickAddSlot(null);
+  }
+
+  function closeLinkedLesson(lesson?: CalendarLesson) {
+    if (lesson) setWeekStart(startOfWeek(new Date(lesson.startAt)));
+    router.replace("/dashboard/calendar", { scroll: false });
   }
   const [instrumentFilter, setInstrumentFilter] = useSessionState<InstrumentFilter>("abdera:calendar:instrument", "Hepsi");
   const [teacherFilter, setTeacherFilter] = useSessionState("abdera:calendar:teacher", "all");
@@ -329,6 +367,20 @@ export default function CalendarPage() {
       </header>
 
       {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
+      {linkedLessonId && linkedLessonMissing && (
+        <Notice onDismiss={() => closeLinkedLesson()}>Bildirimdeki ders bulunamadı; silinmiş ya da artık sana atanmamış olabilir.</Notice>
+      )}
+      {linkedLesson && (
+        <LessonDetailsDialog
+          lesson={linkedLesson}
+          isAdmin={isAdmin}
+          canManage={!!canSchedule}
+          now={now}
+          onUpdated={(message) => announce(message ?? "Ders ayrıntıları güncellendi.")}
+          onPlanMakeup={(lesson) => { closeLinkedLesson(lesson); planMakeup(lesson); }}
+          onClose={() => closeLinkedLesson(linkedLesson)}
+        />
+      )}
 
       {canSchedule && (
         <Modal open={showSeriesForm && !quickAddSlot} title="Yeni ders" description={isAdmin ? "Öğrenciyi seç; sistem öğretmen ve öğrenci takvimini birlikte tarasın." : "Öğrenciyi ve ders gününü seç."} onClose={() => setShowSeriesForm(false)}>
@@ -444,22 +496,7 @@ export default function CalendarPage() {
             hourWindow={hourWindow}
             now={now}
             onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setMakeupContext(null); setShowSeriesForm(false); }}
-            onPlanMakeup={(lesson) => {
-              setMakeupContext({
-                studentId: lesson.studentId,
-                studentName: lesson.studentName,
-                teacherId: lesson.teacherId,
-                teacherName: lesson.teacherName,
-                instrumentId: lesson.instrumentId,
-                instrumentName: lesson.instrumentName,
-                sourceLessonId: lesson.id,
-                sourceLessonStartAt: lesson.startAt,
-                durationMinutes: lessonDurationMinutes(lesson),
-              });
-              setShowMakeupScheduler(true);
-              setShowSeriesForm(false);
-              setQuickAddSlot(null);
-            }}
+            onPlanMakeup={planMakeup}
           />
           <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} error={timelineError} retrying={timelineFetching} onRetry={() => void refetchTimeline()} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
         </div>
