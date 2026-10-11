@@ -26,6 +26,9 @@ public static class Calendar
     {
         app.MapGet("/api/calendar", ListAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapGet("/api/lessons", ListAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        // Bildirimden derse gitmek için tek ders (takvim satırıyla aynı biçim). Öğretmen yalnızca
+        // kendi dersini görür; başkasının dersi için 404 döner ki dersin varlığı da sızmasın.
+        app.MapGet("/api/lessons/{lessonId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     // ARC-3 (docs/13-audit-fix-prompt.md): bu uç noktada sayfalama yok (tek bir takvim
@@ -61,11 +64,26 @@ public static class Calendar
             query = query.Where(l => l.InstrumentId == filterInstrumentId);
         }
 
-        // Not: OrderBy, LessonResponse'a (record) projeksiyondan ÖNCE uygulanır - EF Core
-        // bir record constructor'ının alanına göre sıralamayı SQL'e çeviremiyor
-        // ("could not be translated" hatası). Sıralama anonim ara tipte yapılıp en son adımda
-        // projekte edilir.
-        var lessons = await query
+        var lessons = await ProjectAsync(query, db);
+        return Results.Ok(await EnrichAsync(lessons, db));
+    }
+
+    private static async Task<IResult> GetAsync(Guid lessonId, ClaimsPrincipal principal, AbderaDbContext db)
+    {
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        var query = db.Lessons.Where(l => l.Id == lessonId);
+        if (teacherScope is { } scopedTeacherId) query = query.Where(l => l.TeacherId == scopedTeacherId);
+        var lessons = await ProjectAsync(query, db);
+        if (lessons.Count == 0) throw new NotFoundException("Ders bulunamadı.");
+        return Results.Ok((await EnrichAsync(lessons, db)).Single());
+    }
+
+    // Not: OrderBy, LessonResponse'a (record) projeksiyondan ÖNCE uygulanır - EF Core
+    // bir record constructor'ının alanına göre sıralamayı SQL'e çeviremiyor
+    // ("could not be translated" hatası). Sıralama anonim ara tipte yapılıp en son adımda
+    // projekte edilir.
+    private static Task<List<LessonResponse>> ProjectAsync(IQueryable<Lesson> query, AbderaDbContext db) =>
+        query
             .Join(db.Students, l => l.StudentId, s => s.Id, (l, s) => new { Lesson = l, Student = s })
             .Join(db.Teachers, x => x.Lesson.TeacherId, t => t.Id, (x, t) => new { x.Lesson, x.Student, Teacher = t })
             .Join(db.Instruments, x => x.Lesson.InstrumentId, i => i.Id, (x, i) => new { x.Lesson, x.Student, x.Teacher, Instrument = i })
@@ -77,6 +95,9 @@ public static class Calendar
                 x.Instrument.Id, x.Instrument.Name, null, null, false))
             .ToListAsync();
 
+    // Veli cevabı, yoklama durumu ve not bilgisi ayrı sorgularla eklenir (takvim ve tek ders aynı yolu kullanır).
+    private static async Task<List<LessonResponse>> EnrichAsync(List<LessonResponse> lessons, AbderaDbContext db)
+    {
         var lessonIds = lessons.Select(l => l.Id).ToList();
         var rsvpRows = await db.LessonRsvps
             .Where(r => lessonIds.Contains(r.LessonId))
@@ -108,11 +129,11 @@ public static class Calendar
             .Distinct()
             .ToListAsync()).ToHashSet();
 
-        return Results.Ok(lessons.Select(lesson => lesson with
+        return lessons.Select(lesson => lesson with
         {
             HasNote = lessonsWithNotes.Contains(lesson.Id),
             RsvpResponse = rsvpByLesson.GetValueOrDefault(lesson.Id),
             AttendanceStatus = attendanceByLesson.TryGetValue(lesson.Id, out var status) ? status : null,
-        }));
+        }).ToList();
     }
 }

@@ -159,6 +159,17 @@ export function useCalendar(from: string, to: string, options?: { enabled?: bool
   });
 }
 
+// Bildirimden derse gitmek için tek ders. Anahtar "calendar" ile başlar: ders değiştiren
+// işlemlerin takvim geçersizleştirmesi bu sorguyu da yeniler.
+export function useLesson(lessonId: string | null) {
+  return useQuery({
+    queryKey: ["calendar", "lesson", lessonId],
+    queryFn: () => api.get<CalendarLesson>(`/api/lessons/${lessonId}`),
+    enabled: Boolean(lessonId),
+    retry: false,
+  });
+}
+
 export function useUpdateLesson() {
   const queryClient = useQueryClient();
   return useMutation({

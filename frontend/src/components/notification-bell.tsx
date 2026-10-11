@@ -105,7 +105,12 @@ function useOpenNotification() {
   const router = useRouter();
   return (notification: StaffNotification) => {
     if (!notification.readAt) markRead.mutate(notification.id);
-    router.push(metaFor(notification.type).href);
+    // Tek bir derse işaret eden bildirim (taşındı, iptal, telafi, veli cevabı, yoklama sorusu)
+    // takvimde o dersin penceresini açar; seri bildirimi ve özet hatırlatmalar sabit sayfaya gider.
+    const href = metaFor(notification.type).href;
+    router.push(notification.referenceType === "lesson" && href === "/dashboard/calendar"
+      ? `/dashboard/calendar?lesson=${notification.referenceId}`
+      : href);
   };
 }
 

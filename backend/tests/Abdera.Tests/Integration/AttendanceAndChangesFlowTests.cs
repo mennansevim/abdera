@@ -169,6 +169,28 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
         Assert.Equal(AttendanceStatus.Excused, lessons!.Single(l => l.Id == seeded.LessonId).AttendanceStatus);
     }
 
+    // Bildirimden derse gitmek için tek ders ucu: takvim satırıyla aynı biçim, öğretmen yalnızca
+    // kendi dersini görür (başkasının dersi için 404 - dersin varlığı da sızmaz).
+    [Fact]
+    public async Task A_single_lesson_is_returned_for_its_teacher_and_admin_only()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "single");
+        var other = await SeedLessonAsync(admin, "single-other");
+
+        using var teacherClient = _factory.CreateClient();
+        (await teacherClient.PostAsJsonAsync("/api/auth/login", new Login.Request(seeded.TeacherEmail, seeded.TeacherTempPassword))).EnsureSuccessStatusCode();
+
+        var own = await teacherClient.GetFromJsonAsync<Calendar.LessonResponse>($"/api/lessons/{seeded.LessonId}", TestJson.Options);
+        Assert.Equal(seeded.LessonId, own!.Id);
+        Assert.Equal(seeded.StudentId, own.StudentId);
+        Assert.False(own.HasNote);
+
+        Assert.Equal(HttpStatusCode.NotFound, (await teacherClient.GetAsync($"/api/lessons/{other.LessonId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await teacherClient.GetAsync($"/api/lessons/{Guid.NewGuid()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync($"/api/lessons/{other.LessonId}")).StatusCode);
+    }
+
     // Gün şeridinden ileri bir gün seçilip "Geldi" denebiliyordu: ders Completed olup ödeme
     // haftasına giriyordu. Başlamamış derse yoklama (Admin dahil) reddedilir, ders Normal kalır.
     [Fact]
