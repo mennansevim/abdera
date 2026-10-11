@@ -48,6 +48,19 @@ public static class TeacherPayouts
 
     public record RateResponse(Guid TeacherId, decimal AmountPerLesson, string Currency, DateTimeOffset UpdatedAt);
 
+    // Öğretmenin kendi haftası (issue #16, docs/10-decisions.md O1 - Y kararıyla genişledi).
+    // Tutar ve ders ücreti BİLİNÇLİ olarak yok: kullanıcı kararı "ders sayısı + ödeme durumu".
+    // Lessons haftanın başlamış derslerini yoklama durumuyla taşır; öğretmen yanlış girilmiş
+    // ya da eksik yoklamayı buradan düzeltir (aynı POST /api/lessons/{id}/attendance ucu).
+    public record MyWeekLesson(
+        Guid LessonId, DateTimeOffset StartAt, string StudentName, string InstrumentName,
+        LessonStatus Status, Attendance.Domain.AttendanceStatus? AttendanceStatus);
+
+    public record MyWeekResponse(
+        DateOnly WeekStart, DateOnly WeekEnd, DateOnly PayDay, bool IsCurrentWeek,
+        int CompletedLessons, int MissingAttendanceLessons, bool IsPaid, DateOnly? PaidOn,
+        List<MyWeekLesson> Lessons);
+
     public static void MapTeacherPayouts(this IEndpointRouteBuilder app)
     {
         // Maaş verisi tamamen Admin'e özel (docs/04-permissions.md) - bir öğretmenin
@@ -56,6 +69,55 @@ public static class TeacherPayouts
         group.MapGet("/week", WeekAsync);
         group.MapPost("", CreateAsync);
         group.MapPut("/rates/{teacherId:guid}", SetRateAsync);
+
+        // Öğretmen yalnızca kendi haftasını görür; uç başka bir öğretmen id'si almaz.
+        app.MapGet("/api/teacher-payouts/my-week", MyWeekAsync)
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+    }
+
+    private static async Task<IResult> MyWeekAsync(
+        DateOnly? weekStart, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var teacherId = await AuthContext.ResolveTeacherScopeAsync(principal, db)
+            ?? throw new ForbiddenException("Bu ekran yalnızca öğretmen hesabı içindir.");
+        var now = clock.UtcNow;
+        var todayLocal = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
+        var week = TeacherPayWeek.Containing(weekStart ?? todayLocal);
+        var fromAt = LessonGenerator.ToUtcInstant(week.Start, TimeOnly.MinValue, clock.SchoolTimeZone);
+        var toAt = LessonGenerator.ToUtcInstant(week.ExclusiveEnd, TimeOnly.MinValue, clock.SchoolTimeZone);
+        // Henüz başlamamış ders listede yok: yoklaması alınamaz (Lesson.Complete), "eksik" de sayılmaz.
+        var startedBefore = now < toAt ? now + Lesson.AttendanceOpensBeforeStart : toAt;
+
+        var rows = await db.Lessons.AsNoTracking()
+            .Where(lesson => lesson.TeacherId == teacherId && lesson.StartAt >= fromAt && lesson.StartAt < startedBefore
+                && (lesson.Status == LessonStatus.Normal || lesson.Status == LessonStatus.Makeup || lesson.Status == LessonStatus.Completed))
+            .Join(db.Students, lesson => lesson.StudentId, student => student.Id, (lesson, student) => new { lesson, student })
+            .Join(db.Instruments, x => x.lesson.InstrumentId, instrument => instrument.Id, (x, instrument) => new { x.lesson, x.student, instrument })
+            .OrderBy(x => x.lesson.StartAt)
+            .Select(x => new
+            {
+                x.lesson.Id, x.lesson.StartAt, x.lesson.Status,
+                StudentName = x.student.FirstName + " " + x.student.LastName,
+                InstrumentName = x.instrument.Name,
+            })
+            .ToListAsync();
+        var lessonIds = rows.Select(row => row.Id).ToList();
+        var attendance = await db.LessonAttendances.AsNoTracking()
+            .Where(item => lessonIds.Contains(item.LessonId))
+            .ToDictionaryAsync(item => item.LessonId, item => item.Status);
+        var payout = await db.TeacherWeeklyPayouts.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.TeacherId == teacherId && item.WeekStart == week.Start);
+
+        var lessons = rows
+            .Select(row => new MyWeekLesson(row.Id, row.StartAt, row.StudentName, row.InstrumentName, row.Status,
+                attendance.TryGetValue(row.Id, out var status) ? status : null))
+            .ToList();
+        return Results.Ok(new MyWeekResponse(
+            week.Start, week.End, week.End, week == TeacherPayWeek.Containing(todayLocal),
+            // Ödeme haftasındaki tamamlanan sayı yönetici tablosuyla aynı tanım: Completed ders.
+            lessons.Count(lesson => lesson.Status == LessonStatus.Completed),
+            lessons.Count(lesson => lesson.Status != LessonStatus.Completed),
+            payout is not null, payout?.PaidOn, lessons));
     }
 
     private static async Task<IResult> WeekAsync(DateOnly? weekStart, AbderaDbContext db, IClock clock)

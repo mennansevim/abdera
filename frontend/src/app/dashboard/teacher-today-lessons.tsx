@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
-import { QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
+import { continuePatch, QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
-import { ATTENDANCE_LABELS, ATTENDANCE_OPENS_BEFORE_MINUTES, isAttendanceOpen, useCreateChangeRequest, useCreateLessonNote, useLessonNotes, useMarkAttendance, type AttendanceStatus, type LessonNoteSummary } from "@/lib/attendance";
+import { ATTENDANCE_LABELS, ATTENDANCE_OPENS_BEFORE_MINUTES, isAttendanceOpen, useCreateChangeRequest, useCreateLessonNote, useLessonNotes, useMarkAttendance, usePreviousLessonNote, type AttendanceStatus, type LessonNoteSummary } from "@/lib/attendance";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
+import { useStudentGuardians, whatsAppChatUrl } from "@/lib/people";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 
 export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
@@ -20,19 +21,23 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
     range.setDate(range.getDate() + 22);
     return { todayStart: start, todayEnd: end, rangeEnd: range };
   }, [dateTime]);
-  const { data: rawLessons, isLoading, isError, isFetching, refetch } = useCalendar(todayStart.toISOString(), rangeEnd.toISOString());
+  // Yalnızca seçili gün çekilir (eskiden her 15 sn'de 22 günlük takvim geliyordu - telefonda yavaş
+  // ağda gereksiz yük, issue #16). Veli cevabı (Geliyor/Gelmiyor) dakikada bir tazelenir.
+  const { data: rawLessons, isLoading, isError, isFetching, refetch } = useCalendar(todayStart.toISOString(), todayEnd.toISOString(), { refetchInterval: 60_000 });
   // Bir ders ertelendiğinde backend eski kaydı SİLMEZ, `Rescheduled` durumuna çevirip yeni saat
   // için ayrı bir satır açar (denetim izi - CLAUDE.md). Bugünden başka bir güne taşınan bir ders,
   // bu filtre olmadan hâlâ "bugün" listesinde normal bir ders gibi görünüp yoklama/not almaya
   // açık kalırdı.
   const allLessons = useMemo(() => rawLessons?.filter((lesson) => lesson.status !== "Rescheduled") ?? [], [rawLessons]);
-  const lessons = useMemo(() => allLessons.filter((lesson) => {
-    const start = new Date(lesson.startAt);
-    return start >= todayStart && start < todayEnd;
-  }), [allLessons, todayEnd, todayStart]);
-  const nextLesson = useMemo(() => allLessons
-    .filter((lesson) => new Date(lesson.startAt) >= todayEnd && lesson.status !== "Cancelled")
-    .sort((a, b) => a.startAt.localeCompare(b.startAt))[0], [allLessons, todayEnd]);
+  const lessons = allLessons;
+  // "Sıradaki ders" yalnızca o gün ders yoksa ve bir kez sorulur.
+  const { data: upcoming } = useCalendar(todayEnd.toISOString(), rangeEnd.toISOString(), {
+    enabled: !isLoading && !isError && allLessons.length === 0,
+    refetchInterval: false,
+  });
+  const nextLesson = useMemo(() => (upcoming ?? [])
+    .filter((lesson) => lesson.status !== "Cancelled" && lesson.status !== "Rescheduled")
+    .sort((a, b) => a.startAt.localeCompare(b.startAt))[0], [upcoming]);
   const [expanded, setExpanded] = useState<{ id: string; mode: "attendance" | "note" } | null>(null);
   // Enstrüman renkleri artık dashboard'daki haftalık ızgara ile aynı paletten (lesson-colors.ts) -
   // önceden burada ayrı, karakter-hash'ine dayalı bir renk kümesi kullanılıyordu (docs/14-ui-design-prompt.md C).
@@ -75,14 +80,18 @@ function TodayLessonCard({ lesson, tone, expandedMode, onToggle, onDone }: {
 }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
-  const { data: notes } = useLessonNotes(lesson.id);
-  const hasNote = Boolean(notes?.length);
+  // Rozet takvimle gelen bilgiden beslenir; notların kendisi yalnızca kart açılınca çekilir.
+  const hasNote = Boolean(lesson.hasNote);
   const attendanceTaken = lesson.status === "Completed";
   const actionClass = "pressable flex min-h-11 items-center justify-center gap-2 rounded-xl border text-xs font-bold";
   const idleClass = "border-[var(--line)] bg-white hover:bg-[var(--surface-muted)]";
   const doneClass = "border-[color:var(--success)]/40 bg-[var(--success-soft)] text-[var(--success-strong)]";
   return (
-    <article className="app-card relative overflow-hidden xl:self-start">
+    // overflow-clip: köşe yuvarlama korunur ama kart kaydırma kabı olmaz, alttaki Kaydet
+    // çubuğu telefonda ekranın altına yapışabilir (overflow-hidden sticky'yi bozuyordu).
+    // min-w-0 şart: overflow-hidden ızgara öğesini kendiliğinden daraltıyordu, clip daraltmaz;
+    // yoksa uzun tek satırlık metin (truncate) kartı ekrandan taşırır.
+    <article className="app-card relative min-w-0 overflow-clip xl:self-start">
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: tone.border }} aria-hidden="true" />
       <div className="flex items-center gap-3 p-3 sm:p-4">
         <span className="flex h-14 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-[var(--surface-muted)] text-center">
@@ -101,7 +110,7 @@ function TodayLessonCard({ lesson, tone, expandedMode, onToggle, onDone }: {
         <button onClick={() => onToggle("attendance")} aria-expanded={expandedMode === "attendance"} className={`${actionClass} ${attendanceTaken ? doneClass : idleClass}`}><Icon name={attendanceTaken ? "check" : "calendar"} className="h-4 w-4" /> {attendanceTaken ? lesson.attendanceStatus ? `Yoklama: ${ATTENDANCE_LABELS[lesson.attendanceStatus]}` : "Yoklama alındı" : "Yoklama Al"}</button>
         <button onClick={() => onToggle("note")} aria-expanded={expandedMode === "note"} className={`${actionClass} ${hasNote ? doneClass : idleClass}`}><Icon name={hasNote ? "check" : "note"} className="h-4 w-4" /> {hasNote ? "Not girildi" : "Not Ekle"}</button>
       </div>
-      {expandedMode && <LessonActions lesson={lesson} initialMode={expandedMode} notes={notes ?? []} onDone={onDone} />}
+      {expandedMode && <LessonActions lesson={lesson} initialMode={expandedMode} onDone={onDone} />}
     </article>
   );
 }
@@ -144,15 +153,62 @@ function StatusBadge({ lesson }: { lesson: CalendarLesson }) {
   return <span className={`shrink-0 rounded-full px-2 py-1 text-[.75rem] font-bold ${rsvp.className}`}>{rsvp.label}</span>;
 }
 
-function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: CalendarLesson; initialMode: "attendance" | "note"; notes: LessonNoteSummary[]; onDone: () => void }) {
+// Yarım kalan not taslağı sekme kapanana kadar saklanır: kart kapanınca ya da sayfa değişince
+// yazılanlar kayboluyordu, oysa çevrimdışı uyarısı "yazdıkların korunur" diyor (issue #16).
+// Kalıcı kayıt değil - yalnızca bu cihazdaki bu sekme için kolaylık.
+interface LessonDraft { status: AttendanceStatus | null; note: string; practiced: string; homework: string; nextGoal: string }
+const EMPTY_DRAFT: LessonDraft = { status: null, note: "", practiced: "", homework: "", nextGoal: "" };
+const draftKey = (lessonId: string) => `abdera.lessonDraft:${lessonId}`;
+
+function readDraft(lessonId: string): LessonDraft {
+  try {
+    const raw = window.sessionStorage.getItem(draftKey(lessonId));
+    return raw ? { ...EMPTY_DRAFT, ...(JSON.parse(raw) as Partial<LessonDraft>) } : EMPTY_DRAFT;
+  } catch {
+    return EMPTY_DRAFT;
+  }
+}
+
+function writeDraft(lessonId: string, draft: LessonDraft) {
+  try {
+    const empty = !draft.status && !draft.note && !draft.practiced && !draft.homework && !draft.nextGoal;
+    if (empty) window.sessionStorage.removeItem(draftKey(lessonId));
+    else window.sessionStorage.setItem(draftKey(lessonId), JSON.stringify(draft));
+  } catch {
+    // Depolama kapalı (gizli mod): taslak yalnızca ekranda kalır.
+  }
+}
+
+// Kartın içinden veliyi tek dokunuşla aramak/yazmak: eskiden Öğrenciler → aç → Veliler yolundaydı.
+// Veliler yalnızca kart açılınca çekilir.
+function GuardianContact({ studentId }: { studentId: string }) {
+  const { data: guardians } = useStudentGuardians(studentId);
+  const guardian = guardians?.find((item) => item.isPrimary) ?? guardians?.[0];
+  if (!guardian) return null;
+  const name = `${guardian.firstName} ${guardian.lastName}`;
+  return (
+    <div className="flex items-center gap-2 rounded-xl bg-white px-3 py-2">
+      <span className="min-w-0 flex-1 truncate text-xs"><span className="font-bold">{name}</span>{guardian.relationship && <span className="text-[var(--muted)]"> · {guardian.relationship}</span>}</span>
+      <a href={`tel:${guardian.phoneNumber}`} aria-label={`${name} ara`} title="Ara" className="icon-btn icon-btn-quiet shrink-0"><Icon name="phone" className="h-4 w-4" /></a>
+      <a href={whatsAppChatUrl(guardian.phoneNumber)} target="_blank" rel="noopener noreferrer" aria-label={`${name} için WhatsApp'tan yaz`} title="WhatsApp'tan yaz" className="icon-btn icon-btn-quiet shrink-0 text-[#1f9e55]"><Icon name="whatsapp" className="h-4 w-4" /></a>
+    </div>
+  );
+}
+
+function LessonActions({ lesson, initialMode, onDone }: { lesson: CalendarLesson; initialMode: "attendance" | "note"; onDone: () => void }) {
   const markAttendance = useMarkAttendance(lesson.id);
   const createNote = useCreateLessonNote(lesson.id);
   const createChangeRequest = useCreateChangeRequest(lesson.id);
-  const [status, setStatus] = useState<AttendanceStatus | null>(null);
-  const [practiced, setPracticed] = useState("");
-  const [note, setNote] = useState("");
-  const [homework, setHomework] = useState("");
-  const [nextGoal, setNextGoal] = useState("");
+  const { data: notesData, isLoading: notesLoading } = useLessonNotes(lesson.id);
+  const notes: LessonNoteSummary[] = notesData ?? [];
+  const { data: previousData } = usePreviousLessonNote(lesson.id);
+  const previous = previousData?.previous ?? null;
+  const [initialDraft] = useState(() => readDraft(lesson.id));
+  const [status, setStatus] = useState<AttendanceStatus | null>(lesson.status === "Completed" ? null : initialDraft.status);
+  const [practiced, setPracticed] = useState(initialDraft.practiced);
+  const [note, setNote] = useState(initialDraft.note);
+  const [homework, setHomework] = useState(initialDraft.homework);
+  const [nextGoal, setNextGoal] = useState(initialDraft.nextGoal);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [showChangeForm, setShowChangeForm] = useState(false);
@@ -169,6 +225,11 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
   const showStatusPicker = !attendanceTaken || correcting;
   // Gün şeridinden ileri bir gün seçilince yoklama kapalı kalır; hazırlık notu yine yazılabilir.
   const attendanceOpen = isAttendanceOpen(lesson.startAt);
+  const restoredDraft = Boolean(initialDraft.note || initialDraft.practiced || initialDraft.homework || initialDraft.nextGoal);
+
+  useEffect(() => {
+    if (!saved) writeDraft(lesson.id, { status: correcting ? null : status, note, practiced, homework, nextGoal });
+  }, [lesson.id, status, note, practiced, homework, nextGoal, saved, correcting]);
 
   function applyQuick(patch: QuickNotePatch) {
     if (patch.note !== undefined) setNote(patch.note);
@@ -191,6 +252,7 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
     try {
       if (status && statusChanged) await markAttendance.mutateAsync({ status, note: note || undefined });
       if (practiced || note || homework || nextGoal) await createNote.mutateAsync({ practiced: practiced || undefined, note: note || undefined, homework: homework || undefined, nextGoal: nextGoal || undefined });
+      writeDraft(lesson.id, EMPTY_DRAFT);
       setSaved(true);
       window.setTimeout(onDone, 650);
     } catch (err) {
@@ -200,9 +262,12 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
 
   if (disabled) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4 text-xs text-[var(--muted)]">Bu ders iptal edildi; yeni işlem yapılamaz.</div>;
 
+  if (notesLoading && lesson.hasNote) return <div className="border-t border-[var(--line)] bg-[var(--surface-muted)] p-4"><div className="skeleton h-20 rounded-xl" /></div>;
+
   if (notes.length && !writeExtraNote && !correcting && !saved && (initialMode === "note" || attendanceTaken)) {
     return (
       <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
+        <GuardianContact studentId={lesson.studentId} />
         {notes.slice(0, 2).map((item) => <SavedNote key={item.id} note={item} />)}
         {notes.length > 2 && <p className="text-meta">Bu derste {notes.length - 2} not daha var; tamamı Gelişim ekranında.</p>}
         <div className="flex flex-wrap items-center gap-2">
@@ -218,6 +283,16 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)] p-4">
       {saved ? <p className="flex items-center gap-2 rounded-xl bg-[var(--success-soft)] p-3 text-xs font-bold text-[var(--success-strong)]"><Icon name="check" className="h-4 w-4" /> Ders bilgileri kaydedildi.</p> : (
         <>
+          <GuardianContact studentId={lesson.studentId} />
+          {restoredDraft && <p className="text-meta">Yarım kalan notun geri getirildi.</p>}
+          {/* Ders arasında en sık iş: öğrenci geldi, geçen dersin çalışmasına devam edildi.
+              Tek dokunuş Geldi'yi seçer ve önceki dersin "Ne çalışıldı / Ödev / Hedef"ini
+              boş alanlara aktarır; Kaydet ile biter (issue #16). */}
+          {showStatusPicker && !correcting && attendanceOpen && previous && status === null && (
+            <button type="button" onClick={() => { setStatus("Present"); applyQuick(continuePatch(previous, { note, practiced, homework, nextGoal })); }} className="pressable flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--success-strong)] px-3 text-sm font-bold text-white">
+              <Icon name="check" className="h-4 w-4" /> Geldi + önceki dersten devam
+            </button>
+          )}
           {!showStatusPicker ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white p-3 text-xs font-semibold text-[var(--muted)]">
               <p className="flex items-center gap-2"><Icon name="check" className="h-4 w-4 text-[var(--success-strong)]" /> {lesson.attendanceStatus ? `Yoklama: ${ATTENDANCE_LABELS[lesson.attendanceStatus]}` : "Yoklama alındı"}; bu derse not ekleyebilirsin.</p>
@@ -243,11 +318,13 @@ function LessonActions({ lesson, initialMode, notes, onDone }: { lesson: Calenda
             <label className="sm:col-span-2"><span className="text-meta mb-1.5 block font-bold">Sonraki hedef</span><input value={nextGoal} onChange={(event) => setNextGoal(event.target.value)} className="field text-xs" placeholder="Bir sonraki dersin odağı" /></label>
           </div>
           {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] p-3 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
-          <div className="flex flex-wrap items-center gap-2">
+          {showChangeForm && <ChangeRequestForm onSubmit={async (proposedStartAt, proposedEndAt, reason) => { await createChangeRequest.mutateAsync({ proposedStartAt, proposedEndAt, reason }); setShowChangeForm(false); }} />}
+          {/* Kaydet telefonda ekranın altına (alt menünün üstüne) yapışır: form uzun, eskiden
+              kaydetmek için her derste aşağı kaydırmak gerekiyordu. */}
+          <div className="sticky z-10 -mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t border-[var(--line)] bg-[var(--surface-muted)]/95 px-4 py-3 backdrop-blur max-lg:bottom-[calc(4rem+env(safe-area-inset-bottom))] lg:bottom-0">
             <button type="button" onClick={handleSave} disabled={markAttendance.isPending || createNote.isPending} className="btn btn-primary">{markAttendance.isPending || createNote.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
             {!attendanceTaken && <button type="button" onClick={() => setShowChangeForm((value) => !value)} className="btn btn-quiet">Ders değişikliği iste</button>}
           </div>
-          {showChangeForm && <ChangeRequestForm onSubmit={async (proposedStartAt, proposedEndAt, reason) => { await createChangeRequest.mutateAsync({ proposedStartAt, proposedEndAt, reason }); setShowChangeForm(false); }} />}
         </>
       )}
     </div>

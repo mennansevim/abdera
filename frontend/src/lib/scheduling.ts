@@ -142,17 +142,20 @@ export interface CalendarLesson {
   rsvpResponse?: "Unknown" | "Attending" | "AttendingLate" | "NotAttending" | null;
   // Yoklaması girilmiş dersin güncel durumu; düzeltme ("Gelmedi" → "Mazeretli") buradan başlar.
   attendanceStatus?: AttendanceStatus | null;
+  // Derse en az bir not yazılmış mı; Bugün ekranının "Not girildi" rozeti buradan beslenir.
+  hasNote?: boolean;
 }
 
-export function useCalendar(from: string, to: string) {
+export function useCalendar(from: string, to: string, options?: { enabled?: boolean; refetchInterval?: number | false }) {
   return useQuery({
     queryKey: ["calendar", from, to],
     queryFn: () => api.get<CalendarLesson[]>(`/api/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     // Veli WhatsApp hızlı yanıtını uygulama kapalıyken verebilir. Webhook cevabı
     // veritabanına yazdıktan sonra açık öğretmen/yönetici takvimi sayfa yenilemeden
     // kısa sürede Geliyor / Geç kalacak / Gelmiyor durumuna geçsin.
-    refetchInterval: 15_000,
+    refetchInterval: options?.refetchInterval ?? 15_000,
     refetchOnWindowFocus: true,
+    enabled: options?.enabled ?? true,
   });
 }
 

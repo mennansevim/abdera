@@ -353,6 +353,18 @@ Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [menn
 | X4 | Ayrılma nedeni | Kurs kaydı arayüzden yalnızca nedenle bitirilir (`POST .../enrollments/{id}/end`): Taşındı / Maddi / İlgisini kaybetti / Program uymadı / Başka kursa geçti / Diğer + isteğe bağlı not (≤500). Neden ve not `enrollments`'ta ve `audit_log`'da saklanır. Eski `DELETE` ucu duruyor, nedeni boş bırakır. Öğrenciyi "Pasife al" kurs kayıtlarını bitirmediği için neden sormaz. |
 | X5 | Sonra | Ayrılma nedenlerinin dökümü ve kârlılıktaki varsayılan kalış süresinin (V5) gerçek bitişlerle değiştirilmesi bu adımın dışında; veri birikince ele alınacak. |
 
+## Y — Öğretmen için hızlı ders akışı ve kendi haftası (2026-10-11)
+
+Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [mennansevim/abdera#16](https://github.com/mennansevim/abdera/issues/16).
+
+| # | Konu | Karar |
+|---|---|---|
+| Y1 | Kendi haftası (O1'in genişlemesi) | Öğretmen Bugün ekranında kendi ödeme haftasını (Pzt–Cmt) görür: tamamlanan ders sayısı, yoklaması eksik ders sayısı, **Ödendi/Ödenmedi**. Kullanıcı kararı: **tutar ve ders ücreti gösterilmez** ("ders sayısı + ödeme durumu"); ücret konuşması yöneticide kalır. Uç yalnızca çağıranın kendi haftasını döner, başka öğretmen id'si almaz. O1'in "öğretmen kendi ücretini de göremez" kuralı aynen geçerli. |
+| Y2 | Haftadan düzeltme | Kullanıcı isteği: "haftalık özet verildiğinde düzenleme yapılabilsin, geldi gelmedi durumunu gösterirken aslında gelmedi ya da mazeretli yapılabilsin." Kart haftanın başlamış derslerini yoklama durumlarıyla listeler; tek dokunuş yoklamayı girer ya da düzeltir (aynı `POST /api/lessons/{id}/attendance`, audit ve telafi hakkı kuralları değişmeden). Ödemesi yapılmış haftada düzeltme yapılmış ödemeyi değiştirmez; kart bunu söyler. |
+| Y3 | Hızlı akış | Yoklama kartında "Geldi + önceki dersten devam" tek dokunuşla Geldi'yi seçer ve önceki dersin çalışma/ödev/hedefini boş alanlara aktarır; kaydetmek yine açık bir dokunuştur (not öğretmen görmeden yazılmaz). Kaydet telefonda ekranın altına yapışır. Yarım not taslağı sekme kapanana kadar `sessionStorage`'da saklanır. Bildirimdeki "öğrenci geldi mi?" sorusuna Mazeretli eklendi. |
+| Y4 | Ağ yükü | Bugün ekranı yalnızca seçili günü çeker (eskiden her 15 sn'de 22 gün), "sıradaki ders" yalnızca o gün ders yoksa bir kez sorulur; veli cevabı dakikada bir tazelenir. "Not girildi" rozeti takvim yanıtındaki `hasNote`'tan gelir, kart başına not isteği atılmaz. |
+| Y5 | Ana ekrana ekle | `app/manifest.ts` ile web uygulaması ana ekrana eklenebilir (tam ekran, `/dashboard`'dan açılır). Ayrı mobil uygulama değil; service worker/çevrimdışı önbellek bilinçli olarak yok (bayat yoklama göstermek göstermemekten kötü). Giriş ekranı bu cihazda son kullanılan rolle açılır; rol denetimi sunucuda bağlayıcı kalır. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

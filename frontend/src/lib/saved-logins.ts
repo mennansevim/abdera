@@ -21,6 +21,28 @@ export function readSavedEmail(role: StaffRole): string {
   }
 }
 
+// Bu cihazda en son hangi rolle girildi (issue #16): giriş ekranı varsayılan olarak hep
+// "Yönetici" açılıyordu; öğretmen her gün rolü değiştirmek zorundaydı, unutunca 403 alıyordu.
+// Yalnızca ön seçimdir - rol denetimi sunucuda aynen bağlayıcı kalır.
+const LAST_ROLE_KEY = "abdera.login.lastRole";
+
+export function readLastRole(): StaffRole | null {
+  try {
+    const value = window.localStorage.getItem(LAST_ROLE_KEY);
+    return value === "Admin" || value === "Teacher" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberLastRole(role: StaffRole) {
+  try {
+    window.localStorage.setItem(LAST_ROLE_KEY, role);
+  } catch {
+    // Depolama kapalı: ekran varsayılan rolle açılır.
+  }
+}
+
 export function rememberLogin(role: StaffRole, email: string, password: string) {
   try {
     window.localStorage.setItem(EMAIL_KEY_PREFIX + role, email);

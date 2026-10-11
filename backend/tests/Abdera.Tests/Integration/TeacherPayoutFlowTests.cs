@@ -214,6 +214,73 @@ public class TeacherPayoutFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     // Maaş verisi Admin'e özeldir (docs/04-permissions.md) - oturumsuz istek uca hiç ulaşamaz.
+    // Issue #16: öğretmen kendi haftasını görür - tamamlanan/eksik yoklama sayısı, ödeme durumu
+    // ve haftanın dersleri yoklama durumlarıyla. Tutar dönmez (kullanıcı kararı); yoklama
+    // düzeltmesi aynı listeye yansır.
+    [Fact]
+    public async Task A_teacher_sees_own_week_with_lesson_statuses_and_can_correct_attendance_from_it()
+    {
+        var admin = await CreateAdminClientAsync();
+        var week = PastWeek(1);
+        var now = DateTimeOffset.UtcNow;
+        var instruments = await (await admin.GetAsync("/api/instruments"))
+            .Content.ReadFromJsonAsync<List<Abdera.Api.Modules.People.Features.Instruments.InstrumentResponse>>(TestJson.Options);
+        var piano = instruments!.Single(i => i.Code == "PIANO");
+        var teacherEmail = "my-week@test.local";
+        var teacherCreate = (await (await admin.PostAsJsonAsync("/api/teachers",
+                new Abdera.Api.Modules.People.Features.Teachers.CreateRequest("Kendi", "Haftası", [piano.Id], teacherEmail)))
+            .Content.ReadFromJsonAsync<Abdera.Api.Modules.People.Features.Teachers.CreateResponse>(TestJson.Options))!;
+        var teacherId = teacherCreate.Teacher.Id;
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Abdera.Api.Modules.People.Features.Students.CreateRequest("Hafta", "Öğrencisi", new DateOnly(2014, 1, 1))))
+            .Content.ReadFromJsonAsync<Abdera.Api.Modules.People.Features.Students.StudentResponse>(TestJson.Options))!;
+
+        Lesson Planned(DateOnly date, int hour)
+        {
+            var startAt = LessonGenerator.ToUtcInstant(date, new TimeOnly(hour, 0), Istanbul);
+            return Lesson.CreateMakeup(student.Id, teacherId, piano.Id, startAt, startAt.AddMinutes(45), now);
+        }
+        var marked = Planned(week.Start, 16);
+        var missing = Planned(week.Start.AddDays(2), 17);
+        var sunday = Planned(week.ExclusiveEnd, 10);
+        var cancelled = Planned(week.Start.AddDays(3), 18);
+        cancelled.Cancel(now);
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            db.Lessons.AddRange(marked, missing, sunday, cancelled);
+            await db.SaveChangesAsync();
+        }
+
+        using var teacher = _factory.CreateClient();
+        (await teacher.PostAsJsonAsync("/api/auth/login", new Login.Request(teacherEmail, teacherCreate.TemporaryPassword!))).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Created, (await teacher.PostAsJsonAsync($"/api/lessons/{marked.Id}/attendance",
+            new Abdera.Api.Modules.Attendance.Features.MarkAttendance.MarkRequest(Abdera.Api.Modules.Attendance.Domain.AttendanceStatus.Present, null))).StatusCode);
+
+        var url = $"/api/teacher-payouts/my-week?weekStart={week.Start:yyyy-MM-dd}";
+        var myWeek = (await teacher.GetFromJsonAsync<TeacherPayouts.MyWeekResponse>(url, TestJson.Options))!;
+        Assert.Equal(week.Start, myWeek.WeekStart);
+        Assert.Equal(week.End, myWeek.PayDay);
+        Assert.Equal(1, myWeek.CompletedLessons);
+        Assert.Equal(1, myWeek.MissingAttendanceLessons);
+        Assert.False(myWeek.IsPaid);
+        // Pazar ve iptal edilen ders listede yok; sıralama başlangıç saatine göre.
+        Assert.Equal([marked.Id, missing.Id], myWeek.Lessons.Select(l => l.LessonId));
+        Assert.Equal(Abdera.Api.Modules.Attendance.Domain.AttendanceStatus.Present, myWeek.Lessons[0].AttendanceStatus);
+        Assert.Null(myWeek.Lessons[1].AttendanceStatus);
+        Assert.Equal("Hafta Öğrencisi", myWeek.Lessons[0].StudentName);
+
+        // Haftalık listeden düzeltme: Geldi -> Mazeretli.
+        Assert.Equal(HttpStatusCode.OK, (await teacher.PostAsJsonAsync($"/api/lessons/{marked.Id}/attendance",
+            new Abdera.Api.Modules.Attendance.Features.MarkAttendance.MarkRequest(Abdera.Api.Modules.Attendance.Domain.AttendanceStatus.Excused, null))).StatusCode);
+        var corrected = (await teacher.GetFromJsonAsync<TeacherPayouts.MyWeekResponse>(url, TestJson.Options))!;
+        Assert.Equal(Abdera.Api.Modules.Attendance.Domain.AttendanceStatus.Excused, corrected.Lessons[0].AttendanceStatus);
+
+        // Ücret bilgisi yanıtta yok; yönetici hesabı bu ucu kullanamaz.
+        var raw = await teacher.GetStringAsync(url);
+        Assert.DoesNotContain("amount", raw, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync(url)).StatusCode);
+    }
+
     [Fact]
     public async Task The_payout_week_is_closed_to_callers_without_an_admin_session()
     {

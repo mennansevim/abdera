@@ -6,7 +6,7 @@ import { AppLoader } from "@/components/app-loader";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
-import { readSavedEmail, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
+import { readLastRole, readSavedEmail, rememberLastRole, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
 import { useDevAccounts, useLogin } from "@/lib/use-auth";
 
 type LoginRole = "Admin" | "Teacher" | "Guardian";
@@ -114,9 +114,20 @@ function LoginPageContent() {
   useEffect(() => {
     if (!showForm || initialPrefillDone.current) return;
     initialPrefillDone.current = true;
+    // Bu cihazda en son kullanılan rol seçili açılır (demo yayınında demo hesabı olan rol bozulmaz).
+    const lastRole = readLastRole();
+    if (lastRole && lastRole !== selectedRole) {
+      selectRoleAndPrefill(lastRole);
+      return;
+    }
     if (selectedRole !== "Guardian") prefillFor(selectedRole);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- ekran açıldığında bir kez
   }, [showForm]);
+
+  function selectRoleAndPrefill(role: StaffRole) {
+    setSelectedRole(role);
+    prefillFor(role);
+  }
 
   // Rol seçilince o rolün bilgileri doldurulur: demo yayınında demo hesabı, aksi halde bu
   // cihazda o rolle son girilen e-posta ve tarayıcının kayıtlı şifresi (bkz. saved-logins.ts).
@@ -149,6 +160,7 @@ function LoginPageContent() {
     try {
       const result = await login.mutateAsync({ email: loginEmail, password: loginPassword, expectedRole: role, passwordless });
       if (!passwordless) rememberLogin(role, loginEmail.trim().toLowerCase(), loginPassword);
+      rememberLastRole(role);
       router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail ?? err.title : "Giriş yapılamadı. Lütfen tekrar dene.");

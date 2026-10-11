@@ -17,7 +17,10 @@ public static class Calendar
         Guid InstrumentId, string InstrumentName, RsvpResponse? RsvpResponse,
         // Yoklaması girilmiş derste güncel durum: takvim ve Bugün ekranı "Gelmedi"yi sonradan
         // "Mazeretli"ye çevirmek gibi düzeltmeleri bu değerden başlatır. Girilmemişse null.
-        AttendanceStatus? AttendanceStatus = null);
+        AttendanceStatus? AttendanceStatus = null,
+        // Derse en az bir not yazılmış mı: Bugün ekranındaki "Not girildi" rozeti kart başına
+        // ayrı not isteği atmasın diye takvimle birlikte gelir (issue #16).
+        bool HasNote = false);
 
     public static void MapCalendar(this IEndpointRouteBuilder app)
     {
@@ -71,7 +74,7 @@ public static class Calendar
                 x.Lesson.Id, x.Lesson.LessonSeriesId, x.Lesson.StartAt, x.Lesson.EndAt, x.Lesson.Status,
                 x.Student.Id, x.Student.FirstName + " " + x.Student.LastName,
                 x.Teacher.Id, x.Teacher.FirstName + " " + x.Teacher.LastName,
-                x.Instrument.Id, x.Instrument.Name, null, null))
+                x.Instrument.Id, x.Instrument.Name, null, null, false))
             .ToListAsync();
 
         var lessonIds = lessons.Select(l => l.Id).ToList();
@@ -99,8 +102,15 @@ public static class Calendar
             .Where(a => lessonIds.Contains(a.LessonId))
             .ToDictionaryAsync(a => a.LessonId, a => a.Status);
 
+        var lessonsWithNotes = (await db.LessonNotes
+            .Where(note => lessonIds.Contains(note.LessonId))
+            .Select(note => note.LessonId)
+            .Distinct()
+            .ToListAsync()).ToHashSet();
+
         return Results.Ok(lessons.Select(lesson => lesson with
         {
+            HasNote = lessonsWithNotes.Contains(lesson.Id),
             RsvpResponse = rsvpByLesson.GetValueOrDefault(lesson.Id),
             AttendanceStatus = attendanceByLesson.TryGetValue(lesson.Id, out var status) ? status : null,
         }));
