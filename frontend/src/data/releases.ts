@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.11.3",
+    date: "2026-10-11",
+    items: [
+      { audience: "all", text: "Gelişim ekranında yeni \"Dönem karnesi\" paneli: her öğrencinin dönem karnesini açıp yorumunu yazar, \"Yayınla\" dersin. Devam, çalışılan eserler, beceri puanları ve evde çalışma kendiliğinden gelir." },
+      { audience: "all", text: "Yayınlanan karne velinin portalında Gelişim sekmesinde görünür; taslak veliye görünmez. Yayından sonra değiştirmek istersen önce yayından kaldırman yeterli." },
+      { audience: "admin", text: "Dönem karnesi panelinde okulun tamamında kaç karnenin yayınlandığını, kaçının taslakta beklediğini görürsün; gerekirse karneyi sen de yazıp yayınlayabilirsin." },
+    ],
+  },
+  {
     version: "2026.10.11.2",
     date: "2026-10-11",
     items: [
