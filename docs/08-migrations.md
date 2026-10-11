@@ -305,3 +305,9 @@ gelir yazılıyordu. FK `payments(id)` Restrict, `(payment_id, created_at)` inde
 `CHECK ((end_reason IS NULL AND end_note IS NULL) OR status = 'Ended')`: neden yalnızca sonlanmış
 kayıtta dolu olabilir. Mevcut satırlar null kalır. Yeni tablo yok, `PersonEraser` değişmez.
 `Down()` kısıtı ve iki kolonu düşürür (yerel veritabanında geri alıp yeniden uygulanarak doğrulandı).
+
+**AddTermReports** (Progress): `term_reports` tablosu - dönem karnesi (issue #15, `docs/10-decisions.md` Z).
+`UNIQUE (enrollment_id, term)`, `(teacher_id, term)` ve `student_id` index'leri; FK `students`/`enrollments`/`teachers`
+Restrict; `snapshot_json jsonb` yayın anında dondurulan veri; `xmin` optimistic concurrency (öğretmen + yönetici aynı
+anda düzenleyebilir); `CHECK (status <> 'Published' OR (comment, snapshot_json, published_at dolu))`. `PersonEraser`
+tabloyu öğrenci/öğretmen silmesinde temizler, devirde `teacher_id`'yi yeni öğretmene taşır. `Down()` tabloyu düşürür.

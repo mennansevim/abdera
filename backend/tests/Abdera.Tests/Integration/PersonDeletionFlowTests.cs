@@ -164,6 +164,11 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         // Test ortamında AI kapalı; önbellek satırı elle kurulur ki silme kapsamı sınansın.
         db.ProgressSummaries.Add(ProgressSummary.Create(
             seeded.StudentId, null, "Genel gelişim yorumu.", 1, DateTimeOffset.UtcNow, "test-model", DateTimeOffset.UtcNow));
+        // Dönem karnesi öğrenciye ve kurs kaydına bağlıdır (issue #15).
+        var karne = TermReport.Create(seeded.StudentId, seeded.EnrollmentId, seeded.TeacherId,
+            ReportTerm.Containing(DateOnly.FromDateTime(DateTime.UtcNow)), DateTimeOffset.UtcNow);
+        karne.SaveComment("Karne yorumu.", DateTimeOffset.UtcNow);
+        db.TermReports.Add(karne);
         // Program değişikliği mesajı ve bildirimi seriyi işaret eder (LessonScheduleChanged).
         // Gönderilmiş, veli dışı bir numaraya giden satır: yalnızca seri koşulu bunu silebilir.
         Assert.NotEmpty(seriesIds);
@@ -194,6 +199,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.SkillAssessments.AnyAsync(a => a.StudentId == seeded.StudentId));
         Assert.False(await db.PracticeJournalEntries.AnyAsync(p => p.StudentId == seeded.StudentId));
         Assert.False(await db.ProgressSummaries.AnyAsync(s => s.StudentId == seeded.StudentId));
+        Assert.False(await db.TermReports.AnyAsync(r => r.StudentId == seeded.StudentId));
         Assert.False(await db.Receivables.AnyAsync(r => receivableIds.Contains(r.Id)));
         Assert.False(await db.Payments.AnyAsync(p => paymentIds.Contains(p.Id)));
         Assert.False(await db.PaymentCorrections.AnyAsync(c => paymentIds.Contains(c.PaymentId)));

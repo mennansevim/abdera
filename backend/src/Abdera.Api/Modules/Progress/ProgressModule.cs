@@ -23,5 +23,6 @@ public static class ProgressModule
         app.MapSkillAssessments();
         app.MapPracticeAssignments();
         app.MapPracticeJournal();
+        app.MapTermReports();
     }
 }

@@ -434,6 +434,22 @@ practice_journal_entries
   created_at        timestamptz
 
   CHECK (duration_minutes BETWEEN 1 AND 600)
+
+term_reports                      -- dönem karnesi (docs/10-decisions.md Z)
+  id                   uuid pk
+  student_id           uuid fk -> students(id)
+  enrollment_id        uuid fk -> enrollments(id)
+  teacher_id           uuid fk -> teachers(id)
+  term                 varchar(12)          -- "2025-1": öğretim yılı + dönem no
+  comment              varchar(2000) null   -- öğretmen yorumu (AI yok)
+  status               text                 -- Draft | Published
+  snapshot_json        jsonb null           -- yayın anında donan dönem verisi
+  published_at         timestamptz null
+  published_by_user_id uuid null
+  created_at, updated_at, xmin
+
+  UNIQUE (enrollment_id, term)
+  CHECK (status <> 'Published' OR (comment, snapshot_json, published_at dolu))
 ```
 
 ## Instrument maintenance

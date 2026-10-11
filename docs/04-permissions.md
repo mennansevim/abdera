@@ -35,6 +35,7 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 | Aidat / tahsilat / ödeme kaydı | ✅ | ❌ | ❌ (kapsam dışı - hâlâ WhatsApp/mock) |
 | Okul geneli mali özet | ✅ | ❌ | ❌ |
 | Öğretmen ders başı ücreti / haftalık ödeme (O1) | ✅ | ❌ (kendi ücretini de göremez) | ❌ |
+| Dönem karnesi yazma / yayınlama (Z2) | ✅ tümü | ✅ yalnızca kendi kurs kayıtları | ❌ (yalnızca yayınlanmış karneyi görür, portalda) |
 | Kendi ödeme haftası: ders sayısı + Ödendi/Ödenmedi (Y1) | ❌ (öğretmen hesabı değil) | ✅ yalnızca kendisi, **tutar ve ücret yok** (`GET /api/teacher-payouts/my-week`) | ❌ |
 | WhatsApp bildirim durumu / yeniden deneme | ✅ | ❌ | ❌ |
 | Dashboard (bugün / dikkat / yaklaşan) | ✅ okul geneli | ✅ yalnızca kendi dersleri özeti | ❌ (ayrı, basit bir veli özeti var - dashboard değil) |
