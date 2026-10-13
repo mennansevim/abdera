@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.13.2",
+    date: "2026-10-13",
+    items: [
+      { audience: "all", text: "Telafi planlarken istediğiniz saat önerilerde yoksa \"Başka bir gün/saat\" alanından gün ve saati kendiniz seçebilirsiniz; saat öğretmenin müsaitliği ve çakışmalarla anında kontrol edilir." },
+      { audience: "all", text: "Ana ekranın başlığı sadeleşti: tarihin yanındaki açıklama yazısı kaldırıldı." },
+    ],
+  },
+  {
     version: "2026.10.13",
     date: "2026-10-13",
     items: [],
