@@ -65,6 +65,18 @@ Her bildirim için triage (`github-issues-task-flow` kuralı), güncellemede `up
   issue aday listesine girer.
 - ne bug ne makul istek → `status='Rejected', triage_note='...'`.
 
+"Hâlâ hatalı" teyidi gelen bildirimler (`docs/10-decisions.md` W6) — kullanıcı çözümü
+beğenmedi, görev yeniden açılır:
+
+```bash
+# select id, github_issue_number, feedback_note from bug_reports where status = 'Reopened'
+gh issue reopen <N> --comment "🤖 run abdera <tarih>: bildirimi yapan hâlâ hatalı dedi - <feedback_note | açıklama yok>"
+# update bug_reports set status = 'Triaged', resolved_at = null, updated_at = now() where id = '<id>'
+```
+
+Yeniden açılan issue bu turun aday listesine girer (bug'lardan önce, en öncelikli); `feedback_note`
+ilk düzeltmenin neyi kaçırdığını söyler, 2a'da onu esas al.
+
 Tur başına **en fazla 3 task** işle. Kalanlar sonraki tura kalır.
 
 ## 2. Her task için: anla → güvenlik kapısı → geliştir
@@ -163,7 +175,24 @@ deploy/nightly/smoke-check.sh "$SHA" 15
 
 Sayfalar, `/health` gövdesi, API'nin `/api/auth/me`'ye 401 dönmesi, JS paketleri, sunucudaki
 commit, container durumları, son 15 dakikanın api log hataları. `SMOKE OK` → etiketle
-(abdera-deploy adım 5). Başarısızsa 2 dakika sonra **bir kez** tekrar; yine başarısızsa 3c.
+(abdera-deploy adım 5) ve 3d. Başarısızsa 2 dakika sonra **bir kez** tekrar; yine başarısızsa 3c.
+
+### 3d. Çözülen bildirimleri "Çözüldü" yap
+
+Yalnızca duman testi geçtikten sonra (eski kod `Resolved` durumunu okuyamaz; geri dönülürse
+ekran bozulur). `status = 'Triaged'` her bildirim için: issue'su kapalı **ve** kapatan commit
+canlıdaysa → çözüldü. Bu, bu turun düzeltmelerini de kullanıcının elle kapattıklarını da kapsar.
+
+```bash
+gh issue view <N> --json state --jq .state                          # CLOSED mı
+C=$(git log origin/main --format=%H --grep "Closes #<N>\b" -E -1)   # kapatan commit
+git merge-base --is-ancestor "$C" "$SHA"                             # canlıda mı ($SHA = canlıdaki commit)
+# update bug_reports set status = 'Resolved', resolved_at = now(), updated_at = now() where id = '<id>' and status = 'Triaged'
+```
+
+Kapatan commit bulunamazsa (issue elle kapatılmış) çözüldü yapma, raporda belirt. Bildirimi yapan
+kişi Hata bildir sayfasında teyit eder; teyit bu akışın işi değil. Bu adım deploy olmayan turda da
+çalışır (`$SHA` = sunucudaki commit).
 
 ### 3c. Sorun varsa geri dön
 
@@ -171,7 +200,7 @@ Kullanıcı otomatik geri dönüş yetkisi verdi (2026-10-13) — abdera-deploy'
 kullanıcıya sor" kuralı **yalnızca bu akışta** geçersiz.
 
 - `git diff --name-only "$PREV" "$SHA" | grep /Migrations/` boşsa ya da migration'lar yalnızca
-  ekleme (2b'deki izinli tür) ise → `ssh deploy@panel.abderasanat.com "abdera-deploy $PREV"`,
+  ekleme (2b'deki izinli tür) ve yeni enum değeri canlı veriye henüz yazılmamışsa → `ssh deploy@panel.abderasanat.com "abdera-deploy $PREV"`,
   sonra `deploy/nightly/smoke-check.sh "$PREV" 5`. Eski kod yeni tablo/nullable kolonu görmezden
   gelir; şema geri alınmaz.
 - Başka tür migration varsa (kullanıcının kendi commit'lerinden gelmiş olabilir) **geri dönme**,
@@ -204,7 +233,8 @@ Gövde (Türkçe, sade):
 - Canlıya çıkan sürüm; yapılan her task: `#N başlık` — kullanıcının diliyle bir cümle ne değişti,
   issue linki.
 - Senin kararını bekleyenler (`needs-human`): `#N` — neden yapılmadı, bir cümle.
-- Triage edilen hata bildirimleri: kaç tane, hangi issue'lara dönüştü.
+- Triage edilen hata bildirimleri: kaç tane, hangi issue'lara dönüştü; "Çözüldü" yapılanlar
+  (teyit bekliyor) ve "hâlâ hatalı" dönüp yeniden açılanlar.
 - Kullanıcının deploy'a dahil olan kendi commit'leri varsa listesi.
 - Secret, şifre, kişisel veri (öğrenci/veli adı, telefon) yok.
 
@@ -218,6 +248,7 @@ Son mesaj (sohbette ya da zamanlanmış görev çıktısında) mailin kısa öze
 
 - Ana checkout'ta (`abdera-web`) çalışmak, oradaki değişiklikleri commit'lemek ya da stash'lemek.
 - 2b kapısından geçmeyen işi "küçük görünüyor" diye yapmak; kapsam dışı "fırsat" refactor'ları.
-- Canlı veritabanında `bug_reports` triage güncellemesi dışında yazma; kişi/kayıt silme.
+- Canlı veritabanında `bug_reports` durum güncellemeleri (triage, çözüldü, yeniden açma) dışında
+  yazma; kişi/kayıt silme.
 - Force-push, tag silme, sunucuda `.env`/Caddy/volume değişikliği, `pkill -f` (Podman VM paylaşılıyor).
 - Testleri susturmak, atlamak (`Skip=`), eşik gevşetmek.

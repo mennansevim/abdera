@@ -6,16 +6,17 @@ import { Icon } from "@/components/icons";
 import { Badge, EmptyState, FormMessage, Notice, PageHeader, Pager, Panel, Segmented, type Tone } from "@/components/ui";
 import { ApiError, type Me } from "@/lib/api";
 import {
-  BUG_REPORT_ISSUE_URL, useBugReports, useCreateBugReport, useTriageBugReport,
+  BUG_REPORT_ISSUE_URL, useAwaitingConfirmation, useBugReports, useConfirmBugReport, useCreateBugReport, useTriageBugReport,
   type BugReport, type BugReportKind, type BugReportStatus,
 } from "@/lib/bug-reports";
 import { CURRENT_VERSION } from "@/lib/releases";
 import { useMe } from "@/lib/use-auth";
 import { navPagesFor } from "../app-header";
 
-// Hata bildir (docs/10-decisions.md W). Öğretmen için gönder-unut: formu doldurur, teşekkür
-// mesajını görür, o kadar. Gelen bildirimleri yalnızca yönetici görür; her biri doğrulanıp
-// GitHub'da task'a dönüşür ya da gerekçesiyle reddedilir.
+// Hata bildir (docs/10-decisions.md W). Öğretmen formu doldurur, teşekkür mesajını görür.
+// Gelen bildirimleri yalnızca yönetici görür; her biri doğrulanıp GitHub'da task'a dönüşür ya
+// da gerekçesiyle reddedilir. Görev canlıya çıkınca bildirim "Çözüldü" olur ve bildirimi yapan
+// bu sayfada "Onaylandı / Hâlâ hatalı" diye teyit eder (W6).
 const OTHER = "__other__";
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 4000;
@@ -32,7 +33,7 @@ function BugReportScreen() {
   const { data: me } = useMe();
   const [tab, setTab] = useState<Tab>("report");
   const isAdmin = me?.role === "Admin";
-  const newCount = useBugReports("New", 1, isAdmin).data?.counts.new ?? 0;
+  const newCount = useBugReports(["New"], 1, isAdmin).data?.counts.new ?? 0;
 
   if (!me) return null;
 
@@ -53,7 +54,12 @@ function BugReportScreen() {
           ]}
         />
       )}
-      {tab === "inbox" && isAdmin ? <Inbox isAdmin={isAdmin} /> : <ReportForm key={fromPath ?? ""} me={me} fromPath={fromPath} />}
+      {tab === "inbox" && isAdmin ? <Inbox isAdmin={isAdmin} /> : (
+        <>
+          <AwaitingConfirmation />
+          <ReportForm key={fromPath ?? ""} me={me} fromPath={fromPath} />
+        </>
+      )}
     </div>
   );
 }
@@ -174,14 +180,29 @@ function ReportForm({ me, fromPath }: { me: Me; fromPath: string | null }) {
   );
 }
 
-const STATUS_LABEL: Record<BugReportStatus, string> = { New: "Yeni", Triaged: "Göreve dönüştü", Rejected: "Reddedildi" };
+type InboxTab = "new" | "open" | "resolved" | "rejected";
+
+// Sekme birden çok durumu bir arada gösterir: "Görevde" yeniden açılanları, "Çözüldü" teyit
+// bekleyen ve onaylananları da içerir.
+const INBOX_TABS: Record<InboxTab, { statuses: BugReportStatus[]; label: string; empty: string }> = {
+  new: { statuses: ["New"], label: "Yeni", empty: "Bekleyen bildirim yok" },
+  open: { statuses: ["Triaged", "Reopened"], label: "Görevde", empty: "Görevde bildirim yok" },
+  resolved: { statuses: ["Resolved", "Verified"], label: "Çözüldü", empty: "Çözülen bildirim yok" },
+  rejected: { statuses: ["Rejected"], label: "Reddedildi", empty: "Reddedilen bildirim yok" },
+};
 
 function Inbox({ isAdmin }: { isAdmin: boolean }) {
-  const [status, setStatus] = useState<BugReportStatus>("New");
+  const [tab, setTab] = useState<InboxTab>("new");
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useBugReports(status, page, isAdmin);
+  const { data, isLoading } = useBugReports(INBOX_TABS[tab].statuses, page, isAdmin);
   const pages = useMemo(() => navPagesFor(true), []);
   const counts = data?.counts;
+  const countOf: Record<InboxTab, number> | undefined = counts && {
+    new: counts.new,
+    open: counts.triaged + counts.reopened,
+    resolved: counts.resolved + counts.verified,
+    rejected: counts.rejected,
+  };
   const totalPages = data ? Math.max(1, Math.ceil(data.page.totalCount / data.page.pageSize)) : 1;
 
   return (
@@ -189,15 +210,14 @@ function Inbox({ isAdmin }: { isAdmin: boolean }) {
       flush
       title="Gelen bildirimler"
       actions={(
-        <Segmented<BugReportStatus>
+        <Segmented<InboxTab>
           label="Durum"
-          value={status}
-          onChange={(value) => { setStatus(value); setPage(1); }}
-          options={[
-            { value: "New", label: `Yeni${counts ? ` · ${counts.new}` : ""}` },
-            { value: "Triaged", label: `Göreve dönüştü${counts ? ` · ${counts.triaged}` : ""}` },
-            { value: "Rejected", label: `Reddedildi${counts ? ` · ${counts.rejected}` : ""}` },
-          ]}
+          value={tab}
+          onChange={(value) => { setTab(value); setPage(1); }}
+          options={(Object.keys(INBOX_TABS) as InboxTab[]).map((value) => ({
+            value,
+            label: `${INBOX_TABS[value].label}${countOf ? ` · ${countOf[value]}` : ""}`,
+          }))}
         />
       )}
       footer={totalPages > 1 ? <Pager page={page} totalPages={totalPages} onChange={setPage} /> : undefined}
@@ -205,12 +225,76 @@ function Inbox({ isAdmin }: { isAdmin: boolean }) {
       {isLoading ? (
         <p className="text-meta p-4">Yükleniyor…</p>
       ) : !data || data.page.items.length === 0 ? (
-        <EmptyState title={status === "New" ? "Bekleyen bildirim yok" : `${STATUS_LABEL[status]} bildirim yok`} />
+        <EmptyState title={INBOX_TABS[tab].empty} />
       ) : (
         <ul className="divide-y divide-[var(--line)]">
           {data.page.items.map((report) => <InboxRow key={report.id} report={report} pageLabel={matchPage(pages, report.pagePath)?.label} />)}
         </ul>
       )}
+    </Panel>
+  );
+}
+
+const STATUS_BADGE: Partial<Record<BugReportStatus, { tone: Tone; label: string }>> = {
+  Resolved: { tone: "warning", label: "Teyit bekliyor" },
+  Verified: { tone: "success", label: "Onaylandı" },
+  Reopened: { tone: "danger", label: "Hâlâ hatalı" },
+};
+
+// Bildirimi yapanın teyidi: "Onaylandı" süreci kapatır, "Hâlâ hatalı" görevi yeniden açtırır.
+function ConfirmButtons({ report }: { report: BugReport }) {
+  const confirm = useConfirmBugReport();
+  const [broken, setBroken] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(works: boolean) {
+    setError(null);
+    try {
+      await confirm.mutateAsync({ id: report.id, works, note: works ? null : note.trim() || null });
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Gönderilemedi.");
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      {broken ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="form-label min-w-0 flex-1">Ne hâlâ çalışmıyor? (isteğe bağlı)
+            <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="field text-sm" placeholder="Hangi adımda, ne oldu?" />
+          </label>
+          <button type="button" onClick={() => setBroken(false)} disabled={confirm.isPending} className="btn btn-quiet">Vazgeç</button>
+          <button type="button" onClick={() => send(false)} disabled={confirm.isPending} className="btn btn-primary">Gönder</button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => send(true)} disabled={confirm.isPending} className="btn btn-primary">
+            <Icon name="check" className="h-4 w-4" /> Onaylandı
+          </button>
+          <button type="button" onClick={() => setBroken(true)} disabled={confirm.isPending} className="btn btn-quiet">Hâlâ hatalı</button>
+        </div>
+      )}
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+    </div>
+  );
+}
+
+// Kullanıcının kendi çözülen bildirimleri - formun üstünde, teyit edilene kadar durur.
+function AwaitingConfirmation() {
+  const { data } = useAwaitingConfirmation();
+  if (!data?.length) return null;
+  return (
+    <Panel title="Çözüldü, teyidini bekliyoruz">
+      <ul className="grid gap-4">
+        {data.map((report) => (
+          <li key={report.id} className="grid gap-2">
+            <p className="text-meta">{formatDate(report.createdAt)} tarihli bildirimin{report.resolvedAt ? `, ${formatDate(report.resolvedAt)} tarihinde çözüldü` : " çözüldü"}. Şimdi doğru çalışıyor mu?</p>
+            <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm">{report.description}</p>
+            <ConfirmButtons report={report} />
+          </li>
+        ))}
+      </ul>
     </Panel>
   );
 }
@@ -221,6 +305,7 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
   const [error, setError] = useState<string | null>(null);
   const reporter = report.reporterName ?? report.reporterEmail ?? "Silinmiş kullanıcı";
   const kindTone: Tone = report.kind === "Bug" ? "danger" : "warning";
+  const statusBadge = STATUS_BADGE[report.status];
 
   async function update(status: BugReportStatus) {
     setError(null);
@@ -239,6 +324,7 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
             <Badge tone={kindTone}>{report.kind === "Bug" ? "Hata" : "Öneri"}</Badge>
             <span className="min-w-0 truncate font-bold">{pageLabel ?? report.pagePath}</span>
             <span className="text-meta truncate">· {reporter}</span>
+            {statusBadge && <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
             <span className="text-meta ml-auto whitespace-nowrap">{formatDate(report.createdAt)}</span>
           </div>
           <p className="line-clamp-2 text-sm text-[var(--muted)] group-open:hidden">{report.description}</p>
@@ -251,12 +337,19 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
             {report.userAgent && <div><dt className="inline font-semibold">Tarayıcı: </dt><dd className="inline">{report.userAgent}</dd></div>}
             {report.reporterEmail && <div><dt className="inline font-semibold">Gönderen: </dt><dd className="inline">{report.reporterEmail}</dd></div>}
           </dl>
-          {report.status === "Triaged" && report.githubIssueNumber && (
+          {report.githubIssueNumber && report.status !== "New" && report.status !== "Rejected" && (
             <a href={`${BUG_REPORT_ISSUE_URL}/${report.githubIssueNumber}`} target="_blank" rel="noreferrer" className="justify-self-start">
               <Badge tone="success">Görev #{report.githubIssueNumber}</Badge>
             </a>
           )}
           {report.status === "Rejected" && report.triageNote && <p className="text-meta">Ret gerekçesi: {report.triageNote}</p>}
+          {report.status === "Reopened" && <p className="text-meta">Hâlâ hatalı{report.feedbackNote ? `: ${report.feedbackNote}` : " (açıklama yok)"}</p>}
+          {(report.status === "Triaged" || report.status === "Reopened") && (
+            <button type="button" onClick={() => update("Resolved")} disabled={triage.isPending} className="btn btn-quiet justify-self-start">
+              <Icon name="check" className="h-4 w-4" /> Çözüldü olarak işaretle
+            </button>
+          )}
+          {report.status === "Resolved" && <ConfirmButtons report={report} />}
           {report.status === "New" && (
             <div className="flex flex-wrap items-end gap-2">
               <label className="form-label min-w-0 flex-1">Ret gerekçesi (isteğe bağlı)

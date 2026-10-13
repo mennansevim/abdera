@@ -20,9 +20,13 @@ public class BugReportConfiguration : IEntityTypeConfiguration<BugReport>
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(r => r.GithubIssueNumber).HasColumnName("github_issue_number");
         builder.Property(r => r.TriageNote).HasColumnName("triage_note").HasMaxLength(1000);
+        builder.Property(r => r.ResolvedAt).HasColumnName("resolved_at");
+        builder.Property(r => r.FeedbackNote).HasColumnName("feedback_note").HasMaxLength(1000);
+        builder.Property(r => r.FeedbackAt).HasColumnName("feedback_at");
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
 
         builder.HasIndex(r => new { r.Status, r.CreatedAt });
+        builder.HasIndex(r => new { r.CreatedByUserId, r.Status });
     }
 }

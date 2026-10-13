@@ -13,6 +13,12 @@ public enum BugReportStatus
     New,
     Triaged,
     Rejected,
+    // Görev canlıya çıktı, bildirimi yapanın teyidi bekleniyor (W6).
+    Resolved,
+    // Bildirimi yapan "çalışıyor" dedi - süreç kapandı.
+    Verified,
+    // Bildirimi yapan "hâlâ hatalı" dedi; görev yeniden açılacak.
+    Reopened,
 }
 
 // Personelin panelden ilettiği hata/öneri bildirimi (docs/10-decisions.md W). Öğretmen gönderir
@@ -39,6 +45,10 @@ public class BugReport
     public BugReportStatus Status { get; private set; }
     public int? GithubIssueNumber { get; private set; }
     public string? TriageNote { get; private set; }
+    public DateTimeOffset? ResolvedAt { get; private set; }
+    // Teyit sırasında "hâlâ hatalı" diyenin yazdığı açıklama.
+    public string? FeedbackNote { get; private set; }
+    public DateTimeOffset? FeedbackAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -74,6 +84,9 @@ public class BugReport
     public void Triage(BugReportStatus status, int? githubIssueNumber, string? triageNote, DateTimeOffset now)
     {
         if (!Enum.IsDefined(status)) throw new ArgumentException("Geçersiz durum.", nameof(status));
+        // Teyit akışının durumları kendi yöntemleriyle değişir; burası yalnızca ilk triage.
+        if (status is BugReportStatus.Resolved or BugReportStatus.Verified or BugReportStatus.Reopened)
+            throw new ArgumentException("Bu durum yalnızca çözüldü/teyit akışıyla verilir.", nameof(status));
         if (status == BugReportStatus.Triaged && githubIssueNumber is null or <= 0)
             throw new ArgumentException("Göreve dönüşen bildirim için GitHub issue numarası gerekli.", nameof(githubIssueNumber));
         var note = string.IsNullOrWhiteSpace(triageNote) ? null : triageNote.Trim();
@@ -85,6 +98,32 @@ public class BugReport
         TriageNote = note;
         UpdatedAt = now;
     }
+
+    // Görevin canlıya çıktığını işaretler (W6). Göreve dönüşmemiş bildirim çözülemez; issue
+    // numarası korunur ki teyit "hangi görev" sorusuna cevap versin.
+    public void MarkResolved(DateTimeOffset now)
+    {
+        if (Status is not (BugReportStatus.Triaged or BugReportStatus.Reopened) || GithubIssueNumber is null)
+            throw new ConflictException("Yalnızca göreve dönüşmüş bildirim çözüldü olarak işaretlenebilir.");
+        Status = BugReportStatus.Resolved;
+        ResolvedAt = now;
+        UpdatedAt = now;
+    }
+
+    // Bildirimi yapanın teyidi: çalışıyorsa Verified, değilse Reopened + açıklama.
+    public void Confirm(bool works, string? note, DateTimeOffset now)
+    {
+        if (Status != BugReportStatus.Resolved)
+            throw new ConflictException("Yalnızca çözüldü olarak işaretlenen bildirim teyit edilebilir.");
+        var trimmed = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (trimmed?.Length > MaxTriageNoteLength)
+            throw new ArgumentException($"Açıklama en fazla {MaxTriageNoteLength} karakter olabilir.", nameof(note));
+        Status = works ? BugReportStatus.Verified : BugReportStatus.Reopened;
+        FeedbackNote = works ? null : trimmed;
+        FeedbackAt = now;
+        UpdatedAt = now;
+    }
+
 
     private static string? Truncate(string? value, int max) =>
         string.IsNullOrEmpty(value) ? null : value.Length <= max ? value : value[..max];

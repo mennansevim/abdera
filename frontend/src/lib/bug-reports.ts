@@ -1,5 +1,6 @@
 // "Hata bildir" (docs/10-decisions.md W, backend Modules/Ops/Features/BugReports.cs).
-// Gönderim öğretmen + yönetici; liste ve durum güncellemesi yalnızca yönetici.
+// Gönderim öğretmen + yönetici; liste ve durum güncellemesi yalnızca yönetici. Çözülen
+// bildirimi, bildirimi yapan "çalışıyor / hâlâ hatalı" diye teyit eder (W6).
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -7,7 +8,7 @@ import { api } from "./api";
 import type { PagedResponse } from "./messaging";
 
 export type BugReportKind = "Bug" | "Suggestion";
-export type BugReportStatus = "New" | "Triaged" | "Rejected";
+export type BugReportStatus = "New" | "Triaged" | "Rejected" | "Resolved" | "Verified" | "Reopened";
 
 export interface BugReport {
   id: string;
@@ -22,11 +23,13 @@ export interface BugReport {
   githubIssueNumber: number | null;
   triageNote: string | null;
   createdAt: string;
+  resolvedAt: string | null;
+  feedbackNote: string | null;
 }
 
 export interface BugReportList {
   page: PagedResponse<BugReport>;
-  counts: Record<"new" | "triaged" | "rejected", number>;
+  counts: Record<"new" | "triaged" | "rejected" | "resolved" | "verified" | "reopened", number>;
 }
 
 export const BUG_REPORT_ISSUE_URL = "https://github.com/mennansevim/abdera/issues";
@@ -40,11 +43,28 @@ export function useCreateBugReport() {
   });
 }
 
-export function useBugReports(status: BugReportStatus, page: number, enabled: boolean) {
+export function useBugReports(statuses: BugReportStatus[], page: number, enabled: boolean) {
   return useQuery({
-    queryKey: ["bug-reports", status, page],
-    queryFn: () => api.get<BugReportList>(`/api/bug-reports?status=${status}&page=${page}&pageSize=20`),
+    queryKey: ["bug-reports", statuses.join(","), page],
+    queryFn: () => api.get<BugReportList>(`/api/bug-reports?${statuses.map((status) => `status=${status}`).join("&")}&page=${page}&pageSize=20`),
     enabled,
+  });
+}
+
+// Oturumdaki kullanıcının çözüldü olarak işaretlenmiş, teyidini bekleyen bildirimleri.
+export function useAwaitingConfirmation() {
+  return useQuery({
+    queryKey: ["bug-reports", "awaiting-confirmation"],
+    queryFn: () => api.get<BugReport[]>("/api/bug-reports/awaiting-confirmation"),
+  });
+}
+
+export function useConfirmBugReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; works: boolean; note: string | null }) =>
+      api.post<void>(`/api/bug-reports/${id}/confirmation`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bug-reports"] }),
   });
 }
 

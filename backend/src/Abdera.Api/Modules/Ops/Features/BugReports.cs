@@ -6,25 +6,29 @@ using Microsoft.EntityFrameworkCore;
 namespace Abdera.Api.Modules.Ops.Features;
 
 // "Hata bildir" (docs/10-decisions.md W). Öğretmen ve yönetici gönderir; liste ve durum
-// güncellemesi yalnızca yöneticiye açık - öğretmen için gönder-unut, kendi bildirimini de
-// listeleyemez. Bildirim para/takvim/rıza değiştirmediği için audit_log'a yazılmaz.
+// güncellemesi yalnızca yöneticiye açık. Görev canlıya çıkınca bildirim "Çözüldü" olur ve
+// bildirimi yapan kendi çözülen bildirimlerini görüp "çalışıyor / hâlâ hatalı" diye teyit
+// eder (W6). Bildirim para/takvim/rıza değiştirmediği için audit_log'a yazılmaz.
 public static class BugReports
 {
     public record CreateRequest(BugReportKind Kind, string PagePath, string Description, string? AppVersion);
     public record CreateResponse(Guid Id);
     public record TriageRequest(BugReportStatus Status, int? GithubIssueNumber, string? TriageNote);
+    public record ConfirmRequest(bool Works, string? Note);
 
     public record BugReportResponse(
         Guid Id, BugReportKind Kind, string PagePath, string Description, string? UserAgent, string? AppVersion,
         string? ReporterName, string? ReporterEmail, BugReportStatus Status, int? GithubIssueNumber,
-        string? TriageNote, DateTimeOffset CreatedAt);
+        string? TriageNote, DateTimeOffset CreatedAt, DateTimeOffset? ResolvedAt, string? FeedbackNote);
 
-    public record StatusCounts(int New, int Triaged, int Rejected);
+    public record StatusCounts(int New, int Triaged, int Rejected, int Resolved, int Verified, int Reopened);
     public record ListResponse(PagedResponse<BugReportResponse> Page, StatusCounts Counts);
 
     public static void MapBugReports(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/bug-reports", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        app.MapGet("/api/bug-reports/awaiting-confirmation", AwaitingConfirmationAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        app.MapPost("/api/bug-reports/{id:guid}/confirmation", ConfirmAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         var admin = app.MapGroup("/api/bug-reports").RequireAuthorization(AuthorizationPolicies.AdminOnly);
         admin.MapGet("", ListAsync);
@@ -42,12 +46,14 @@ public static class BugReports
         return Results.Created($"/api/bug-reports/{report.Id}", new CreateResponse(report.Id));
     }
 
+    // status birden çok verilebilir (?status=Resolved&status=Verified): ekrandaki sekmeler
+    // birden fazla durumu bir arada gösterir.
     private static async Task<IResult> ListAsync(
-        BugReportStatus? status, int? page, int? pageSize, AbderaDbContext db)
+        [Microsoft.AspNetCore.Mvc.FromQuery] BugReportStatus[]? status, int? page, int? pageSize, AbderaDbContext db)
     {
         var (pageNumber, size) = Pagination.Normalize(page, pageSize);
         var query = db.BugReports.AsNoTracking();
-        if (status is not null) query = query.Where(report => report.Status == status);
+        if (status is { Length: > 0 }) query = query.Where(report => status.Contains(report.Status));
 
         var totalCount = await query.CountAsync();
         var reports = await query
@@ -71,18 +77,50 @@ public static class BugReports
             .Select(group => new { group.Key, Count = group.Count() })
             .ToDictionaryAsync(item => item.Key, item => item.Count);
 
-        var items = reports.Select(report => new BugReportResponse(
-            report.Id, report.Kind, report.PagePath, report.Description, report.UserAgent, report.AppVersion,
+        var items = reports.Select(report => ToResponse(
+            report,
             report.CreatedByUserId is { } id ? names.GetValueOrDefault(id) : null,
-            report.CreatedByUserId is { } userId ? emails.GetValueOrDefault(userId) : null,
-            report.Status, report.GithubIssueNumber, report.TriageNote, report.CreatedAt)).ToList();
+            report.CreatedByUserId is { } userId ? emails.GetValueOrDefault(userId) : null)).ToList();
 
         return Results.Ok(new ListResponse(
             new PagedResponse<BugReportResponse>(items, totalCount, pageNumber, size),
             new StatusCounts(
                 countsByStatus.GetValueOrDefault(BugReportStatus.New),
                 countsByStatus.GetValueOrDefault(BugReportStatus.Triaged),
-                countsByStatus.GetValueOrDefault(BugReportStatus.Rejected))));
+                countsByStatus.GetValueOrDefault(BugReportStatus.Rejected),
+                countsByStatus.GetValueOrDefault(BugReportStatus.Resolved),
+                countsByStatus.GetValueOrDefault(BugReportStatus.Verified),
+                countsByStatus.GetValueOrDefault(BugReportStatus.Reopened))));
+    }
+
+    private static BugReportResponse ToResponse(BugReport report, string? reporterName, string? reporterEmail) => new(
+        report.Id, report.Kind, report.PagePath, report.Description, report.UserAgent, report.AppVersion,
+        reporterName, reporterEmail, report.Status, report.GithubIssueNumber, report.TriageNote, report.CreatedAt,
+        report.ResolvedAt, report.FeedbackNote);
+
+    // Oturumdaki kullanıcının çözüldü olarak işaretlenmiş, teyidini bekleyen bildirimleri.
+    private static async Task<IResult> AwaitingConfirmationAsync(ClaimsPrincipal principal, AbderaDbContext db)
+    {
+        var userId = AuthContext.GetUserId(principal);
+        var reports = await db.BugReports.AsNoTracking()
+            .Where(report => report.CreatedByUserId == userId && report.Status == BugReportStatus.Resolved)
+            .OrderByDescending(report => report.ResolvedAt)
+            .ToListAsync();
+        return Results.Ok(reports.Select(report => ToResponse(report, null, null)).ToList());
+    }
+
+    // Teyidi bildirimi yapan verir; yönetici de onun adına verebilir (yüz yüze sorduysa).
+    private static async Task<IResult> ConfirmAsync(
+        Guid id, ConfirmRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var report = await db.BugReports.SingleOrDefaultAsync(item => item.Id == id)
+            ?? throw new NotFoundException("Bildirim bulunamadı.");
+        if (report.CreatedByUserId != AuthContext.GetUserId(principal) && !AuthContext.IsAdmin(principal))
+            throw new ForbiddenException("Yalnızca bildirimi yapan kişi teyit edebilir.");
+
+        report.Confirm(request.Works, request.Note, clock.UtcNow);
+        await db.SaveChangesAsync();
+        return Results.NoContent();
     }
 
     private static async Task<IResult> TriageAsync(Guid id, TriageRequest request, AbderaDbContext db, IClock clock)
@@ -90,7 +128,8 @@ public static class BugReports
         var report = await db.BugReports.SingleOrDefaultAsync(item => item.Id == id)
             ?? throw new NotFoundException("Bildirim bulunamadı.");
 
-        report.Triage(request.Status, request.GithubIssueNumber, request.TriageNote, clock.UtcNow);
+        if (request.Status == BugReportStatus.Resolved) report.MarkResolved(clock.UtcNow);
+        else report.Triage(request.Status, request.GithubIssueNumber, request.TriageNote, clock.UtcNow);
         await db.SaveChangesAsync();
         return Results.NoContent();
     }

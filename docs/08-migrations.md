@@ -311,3 +311,10 @@ kayıtta dolu olabilir. Mevcut satırlar null kalır. Yeni tablo yok, `PersonEra
 Restrict; `snapshot_json jsonb` yayın anında dondurulan veri; `xmin` optimistic concurrency (öğretmen + yönetici aynı
 anda düzenleyebilir); `CHECK (status <> 'Published' OR (comment, snapshot_json, published_at dolu))`. `PersonEraser`
 tabloyu öğrenci/öğretmen silmesinde temizler, devirde `teacher_id`'yi yeni öğretmene taşır. `Down()` tabloyu düşürür.
+
+**AddBugReportConfirmation** (Ops): `bug_reports.resolved_at timestamptz NULL`, `feedback_note varchar(1000) NULL`,
+`feedback_at timestamptz NULL` ve `(created_by_user_id, status)` index'i - çözüldü + teyit akışı (`docs/10-decisions.md` W6).
+Yalnızca ekleme: mevcut satırlar null kalır; yeni durumlar (`Resolved`/`Verified`/`Reopened`) mevcut `status varchar(20)`
+kolonuna sığar. `PersonEraser` değişmez (gönderen silinince yine yalnızca `created_by_user_id` null'lanır). `Down()` index'i
+ve üç kolonu düşürür. Not: `Down()`'dan önce yeni durumdaki satırlar eski koda dönülürse okunamaz - geri dönüşte bu
+satırları `Triaged`'a çekmek gerekir.

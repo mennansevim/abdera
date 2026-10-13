@@ -1610,6 +1610,15 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("character varying(4000)")
                         .HasColumnName("description");
 
+                    b.Property<DateTimeOffset?>("FeedbackAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("feedback_at");
+
+                    b.Property<string>("FeedbackNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("feedback_note");
+
                     b.Property<int?>("GithubIssueNumber")
                         .HasColumnType("integer")
                         .HasColumnName("github_issue_number");
@@ -1625,6 +1634,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("page_path");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1647,6 +1660,8 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnName("user_agent");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId", "Status");
 
                     b.HasIndex("Status", "CreatedAt");
 
