@@ -185,7 +185,7 @@ canlıdaysa → çözüldü. Bu, bu turun düzeltmelerini de kullanıcının ell
 
 ```bash
 gh issue view <N> --json state --jq .state                          # CLOSED mı
-C=$(git log origin/main --format=%H --grep "Closes #<N>\b" -E -1)   # kapatan commit
+C=$(git log origin/main --format=%H -E --grep "Closes #<N>([^0-9]|$)" -1)   # kapatan commit (git ERE'de \b yok)
 git merge-base --is-ancestor "$C" "$SHA"                             # canlıda mı ($SHA = canlıdaki commit)
 # update bug_reports set status = 'Resolved', resolved_at = now(), updated_at = now() where id = '<id>' and status = 'Triaged'
 ```
