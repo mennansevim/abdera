@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy sonrası canlı duman testi (gece turu, .claude/skills/abdera-nightly-bugfix).
+# Deploy sonrası canlı duman testi (run abdera, .claude/skills/run-abdera).
 # Kullanım: smoke-check.sh <deploy edilen 40 karakterlik sha> [log penceresi, dakika = 15]
 # Çıkış 0 = sağlıklı; değilse her sorun stdout'a "FAIL: ..." satırı olarak yazılır.
 set -uo pipefail

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gece turunun sorun bildirimi: alert-mail.sh "<konu>" <gövde dosyası>
+# run abdera rapor/sorun maili: alert-mail.sh "<konu>" <gövde dosyası>
 # SMTP bilgileri repoda DEĞİL, bu Mac'te ~/.config/abdera-nightly/mail.env (chmod 600):
 #   SMTP_URL=smtp://smtp.gmail.com:587
 #   SMTP_USER=<gmail adresi>
@@ -16,7 +16,7 @@ CONF="$HOME/.config/abdera-nightly/mail.env"
 
 msg=$(mktemp); trap 'rm -f "$msg"' EXIT
 {
-  printf 'From: Abdera Gece Turu <%s>\r\n' "$SMTP_USER"
+  printf 'From: run abdera <%s>\r\n' "$SMTP_USER"
   printf 'To: %s\r\n' "$MAIL_TO"
   printf 'Subject: =?UTF-8?B?%s?=\r\n' "$(printf '%s' "$SUBJECT" | base64 | tr -d '\n')"
   printf 'Date: %s\r\n' "$(LC_ALL=C date -R 2>/dev/null || LC_ALL=C date '+%a, %d %b %Y %H:%M:%S %z')"
