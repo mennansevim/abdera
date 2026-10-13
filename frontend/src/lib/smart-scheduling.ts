@@ -138,6 +138,49 @@ export function findOpenSlots({
   return diversify(ranked, { limit, keyOf: dayKey });
 }
 
+// Kullanıcının elle girdiği tek seferlik saat (#22): öneri listesi çeşitlendirildiği için
+// öğretmen boşken istenen saat listede hiç çıkmayabiliyordu. Öneriyle aynı kurallar -
+// gelecekte, öğretmenin müsaitlik penceresinde, öğretmen/öğrenci çakışması yok. Haftalık
+// ders sınırı yalnızca öneri sıralaması içindir, elle seçimi engellemez. Sunucu çakışmayı
+// ayrıca denetler (LessonConflictChecker). Sorun yoksa null döner.
+export function checkManualSlot({
+  start,
+  durationMinutes,
+  teacherId,
+  studentId,
+  availability,
+  lessons,
+}: {
+  start: Date;
+  durationMinutes: number;
+  teacherId: string;
+  studentId: string;
+  availability: TeacherAvailability[];
+  lessons: CalendarLesson[];
+}): string | null {
+  const end = new Date(start.getTime() + durationMinutes * 60000);
+  if (start.getTime() <= Date.now()) return "Telafi dersinin başlangıcı gelecekte olmalı.";
+  const day = new Date(start);
+  day.setHours(0, 0, 0, 0);
+  const minutesOf = (value: Date) => value.getHours() * 60 + value.getMinutes();
+  const startMinutes = minutesOf(start);
+  const endMinutes = startMinutes + durationMinutes;
+  const windows = windowsForDay(day, availability);
+  const fits = windows.some((window) => {
+    const from = timeParts(window.startTime);
+    const to = timeParts(window.endTime);
+    return startMinutes >= from.hour * 60 + from.minute && endMinutes <= to.hour * 60 + to.minute;
+  });
+  if (!fits) {
+    return windows.length
+      ? `Öğretmen bu saatte müsait değil (${windows.map((window) => `${window.startTime.slice(0, 5)}–${window.endTime.slice(0, 5)}`).join(", ")}).`
+      : "Öğretmen bu gün müsait değil.";
+  }
+  if (lessons.some((lesson) => (lesson.teacherId === teacherId || lesson.studentId === studentId) && overlaps(start, end, lesson)))
+    return "Bu saat, öğretmenin veya öğrencinin başka bir dersiyle çakışıyor.";
+  return null;
+}
+
 export function findRecurringSlots({ effectiveFrom, durationMinutes, teacherId, studentId, availability, lessons, limit = 6 }: { effectiveFrom: string; durationMinutes: number; teacherId: string; studentId: string; availability: TeacherAvailability[]; lessons: CalendarLesson[]; limit?: number }) {
   const oneOff = findOpenSlots({ from: new Date(`${effectiveFrom}T00:00:00`), days: 14, durationMinutes, teacherId, studentId, availability, lessons, limit: 80 });
   const candidates = oneOff.filter((candidate) => {

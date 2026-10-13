@@ -5,7 +5,7 @@ import { useQueries } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { useUseMakeupCredit, type MakeupCredit } from "@/lib/billing";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
-import { findOpenSlots, type SuggestedSlot } from "@/lib/smart-scheduling";
+import { checkManualSlot, findOpenSlots, type SuggestedSlot } from "@/lib/smart-scheduling";
 import { useCalendar, useTeacherAvailability } from "@/lib/scheduling";
 
 export interface MakeupSchedulerContext {
@@ -25,6 +25,11 @@ function formatSlot(slot: SuggestedSlot) {
     day: slot.start.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "short" }),
     time: `${slot.start.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}–${slot.end.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`,
   };
+}
+
+function dateInputValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 function isAvailable(credit: MakeupCredit) {
@@ -61,6 +66,9 @@ export function MakeupScheduler({
   const [creditId, setCreditId] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(Math.round(context?.durationMinutes ?? 45));
   const [selectedSlot, setSelectedSlot] = useState<SuggestedSlot | null>(null);
+  // Önerilerde olmayan bir saat (#22): ikisi de doluysa önerilerin önüne geçer.
+  const [manualDate, setManualDate] = useState("");
+  const [manualTime, setManualTime] = useState("");
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
@@ -118,6 +126,32 @@ export function MakeupScheduler({
     : [];
   const slotsLoading = availabilityLoading || lessonsLoading;
 
+  const manualStart = manualDate && manualTime ? new Date(`${manualDate}T${manualTime}:00`) : null;
+  const manualSlot: SuggestedSlot | null = manualStart && !Number.isNaN(manualStart.getTime())
+    ? { start: manualStart, end: new Date(manualStart.getTime() + durationMinutes * 60000), score: 0, reason: "Elle seçildi" }
+    : null;
+  const lastValidDay = activeCredit ? new Date(new Date(activeCredit.expiresAt).getTime() - 1) : null;
+  const manualError = !manualSlot || !enrollment
+    ? null
+    : manualSlot.start < range.start
+      ? "Telafi dersi, iptal edilen dersin gününden sonraki bir güne planlanmalı."
+      : lastValidDay && manualSlot.start.getTime() >= new Date(activeCredit!.expiresAt).getTime()
+        ? `Bu telafi hakkı ${lastValidDay.toLocaleDateString("tr-TR")} tarihine kadar geçerli.`
+        : checkManualSlot({
+            start: manualSlot.start,
+            durationMinutes,
+            teacherId: enrollment.teacherId,
+            studentId: activeStudentId,
+            availability: availability ?? [],
+            lessons: lessons ?? [],
+          });
+  const chosenSlot = manualSlot ?? selectedSlot ?? suggestions[0];
+
+  function clearManual() {
+    setManualDate("");
+    setManualTime("");
+  }
+
   function enrollmentLabel(item: (typeof activeEnrollments)[number]) {
     const teacher = teachers?.find((row) => row.id === item.teacherId);
     const instrument = instruments?.find((row) => row.id === item.instrumentId);
@@ -127,8 +161,8 @@ export function MakeupScheduler({
   }
 
   async function place() {
-    const slot = selectedSlot ?? suggestions[0];
-    if (!enrollment || !activeCredit || !slot) return;
+    const slot = chosenSlot;
+    if (!enrollment || !activeCredit || !slot || (manualSlot && manualError)) return;
     setMessage(null);
     try {
       await useCredit.mutateAsync({
@@ -142,6 +176,7 @@ export function MakeupScheduler({
       const text = `Telafi dersi ${formatted.day} ${formatted.time} saatine yerleştirildi.`;
       setMessage({ tone: "success", text });
       setSelectedSlot(null);
+      clearManual();
       onPlaced?.(text);
     } catch (error) {
       setMessage({ tone: "error", text: error instanceof ApiError ? error.detail ?? error.title : "Telafi dersi yerleştirilemedi." });
@@ -206,10 +241,10 @@ export function MakeupScheduler({
           ) : suggestions.length ? (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {suggestions.map((slot, index) => {
-                const active = (selectedSlot ?? suggestions[0])?.start.getTime() === slot.start.getTime();
+                const active = !manualSlot && (selectedSlot ?? suggestions[0])?.start.getTime() === slot.start.getTime();
                 const formatted = formatSlot(slot);
                 return (
-                  <button type="button" key={slot.start.toISOString()} onClick={() => setSelectedSlot(slot)} aria-pressed={active} className={`pressable flex min-h-16 items-center gap-3 rounded-xl border p-3 text-left ${active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
+                  <button type="button" key={slot.start.toISOString()} onClick={() => { setSelectedSlot(slot); clearManual(); }} aria-pressed={active} className={`pressable flex min-h-16 items-center gap-3 rounded-xl border p-3 text-left ${active ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)] bg-white hover:border-[var(--brand)]"}`}>
                     <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-xs font-bold ${active ? "bg-[var(--brand)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{index + 1}</span>
                     <span><span className="block text-xs font-bold capitalize">{formatted.day}</span><span className="mt-1 block text-[.75rem] font-semibold text-[var(--muted)]">{formatted.time}</span></span>
                   </button>
@@ -219,13 +254,27 @@ export function MakeupScheduler({
           ) : (
             <p className="rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-xs font-semibold text-[var(--danger-strong)]">Önümüzdeki 21 günde uygun ortak boşluk bulunamadı.</p>
           )}
+          <div className={`rounded-xl border p-3 ${manualSlot ? "border-[var(--brand)] bg-[var(--brand-soft)]" : "border-[var(--line)]"}`}>
+            <p className="text-xs font-bold">Başka bir gün/saat</p>
+            <p className="mt-1 text-[.75rem] text-[var(--muted)]">İstediğiniz saat önerilerde yoksa gün ve saati kendiniz seçin.</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <label className="form-label">Telafi günü
+                <input type="date" value={manualDate} min={dateInputValue(range.start)} max={lastValidDay ? dateInputValue(lastValidDay) : undefined} onChange={(event) => setManualDate(event.target.value)} className="field text-sm" />
+              </label>
+              <label className="form-label">Telafi saati
+                <input type="time" step={900} value={manualTime} onChange={(event) => setManualTime(event.target.value)} className="field text-sm" />
+              </label>
+            </div>
+            {manualError && !slotsLoading && <p role="alert" className="mt-2 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{manualError}</p>}
+            {manualSlot && !manualError && <p className="mt-2 text-[.75rem] font-semibold text-[var(--brand-strong)]">Seçilen: {formatSlot(manualSlot).day} {formatSlot(manualSlot).time}</p>}
+          </div>
         </div>
       )}
 
       {message && <p role="status" className={`rounded-xl px-3 py-2.5 text-xs font-semibold ${message.tone === "success" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>{message.text}</p>}
       <div className="sticky bottom-[-1rem] z-10 -mx-4 flex justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 sm:-mx-5 sm:px-5">
         {onCancel && <button type="button" onClick={onCancel} className="btn btn-quiet">Vazgeç</button>}
-        <button type="button" onClick={place} disabled={useCredit.isPending || !activeCredit || !enrollment || (!selectedSlot && !suggestions.length)} className="btn btn-primary">{useCredit.isPending ? "Yerleştiriliyor…" : "Telafi dersini yerleştir"}</button>
+        <button type="button" onClick={place} disabled={useCredit.isPending || !activeCredit || !enrollment || !chosenSlot || (!!manualSlot && (!!manualError || slotsLoading))} className="btn btn-primary">{useCredit.isPending ? "Yerleştiriliyor…" : "Telafi dersini yerleştir"}</button>
       </div>
     </section>
   );
