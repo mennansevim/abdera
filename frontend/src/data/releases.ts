@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.13.4",
+    date: "2026-10-13",
+    items: [
+      { audience: "all", text: "Planlanmış bir telafi dersinin günü, saati ve süresi ders penceresindeki \"Düzenle\" ile değiştirilebilir; ders telafi dersi olarak kalır ve yeni gün telafi hakkının geçerli olduğu tarihler içinde olmalıdır." },
+    ],
+  },
+  {
     version: "2026.10.13.3",
     date: "2026-10-13",
     items: [
