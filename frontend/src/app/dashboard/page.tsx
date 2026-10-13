@@ -101,7 +101,7 @@ function DashboardTopbar({ email }: { email: string }) {
       <div>
         <h1 className="text-display font-serif leading-tight">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
         <p className="text-meta mt-0.5">
-          {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())} · Okulun bugünkü akışı burada
+          {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())}
         </p>
       </div>
       <div className="flex items-center gap-2">
