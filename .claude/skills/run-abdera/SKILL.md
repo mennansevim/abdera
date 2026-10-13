@@ -34,7 +34,11 @@ Bundan sonraki her komut `$WT` içinde. Commit'ler bu yerel dalda birikir, en so
 
 Ön koşullar — biri tutmazsa **hiçbir şeye dokunmadan** rapor maili at ve bitir:
 - `gh auth status` ve `ssh -o BatchMode=yes deploy@panel.abderasanat.com true` geçiyor.
-- Docker/Podman ayakta (`docker info`) — backend integration testleri Testcontainers ister.
+- Container gerçekten başlıyor mu: `docker run --rm docker.io/library/alpine:3.20 true` (`docker info`
+  yetmez - 2026-10-13'te Podman VM depolaması bozukken `info` geçip her container 500 verdi).
+  Başlamıyorsa durma: backend integration testleri yalnızca CI'da koşar (CI zaten deploy kapısı);
+  yerelde birim testleri + derleme yeter. Podman'ı yeniden başlatma (paylaşılan VM, diğer
+  projelerin container'ları düşer) - maile "yerel container çalışmıyor" notu ekle.
 - `origin/main`'in son CI koşusu yeşil (`gh run list --branch main --workflow ci.yml -L1`).
   Kırmızıysa onu düzeltmeye kalkma; raporla.
 - Canlı sağlıklı: `curl -fsS https://panel.abderasanat.com/health`.
