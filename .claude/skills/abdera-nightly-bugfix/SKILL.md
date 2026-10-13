@@ -1,9 +1,12 @@
 ---
 name: abdera-nightly-bugfix
-description: Abdera gece bakım turu — açık `bug` issue'larını ve canlıdaki yeni hata bildirimlerini toplar, her birinin gerçekten bug olup olmadığını kodda/canlıda doğrular, doğrulananları testle kanıtlayıp düzeltir, `Closes #N` ile commit'ler ve tek seferde abdera-deploy akışıyla canlıya alır. Emin olmadığı veya riskli işi düzeltmez, `needs-human` etiketiyle bırakır. Kullanılacak — zamanlanmış gece görevi, "gece turunu çalıştır", "bug'ları otomatik düzelt".
+description: Abdera gece bakım turu — açık `bug` issue'larını ve canlıdaki yeni hata bildirimlerini toplar, her birinin gerçekten bug olup olmadığını kodda/canlıda doğrular, doğrulananları testle kanıtlayıp düzeltir, `Closes #N` ile commit'ler ve tek seferde abdera-deploy akışıyla canlıya alır. Emin olmadığı veya riskli işi düzeltmez, `needs-human` etiketiyle bırakır. Kullanılacak — zamanlanmış gece görevi ve elle tetikleme: anahtar kelime **"gece turu"** (ayrıca "gece turunu çalıştır", "bug turu", "bug'ları otomatik düzelt").
 ---
 
 # Abdera Gece Bug Turu
+
+**Elle tetikleme:** kullanıcı sohbette "gece turu" yazınca bu skill aynen çalışır (saati beklemeden).
+Bu durumda kullanıcı ekranda olabilir, ama akış yine sorusuzdur.
 
 Kullanıcı yokken çalışır: **soru sorma, beklenmedik durumda dur ve raporla.** Sorulacak bir şey
 çıkarsa o işi `needs-human` olarak bırak, diğerlerine devam et. Amaç "her gece bir şey deploy
