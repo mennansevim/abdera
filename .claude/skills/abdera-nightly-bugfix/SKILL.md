@@ -158,7 +158,7 @@ olması, container durumları ve son 15 dakikadaki api log hataları. `SMOKE OK`
 (abdera-deploy adım 5), rapora geç. Geçici ağ sorunu ihtimaline karşı başarısızsa 2 dakika
 sonra **bir kez** tekrar çalıştır; ikinci kez de başarısızsa 3c.
 
-### 3c. Sorun varsa: geri dön + mail at
+### 3c. Sorun varsa: geri dön + bildir
 
 Kullanıcı gece turuna otomatik geri dönüş yetkisi verdi (2026-10-13) — abdera-deploy'un
 "rollback kararını kullanıcıya sor" kuralı **yalnızca bu akışta** geçersiz.
@@ -167,17 +167,18 @@ Kullanıcı gece turuna otomatik geri dönüş yetkisi verdi (2026-10-13) — ab
    - Migration **yoksa** → `ssh deploy@panel.abderasanat.com "abdera-deploy $PREV"` ile önceki
      sürüme dön, sonra `deploy/nightly/smoke-check.sh "$PREV" 5` ile dönüşü doğrula.
    - Migration **varsa** → kod geri dönerse yeni şemayla eski kod çakışabilir; **geri dönme**,
-     yalnızca mail at. Veritabanını dökümden geri yüklemek asla otomatik yapılmaz.
+     yalnızca bildir (2). Veritabanını dökümden geri yüklemek asla otomatik yapılmaz.
    - Betiğin kendisi sağlıksız deyip zaten `$PREV`'e döndüyse yeniden deploy etme, doğrudan 2.
-2. Mail at (her durumda — dönüş başarılı olsa da):
-   ```bash
-   deploy/nightly/alert-mail.sh "Abdera: gece deploy'u sorunlu - <geri dönüldü | GERİ DÖNÜLEMEDİ>" <gövde dosyası>
-   ```
-   Gövde (Türkçe, scratchpad'e yaz): ne deploy edildi (`$PREV`→`$SHA`, issue'lar), duman testinin
-   FAIL satırları, geri dönüş yapıldı mı ve sonucu, `docker compose logs --tail 100 api` özeti,
-   sabah yapılması gereken. Secret/kişisel veri koyma.
-   - Çıkış 3 (mail ayarı yok) ya da gönderim hatası → yedek kanal: `PushNotification` +
-     `gh issue create --label bug --label needs-human` başlık `deploy: gece deploy'u sorunlu <tarih>`.
+2. Bildir (her durumda — dönüş başarılı olsa da). Kullanıcı mail istemedi (2026-10-13);
+   kanal **GitHub issue + push bildirimi**:
+   - `gh issue create --label bug --label needs-human`, başlık
+     `deploy: gece deploy'u sorunlu <tarih> - <geri dönüldü | GERİ DÖNÜLEMEDİ>`. Gövde (Türkçe):
+     ne deploy edildi (`$PREV`→`$SHA`, issue'lar), duman testinin FAIL satırları, geri dönüş
+     yapıldı mı ve sonucu, `docker compose logs --tail 100 api` özeti, sabah yapılması gereken.
+     Secret/kişisel veri koyma — repo public.
+   - `PushNotification`: tek satır, issue numarasıyla.
+   - İsteğe bağlı: `~/.config/abdera-nightly/mail.env` varsa aynı metni
+     `deploy/nightly/alert-mail.sh "<başlık>" <gövde dosyası>` ile mail de at; yoksa atla.
 3. Etiket atma. `Closes #N` ile kapanan issue'ları yeniden aç, "canlıya çıkamadı, geri dönüldü"
    yorumu yaz, `needs-human` ekle. Aynı gece **tekrar deploy deneme**.
 
@@ -193,7 +194,7 @@ Kullanıcı gece turuna otomatik geri dönüş yetkisi verdi (2026-10-13) — ab
   - atlanan ön koşul / kırmızı CI / rollback varsa en üstte.
 - Hiç aday yoksa tek satır: "Bekleyen bug yok, deploy yapılmadı."
 - Bir şey deploy edildiyse veya kullanıcının kararı gerekiyorsa `PushNotification` ile tek satır
-  bildir; boş gecelerde bildirim gönderme. Canlı sorunu (3c) ayrıca mail ile bildirilir.
+  bildir; boş gecelerde bildirim gönderme. Canlı sorunu (3c) ayrıca issue ile kayda geçer.
 
 ## Yapılmayacaklar
 
