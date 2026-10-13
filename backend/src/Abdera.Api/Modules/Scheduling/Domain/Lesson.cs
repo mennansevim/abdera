@@ -112,8 +112,8 @@ public class Lesson
         DateTimeOffset newEndAt,
         DateTimeOffset now)
     {
-        if (original.Status != LessonStatus.Normal)
-            throw new ConflictException("Yalnızca NORMAL durumundaki bir ders düzenlenebilir.");
+        if (original.Status is not (LessonStatus.Normal or LessonStatus.Makeup))
+            throw new ConflictException("Yalnızca planlı bir ders veya telafi dersi düzenlenebilir.");
         if (newEndAt <= newStartAt)
             throw new ArgumentException("Bitiş zamanı başlangıçtan sonra olmalı.", nameof(newEndAt));
 
@@ -123,6 +123,8 @@ public class Lesson
 
         var participantsChanged = original.StudentId != studentId || original.TeacherId != teacherId;
         var originalSeriesId = original.LessonSeriesId;
+        // Taşınan telafi dersi telafi dersi olarak kalır.
+        var originalStatus = original.Status;
         original.Status = LessonStatus.Rescheduled;
         original.UpdatedAt = now;
         // Yalnız süre değiştiğinde iki satırın aynı seri + başlangıç anahtarını paylaşması
@@ -139,7 +141,7 @@ public class Lesson
             InstrumentId = original.InstrumentId,
             StartAt = newStartAt,
             EndAt = newEndAt,
-            Status = LessonStatus.Normal,
+            Status = originalStatus,
             OriginalLessonId = original.Id,
             CreatedAt = now,
             UpdatedAt = now,

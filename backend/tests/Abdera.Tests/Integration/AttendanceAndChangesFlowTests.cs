@@ -689,6 +689,61 @@ public class AttendanceAndChangesFlowTests : IClassFixture<AbderaWebApplicationF
             (await db.MakeupCredits.AsNoTracking().SingleAsync(c => c.Id == renewed.Id)).Status);
     }
 
+    // Hata bildirimi (#25): planlanmış telafi dersinin günü/saati sonradan değiştirilemiyordu.
+    // Taşınan ders yine telafi dersi kalır, hak yeni derse bağlanır ve hakkın penceresi korunur.
+    [Fact]
+    public async Task A_scheduled_makeup_lesson_can_be_moved_within_its_credit_window()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "mkmove");
+        await MoveLessonToPastAsync(seeded.LessonId);
+        var pianoId = await GetPianoIdAsync(admin);
+        var clock = _factory.Services.GetRequiredService<IClock>();
+
+        (await admin.PostAsJsonAsync($"/api/lessons/{seeded.LessonId}/attendance",
+            new MarkAttendance.MarkRequest(AttendanceStatus.Excused, null))).EnsureSuccessStatusCode();
+        var credit = (await (await admin.GetAsync($"/api/students/{seeded.StudentId}/makeup-credits"))
+            .Content.ReadFromJsonAsync<List<MakeupCredits.CreditResponse>>(TestJson.Options))!.Single();
+        var sourceLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(credit.SourceLessonStartAt).Date);
+
+        var makeupStart = LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(5), new TimeOnly(11, 0), clock.SchoolTimeZone);
+        var used = (await (await admin.PostAsJsonAsync($"/api/makeup-credits/{credit.Id}/use",
+                new MakeupCredits.UseRequest(seeded.TeacherId, pianoId, makeupStart, 45)))
+            .Content.ReadFromJsonAsync<MakeupCredits.UseResponse>(TestJson.Options))!;
+
+        var newStart = LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(6), new TimeOnly(11, 30), clock.SchoolTimeZone);
+        var moveResponse = await admin.PatchAsJsonAsync($"/api/lessons/{used.NewLessonId}",
+            new UpdateLesson.Request(seeded.StudentId, seeded.TeacherId, newStart, 60, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.OK, moveResponse.StatusCode);
+        var moved = (await moveResponse.Content.ReadFromJsonAsync<UpdateLesson.Response>(TestJson.Options))!;
+
+        db.ChangeTracker.Clear();
+        Assert.Equal(LessonStatus.Rescheduled, (await db.Lessons.SingleAsync(l => l.Id == used.NewLessonId)).Status);
+        var replacement = await db.Lessons.SingleAsync(l => l.Id == moved.LessonId);
+        Assert.Equal(LessonStatus.Makeup, replacement.Status);
+        Assert.Equal(newStart, replacement.StartAt);
+        Assert.Equal(newStart.AddMinutes(60), replacement.EndAt);
+        var movedCredit = await db.MakeupCredits.SingleAsync(c => c.Id == credit.Id);
+        Assert.Equal(MakeupCreditStatus.Used, movedCredit.Status);
+        Assert.Equal(replacement.Id, movedCredit.UsedLessonId);
+
+        // Telafi hakkının sınırları taşımada da geçerli: kaynak dersin günü ve son geçerlilik sonrası olmaz.
+        var tooLate = LessonGenerator.ToUtcInstant(sourceLessonDate.AddDays(22), new TimeOnly(11, 0), clock.SchoolTimeZone);
+        var tooLateResponse = await admin.PatchAsJsonAsync($"/api/lessons/{replacement.Id}",
+            new UpdateLesson.Request(seeded.StudentId, seeded.TeacherId, tooLate, 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.BadRequest, tooLateResponse.StatusCode);
+
+        var sameDay = LessonGenerator.ToUtcInstant(sourceLessonDate, new TimeOnly(22, 0), clock.SchoolTimeZone);
+        var sameDayResponse = await admin.PatchAsJsonAsync($"/api/lessons/{replacement.Id}",
+            new UpdateLesson.Request(seeded.StudentId, seeded.TeacherId, sameDay, 45, LessonStatus.Normal));
+        Assert.Equal(HttpStatusCode.BadRequest, sameDayResponse.StatusCode);
+
+        db.ChangeTracker.Clear();
+        Assert.Equal(LessonStatus.Makeup, (await db.Lessons.SingleAsync(l => l.Id == replacement.Id)).Status);
+        Assert.Equal(replacement.Id, (await db.MakeupCredits.SingleAsync(c => c.Id == credit.Id)).UsedLessonId);
+    }
+
     [Fact]
     public async Task Absent_attendance_earns_no_makeup_credit()
     {

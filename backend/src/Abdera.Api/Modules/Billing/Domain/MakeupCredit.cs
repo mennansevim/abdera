@@ -68,6 +68,16 @@ public class MakeupCredit
         UsedAt = now;
     }
 
+    // Planlanmış telafi dersi taşındığında (UpdateLesson) eski satır Rescheduled olarak donar ve
+    // yerine yeni satır açılır; hak, takvimde yaşayan yeni derse bağlanır. Hak yeniden harcanmaz.
+    public void MoveToLesson(Guid lessonId)
+    {
+        if (Status != MakeupCreditStatus.Used)
+            throw new ConflictException($"Bu telafi kredisi '{Status}' durumunda, derse bağlanamaz.");
+
+        UsedLessonId = lessonId;
+    }
+
     // Yalnızca henüz kullanılmamış hak geri alınır: telafi dersi zaten planlandıysa o ders
     // takvimde durur, hak "Used" kalır.
     public bool Revoke()

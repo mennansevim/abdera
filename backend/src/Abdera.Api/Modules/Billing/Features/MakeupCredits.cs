@@ -86,26 +86,7 @@ public static class MakeupCredits
             .SingleOrDefaultAsync(lesson => lesson.Id == credit.SourceLessonId)
             ?? throw new NotFoundException("İptal edilen kaynak ders bulunamadı.");
 
-        var sourceLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(sourceLesson.StartAt).Date);
-        var requestedLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(request.StartAt).Date);
-        if (requestedLessonDate <= sourceLessonDate)
-        {
-            throw new ValidationFailedException(new Dictionary<string, string[]>
-            {
-                ["startAt"] = ["Telafi dersi, iptal edilen dersin gününden sonraki bir güne planlanmalı."],
-            });
-        }
-
-        // Hakkın son geçerlilik anı yalnızca planlama anını değil, telafi dersinin kendisini de
-        // sınırlar: mazeretli dersin hakkı 21 gün içinde KULLANILIR, 21. günden sonraya ders açmaz.
-        if (request.StartAt >= credit.ExpiresAt)
-        {
-            var lastDay = clock.ToSchoolLocal(credit.ExpiresAt.AddTicks(-1)).ToString("dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
-            throw new ValidationFailedException(new Dictionary<string, string[]>
-            {
-                ["startAt"] = [$"Bu telafi hakkı {lastDay} tarihine kadar geçerli; telafi dersi bu tarihe kadar planlanmalı."],
-            });
-        }
+        EnsureWithinCreditWindow(credit, sourceLesson.StartAt, request.StartAt, clock);
 
         if (request.StartAt <= clock.UtcNow)
         {
@@ -181,5 +162,32 @@ public static class MakeupCredits
         await transaction.CommitAsync();
         await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new UseResponse(credit.Id, makeupLesson.Id));
+    }
+
+    // Telafi dersinin hangi günlere düşebileceği: kaynak dersin gününden sonra ve hakkın son
+    // geçerlilik anından önce. Planlanmış telafi dersi taşınırken de aynı sınır uygulanır (UpdateLesson).
+    public static void EnsureWithinCreditWindow(
+        MakeupCredit credit, DateTimeOffset sourceLessonStartAt, DateTimeOffset lessonStartAt, IClock clock)
+    {
+        var sourceLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(sourceLessonStartAt).Date);
+        var requestedLessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(lessonStartAt).Date);
+        if (requestedLessonDate <= sourceLessonDate)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["startAt"] = ["Telafi dersi, iptal edilen dersin gününden sonraki bir güne planlanmalı."],
+            });
+        }
+
+        // Hakkın son geçerlilik anı yalnızca planlama anını değil, telafi dersinin kendisini de
+        // sınırlar: mazeretli dersin hakkı 21 gün içinde KULLANILIR, 21. günden sonraya ders açmaz.
+        if (lessonStartAt >= credit.ExpiresAt)
+        {
+            var lastDay = clock.ToSchoolLocal(credit.ExpiresAt.AddTicks(-1)).ToString("dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["startAt"] = [$"Bu telafi hakkı {lastDay} tarihine kadar geçerli; telafi dersi bu tarihe kadar planlanmalı."],
+            });
+        }
     }
 }

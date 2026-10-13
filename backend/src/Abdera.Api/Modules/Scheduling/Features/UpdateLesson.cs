@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People;
@@ -65,8 +66,18 @@ public static class UpdateLesson
                 throw new ForbiddenException("Öğretmen yalnızca kendi dersinin gün, saat, süre veya durumunu değiştirebilir.");
         }
 
-        if (lesson.Status != LessonStatus.Normal)
+        // Planlanmış telafi dersi de taşınabilir (#25); iptali bu formdan değil, öğrencisi de
+        // değişmez - hak o öğrencinin. Taşınan ders yine telafi dersi olarak kalır.
+        var isMakeup = lesson.Status == LessonStatus.Makeup;
+        if (lesson.Status != LessonStatus.Normal && !isMakeup)
             throw new ConflictException($"'{lesson.Status}' durumundaki bir ders düzenlenemez.");
+        if (isMakeup && request.Status == LessonStatus.Cancelled)
+            throw new ConflictException("Telafi dersi ders detayından iptal edilemez.");
+        if (isMakeup && request.StudentId != lesson.StudentId)
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["studentId"] = ["Telafi dersinin öğrencisi değiştirilemez; telafi hakkı bu öğrenciye ait."],
+            });
         if (request.Status is not LessonStatus.Normal and not LessonStatus.Cancelled)
             throw new ValidationFailedException(new Dictionary<string, string[]>
             {
@@ -142,6 +153,18 @@ public static class UpdateLesson
                 ["studentId"] = ["Seçilen öğrenci, öğretmen ve enstrüman için aktif bir kurs kaydı bulunamadı."],
             });
 
+        var makeupCredit = isMakeup
+            ? await db.MakeupCredits.SingleOrDefaultAsync(credit => credit.UsedLessonId == lesson.Id)
+            : null;
+        if (makeupCredit is not null)
+        {
+            var sourceLessonStartAt = await db.Lessons
+                .Where(source => source.Id == makeupCredit.SourceLessonId)
+                .Select(source => source.StartAt)
+                .SingleAsync();
+            MakeupCredits.EnsureWithinCreditWindow(makeupCredit, sourceLessonStartAt, request.StartAt, clock);
+        }
+
         var endAt = request.StartAt.AddMinutes(request.DurationMinutes);
         var hasConflict = await LessonConflictChecker.HasOverlapAsync(
             db,
@@ -161,6 +184,7 @@ public static class UpdateLesson
             endAt,
             clock.UtcNow);
         db.Lessons.Add(replacement);
+        makeupCredit?.MoveToLesson(replacement.Id);
 
         await scheduler.CancelPendingAsync("lesson", lesson.Id);
         var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, replacement.StudentId);
@@ -214,6 +238,7 @@ public static class UpdateLesson
                 replacement.EndAt,
                 Status = replacement.Status.ToString(),
                 ReplacedLessonId = lesson.Id,
+                MakeupCreditId = makeupCredit?.Id,
             })));
 
         await db.SaveChangesAsync();

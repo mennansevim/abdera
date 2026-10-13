@@ -132,6 +132,33 @@ public class LessonStateTransitionTests
         Assert.Equal(60, (edited.EndAt - edited.StartAt).TotalMinutes);
     }
 
+    [Fact]
+    public void CreateEditedCopy_keeps_a_moved_makeup_lesson_as_makeup()
+    {
+        var studentId = Guid.NewGuid();
+        var teacherId = Guid.NewGuid();
+        var start = Now.AddDays(3);
+        var makeup = Lesson.CreateMakeup(studentId, teacherId, Guid.NewGuid(), start, start.AddMinutes(45), Now);
+
+        var moved = Lesson.CreateEditedCopy(makeup, studentId, teacherId, start.AddDays(1), start.AddDays(1).AddMinutes(45), Now);
+
+        Assert.Equal(LessonStatus.Rescheduled, makeup.Status);
+        Assert.Equal(LessonStatus.Makeup, moved.Status);
+        Assert.Null(moved.LessonSeriesId);
+        Assert.Equal(makeup.Id, moved.OriginalLessonId);
+    }
+
+    [Fact]
+    public void CreateEditedCopy_rejects_a_cancelled_lesson()
+    {
+        var original = CreateNormalLesson();
+        original.Cancel(Now);
+        var start = Now.AddDays(3);
+
+        Assert.Throws<ConflictException>(() => Lesson.CreateEditedCopy(
+            original, original.StudentId, original.TeacherId, start, start.AddMinutes(45), Now));
+    }
+
     [Theory]
     [InlineData(14)]
     [InlineData(181)]

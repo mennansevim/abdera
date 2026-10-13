@@ -1433,7 +1433,10 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   // öğretmeni kendi dersiyle, taşımayı da gelecek bir saatle sınırlar; handleSave aynısını önden söyler.
   // Tamamlanmış/iptal edilmiş ders hiç kimsede düzenlenmez - bu bir yetki değil, domain
   // invariant'ı (Lesson.Cancel / UpdateLesson `Status != Normal` ile reddeder).
-  const canEdit = canManage && lesson.status === "Normal";
+  // Planlanmış telafi dersi de taşınabilir; öğrencisi değişmez (hak o öğrencinin) ve yeni
+  // gün telafi hakkının penceresinde kalmalı - sınırı sunucu uygular (UpdateLesson.cs).
+  const isMakeupLesson = lesson.status === "Makeup";
+  const canEdit = canManage && (lesson.status === "Normal" || isMakeupLesson);
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
   const canCorrectAttendance = canManage && lesson.status === "Completed" && Boolean(lesson.attendanceStatus);
   const canCancelWithMakeup = canManage && lesson.status === "Normal";
@@ -1561,13 +1564,13 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         {editing ? (
           <form onSubmit={handleSave} className="border-t border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              {isAdmin && <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>}
+              {isAdmin && !isMakeupLesson && <label className="text-micro text-[var(--muted)]">Öğrenci<select value={studentId} onChange={(event) => { const nextStudentId = event.target.value; setStudentId(nextStudentId); setTeacherId(""); }} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğrenci seç</option>{students?.filter((student) => student.status === "Active").map((student) => <option key={student.id} value={student.id}>{student.firstName} {student.lastName}</option>)}</select></label>}
               {isAdmin && <label className="text-micro text-[var(--muted)]">Öğretmen<select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required><option value="">Öğretmen seç</option>{eligibleTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.firstName} {teacher.lastName}</option>)}</select></label>}
               <label className="text-micro text-[var(--muted)]">Yeni tarih<input type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Yeni saat<input type="time" value={timeValue} onChange={(event) => setTimeValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" inputMode="numeric" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
             </div>
-            <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
+            <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isMakeupLesson ? "Telafi dersi, telafi hakkının geçerli olduğu günlere taşınabilir. " : ""}{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
             <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface-muted)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
               <button type="button" onClick={() => { setEditing(false); setError(null); }} className="btn btn-quiet px-4 text-sm font-bold text-[var(--foreground)]">İptal</button>
