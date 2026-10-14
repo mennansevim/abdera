@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.14.4",
+    date: "2026-10-14",
+    items: [
+      { audience: "all", text: "Ders penceresinde yeni \"Yer değiştir\" düğmesi: aynı öğretmenin bu haftaki iki dersini tek adımda yer değiştirebilirsiniz (örneğin Perşembe 15:00 ile Cuma 15:00). Her öğrenci kendi ders süresini korur." },
+      { audience: "all", text: "Yer değiştirirken \"Yalnız bu hafta\" yalnızca o iki dersi taşır; \"Bundan sonra hep\" iki öğrencinin haftalık programını o haftadan itibaren değiştirir. Velilere yeni saat bildirilir." },
+    ],
+  },
+  {
     version: "2026.10.14.3",
     date: "2026-10-14",
     items: [
