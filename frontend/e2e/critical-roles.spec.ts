@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { loginAsGuardian } from "./guardian-login";
 
 const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8080";
 const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@example.com";
@@ -317,18 +318,7 @@ test.describe.serial("Abdera critical role flows", () => {
   });
 
   test("parent sees own calendar, payment view, approved comment and records practice", async ({ page }) => {
-    await page.goto("/parent/login");
-    // Varsayılan giriş modu telefon+kalıcı şifre (docs/10-decisions.md Karar F reversal) - OTP
-    // ikincil bir seçenek, önce oraya geçmek gerekiyor.
-    await page.getByRole("button", { name: "Şifreni bilmiyor musun? WhatsApp ile kod al" }).click();
-    await page.getByLabel("Telefon numarası").fill("+905550000001");
-    await page.getByRole("button", { name: "Kod gönder" }).click();
-    const debugText = await page.getByText(/Geliştirme kodu:/).innerText();
-    const code = debugText.match(/\d{6}/)?.[0];
-    expect(code).toBeTruthy();
-    await page.getByLabel("Doğrulama kodu").fill(code!);
-    await page.getByRole("button", { name: "Giriş yap" }).click();
-    await page.waitForURL(/\/parent$/);
+    await loginAsGuardian(page, "+905550000001");
     // exact: mesaj listesindeki "Ders Saati Değişikliği" bildirimi de öğrencinin adını
     // içeriyor - beklenen şey çocuğun kartındaki ad, gövde metni değil.
     await expect(page.getByText("Lara Arslan", { exact: true }).first()).toBeVisible();

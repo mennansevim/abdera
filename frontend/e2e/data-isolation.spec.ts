@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { loginAsGuardian } from "./guardian-login";
 
 const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8080";
 const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@example.com";
@@ -34,7 +35,7 @@ test("veli yalnızca kendi çocuğunun verisini görebilir ve ham öğretmen not
   await page.request.post(`${apiUrl}/api/auth/logout`);
   await page.context().clearCookies();
 
-  await loginAsGuardian(page);
+  await loginAsGuardian(page, demoGuardianPhone);
 
   // --- 1) Yabancı bir öğrencinin verisi reddedilmeli ---
   const ownStudents = await (await page.request.get(`${apiUrl}/api/guardian/me/students`)).json();
@@ -88,32 +89,3 @@ test("veli yalnızca kendi çocuğunun verisini görebilir ve ham öğretmen not
   }
 });
 
-async function loginAsGuardian(page: Page) {
-  await page.goto("/parent/login");
-  // Varsayılan giriş modu telefon+kalıcı şifre (docs/10-decisions.md Karar F reversal) - OTP
-  // ikincil bir seçenek, önce oraya geçmek gerekiyor. Bu geçiş eklenmeden "Kod gönder" hiç
-  // görünmüyor ve test anlamsız bir zaman aşımıyla düşüyordu.
-  await page.getByRole("button", { name: "Şifreni bilmiyor musun? WhatsApp ile kod al" }).click();
-  await page.getByLabel("Telefon numarası").fill(demoGuardianPhone);
-
-  // OTP isteğinin gerçekten başarılı olduğunu doğrula. Aksi halde (örn. hız sınırına
-  // takılınca) test ilerideki bir adımda anlamsız bir zaman aşımıyla düşüyor ve gerçek
-  // sebep görünmüyordu.
-  const otpResponse = page.waitForResponse((response) =>
-    response.url().includes("/api/guardian/otp/request") && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Kod gönder" }).click();
-  const otpStatus = (await otpResponse).status();
-  expect(
-    otpStatus,
-    otpStatus === 429
-      ? "veli OTP ucu hız sınırına takıldı (IP başına 15 dk'da 5 istek) - testleri arka arkaya çalıştırdıysan sınırın dolmasını bekle"
-      : `OTP isteği başarısız (HTTP ${otpStatus})`,
-  ).toBe(200);
-
-  const debugText = await page.getByText(/Geliştirme kodu:/).innerText();
-  const code = debugText.match(/\d{6}/)?.[0];
-  expect(code, "Development ortamında doğrulama kodu ekranda gösterilmeli").toBeTruthy();
-  await page.getByLabel("Doğrulama kodu").fill(code!);
-  await page.getByRole("button", { name: "Giriş yap" }).click();
-  await page.waitForURL(/\/parent$/);
-}

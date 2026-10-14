@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { loginAsGuardian } from "./guardian-login";
 
 const apiUrl = process.env.E2E_API_URL ?? "http://localhost:8080";
 const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin@example.com";
@@ -110,18 +111,7 @@ test.describe.serial("Abdera duman testleri (smoke)", () => {
   // Veli portalı ayrı bir kimlik doğrulama akışı ve alt navigasyon kullanıyor (bkz.
   // guardian-auth.ts) - dashboard'daki AppShell'den tamamen bağımsız, ayrıca duman testi gerekir.
   test("veli: portal sekmeleri konsol hatası olmadan açılıyor", async ({ page }) => {
-    await page.goto("/parent/login");
-    // Varsayılan giriş modu telefon+kalıcı şifre (docs/10-decisions.md Karar F reversal) - OTP
-    // ikincil bir seçenek, önce oraya geçmek gerekiyor.
-    await page.getByRole("button", { name: "Şifreni bilmiyor musun? WhatsApp ile kod al" }).click();
-    await page.getByLabel("Telefon numarası").fill(demoGuardianPhone);
-    await page.getByRole("button", { name: "Kod gönder" }).click();
-    const debugText = await page.getByText(/Geliştirme kodu:/).innerText();
-    const code = debugText.match(/\d{6}/)?.[0];
-    expect(code, "dev OTP kodu görünmeli").toBeTruthy();
-    await page.getByLabel("Doğrulama kodu").fill(code!);
-    await page.getByRole("button", { name: "Giriş yap" }).click();
-    await page.waitForURL(/\/parent$/);
+    await loginAsGuardian(page, demoGuardianPhone);
     const errors = trackPageErrors(page);
 
     for (const tabName of ["Takvim", "Aidat", "Gelişim", "Mesajlar", "Ana Sayfa"]) {
