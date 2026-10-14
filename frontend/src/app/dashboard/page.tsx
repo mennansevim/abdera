@@ -10,6 +10,7 @@ import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
 import { useNotifications } from "@/lib/messaging";
 import { useSystemHealth } from "@/lib/ops";
 import { useAttentionNeededStudents, useStudents, useTeachers } from "@/lib/people";
+import { dailyQuote } from "@/lib/daily-quote";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 import { Panel, StatStrip } from "@/components/ui";
@@ -103,6 +104,7 @@ function DashboardTopbar({ email }: { email: string }) {
         <p className="text-meta mt-0.5">
           {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())}
         </p>
+        <DailyQuoteLine />
       </div>
       <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1 lg:w-[19rem] lg:flex-none">
@@ -124,6 +126,16 @@ function DashboardTopbar({ email }: { email: string }) {
         </Link>
       </div>
     </header>
+  );
+}
+
+// Günün özlü sözü (Bugün ekranı, yalnızca admin - DashboardTopbar yalnızca AdminDashboard'da).
+function DailyQuoteLine() {
+  const quote = dailyQuote();
+  return (
+    <figure className="mt-1.5 max-w-[38rem]">
+      <blockquote className="text-[.8rem] italic leading-snug text-[var(--muted)]">“{quote.text}”{quote.author && <span className="not-italic"> — {quote.author}</span>}</blockquote>
+    </figure>
   );
 }
 
@@ -405,7 +417,7 @@ function TeacherDashboard({ email }: { email: string }) {
   return (
     <div className="mx-auto max-w-[32rem] xl:max-w-5xl">
       <header className="mb-3 flex items-start justify-between gap-3">
-        <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">{selectedIsToday ? "Bugün" : selectedDate.toLocaleDateString("tr-TR", { weekday: "long" })}</h1><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(selectedDate)}</p></div>
+        <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">{selectedIsToday ? "Bugün" : selectedDate.toLocaleDateString("tr-TR", { weekday: "long" })}</h1><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(selectedDate)}</p><DailyQuoteLine /></div>
         <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
       </header>
       <TeacherWeekCard />
