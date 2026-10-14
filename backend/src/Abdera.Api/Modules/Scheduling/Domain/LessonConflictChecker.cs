@@ -11,7 +11,8 @@ public static class LessonConflictChecker
 {
     public static Task<bool> HasOverlapAsync(
         AbderaDbContext db, Guid teacherId, Guid studentId,
-        DateTimeOffset start, DateTimeOffset end, Guid? excludeLessonId = null)
+        DateTimeOffset start, DateTimeOffset end, Guid? excludeLessonId = null,
+        Guid? swapPartnerLessonId = null)
     {
         var query = db.Lessons
             .Where(l => l.Status != LessonStatus.Cancelled && l.Status != LessonStatus.Rescheduled)
@@ -21,6 +22,12 @@ public static class LessonConflictChecker
         if (excludeLessonId is { } id)
         {
             query = query.Where(l => l.Id != id);
+        }
+
+        // Yer değiştirmede karşı ders de o saati boşaltıyor (SwapLessons).
+        if (swapPartnerLessonId is { } partnerId)
+        {
+            query = query.Where(l => l.Id != partnerId);
         }
 
         return query.AnyAsync();

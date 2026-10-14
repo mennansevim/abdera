@@ -235,29 +235,9 @@ public static class LessonSeriesFeatures
 
         var beforeJson = SerializeSeries(series, enrollment.TeacherId, enrollment.StudentId);
 
-        // Eskisi bir gün öncesinden kapanır. Program daha başlamadan taşınıyorsa (aynı gün
-        // açılıp düzeltiliyor) geriye kapatılamaz - o zaman kendi başlangıç gününde kapanır
-        // ve zaten üretilmiş dersleri aşağıda kaldırılır, yani hiç ders doğurmamış olur.
-        var previousDay = effectiveFrom.AddDays(-1);
-        series.EndAs(previousDay < series.EffectiveFrom ? series.EffectiveFrom : previousDay, clock.UtcNow);
-
-        var staleLessons = await db.Lessons
-            .Where(l => l.LessonSeriesId == series.Id && l.Status == LessonStatus.Normal)
-            .Where(l => DateOnly.FromDateTime(l.StartAt.UtcDateTime) >= effectiveFrom)
-            .ToListAsync();
-        db.Lessons.RemoveRange(staleLessons);
-        // Kaldırılan derslere kurulmuş bekleyen hatırlatmalar da iptal edilir - CLAUDE.md
-        // "ders değişince eski job iptali" invariant'ı. Aksi halde veliye artık var olmayan
-        // bir ders için hatırlatma giderdi.
-        foreach (var stale in staleLessons)
-        {
-            await scheduler.CancelPendingAsync("lesson", stale.Id);
-        }
-
-        var replacement = LessonSeries.Create(
-            series.EnrollmentId, request.DayOfWeek, request.StartTime, request.DurationMinutes,
-            effectiveFrom, originalUntil, clock.UtcNow);
-        db.LessonSeries.Add(replacement);
+        var replacement = await ReplaceSeriesAsync(
+            series, request.DayOfWeek, request.StartTime, request.DurationMinutes, effectiveFrom, originalUntil,
+            db, clock, scheduler);
 
         // Program değişti: veliye tek bir "ders programı değişti" mesajı, öğretmen + yöneticilere
         // ekran içi bildirim (CLAUDE.md M4 - ders değiştiren her yol ikisini de yapar). Eski
@@ -287,6 +267,41 @@ public static class LessonSeriesFeatures
         var generation = await GenerateForSeriesAsync(replacement, enrollment, db, clock, config, scheduler);
         await staffNotifier.FlushEmailsAsync();
         return Results.Ok(new CreateResponse(ToResponse(replacement), generation));
+    }
+
+    // Taşımanın kendisi: eski seri effectiveFrom'un bir gün öncesinde kapanır, o tarihten sonraki
+    // üretilmiş (Normal) dersleri kaldırılır ve hatırlatmaları iptal edilir, yerine yeni gün/saatte
+    // bir seri açılır. Doğrulama çağıranın işi - yer değiştirmede (SwapLessons) iki seri birlikte
+    // doğrulanıp sonra ikisi de bu adımdan geçer. Ders üretimi SaveChanges'ten sonra yapılır.
+    internal static async Task<LessonSeries> ReplaceSeriesAsync(
+        LessonSeries series, DayOfWeek dayOfWeek, TimeOnly startTime, int durationMinutes,
+        DateOnly effectiveFrom, DateOnly? originalUntil, AbderaDbContext db, IClock clock,
+        INotificationScheduler scheduler)
+    {
+        // Eskisi bir gün öncesinden kapanır. Program daha başlamadan taşınıyorsa (aynı gün
+        // açılıp düzeltiliyor) geriye kapatılamaz - o zaman kendi başlangıç gününde kapanır
+        // ve zaten üretilmiş dersleri aşağıda kaldırılır, yani hiç ders doğurmamış olur.
+        var previousDay = effectiveFrom.AddDays(-1);
+        series.EndAs(previousDay < series.EffectiveFrom ? series.EffectiveFrom : previousDay, clock.UtcNow);
+
+        var staleLessons = await db.Lessons
+            .Where(l => l.LessonSeriesId == series.Id && l.Status == LessonStatus.Normal)
+            .Where(l => DateOnly.FromDateTime(l.StartAt.UtcDateTime) >= effectiveFrom)
+            .ToListAsync();
+        db.Lessons.RemoveRange(staleLessons);
+        // Kaldırılan derslere kurulmuş bekleyen hatırlatmalar da iptal edilir - CLAUDE.md
+        // "ders değişince eski job iptali" invariant'ı. Aksi halde veliye artık var olmayan
+        // bir ders için hatırlatma giderdi.
+        foreach (var stale in staleLessons)
+        {
+            await scheduler.CancelPendingAsync("lesson", stale.Id);
+        }
+
+        var replacement = LessonSeries.Create(
+            series.EnrollmentId, dayOfWeek, startTime, durationMinutes,
+            effectiveFrom, originalUntil, clock.UtcNow);
+        db.LessonSeries.Add(replacement);
+        return replacement;
     }
 
     private static async Task<IResult> GenerateAsync(
@@ -384,18 +399,21 @@ public static class LessonSeriesFeatures
     // lessonGroupId: grup dersine üye eklerken aynı gruptaki diğer üyelerin serileri (ve grubun
     // kendisi) öğretmen çakışması sayılmaz - hepsi aynı sınıf. Öğrenci tarafı yine denetlenir.
     // Öğrencisi henüz olmayan bir grup da saatini rezerve eder: bireysel ders o saate giremez.
+    // swapPartnerSeriesId: iki seri yer değiştirirken karşı seri de o saati boşaltıyor, yani
+    // aday listesinden çıkar. İki yeni saatin birbiriyle çakışmasını çağıran ayrıca denetler.
     internal static async Task EnsureNoConflictAsync(
         Enrollment enrollment, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime,
         DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db, Guid? excludeSeriesId = null,
-        Guid? lessonGroupId = null)
+        Guid? lessonGroupId = null, Guid? swapPartnerSeriesId = null)
     {
         await EnsureTeacherSlotFreeAsync(
             enrollment.TeacherId, dayOfWeek, startTime, endTime, effectiveFrom, effectiveUntil, db,
-            excludeSeriesId, lessonGroupId);
+            excludeSeriesId, lessonGroupId, swapPartnerSeriesId);
 
         var candidates = await db.LessonSeries
             .Where(s => s.Status == LessonSeriesStatus.Active && s.DayOfWeek == dayOfWeek)
             .Where(s => excludeSeriesId == null || s.Id != excludeSeriesId)
+            .Where(s => swapPartnerSeriesId == null || s.Id != swapPartnerSeriesId)
             .Join(db.Enrollments, s => s.EnrollmentId, e => e.Id, (s, e) => new { Series = s, Enrollment = e })
             .Where(x => x.Enrollment.StudentId == enrollment.StudentId)
             .ToListAsync();
@@ -419,11 +437,12 @@ public static class LessonSeriesFeatures
     internal static async Task EnsureTeacherSlotFreeAsync(
         Guid teacherId, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime,
         DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db,
-        Guid? excludeSeriesId = null, Guid? lessonGroupId = null)
+        Guid? excludeSeriesId = null, Guid? lessonGroupId = null, Guid? swapPartnerSeriesId = null)
     {
         var seriesCandidates = await db.LessonSeries
             .Where(s => s.Status == LessonSeriesStatus.Active && s.DayOfWeek == dayOfWeek)
             .Where(s => excludeSeriesId == null || s.Id != excludeSeriesId)
+            .Where(s => swapPartnerSeriesId == null || s.Id != swapPartnerSeriesId)
             .Where(s => lessonGroupId == null || s.LessonGroupId != lessonGroupId)
             .Join(db.Enrollments, s => s.EnrollmentId, e => e.Id, (s, e) => new { Series = s, Enrollment = e })
             .Where(x => x.Enrollment.TeacherId == teacherId)

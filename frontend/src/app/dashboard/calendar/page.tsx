@@ -17,6 +17,7 @@ import { computeHourWindow, layoutDayLessons, type HourWindow, type LessonLayout
 import { Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
 import { MakeupScheduler, type MakeupSchedulerContext } from "./makeup-scheduler";
+import { canSwapLesson, SwapLessonPanel } from "./swap-lesson-panel";
 
 // Saat penceresi ve çakışma yerleşimi dashboard önizlemesiyle (dashboard/page.tsx) aynı
 // paylaşılan modülden (lib/week-grid-layout.ts) gelir. Çekirdek 12:00-18:00 aralığı boşken de
@@ -1543,6 +1544,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const [durationValue, setDurationValue] = useState(() => String(duration));
   const [error, setError] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<"absent" | "cancel-with-makeup" | "cancel-without-makeup" | "cancel-by-guardian" | null>(null);
+  const [swapping, setSwapping] = useState(false);
   const { data: enrollments } = useEnrollments(studentId);
   const eligibleEnrollments = enrollments?.filter((item) => item.status === "Active" && item.instrumentId === lesson.instrumentId) ?? [];
   const eligibleTeacherIds = new Set(eligibleEnrollments.map((item) => item.teacherId));
@@ -1561,6 +1563,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
   const canMarkAbsent = canManage && lesson.status === "Normal" && start.getTime() <= now.getTime();
   const canCorrectAttendance = canManage && lesson.status === "Completed" && Boolean(lesson.attendanceStatus);
   const canCancelWithMakeup = canManage && lesson.status === "Normal";
+  const canSwap = canSwapLesson(lesson, canManage, isAdmin, now);
   // Yalnızca onay metni için: kararı sunucu verir (CancelLesson.cs, Policy:MakeupNoticeHours = 24).
   const guardianNoticeEnough = start.getTime() - now.getTime() >= 24 * 60 * 60 * 1000;
   const canPlanMakeup = canManage && makeupSource && Boolean(makeupCredits?.some((credit) =>
@@ -1713,6 +1716,15 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
                 {error && <p role="alert" className="mt-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
               </div>
             )}
+            {swapping && !confirmAction && (
+              <SwapLessonPanel
+                lesson={lesson}
+                isAdmin={isAdmin}
+                now={now}
+                onSwapped={(message) => { onUpdated(message); onClose(); }}
+                onCancel={() => setSwapping(false)}
+              />
+            )}
             {confirmAction && (
               <div className={`border-t border-[var(--line)] p-4 ${confirmAction === "absent" ? "bg-[var(--warning-soft)]" : "bg-[var(--danger-soft)]"}`}>
                 <p className="text-sm font-bold">{confirmAction === "absent" ? "Öğrenci gelmedi olarak işaretlensin mi?" : confirmAction === "cancel-with-makeup" ? "Ders iptal edilip telafi hakkı tanımlansın mı?" : confirmAction === "cancel-by-guardian" ? "Ders veli iptali olarak kaydedilsin mi?" : "Ders telafi hakkı verilmeden iptal edilsin mi?"}</p>
@@ -1734,6 +1746,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-by-guardian")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">Veli iptal etti</button>}
               {canCancelWithMakeup && <button type="button" onClick={() => setConfirmAction("cancel-without-makeup")} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--danger-strong)] sm:w-auto sm:px-4">Telafisiz iptal</button>}
               {canPlanMakeup && <button type="button" onClick={() => onPlanMakeup(lesson)} className="pressable inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-3 text-sm font-bold text-white sm:w-auto sm:px-4"><Icon name="plus" className="h-4 w-4" />Telafi dersi ekle</button>}
+              {canSwap && !swapping && <button type="button" onClick={() => { setSwapping(true); setConfirmAction(null); setError(null); }} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--brand-strong)] sm:w-auto sm:px-4">Yer değiştir</button>}
               {canEdit && <button type="button" onClick={() => setEditing(true)} className="pressable min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3 text-sm font-bold text-[var(--brand-strong)] sm:w-auto sm:px-5">Düzenle</button>}
               <button type="button" onClick={onClose} className={`pressable min-h-11 w-full rounded-xl px-3 text-sm font-bold sm:w-auto sm:px-5 ${canPlanMakeup ? "border border-[var(--line)] bg-white text-[var(--foreground)]" : "bg-[var(--brand)] text-white"}`}>Kapat</button>
             </div>

@@ -92,7 +92,7 @@ internal static class LessonChangeNotice
             teacherId, actorUserId, StaffNotificationType.MakeupScheduled, "Telafi dersi planlandı", body, "lesson", makeupLessonId);
     }
 
-    private static async Task<string> StudentNameAsync(AbderaDbContext db, Guid studentId) =>
+    internal static async Task<string> StudentNameAsync(AbderaDbContext db, Guid studentId) =>
         await db.Students
             .Where(student => student.Id == studentId)
             .Select(student => student.FirstName + " " + student.LastName)

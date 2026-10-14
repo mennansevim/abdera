@@ -196,6 +196,25 @@ export function useUpdateLesson() {
   });
 }
 
+// İki birebir dersin yer değiştirmesi (POST /api/lessons/{id}/swap, SwapLessons.cs). Her öğrenci
+// kendi süresini korur, başlangıç saatleri takas edilir. "Once": yalnızca bu iki ders;
+// "Recurring": iki dersin haftalık programı, ikisinden erken olanının gününden itibaren.
+export type LessonSwapScope = "Once" | "Recurring";
+
+export function useSwapLessons() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lessonId, ...body }: { lessonId: string; otherLessonId: string; scope: LessonSwapScope }) =>
+      api.post<{ scope: LessonSwapScope; firstId: string; secondId: string }>(`/api/lessons/${lessonId}/swap`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["student-lesson-series"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-payout-week"] });
+    },
+  });
+}
+
 // Okulun çalışma penceresi: öğretmenler 09:00-21:00 arasında ders verebilir. "Uygun günler"
 // bir günü açarken bu aralığı yazar; hiç uygunluk tanımlanmamış öğretmen için slot önerileri
 // (smart-scheduling.ts) de aynı pencereyi tarar. Saati değiştirirken tek yer burası.
