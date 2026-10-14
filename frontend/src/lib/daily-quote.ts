@@ -44,6 +44,20 @@ const ATTRIBUTED_QUOTES: readonly DailyQuote[] = [
   { text: "Önemli olan notalar değil, aralarındaki sessizliktir.", author: "Miles Davis (atfedilen)" },
   { text: "Her çocuk bir sanatçıdır. Sorun, büyüdüğünde sanatçı kalabilmektir.", author: "Pablo Picasso (atfedilen)" },
   { text: "Dehâ, yüzde bir ilhamdır, yüzde doksan dokuz terdir.", author: "Thomas Edison (atfedilen)" },
+  { text: "Musikisiz hayat zaten mevcut olamaz.", author: "Mustafa Kemal Atatürk" },
+  { text: "Musiki hayatın neşesi, ruhu, süruru ve her şeyidir.", author: "Mustafa Kemal Atatürk" },
+  { text: "Müzikte tutkular kendilerinden zevk alır.", author: "Friedrich Nietzsche" },
+  { text: "Müzik, tüm bilgelik ve felsefeden daha yüksek bir vahiydir.", author: "Ludwig van Beethoven (atfedilen)" },
+  { text: "Müzik, söylenemeyeni anlatır; susulamayanı dile getirir.", author: "Victor Hugo (atfedilen)" },
+  { text: "Müzik, insanlığın evrensel dilidir.", author: "Henry Wadsworth Longfellow" },
+  { text: "Müzik, duygunun kısa yazısıdır.", author: "Lev Tolstoy" },
+  { text: "Müzik, hayatın karanlık gecesindeki ay ışığıdır.", author: "Jean Paul (atfedilen)" },
+  { text: "Müzik aşkı besliyorsa çalmaya devam edin.", author: "William Shakespeare" },
+  { text: "Müzik, günlük hayatın tozunu ruhtan temizler.", author: "Berthold Auerbach" },
+  { text: "Kelimelerin bittiği yerde müzik başlar.", author: "Hans Christian Andersen (atfedilen)" },
+  { text: "Sanat, kendimizi bulmamızı ve kaybetmemizi aynı anda sağlar.", author: "Thomas Merton" },
+  { text: "Müzisyenler emekli olmaz; içlerindeki müzik bitince dururlar.", author: "Louis Armstrong (atfedilen)" },
+  { text: "Sanatı kendinde sev, kendini sanatta değil.", author: "Konstantin Stanislavski (atfedilen)" },
 ];
 
 // Yazarı belirtilmemiş, okul tarafından yazılmış özgün sözler (liste sırasıyla).
