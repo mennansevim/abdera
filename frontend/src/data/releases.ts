@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.14.3",
+    date: "2026-10-14",
+    items: [
+      { audience: "admin", text: "Yeni \"Grup dersleri\" ekranı: Resim gibi grup dersleri için öğretmen, haftalık gün ve saat seçip grup açabilir, altına en fazla 6 öğrenci ekleyebilirsiniz. Eklenen öğrencinin Grup aidatı kendiliğinden açılır." },
+      { audience: "all", text: "Takvimde grup dersi tek bir \"GRUP\" kartı olarak görünür; karta tıklayınca öğrenci listesi açılır ve her öğrencinin yoklaması ayrı girilir. Grubun saatine başka bir ders konamaz." },
+      { audience: "admin", text: "Grup dersi öğretmenine o ayın grup aidatlarının %40'ı ödenir: Gelir ve gider ekranında Gider ekle → \"Aylık grup\" sekmesinden. Grup dersleri haftalık ders ödemesinde artık sayılmaz." },
+    ],
+  },
+  {
     version: "2026.10.14.2",
     date: "2026-10-14",
     items: [
