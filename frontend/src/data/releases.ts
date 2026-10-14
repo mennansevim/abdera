@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.15",
+    date: "2026-10-15",
+    items: [
+      { audience: "admin", text: "Grup'a daha önce alınmış Resim öğrencilerinin henüz ödenmemiş aidatları da 4.500 TL'ye düzeltildi; ödeme penceresi artık 6.000 TL göstermez. Ödenmiş aylar değişmez." },
+      { audience: "all", text: "Günün sözüne kaynağı belli yeni sözler eklendi." },
+    ],
+  },
+  {
     version: "2026.10.14.5",
     date: "2026-10-14",
     items: [
