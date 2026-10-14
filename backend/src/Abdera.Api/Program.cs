@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Banking;
 using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Banking.Infrastructure;
 using Abdera.Api.Modules.Billing;
+using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.Dashboard;
 using Abdera.Api.Modules.Library;
 using Abdera.Api.Modules.Messaging;
@@ -555,6 +556,7 @@ if (runStartupTasksInBackground)
             {
                 await DatabaseMigrator.RunAsync(app);
                 await AdminBootstrapper.RunAsync(app);
+                await GroupDuesRepriceBackfill.RunOnceAsync(app);
             }
             catch (Exception exception)
             {
@@ -567,6 +569,7 @@ else
 {
     await DatabaseMigrator.RunAsync(app);
     await AdminBootstrapper.RunAsync(app);
+    await GroupDuesRepriceBackfill.RunOnceAsync(app);
 }
 
 app.Run();

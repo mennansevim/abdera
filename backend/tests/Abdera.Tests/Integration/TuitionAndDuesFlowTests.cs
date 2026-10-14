@@ -4,6 +4,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Shared;
@@ -800,5 +801,51 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(4500m, openAfter.Amount);
         Assert.True(await db.AuditLogs.AnyAsync(log =>
             log.Action == "receivable.repriced_after_enrollment_change" && log.EntityId == open.Id));
+    }
+
+    // Ders türü düzeltme canlıya çıkmadan önce Grup'a alınan Resim kayıtlarının Ekim aidatı 6.000'de
+    // kalmıştı; tek seferlik düzeltme ödeme görmemiş satırı 4.500'e çeker, ödenmişe dokunmaz.
+    [Fact]
+    public async Task Group_dues_backfill_reprices_unpaid_rows_left_from_before_the_course_kind_fix()
+    {
+        var admin = await CreateAdminClientAsync();
+        var art = await InstrumentIdAsync(admin, "ART");
+        var teacher = await CreateTeacherAsync(admin, "Bfl", art);
+        var student = await CreateStudentAsync(admin, "Bfl");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, art);
+
+        var paid = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2027-08")));
+        (await PostPaymentAsync(admin, paid.Id,
+            new Payments.CreateRequest(paid.Amount, new DateOnly(2027, 8, 1), PaymentMethod.Cash, null, null)))
+            .EnsureSuccessStatusCode();
+        var open = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2027-09")));
+        Assert.Equal(6000m, open.Amount);
+
+        // Eski davranış: ders türü değişti ama açık aidat yeniden fiyatlanmadı.
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var row = await db.Enrollments.SingleAsync(e => e.Id == enrollment.Id);
+            row.SetCourseKind(CourseKind.Group, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            Assert.True(await GroupDuesRepriceBackfill.RepriceGroupEnrollmentsAsync(db, DateTimeOffset.UtcNow) >= 1);
+            await db.SaveChangesAsync();
+            Assert.Equal(0, await GroupDuesRepriceBackfill.RepriceGroupEnrollmentsAsync(db, DateTimeOffset.UtcNow));
+        }
+
+        await using var check = await _factory.CreateDbContextAsync();
+        var paidAfter = await check.Receivables.AsNoTracking().SingleAsync(r => r.Id == paid.Id);
+        var openAfter = await check.Receivables.AsNoTracking().SingleAsync(r => r.Id == open.Id);
+        Assert.Equal(6000m, paidAfter.Amount);
+        Assert.Equal(4500m, openAfter.Amount);
+        Assert.True(await check.AuditLogs.AnyAsync(log =>
+            log.Action == "receivable.repriced_after_enrollment_change" && log.EntityId == open.Id));
+        // Açılışta bir kez çalıştı ve işaretini bıraktı.
+        Assert.True(await check.AuditLogs.AnyAsync(log => log.Action == GroupDuesRepriceBackfill.MarkerAction));
     }
 }
