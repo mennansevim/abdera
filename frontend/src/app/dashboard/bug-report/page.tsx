@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { Badge, EmptyState, FormMessage, Notice, PageHeader, Pager, Panel, Segmented, type Tone } from "@/components/ui";
 import { ApiError, type Me } from "@/lib/api";
 import {
-  BUG_REPORT_ISSUE_URL, useAwaitingConfirmation, useBugReports, useConfirmBugReport, useCreateBugReport, useTriageBugReport,
+  BUG_REPORT_ISSUE_URL, useAwaitingMe, useBugReports, useConfirmBugReport, useCreateBugReport, useProvideBugReportDetails, useTriageBugReport,
   type BugReport, type BugReportKind, type BugReportStatus,
 } from "@/lib/bug-reports";
 import { CURRENT_VERSION } from "@/lib/releases";
@@ -16,7 +16,8 @@ import { navPagesFor } from "../app-header";
 // Hata bildir (docs/10-decisions.md W). Öğretmen formu doldurur, teşekkür mesajını görür.
 // Gelen bildirimleri yalnızca yönetici görür; her biri doğrulanıp GitHub'da task'a dönüşür ya
 // da gerekçesiyle reddedilir. Görev canlıya çıkınca bildirim "Çözüldü" olur ve bildirimi yapan
-// bu sayfada "Onaylandı / Hâlâ hatalı" diye teyit eder (W6).
+// bu sayfada "Onaylandı / Hâlâ hatalı" diye teyit eder (W6). Ne istendiği anlaşılamayan
+// bildirim "Beklemede" olur; bildirimi yapan sorulan soruya bu sayfadan cevap yazar (W7).
 const OTHER = "__other__";
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 4000;
@@ -56,7 +57,7 @@ function BugReportScreen() {
       )}
       {tab === "inbox" && isAdmin ? <Inbox isAdmin={isAdmin} /> : (
         <>
-          <AwaitingConfirmation />
+          <AwaitingMe />
           <ReportForm key={fromPath ?? ""} me={me} fromPath={fromPath} />
         </>
       )}
@@ -180,12 +181,13 @@ function ReportForm({ me, fromPath }: { me: Me; fromPath: string | null }) {
   );
 }
 
-type InboxTab = "new" | "open" | "resolved" | "rejected";
+type InboxTab = "new" | "waiting" | "open" | "resolved" | "rejected";
 
 // Sekme birden çok durumu bir arada gösterir: "Görevde" yeniden açılanları, "Çözüldü" teyit
 // bekleyen ve onaylananları da içerir.
 const INBOX_TABS: Record<InboxTab, { statuses: BugReportStatus[]; label: string; empty: string }> = {
   new: { statuses: ["New"], label: "Yeni", empty: "Bekleyen bildirim yok" },
+  waiting: { statuses: ["NeedsInfo"], label: "Beklemede", empty: "Detay beklenen bildirim yok" },
   open: { statuses: ["Triaged", "Reopened"], label: "Görevde", empty: "Görevde bildirim yok" },
   resolved: { statuses: ["Resolved", "Verified"], label: "Çözüldü", empty: "Çözülen bildirim yok" },
   rejected: { statuses: ["Rejected"], label: "Reddedildi", empty: "Reddedilen bildirim yok" },
@@ -199,6 +201,7 @@ function Inbox({ isAdmin }: { isAdmin: boolean }) {
   const counts = data?.counts;
   const countOf: Record<InboxTab, number> | undefined = counts && {
     new: counts.new,
+    waiting: counts.needsInfo,
     open: counts.triaged + counts.reopened,
     resolved: counts.resolved + counts.verified,
     rejected: counts.rejected,
@@ -239,7 +242,39 @@ const STATUS_BADGE: Partial<Record<BugReportStatus, { tone: Tone; label: string 
   Resolved: { tone: "warning", label: "Teyit bekliyor" },
   Verified: { tone: "success", label: "Onaylandı" },
   Reopened: { tone: "danger", label: "Hâlâ hatalı" },
+  NeedsInfo: { tone: "muted", label: "Detay bekleniyor" },
 };
+
+// Detay istenen bildirime cevap: açıklamanın sonuna eklenir, bildirim yeniden incelemeye düşer.
+function DetailsForm({ report }: { report: BugReport }) {
+  const provide = useProvideBugReportDetails();
+  const [details, setDetails] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (details.trim().length < MIN_LENGTH) {
+      setError(`Açıklama en az ${MIN_LENGTH} karakter olmalı.`);
+      return;
+    }
+    try {
+      await provide.mutateAsync({ id: report.id, details: details.trim() });
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Gönderilemedi.");
+    }
+  }
+
+  return (
+    <form onSubmit={send} className="grid gap-2">
+      <label className="form-label">Cevabın
+        <textarea value={details} onChange={(e) => setDetails(e.target.value)} rows={3} maxLength={MAX_LENGTH} className="field py-2 text-sm" placeholder="Ne olmasını istiyorsun? Hangi öğrenci/ders, hangi adımda?" />
+      </label>
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <button type="submit" disabled={provide.isPending} className="btn btn-primary justify-self-start">{provide.isPending ? "Gönderiliyor…" : "Detayı gönder"}</button>
+    </form>
+  );
+}
 
 // Bildirimi yapanın teyidi: "Onaylandı" süreci kapatır, "Hâlâ hatalı" görevi yeniden açtırır.
 function ConfirmButtons({ report }: { report: BugReport }) {
@@ -280,22 +315,42 @@ function ConfirmButtons({ report }: { report: BugReport }) {
   );
 }
 
-// Kullanıcının kendi çözülen bildirimleri - formun üstünde, teyit edilene kadar durur.
-function AwaitingConfirmation() {
-  const { data } = useAwaitingConfirmation();
-  if (!data?.length) return null;
+// Kullanıcıdan bir şey bekleyen kendi bildirimleri - formun üstünde, cevaplanana kadar durur:
+// detay istenenler (soru + cevap kutusu) ve çözülüp teyit bekleyenler.
+function AwaitingMe() {
+  const { data } = useAwaitingMe();
+  const needsInfo = data?.filter((report) => report.status === "NeedsInfo") ?? [];
+  const resolved = data?.filter((report) => report.status === "Resolved") ?? [];
   return (
-    <Panel title="Çözüldü, teyidini bekliyoruz">
-      <ul className="grid gap-4">
-        {data.map((report) => (
-          <li key={report.id} className="grid gap-2">
-            <p className="text-meta">{formatDate(report.createdAt)} tarihli bildirimin{report.resolvedAt ? `, ${formatDate(report.resolvedAt)} tarihinde çözüldü` : " çözüldü"}. Şimdi doğru çalışıyor mu?</p>
-            <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm">{report.description}</p>
-            <ConfirmButtons report={report} />
-          </li>
-        ))}
-      </ul>
-    </Panel>
+    <>
+      {needsInfo.length > 0 && (
+        <Panel title="Bildirimini anlayamadık, biraz detay verir misin?">
+          <ul className="grid gap-4">
+            {needsInfo.map((report) => (
+              <li key={report.id} className="grid gap-2">
+                <p className="text-meta">{formatDate(report.createdAt)} tarihli bildirimin:</p>
+                <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm">{report.description}</p>
+                {report.triageNote && <p className="rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-sm font-semibold text-[var(--warning-strong)]">Soru: {report.triageNote}</p>}
+                <DetailsForm report={report} />
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+      {resolved.length > 0 && (
+        <Panel title="Çözüldü, teyidini bekliyoruz">
+          <ul className="grid gap-4">
+            {resolved.map((report) => (
+              <li key={report.id} className="grid gap-2">
+                <p className="text-meta">{formatDate(report.createdAt)} tarihli bildirimin{report.resolvedAt ? `, ${formatDate(report.resolvedAt)} tarihinde çözüldü` : " çözüldü"}. Şimdi doğru çalışıyor mu?</p>
+                <p className="line-clamp-3 whitespace-pre-wrap break-words text-sm">{report.description}</p>
+                <ConfirmButtons report={report} />
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </>
   );
 }
 
@@ -310,7 +365,7 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
   async function update(status: BugReportStatus) {
     setError(null);
     try {
-      await triage.mutateAsync({ id: report.id, status, githubIssueNumber: null, triageNote: status === "Rejected" ? note.trim() || null : null });
+      await triage.mutateAsync({ id: report.id, status, githubIssueNumber: null, triageNote: status === "Rejected" || status === "NeedsInfo" ? note.trim() || null : null });
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Güncellenemedi.");
     }
@@ -343,6 +398,12 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
             </a>
           )}
           {report.status === "Rejected" && report.triageNote && <p className="text-meta">Ret gerekçesi: {report.triageNote}</p>}
+          {report.status === "NeedsInfo" && (
+            <>
+              {report.triageNote && <p className="text-meta">Sorulan: {report.triageNote}</p>}
+              <DetailsForm report={report} />
+            </>
+          )}
           {report.status === "Reopened" && <p className="text-meta">Hâlâ hatalı{report.feedbackNote ? `: ${report.feedbackNote}` : " (açıklama yok)"}</p>}
           {(report.status === "Triaged" || report.status === "Reopened") && (
             <button type="button" onClick={() => update("Resolved")} disabled={triage.isPending} className="btn btn-quiet justify-self-start">
@@ -352,9 +413,10 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
           {report.status === "Resolved" && <ConfirmButtons report={report} />}
           {report.status === "New" && (
             <div className="flex flex-wrap items-end gap-2">
-              <label className="form-label min-w-0 flex-1">Ret gerekçesi (isteğe bağlı)
-                <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="field text-sm" placeholder="Zaten böyle çalışıyor" />
+              <label className="form-label min-w-0 flex-1">Not: ret gerekçesi ya da bildirimi yapana soru
+                <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} className="field text-sm" placeholder="Hangi öğrenciler, ne olmasını istiyorsun?" />
               </label>
+              <button type="button" onClick={() => update("NeedsInfo")} disabled={triage.isPending || !note.trim()} className="btn btn-quiet">Detay iste</button>
               <button type="button" onClick={() => update("Rejected")} disabled={triage.isPending} className="btn btn-quiet">Reddet</button>
             </div>
           )}

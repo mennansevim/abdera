@@ -1,6 +1,7 @@
 // "Hata bildir" (docs/10-decisions.md W, backend Modules/Ops/Features/BugReports.cs).
 // Gönderim öğretmen + yönetici; liste ve durum güncellemesi yalnızca yönetici. Çözülen
-// bildirimi, bildirimi yapan "çalışıyor / hâlâ hatalı" diye teyit eder (W6).
+// bildirimi, bildirimi yapan "çalışıyor / hâlâ hatalı" diye teyit eder (W6). Anlaşılamayan
+// bildirim için bildirimi yapandan detay istenir (W7).
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import { api } from "./api";
 import type { PagedResponse } from "./messaging";
 
 export type BugReportKind = "Bug" | "Suggestion";
-export type BugReportStatus = "New" | "Triaged" | "Rejected" | "Resolved" | "Verified" | "Reopened";
+export type BugReportStatus = "New" | "Triaged" | "Rejected" | "Resolved" | "Verified" | "Reopened" | "NeedsInfo";
 
 export interface BugReport {
   id: string;
@@ -29,7 +30,7 @@ export interface BugReport {
 
 export interface BugReportList {
   page: PagedResponse<BugReport>;
-  counts: Record<"new" | "triaged" | "rejected" | "resolved" | "verified" | "reopened", number>;
+  counts: Record<"new" | "triaged" | "rejected" | "resolved" | "verified" | "reopened" | "needsInfo", number>;
 }
 
 export const BUG_REPORT_ISSUE_URL = "https://github.com/mennansevim/abdera/issues";
@@ -51,11 +52,20 @@ export function useBugReports(statuses: BugReportStatus[], page: number, enabled
   });
 }
 
-// Oturumdaki kullanıcının çözüldü olarak işaretlenmiş, teyidini bekleyen bildirimleri.
-export function useAwaitingConfirmation() {
+// Oturumdaki kullanıcıdan bir şey bekleyen bildirimler: çözüldü teyidi ya da istenen detay.
+export function useAwaitingMe() {
   return useQuery({
-    queryKey: ["bug-reports", "awaiting-confirmation"],
-    queryFn: () => api.get<BugReport[]>("/api/bug-reports/awaiting-confirmation"),
+    queryKey: ["bug-reports", "awaiting-me"],
+    queryFn: () => api.get<BugReport[]>("/api/bug-reports/awaiting-me"),
+  });
+}
+
+export function useProvideBugReportDetails() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, details }: { id: string; details: string }) =>
+      api.post<void>(`/api/bug-reports/${id}/details`, { details }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["bug-reports"] }),
   });
 }
 

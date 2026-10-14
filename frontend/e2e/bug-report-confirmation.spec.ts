@@ -22,7 +22,7 @@ test("the reporter confirms a resolved report or sends it back as still broken",
       await route.fulfill({ json: { items: [], unreadCount: 0 } });
       return;
     }
-    if (pathname === "/api/bug-reports/awaiting-confirmation") {
+    if (pathname === "/api/bug-reports/awaiting-me") {
       await route.fulfill({ json: awaiting });
       return;
     }
@@ -53,4 +53,39 @@ test("the reporter confirms a resolved report or sends it back as still broken",
     { id: "report-1", works: true, note: null },
     { id: "report-2", works: false, note: "Cuma günü yine kayboldu." },
   ]);
+});
+
+// W7: ne istendiği anlaşılamayan bildirimde bildirimi yapana soru gösterilir; cevabı aynı
+// sayfadan yazar, bildirim yeniden incelemeye düşer.
+test("the reporter answers the question on an unclear report", async ({ page }) => {
+  const sent: { id: string; details: string }[] = [];
+  let awaiting = [{
+    id: "report-9", kind: "Bug", pagePath: "/dashboard", description: "Perşembe 15.00 ile cuma 15.00 öğrencileri yer değişsin.",
+    userAgent: null, appVersion: "2026.10.14", reporterName: null, reporterEmail: null, status: "NeedsInfo",
+    githubIssueNumber: null, triageNote: "Hangi öğrenciler, hangi tarihten itibaren?", createdAt: "2026-10-14T12:03:00Z",
+    resolvedAt: null, feedbackNote: null,
+  }];
+
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/auth/me") return route.fulfill({ json: { id: "user-1", email: "teacher@example.com", role: "Teacher", mustChangePassword: false, teacherId: "teacher-1", instrumentIds: [] } });
+    if (pathname === "/api/me/notifications") return route.fulfill({ json: { items: [], unreadCount: 0 } });
+    if (pathname === "/api/bug-reports/awaiting-me") return route.fulfill({ json: awaiting });
+    const details = pathname.match(/^\/api\/bug-reports\/([^/]+)\/details$/);
+    if (details && request.method() === "POST") {
+      sent.push({ id: details[1], ...request.postDataJSON() });
+      awaiting = [];
+      return route.fulfill({ status: 204, body: "" });
+    }
+    return route.fulfill({ json: [] });
+  });
+
+  await page.goto("/dashboard/bug-report");
+  await expect(page.getByText("Bildirimini anlayamadık, biraz detay verir misin?")).toBeVisible();
+  await expect(page.getByText("Soru: Hangi öğrenciler, hangi tarihten itibaren?")).toBeVisible();
+  await page.getByLabel("Cevabın").fill("Ali ile Ayşe, gelecek haftadan itibaren.");
+  await page.getByRole("button", { name: "Detayı gönder" }).click();
+  await expect(page.getByText("Bildirimini anlayamadık, biraz detay verir misin?")).toHaveCount(0);
+  expect(sent).toEqual([{ id: "report-9", details: "Ali ile Ayşe, gelecek haftadan itibaren." }]);
 });

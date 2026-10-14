@@ -19,6 +19,9 @@ public enum BugReportStatus
     Verified,
     // Bildirimi yapan "hâlâ hatalı" dedi; görev yeniden açılacak.
     Reopened,
+    // Ne istendiği anlaşılamadı; soru (TriageNote) bildirimi yapana gösterilir, cevabı
+    // gelince bildirim yeniden New olur (W7).
+    NeedsInfo,
 }
 
 // Personelin panelden ilettiği hata/öneri bildirimi (docs/10-decisions.md W). Öğretmen gönderir
@@ -92,6 +95,8 @@ public class BugReport
         var note = string.IsNullOrWhiteSpace(triageNote) ? null : triageNote.Trim();
         if (note?.Length > MaxTriageNoteLength)
             throw new ArgumentException($"Not en fazla {MaxTriageNoteLength} karakter olabilir.", nameof(triageNote));
+        if (status == BugReportStatus.NeedsInfo && note is null)
+            throw new ArgumentException("Detay isterken bildirimi yapana ne sorulduğunu yazın.", nameof(triageNote));
 
         Status = status;
         GithubIssueNumber = status == BugReportStatus.Triaged ? githubIssueNumber : null;
@@ -124,6 +129,25 @@ public class BugReport
         UpdatedAt = now;
     }
 
+
+    // Detay istenen bildirime, bildirimi yapanın cevabı (W7). Cevap açıklamanın sonuna tarihli
+    // eklenir - bir sonraki inceleme ilk metinle cevabı birlikte görür. Soru da kayıtta kalır.
+    public void ProvideDetails(string details, DateTimeOffset now, TimeZoneInfo schoolTimeZone)
+    {
+        if (Status != BugReportStatus.NeedsInfo)
+            throw new ConflictException("Bu bildirim için detay istenmedi.");
+        var trimmed = details?.Trim() ?? "";
+        if (trimmed.Length < MinDescriptionLength)
+            throw new ArgumentException($"Açıklama en az {MinDescriptionLength} karakter olmalı.", nameof(details));
+        var stamp = TimeZoneInfo.ConvertTime(now, schoolTimeZone).ToString("dd.MM.yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        var combined = $"{Description}\n\n— Soru: {TriageNote}\n— Ek bilgi ({stamp}): {trimmed}";
+        if (combined.Length > MaxDescriptionLength)
+            throw new ArgumentException($"Açıklamayla birlikte en fazla {MaxDescriptionLength} karakter olabilir.", nameof(details));
+        Description = combined;
+        Status = BugReportStatus.New;
+        TriageNote = null;
+        UpdatedAt = now;
+    }
 
     private static string? Truncate(string? value, int max) =>
         string.IsNullOrEmpty(value) ? null : value.Length <= max ? value : value[..max];

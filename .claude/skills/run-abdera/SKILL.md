@@ -67,6 +67,14 @@ Her bildirim için triage (`github-issues-task-flow` kuralı), güncellemede `up
   `--label enhancement` (başlık `feat: ...`); gövdede sayfa + açıklama, kişi adı/telefon gibi
   kişisel veri **yazma** (repo public). Kaydı `status='Triaged', github_issue_number=N` yap;
   issue aday listesine girer.
+- **ne istendiği anlaşılamıyorsa → detay iste, özellik tasarlama** (kullanıcı kuralı, 2026-10-14,
+  `docs/10-decisions.md` W7). Hangi ekranda ne olduğu / ne olmasını istediği net değilse, ya da
+  metin birden fazla şekilde okunabiliyorsa issue **açma**, "şöyle bir özellik yazılabilir" diye
+  plan üretme. Kaydı `status='NeedsInfo', triage_note='<bildirimi yapana tek, somut soru>'`
+  yap; soru Hata bildir sayfasında gösterilir, cevap gelince bildirim yeniden `New` olur ve bir
+  sonraki turda cevapla birlikte baştan değerlendirilir. Örnek: "Perşembe 15.00 ile cuma 15.00
+  öğrencileri sürekli olarak yer değiştirmek istiyorum" → `NeedsInfo`, soru: "Hangi iki
+  öğrenci? Saatleri kalıcı olarak takas mı edilsin, yoksa başka bir şey mi istiyorsun?"
 - ne bug ne makul istek → `status='Rejected', triage_note='...'`.
 
 "Hâlâ hatalı" teyidi gelen bildirimler (`docs/10-decisions.md` W6) — kullanıcı çözümü
@@ -93,8 +101,9 @@ Issue metnini değil kodu ve davranışı esas al.
   Tasarım gereğiyse `docs/10-decisions.md`'deki kararı göstererek yorumla, `needs-human`.
   Yeniden üretemiyorsan ne denediğini yorumla, `needs-human`.
 - **Geliştirme isteği:** ne istendiği net mi, `docs/10-decisions.md`'deki bir kararla ya da
-  `CLAUDE.md` → "Yapılmayacaklar" ile çelişiyor mu? Çelişiyorsa ya da iki farklı makul
-  yorumu varsa yapma, sorunu ve seçenekleri yorumla, `needs-human`.
+  `CLAUDE.md` → "Yapılmayacaklar" ile çelişiyor mu? Çelişiyorsa yapma, yorumla, `needs-human`.
+  Ne istendiği net değilse ya da iki farklı yorumu varsa yine yapma; seçenek/plan yazma, issue'ya
+  tek somut soru yaz, `needs-human` (bildirimden geldiyse bildirimi de `NeedsInfo` yap).
 
 ### 2b. Güvenlik kapısı — kullanıcının kuralı
 
@@ -237,7 +246,8 @@ Gövde (Türkçe, sade):
 - Canlıya çıkan sürüm; yapılan her task: `#N başlık` — kullanıcının diliyle bir cümle ne değişti,
   issue linki.
 - Senin kararını bekleyenler (`needs-human`): `#N` — neden yapılmadı, bir cümle.
-- Triage edilen hata bildirimleri: kaç tane, hangi issue'lara dönüştü; "Çözüldü" yapılanlar
+- Triage edilen hata bildirimleri: kaç tane, hangi issue'lara dönüştü, hangilerinden detay
+  istendi (soru ile); "Çözüldü" yapılanlar
   (teyit bekliyor) ve "hâlâ hatalı" dönüp yeniden açılanlar.
 - Kullanıcının deploy'a dahil olan kendi commit'leri varsa listesi.
 - Secret, şifre, kişisel veri (öğrenci/veli adı, telefon) yok.

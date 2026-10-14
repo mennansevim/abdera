@@ -8,26 +8,30 @@ namespace Abdera.Api.Modules.Ops.Features;
 // "Hata bildir" (docs/10-decisions.md W). Öğretmen ve yönetici gönderir; liste ve durum
 // güncellemesi yalnızca yöneticiye açık. Görev canlıya çıkınca bildirim "Çözüldü" olur ve
 // bildirimi yapan kendi çözülen bildirimlerini görüp "çalışıyor / hâlâ hatalı" diye teyit
-// eder (W6). Bildirim para/takvim/rıza değiştirmediği için audit_log'a yazılmaz.
+// eder (W6). Ne istendiği anlaşılamayan bildirim "Beklemede" olur, bildirimi yapana soru
+// gösterilir; cevabı açıklamaya eklenip bildirim yeniden incelemeye düşer (W7). Bildirim
+// para/takvim/rıza değiştirmediği için audit_log'a yazılmaz.
 public static class BugReports
 {
     public record CreateRequest(BugReportKind Kind, string PagePath, string Description, string? AppVersion);
     public record CreateResponse(Guid Id);
     public record TriageRequest(BugReportStatus Status, int? GithubIssueNumber, string? TriageNote);
     public record ConfirmRequest(bool Works, string? Note);
+    public record DetailsRequest(string Details);
 
     public record BugReportResponse(
         Guid Id, BugReportKind Kind, string PagePath, string Description, string? UserAgent, string? AppVersion,
         string? ReporterName, string? ReporterEmail, BugReportStatus Status, int? GithubIssueNumber,
         string? TriageNote, DateTimeOffset CreatedAt, DateTimeOffset? ResolvedAt, string? FeedbackNote);
 
-    public record StatusCounts(int New, int Triaged, int Rejected, int Resolved, int Verified, int Reopened);
+    public record StatusCounts(int New, int Triaged, int Rejected, int Resolved, int Verified, int Reopened, int NeedsInfo);
     public record ListResponse(PagedResponse<BugReportResponse> Page, StatusCounts Counts);
 
     public static void MapBugReports(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/bug-reports", CreateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
-        app.MapGet("/api/bug-reports/awaiting-confirmation", AwaitingConfirmationAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        app.MapGet("/api/bug-reports/awaiting-me", AwaitingMeAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        app.MapPost("/api/bug-reports/{id:guid}/details", ProvideDetailsAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPost("/api/bug-reports/{id:guid}/confirmation", ConfirmAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
 
         var admin = app.MapGroup("/api/bug-reports").RequireAuthorization(AuthorizationPolicies.AdminOnly);
@@ -90,7 +94,8 @@ public static class BugReports
                 countsByStatus.GetValueOrDefault(BugReportStatus.Rejected),
                 countsByStatus.GetValueOrDefault(BugReportStatus.Resolved),
                 countsByStatus.GetValueOrDefault(BugReportStatus.Verified),
-                countsByStatus.GetValueOrDefault(BugReportStatus.Reopened))));
+                countsByStatus.GetValueOrDefault(BugReportStatus.Reopened),
+                countsByStatus.GetValueOrDefault(BugReportStatus.NeedsInfo))));
     }
 
     private static BugReportResponse ToResponse(BugReport report, string? reporterName, string? reporterEmail) => new(
@@ -98,15 +103,31 @@ public static class BugReports
         reporterName, reporterEmail, report.Status, report.GithubIssueNumber, report.TriageNote, report.CreatedAt,
         report.ResolvedAt, report.FeedbackNote);
 
-    // Oturumdaki kullanıcının çözüldü olarak işaretlenmiş, teyidini bekleyen bildirimleri.
-    private static async Task<IResult> AwaitingConfirmationAsync(ClaimsPrincipal principal, AbderaDbContext db)
+    // Oturumdaki kullanıcıdan bir şey bekleyen bildirimleri: çözüldü teyidi (W6) ya da
+    // istenen detay (W7). Soru TriageNote alanında döner.
+    private static async Task<IResult> AwaitingMeAsync(ClaimsPrincipal principal, AbderaDbContext db)
     {
         var userId = AuthContext.GetUserId(principal);
         var reports = await db.BugReports.AsNoTracking()
-            .Where(report => report.CreatedByUserId == userId && report.Status == BugReportStatus.Resolved)
-            .OrderByDescending(report => report.ResolvedAt)
+            .Where(report => report.CreatedByUserId == userId
+                && (report.Status == BugReportStatus.Resolved || report.Status == BugReportStatus.NeedsInfo))
+            .OrderByDescending(report => report.UpdatedAt)
             .ToListAsync();
         return Results.Ok(reports.Select(report => ToResponse(report, null, null)).ToList());
+    }
+
+    // Detayı bildirimi yapan verir; yönetici de onun adına yazabilir (telefonda öğrendiyse).
+    private static async Task<IResult> ProvideDetailsAsync(
+        Guid id, DetailsRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var report = await db.BugReports.SingleOrDefaultAsync(item => item.Id == id)
+            ?? throw new NotFoundException("Bildirim bulunamadı.");
+        if (report.CreatedByUserId != AuthContext.GetUserId(principal) && !AuthContext.IsAdmin(principal))
+            throw new ForbiddenException("Yalnızca bildirimi yapan kişi detay ekleyebilir.");
+
+        report.ProvideDetails(request.Details, clock.UtcNow, clock.SchoolTimeZone);
+        await db.SaveChangesAsync();
+        return Results.NoContent();
     }
 
     // Teyidi bildirimi yapan verir; yönetici de onun adına verebilir (yüz yüze sorduysa).

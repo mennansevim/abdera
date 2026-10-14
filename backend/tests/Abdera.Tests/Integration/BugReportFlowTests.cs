@@ -125,7 +125,7 @@ public class BugReportFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var works = await ResolvedReportAsync("Telafi saati seçilemiyor, hep öneri yerleşiyor.", 22);
         var broken = await ResolvedReportAsync("Takvimde sürükleyince ders kayboluyor.", 24);
 
-        var awaiting = await ReadAsync<List<BugReports.BugReportResponse>>(await teacher.GetAsync("/api/bug-reports/awaiting-confirmation"));
+        var awaiting = await ReadAsync<List<BugReports.BugReportResponse>>(await teacher.GetAsync("/api/bug-reports/awaiting-me"));
         Assert.Equal([broken, works], awaiting.Select(report => report.Id).Where(id => id == works || id == broken).OrderBy(id => id == works).ToList());
         Assert.All(awaiting, report => Assert.Equal(BugReportStatus.Resolved, report.Status));
         Assert.Equal(22, awaiting.Single(report => report.Id == works).GithubIssueNumber);
@@ -135,7 +135,7 @@ public class BugReportFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.NoContent, (await teacher.PostAsJsonAsync(
             $"/api/bug-reports/{broken}/confirmation", new BugReports.ConfirmRequest(false, "  Hâlâ kayboluyor, bu sefer cuma günü.  "))).StatusCode);
 
-        var remaining = await ReadAsync<List<BugReports.BugReportResponse>>(await teacher.GetAsync("/api/bug-reports/awaiting-confirmation"));
+        var remaining = await ReadAsync<List<BugReports.BugReportResponse>>(await teacher.GetAsync("/api/bug-reports/awaiting-me"));
         Assert.DoesNotContain(remaining, report => report.Id == works || report.Id == broken);
 
         var verifiedOrReopened = await ReadAsync<BugReports.ListResponse>(
@@ -173,7 +173,7 @@ public class BugReportFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.Forbidden, (await stranger.PostAsJsonAsync(
             $"/api/bug-reports/{created.Id}/confirmation", new BugReports.ConfirmRequest(true, null))).StatusCode);
         Assert.DoesNotContain(
-            await ReadAsync<List<BugReports.BugReportResponse>>(await stranger.GetAsync("/api/bug-reports/awaiting-confirmation")),
+            await ReadAsync<List<BugReports.BugReportResponse>>(await stranger.GetAsync("/api/bug-reports/awaiting-me")),
             report => report.Id == created.Id);
 
         await using var db = await _factory.CreateDbContextAsync();
@@ -181,5 +181,50 @@ public class BugReportFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(BugReportStatus.Resolved, stored.Status);
         Assert.Equal(30, stored.GithubIssueNumber);
         Assert.NotNull(stored.ResolvedAt);
+    }
+
+    // W7: ne istendiği anlaşılamayan bildirim için görev açılmaz; yönetici (ya da run abdera)
+    // soru sorar, bildirimi yapan cevabını yazınca bildirim yeniden "Yeni" olur.
+    [Fact]
+    public async Task Unclear_report_waits_for_details_and_returns_to_new_with_the_answer()
+    {
+        var admin = await CreateAdminClientAsync();
+        var reporter = await CreateTeacherClientAsync(admin, "detay");
+        var stranger = await CreateTeacherClientAsync(admin, "detayyabanci");
+
+        var created = await ReadAsync<BugReports.CreateResponse>(await reporter.PostAsJsonAsync(
+            "/api/bug-reports", new BugReports.CreateRequest(BugReportKind.Bug, "/dashboard", "Perşembe ile cuma öğrencileri yer değişsin.", null)));
+
+        // Soru yazılmadan detay istenemez; detay istenmemiş bildirime cevap yazılamaz.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PatchAsJsonAsync(
+            $"/api/bug-reports/{created.Id}", new BugReports.TriageRequest(BugReportStatus.NeedsInfo, null, "  "))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await reporter.PostAsJsonAsync(
+            $"/api/bug-reports/{created.Id}/details", new BugReports.DetailsRequest("Öğrenci adları Ali ve Ayşe."))).StatusCode);
+
+        const string question = "Hangi öğrenciler, hangi tarihten itibaren?";
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PatchAsJsonAsync(
+            $"/api/bug-reports/{created.Id}", new BugReports.TriageRequest(BugReportStatus.NeedsInfo, null, question))).StatusCode);
+
+        var waiting = Assert.Single(
+            await ReadAsync<List<BugReports.BugReportResponse>>(await reporter.GetAsync("/api/bug-reports/awaiting-me")),
+            report => report.Id == created.Id);
+        Assert.Equal(BugReportStatus.NeedsInfo, waiting.Status);
+        Assert.Equal(question, waiting.TriageNote);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await stranger.PostAsJsonAsync(
+            $"/api/bug-reports/{created.Id}/details", new BugReports.DetailsRequest("Benim bildirimim değil ama yazayım."))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await reporter.PostAsJsonAsync(
+            $"/api/bug-reports/{created.Id}/details", new BugReports.DetailsRequest("  Ali ile Ayşe, gelecek haftadan itibaren.  "))).StatusCode);
+
+        Assert.DoesNotContain(
+            await ReadAsync<List<BugReports.BugReportResponse>>(await reporter.GetAsync("/api/bug-reports/awaiting-me")),
+            report => report.Id == created.Id);
+        var list = await ReadAsync<BugReports.ListResponse>(await admin.GetAsync("/api/bug-reports?status=New&pageSize=100"));
+        var item = Assert.Single(list.Page.Items, report => report.Id == created.Id);
+        Assert.StartsWith("Perşembe ile cuma öğrencileri yer değişsin.", item.Description);
+        Assert.Contains($"— Soru: {question}", item.Description);
+        Assert.Contains("Ali ile Ayşe, gelecek haftadan itibaren.", item.Description);
+        Assert.Null(item.TriageNote);
+        Assert.Null(item.GithubIssueNumber);
     }
 }
