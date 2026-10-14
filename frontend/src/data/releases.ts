@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.14.5",
+    date: "2026-10-14",
+    items: [
+      { audience: "admin", text: "Bir kursun ders türünü (Birebir/Grup) ya da özel indirimini değiştirince, henüz ödenmemiş açık aidatlar da yeni tutara geçer. Örneğin Grup'a alınan Resim öğrencisinin bu ayki aidatı 4.500 TL olur; ödenmiş aylar değişmez." },
+      { audience: "all", text: "Ana ekranda tarihin altında her gün değişen bir \"günün sözü\" görünür." },
+    ],
+  },
+  {
     version: "2026.10.14.4",
     date: "2026-10-14",
     items: [
