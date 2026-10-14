@@ -153,16 +153,29 @@ function AvailabilityBoard() {
     .map((entry) => ({ ...entry, ranges: freeRanges(entry.teacher.slots, durationMinutes, preference) }))
     .sort((a, b) => rangeMinutes(b.ranges) - rangeMinutes(a.ranges));
 
-  // Veliye okunacak/gönderilecek kısa liste: her günden en erken saat, en fazla beş seçenek.
+  // Veliye okunacak/gönderilecek liste: her günün boş aralıkları ("Cuma 15:00–19:00 arası"),
+  // tek başlangıçlık boşluk yalnızca saatiyle. Önceden her günden yalnızca en erken saat
+  // yazılıyordu; o günün geri kalan boşlukları veliye hiç ulaşmıyordu (2026-10-14 bildirimi).
+  // Öğretmenlerin boşlukları birleşir: veli için hangi öğretmen olduğu sonraki adım.
   // Veli henüz kayıtlı değil, WhatsApp onayı yok - bu yüzden gönderim değil, panoya kopya.
   async function copyForGuardian() {
-    const perDay = new Map<string, number>();
+    const startsByDay = new Map<string, Set<number>>();
     for (const { slot } of preferredSlots) {
-      const minutes = toMinutes(slot.startTime);
-      const current = perDay.get(slot.dayOfWeek);
-      if (current === undefined || minutes < current) perDay.set(slot.dayOfWeek, minutes);
+      const set = startsByDay.get(slot.dayOfWeek) ?? new Set<number>();
+      set.add(toMinutes(slot.startTime));
+      startsByDay.set(slot.dayOfWeek, set);
     }
-    const options = days.filter((day) => perDay.has(day)).slice(0, 5).map((day) => `${DAY_NAMES_TR[day]} ${hhmm(perDay.get(day)!)}`);
+    const options = days.filter((day) => startsByDay.has(day)).map((day) => {
+      const merged = freeRanges(
+        [...startsByDay.get(day)!].sort((a, b) => a - b).map((minutes) => ({ dayOfWeek: day, startTime: hhmm(minutes), firstOpenDate: null })),
+        durationMinutes,
+        "any",
+      );
+      const parts = merged.map((range) => range.end - range.start === durationMinutes
+        ? hhmm(range.start)
+        : `${hhmm(range.start)}–${hhmm(range.end)} arası`);
+      return `${DAY_NAMES_TR[day]} ${parts.join(" ve ")}`;
+    });
     if (!options.length) { setCopied("Seçilen tercihte boş saat yok."); return; }
     const text = `${instrumentName ?? "Ders"} için uygun saatlerimiz: ${options.join(", ")}. Hangisi size uygun?`;
     try {
