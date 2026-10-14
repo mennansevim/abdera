@@ -167,6 +167,7 @@ public static class LessonGroups
             db.AuditLogs.Add(AuditLog.Record(
                 AuthContext.GetUserId(principal), "enrollment.updated", nameof(Enrollment), enrollment.Id, now,
                 beforeJson: before, afterJson: JsonSerializer.Serialize(new { CourseKind = enrollment.CourseKind.ToString() })));
+            await EnrollmentReceivableRepricer.RepriceUnpaidAsync(enrollment, db, AuthContext.GetUserId(principal), now);
         }
 
         await LessonSeriesFeatures.EnsureStudentWeeklyLimitAsync(enrollment.StudentId, startFrom, null, db);

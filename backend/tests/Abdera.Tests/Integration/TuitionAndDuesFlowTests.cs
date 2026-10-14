@@ -768,4 +768,37 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(4800m, receivable.Amount);
         Assert.Equal("Burslu öğrenci (%20)", receivable.DiscountReason);
     }
+
+    // Resim kayıtları Grup'a çekildikten sonra açık aidatlar Birebir tutarında (6.000) kalıyordu.
+    [Fact]
+    public async Task Switching_course_kind_reprices_unpaid_receivables_but_not_paid_ones()
+    {
+        var admin = await CreateAdminClientAsync();
+        var art = await InstrumentIdAsync(admin, "ART");
+        var teacher = await CreateTeacherAsync(admin, "Tur", art);
+        var student = await CreateStudentAsync(admin, "Tur");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, art);
+
+        var paid = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2027-10")));
+        (await PostPaymentAsync(admin, paid.Id,
+            new Payments.CreateRequest(paid.Amount, new DateOnly(2027, 10, 1), PaymentMethod.Cash, null, null)))
+            .EnsureSuccessStatusCode();
+        var open = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2027-11")));
+        Assert.Equal(6000m, open.Amount);
+
+        await ReadAsync<Enrollments.EnrollmentResponse>(await admin.PatchAsJsonAsync(
+            $"/api/students/{student.Id}/enrollments/{enrollment.Id}",
+            new Enrollments.UpdateRequest(CourseKind.Group, null, null)));
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var paidAfter = await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == paid.Id);
+        var openAfter = await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == open.Id);
+        Assert.Equal(6000m, paidAfter.Amount);
+        Assert.Equal(4500m, openAfter.BaseAmount);
+        Assert.Equal(4500m, openAfter.Amount);
+        Assert.True(await db.AuditLogs.AnyAsync(log =>
+            log.Action == "receivable.repriced_after_enrollment_change" && log.EntityId == open.Id));
+    }
 }

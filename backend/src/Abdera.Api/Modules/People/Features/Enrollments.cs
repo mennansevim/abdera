@@ -240,6 +240,10 @@ public static class Enrollments
                 enrollment.ManualDiscountReason,
             })));
 
+        // Ders türü / özel indirim değişti: ödeme görmemiş açık aidatlar da yeni tutara geçer,
+        // yoksa Aidatlar çizelgesi eski türün fiyatını göstermeye devam eder.
+        await EnrollmentReceivableRepricer.RepriceUnpaidAsync(enrollment, db, AuthContext.GetUserId(principal), now);
+
         await db.SaveChangesAsync();
         return Results.Ok(ToResponse(enrollment));
     }
