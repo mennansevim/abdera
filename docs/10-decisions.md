@@ -379,6 +379,18 @@ Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [menn
 | Z5 | Veliye ulaşma | Yalnızca veli portalı, Gelişim sekmesi (kullanıcı kararı). WhatsApp bildirimi yok, bu yüzden yeni şablon/bildirim tipi de yok. Veli taslağı hiç görmez. |
 | Z6 | Silme ve devir | `PersonEraser`: öğrenci silinince karneleri de gider; öğretmen devrinde karne kurs kaydıyla yeni öğretmene geçer (yayınlanmış karnedeki yazan öğretmen adı değişmez), devirsiz silmede kaydın karneleriyle birlikte gider. Para/takvim/rıza değiştirmediği için `audit_log`'a yazılmaz. |
 
+## AA — Veli şifresini okul yönetir: "Veli girişleri" ekranı (2026-10-13)
+
+Kullanıcı isteği: "şifreleri WhatsApp üzerinden veremiyorum, gitmiyor. Okul yönetsin bu şifreyi; veli için hızlı şifre al / şifre sıfırla olmalı." Velinin WhatsApp'a yazıp giriş linki alması önerisi reddedildi.
+
+| # | Konu | Karar |
+|---|---|---|
+| AA1 | Şifre türü | Yöneticinin verdiği şifre **rastgele 6 haneli sayı** (kullanıcı kararı; `OtpGenerator`). Q1'deki "sıfırla → ad soyad şifresine dön" kaldırıldı: ad soyadı bilen herkesin tahmin edebildiği şifreyi okul artık kendisi vermez. Şifresi hiç atanmamış veli (hash NULL) ad soyad şifresiyle girmeye devam eder (geri uyum). Kayıt ekranı da aynı ucu kullandığı için yeni veli 6 haneli şifreyle başlar. Okulun verdiği şifre "ilk şifre" sayılmaz, portal değiştirme hatırlatması göstermez. |
+| AA2 | Tekrar görme | Okul verdiği şifreyi sonra yeniden görebilir ("veli şifresini unuttu, söyler misiniz"). Düz metin hiçbir kolonda durmaz: `guardians.issued_password_protected` ASP.NET Data Protection ile şifrelenmiş kopyadır (anahtarlar oturum çerezleriyle aynı kalıcı halkada). Veli portaldan kendi şifresini belirleyince kopya silinir, `password_set_by_guardian = true` olur ve okul o şifreyi **göremez**, yalnızca yenisini verebilir. |
+| AA3 | Ekran | `/dashboard/guardians` (yalnızca Admin, menüde İletişim altında). Satırda veli, öğrencileri, telefon (kullanıcı adı), şifre durumu (Ad soyad / Okulun verdiği / Velinin kendi / Eski). "Şifreyi göster" ve "Yeni şifre ver" (onaylı). "Giriş bilgilerini kopyala" panel adresi + kullanıcı adı + şifreyi hazır metin yapar. "Kendi WhatsApp'ımdan gönder" bu metinle `wa.me` açar: mesaj yöneticinin kişisel hesabından gider, işletme hesabının şablon kısıtı (R2) yoktur. Uçlar: `GET /api/guardians/logins`, `POST /api/guardians/{id}/reveal-password`. |
+| AA4 | Audit | Hesaba erişim sağlayan bilgi olduğu için `guardian.password_reset` ve `guardian.password_viewed` (kim, hangi veli, ne zaman) `audit_log`'a yazılır. Şifrenin kendisi audit'e yazılmaz. Öğretmen liste ve gösterime erişemez (403). |
+| AA5 | Veli giriş ekranı | "Şifreni bilmiyor musun? WhatsApp ile kod al" kaldırıldı: kod şablonu Meta'da açılamadığı için (R2) kod veliye hiç ulaşmıyordu. Yerine "okul yönetiminden yeni şifre iste" yazar. OTP uçları kodda duruyor. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

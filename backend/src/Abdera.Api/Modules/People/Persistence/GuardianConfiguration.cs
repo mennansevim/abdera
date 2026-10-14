@@ -22,6 +22,8 @@ public class GuardianConfiguration : IEntityTypeConfiguration<Guardian>
         builder.Property(g => g.SecurityStamp).HasColumnName("security_stamp").HasDefaultValueSql("gen_random_uuid()");
         // Nullable - şifresi henüz atanmamış veli yalnızca OTP ile girer (Karar F reversal).
         builder.Property(g => g.PasswordHash).HasColumnName("password_hash");
+        builder.Property(g => g.IssuedPasswordProtected).HasColumnName("issued_password_protected");
+        builder.Property(g => g.PasswordSetByGuardian).HasColumnName("password_set_by_guardian").HasDefaultValue(false);
         builder.Property(g => g.CreatedAt).HasColumnName("created_at");
         builder.Property(g => g.UpdatedAt).HasColumnName("updated_at");
 

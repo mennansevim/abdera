@@ -37,6 +37,12 @@ public class Guardian
     // yalnızca OTP ile girer. Hash IPasswordHasher<Guardian> ile üretilir (OTP kod hash'iyle
     // aynı altyapı), `users` tablosuna hâlâ dokunulmaz.
     public string? PasswordHash { get; private set; }
+    // docs/10-decisions.md AA1: okulun verdiği şifre (rastgele 6 hane) yöneticinin tekrar
+    // görebilmesi için Data Protection ile şifrelenmiş olarak da tutulur - düz metin hiçbir
+    // kolonda durmaz. Veli kendi şifresini belirleyince silinir; o şifreyi okul göremez.
+    public string? IssuedPasswordProtected { get; private set; }
+    // Veli portaldan kendi şifresini belirledi mi. Okul yeni şifre verince false'a döner.
+    public bool PasswordSetByGuardian { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -69,9 +75,28 @@ public class Guardian
         UpdatedAt = now;
     }
 
-    // Veli şifresini (yeniden) atar. Yeni şifreyle birlikte güvenlik damgası tazelenir ki
-    // eski cookie oturumları sunucu tarafında düşsün (User.SetPassword ile aynı ruh).
+    // Veli kendi şifresini belirler (portal). Yeni şifreyle birlikte güvenlik damgası tazelenir
+    // ki eski cookie oturumları sunucu tarafında düşsün (User.SetPassword ile aynı ruh).
+    // Okulun verdiği şifrenin saklı kopyası silinir: velinin kendi şifresini okul göremez.
     public void SetPassword(string passwordHash, DateTimeOffset now)
+    {
+        ApplyPasswordHash(passwordHash, now);
+        IssuedPasswordProtected = null;
+        PasswordSetByGuardian = true;
+    }
+
+    // Okul (yönetici) yeni şifre verir - AA1. Şifrelenmiş kopya yöneticinin "Şifreyi göster"i için.
+    public void IssuePassword(string passwordHash, string protectedPassword, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(protectedPassword))
+            throw new ArgumentException("Şifrelenmiş şifre boş olamaz.", nameof(protectedPassword));
+
+        ApplyPasswordHash(passwordHash, now);
+        IssuedPasswordProtected = protectedPassword;
+        PasswordSetByGuardian = false;
+    }
+
+    private void ApplyPasswordHash(string passwordHash, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(passwordHash))
             throw new ArgumentException("Şifre hash'i boş olamaz.", nameof(passwordHash));

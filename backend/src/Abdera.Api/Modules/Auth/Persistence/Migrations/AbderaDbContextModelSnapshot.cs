@@ -1816,6 +1816,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("first_name");
 
+                    b.Property<string>("IssuedPasswordProtected")
+                        .HasColumnType("text")
+                        .HasColumnName("issued_password_protected");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1831,6 +1835,12 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text")
                         .HasColumnName("password_hash");
+
+                    b.Property<bool>("PasswordSetByGuardian")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("password_set_by_guardian");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()

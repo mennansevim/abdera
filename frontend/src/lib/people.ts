@@ -265,13 +265,58 @@ export function useCreateGuardian() {
   });
 }
 
-// docs/10-decisions.md Q1: veli giriş şifresini ad soyaddan türeyen varsayılana döndürür
-// (ör. Mennan Sevim → sevimm) ve WhatsApp'tan gönderir. Yalnızca Admin; düz metin bir kez döner.
+// docs/10-decisions.md AA1: okul veliye rastgele 6 haneli yeni bir giriş şifresi verir. Şifre
+// WhatsApp'tan gitmez (R2); yönetici yanıttaki düz metni görüp iletir. Yalnızca Admin.
 export function useResetGuardianPassword() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (guardianId: string) =>
       api.post<{ id: string; phoneNumber: string; password: string; message: string }>(`/api/guardians/${guardianId}/reset-password`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guardian-logins"] }),
   });
+}
+
+// docs/10-decisions.md AA: veli giriş bilgilerini okul yönetir. Listede şifre yok, yalnızca
+// durumu; düz metin "Şifreyi göster" ile tek veli için sunucudan istenir (audit'e düşer).
+export type GuardianPasswordState = "Default" | "Issued" | "GuardianSet" | "Legacy";
+
+export const GUARDIAN_PASSWORD_STATE_LABEL: Record<GuardianPasswordState, string> = {
+  Default: "Ad soyad şifresi",
+  Issued: "Okulun verdiği şifre",
+  GuardianSet: "Velinin kendi şifresi",
+  Legacy: "Eski şifre",
+};
+
+export interface GuardianLogin {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+  studentNames: string[];
+  passwordState: GuardianPasswordState;
+}
+
+export function useGuardianLogins() {
+  return useQuery({ queryKey: ["guardian-logins"], queryFn: () => api.get<GuardianLogin[]>("/api/guardians/logins") });
+}
+
+export function useRevealGuardianPassword() {
+  return useMutation({
+    mutationFn: (guardianId: string) =>
+      api.post<{ id: string; phoneNumber: string; password: string | null; passwordState: GuardianPasswordState }>(
+        `/api/guardians/${guardianId}/reveal-password`, {}),
+  });
+}
+
+// Veliye iletilecek hazır metin: panel adresi + kullanıcı adı + şifre. Yönetici kopyalayıp
+// kendi telefonundan gönderir (işletme hesabı şifre içeren mesaj gönderemiyor, R2).
+export function guardianCredentialMessage(phoneNumber: string, password: string, origin: string) {
+  return `Abdera veli paneli giriş bilgileriniz:\n${origin}/parent/login\nKullanıcı adı: ${localPhone(phoneNumber)}\nŞifre: ${password}`;
+}
+
+// +905551234567 → 05551234567: veli giriş ekranına yazdığı biçim. Giriş her iki biçimi de kabul eder.
+export function localPhone(phoneNumber: string) {
+  return phoneNumber.startsWith("+90") ? `0${phoneNumber.slice(3)}` : phoneNumber;
 }
 
 export interface StudentGuardianLink {

@@ -100,7 +100,7 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
 
     // docs/10-decisions.md Q1: şifresi hiç atanmamış veli ad soyaddan türeyen varsayılanla
     // (soyad + adın ilk harfi) girer, sonra kendi şifresini değiştirir; eski varsayılan artık
-    // geçmez. Yönetici sıfırlaması veliyi yeniden varsayılana döndürür.
+    // geçmez. Yönetici sıfırlaması (AA1) veliye rastgele 6 haneli yeni bir şifre verir.
     [Fact]
     public async Task Guardian_logs_in_with_name_derived_password_and_can_change_it()
     {
@@ -145,11 +145,81 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
 
         var reset = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
             .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
-        Assert.Equal("sevimm", reset.Password);
+        Assert.Matches("^[0-9]{6}$", reset.Password);
 
         using var afterReset = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await afterReset.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "YeniSifre1"))).StatusCode);
         Assert.Equal(HttpStatusCode.OK,
-            (await afterReset.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, "sevimm"))).StatusCode);
+            (await afterReset.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, reset.Password))).StatusCode);
+        // Okulun verdiği şifre "ilk şifre" sayılmaz: portal değiştirme hatırlatması göstermez.
+        Assert.False((await (await afterReset.GetAsync("/api/guardian/me"))
+            .Content.ReadFromJsonAsync<GuardianAuth.GuardianMeResponse>(TestJson.Options))!.UsesDefaultPassword);
+    }
+
+    // docs/10-decisions.md AA: "Veli girişleri" ekranı. Yönetici her velinin şifre durumunu görür;
+    // ad soyad şifresini ve okulun verdiği şifreyi tekrar görebilir, velinin kendi belirlediği
+    // şifreyi göremez (yalnızca sıfırlar). Göstermek audit'e düşer, şifrenin kendisi düşmez.
+    [Fact]
+    public async Task Admin_sees_guardian_login_states_and_can_reveal_school_issued_passwords_only()
+    {
+        var admin = await CreateAdminClientAsync();
+        const string rawPhone = "05557775566";
+        var guardian = (await (await admin.PostAsJsonAsync("/api/guardians",
+                new Guardians.CreateRequest("Ayşe Nur", "Çelik", rawPhone)))
+            .Content.ReadFromJsonAsync<Guardians.GuardianResponse>(TestJson.Options))!;
+        var student = (await (await admin.PostAsJsonAsync("/api/students",
+                new Students.CreateRequest("Deniz", "Çelik", new DateOnly(2015, 3, 1))))
+            .Content.ReadFromJsonAsync<Students.StudentResponse>(TestJson.Options))!;
+        await admin.PostAsJsonAsync($"/api/students/{student.Id}/guardians",
+            new LinkGuardianToStudent.Request(guardian.Id, "anne", true));
+
+        async Task<Guardians.GuardianLoginResponse> RowAsync() =>
+            (await (await admin.GetAsync("/api/guardians/logins"))
+                .Content.ReadFromJsonAsync<List<Guardians.GuardianLoginResponse>>(TestJson.Options))!
+            .Single(row => row.Id == guardian.Id);
+        async Task<Guardians.RevealPasswordResponse> RevealAsync() =>
+            (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reveal-password", null))
+                .Content.ReadFromJsonAsync<Guardians.RevealPasswordResponse>(TestJson.Options))!;
+
+        var initial = await RowAsync();
+        Assert.Equal(Guardians.PasswordState.Default, initial.PasswordState);
+        Assert.Equal(["Deniz Çelik"], initial.StudentNames);
+        Assert.Equal("celika", (await RevealAsync()).Password);
+
+        var reset = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
+            .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
+        Assert.Equal(Guardians.PasswordState.Issued, (await RowAsync()).PasswordState);
+        Assert.Equal(reset.Password, (await RevealAsync()).Password);
+
+        // Veli kendi şifresini belirleyince okul onu göremez; saklı kopya da silinir.
+        using var portal = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.OK,
+            (await portal.PostAsJsonAsync("/api/guardian/login", new GuardianAuth.LoginRequest(rawPhone, reset.Password))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await portal.PostAsJsonAsync("/api/guardian/change-password",
+            new GuardianAuth.ChangePasswordRequest(reset.Password, "VeliSifresi9"))).StatusCode);
+
+        Assert.Equal(Guardians.PasswordState.GuardianSet, (await RowAsync()).PasswordState);
+        var hidden = await RevealAsync();
+        Assert.Null(hidden.Password);
+        Assert.Equal(Guardians.PasswordState.GuardianSet, hidden.PasswordState);
+
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var stored = await db.Guardians.AsNoTracking().SingleAsync(g => g.Id == guardian.Id);
+            Assert.Null(stored.IssuedPasswordProtected);
+            Assert.True(stored.PasswordSetByGuardian);
+            // İki başarılı gösterim (ad soyad + okulun şifresi) audit'te; başarısız gösterim yazılmaz.
+            Assert.Equal(2, await db.AuditLogs.CountAsync(a => a.Action == "guardian.password_viewed" && a.EntityId == guardian.Id));
+            Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Action == "guardian.password_reset" && a.EntityId == guardian.Id));
+            var guardianAudit = await db.AuditLogs.AsNoTracking().Where(a => a.EntityId == guardian.Id).ToListAsync();
+            Assert.DoesNotContain(guardianAudit, a => (a.AfterJson ?? "").Contains(reset.Password) || (a.BeforeJson ?? "").Contains(reset.Password));
+        }
+
+        // Okul yeniden sıfırlayınca şifre tekrar okulun elinde.
+        var again = (await (await admin.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null))
+            .Content.ReadFromJsonAsync<Guardians.ResetPasswordResponse>(TestJson.Options))!;
+        Assert.Equal(again.Password, (await RevealAsync()).Password);
     }
 
     // docs/10-decisions.md R2: yeni veliye panel adresini ileten karşılama mesajı bildirim onayı

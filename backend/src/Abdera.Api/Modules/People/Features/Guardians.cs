@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,6 +25,29 @@ public static class Guardians
     // Şifre düz metni yalnızca bu yanıtta bir kez döner (öğretmen TemporaryPassword desenيyle
     // aynı) - admin ekranı gösterebilsin, agent doğrulama için kullanabilsin.
     public record ResetPasswordResponse(Guid Id, string PhoneNumber, string Password, string Message);
+
+    // docs/10-decisions.md AA: "Veli girişleri" ekranı. Şifrenin kendisi listede DEĞİL - yalnızca
+    // durumu; düz metin "Şifreyi göster" ile tek veli için, audit'e yazılarak açılır.
+    public enum PasswordState
+    {
+        // Şifre hiç atanmamış: soyad + adın baş harfi (Q1) ile girer.
+        Default,
+        // Okulun verdiği rastgele 6 haneli şifre (AA1) - yönetici tekrar görebilir.
+        Issued,
+        // Veli portaldan kendi şifresini belirledi - okul göremez, yalnızca sıfırlayabilir.
+        GuardianSet,
+        // AA öncesi sıfırlamadan kalan hash (ad soyad deseni ya da daha eski desen). Göster
+        // yalnızca ad soyad desenine uyuyorsa çalışır.
+        Legacy,
+    }
+
+    public record GuardianLoginResponse(
+        Guid Id, string FirstName, string LastName, string PhoneNumber, List<string> StudentNames, PasswordState PasswordState);
+    // Password null: bu şifre okulca görülemiyor (veli belirlemiş ya da eski desen) - sıfırlamak gerekir.
+    public record RevealPasswordResponse(Guid Id, string PhoneNumber, string? Password, PasswordState PasswordState);
+
+    // Data Protection amacı - bu anahtarla korunan metin başka bir amaçla açılamaz.
+    private const string IssuedPasswordPurpose = "Abdera.People.GuardianIssuedPassword.v1";
 
     public static void MapGuardians(this IEndpointRouteBuilder app)
     {
@@ -45,6 +69,89 @@ public static class Guardians
         // bilgisini değiştiremez; bu sınır yalnızca arayüzde değil API'de zorlanır.
         group.MapPost("/{guardianId:guid}/reset-password", ResetPasswordAsync)
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        // AA: veli giriş bilgilerini okul yönetir - liste ve "Şifreyi göster" yalnızca Admin.
+        group.MapGet("/logins", ListLoginsAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        group.MapPost("/{guardianId:guid}/reveal-password", RevealPasswordAsync)
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+    }
+
+    private static async Task<IResult> ListLoginsAsync(AbderaDbContext db)
+    {
+        var guardians = await db.Guardians.AsNoTracking()
+            .OrderBy(g => g.FirstName).ThenBy(g => g.LastName)
+            .Select(g => new
+            {
+                g.Id, g.FirstName, g.LastName, g.PhoneNumber,
+                HasHash = g.PasswordHash != null,
+                HasIssued = g.IssuedPasswordProtected != null,
+                g.PasswordSetByGuardian,
+            })
+            .ToListAsync();
+
+        var studentNames = (await db.StudentGuardians.AsNoTracking()
+                .Join(db.Students, link => link.StudentId, student => student.Id,
+                    (link, student) => new { link.GuardianId, student.FirstName, student.LastName })
+                .OrderBy(x => x.FirstName).ThenBy(x => x.LastName)
+                .ToListAsync())
+            .GroupBy(x => x.GuardianId)
+            .ToDictionary(group => group.Key, group => group.Select(x => $"{x.FirstName} {x.LastName}").ToList());
+
+        return Results.Ok(guardians.Select(g => new GuardianLoginResponse(
+            g.Id, g.FirstName, g.LastName, g.PhoneNumber,
+            studentNames.GetValueOrDefault(g.Id) ?? [],
+            StateOf(g.HasHash, g.HasIssued, g.PasswordSetByGuardian))).ToList());
+    }
+
+    private static PasswordState StateOf(bool hasHash, bool hasIssued, bool setByGuardian) =>
+        !hasHash ? PasswordState.Default
+        : setByGuardian ? PasswordState.GuardianSet
+        : hasIssued ? PasswordState.Issued
+        : PasswordState.Legacy;
+
+    // Yöneticinin "Şifreyi göster"i. Kim hangi velinin şifresini ne zaman gördü audit'e düşer
+    // (hesaba erişim sağlayan bilgi); şifrenin kendisi audit'e yazılmaz.
+    private static async Task<IResult> RevealPasswordAsync(
+        Guid guardianId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        IPasswordHasher<Guardian> passwordHasher, IDataProtectionProvider dataProtection,
+        ILogger<Program> logger)
+    {
+        var guardian = await db.Guardians.AsNoTracking().SingleOrDefaultAsync(g => g.Id == guardianId)
+            ?? throw new NotFoundException("Veli bulunamadı.");
+
+        var state = StateOf(guardian.PasswordHash is not null, guardian.IssuedPasswordProtected is not null, guardian.PasswordSetByGuardian);
+        string? password = null;
+        switch (state)
+        {
+            case PasswordState.Default:
+                password = GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName);
+                break;
+            case PasswordState.Issued:
+                try
+                {
+                    password = dataProtection.CreateProtector(IssuedPasswordPurpose).Unprotect(guardian.IssuedPasswordProtected!);
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    // Anahtar halkası kaybolduysa (yedekten dönüş vb.) şifre açılamaz; yönetici sıfırlar.
+                    logger.LogWarning("Veli şifresinin saklı kopyası çözülemedi; sıfırlama gerekiyor.");
+                }
+                break;
+            case PasswordState.Legacy:
+                // AA öncesi sıfırlama ad soyad desenini hash'lemişti; uyuyorsa gösterilebilir.
+                var candidate = GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName);
+                if (passwordHasher.VerifyHashedPassword(guardian, guardian.PasswordHash!, candidate) != PasswordVerificationResult.Failed)
+                    password = candidate;
+                break;
+        }
+
+        if (password is not null)
+        {
+            db.AuditLogs.Add(AuditLog.Record(
+                AuthContext.GetUserId(principal), "guardian.password_viewed", nameof(Guardian), guardian.Id, clock.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        return Results.Ok(new RevealPasswordResponse(guardian.Id, guardian.PhoneNumber, password, state));
     }
 
     private static async Task<IResult> ListAsync(AbderaDbContext db)
@@ -158,10 +265,10 @@ public static class Guardians
         return Results.Ok(ToResponse(guardian));
     }
 
-    // Veli şifresini ad soyaddan türeyen varsayılana döndürür (docs/10-decisions.md Q1,
-    // GuardianPasswordGenerator) ve hash'ler. Veli kendi şifresini
-    // değiştirip unuttuğunda yöneticinin geri dönüş yolu. Düz metin yalnızca yanıtta bir kez
-    // döner - loglanmaz.
+    // Okul veliye yeni bir giriş şifresi verir (docs/10-decisions.md AA1): rastgele 6 haneli
+    // sayı. Kayıt ekranı, öğrenci künyesi ve "Veli girişleri" ekranı hep bu ucu kullanır.
+    // Hash girişte, Data Protection ile şifrelenmiş kopya yöneticinin "Şifreyi göster"i
+    // içindir. Düz metin yalnızca bu yanıtta döner - loglanmaz, audit'e yazılmaz.
     //
     // R2: yeni veliye panel adresini ileten karşılama mesajı (welcome_student) onay kapalıyken
     // de BİR KEZ gider; istisnayı ConsentGatedWhatsAppClient uygular, burada borç kapatılır ve
@@ -173,13 +280,19 @@ public static class Guardians
     // görüp iletir.
     private static async Task<IResult> ResetPasswordAsync(
         Guid guardianId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
-        IPasswordHasher<Guardian> passwordHasher, IWhatsAppClient whatsAppClient)
+        IPasswordHasher<Guardian> passwordHasher, IDataProtectionProvider dataProtection,
+        IWhatsAppClient whatsAppClient)
     {
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId)
             ?? throw new NotFoundException("Veli bulunamadı.");
 
-        var password = GuardianPasswordGenerator.Generate(guardian.FirstName, guardian.LastName);
-        guardian.SetPassword(passwordHasher.HashPassword(guardian, password), clock.UtcNow);
+        var password = OtpGenerator.Generate();
+        guardian.IssuePassword(
+            passwordHasher.HashPassword(guardian, password),
+            dataProtection.CreateProtector(IssuedPasswordPurpose).Protect(password),
+            clock.UtcNow);
+        db.AuditLogs.Add(AuditLog.Record(
+            AuthContext.GetUserId(principal), "guardian.password_reset", nameof(Guardian), guardian.Id, clock.UtcNow));
         await db.SaveChangesAsync();
 
         WhatsAppSendResult? welcomeResult = null;

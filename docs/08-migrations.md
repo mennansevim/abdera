@@ -318,3 +318,11 @@ Yalnızca ekleme: mevcut satırlar null kalır; yeni durumlar (`Resolved`/`Verif
 kolonuna sığar. `PersonEraser` değişmez (gönderen silinince yine yalnızca `created_by_user_id` null'lanır). `Down()` index'i
 ve üç kolonu düşürür. Not: `Down()`'dan önce yeni durumdaki satırlar eski koda dönülürse okunamaz - geri dönüşte bu
 satırları `Triaged`'a çekmek gerekir.
+
+**AddGuardianIssuedPassword** (People): `guardians.issued_password_protected text NULL` ve
+`guardians.password_set_by_guardian boolean NOT NULL DEFAULT false` - okulun verdiği rastgele 6 haneli veli
+şifresi ve "Veli girişleri" ekranı (`docs/10-decisions.md` AA). Şifrenin düz metni hiçbir kolonda durmaz:
+`issued_password_protected` ASP.NET Data Protection ile şifrelenmiş kopyadır (anahtarlar `Auth:KeysDirectory`
+ya da `DataProtectionKeys`), veli kendi şifresini belirleyince null'lanır. Backfill: audit'te
+`guardian.password_changed` olan velilerde `password_set_by_guardian = true`. Yeni tablo yok, `PersonEraser`
+değişmez. `Down()` iki kolonu düşürür.

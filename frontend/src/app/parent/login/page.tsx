@@ -18,7 +18,7 @@ const EXAMPLE_GUARDIAN_PHONE = "0555 000 00 01";
 const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 
 // docs/10-decisions.md Karar F (ikinci) reversal: veli artık telefon + KALICI ŞİFRE ile giriş
-// yapar (ilk şifre ad soyaddan türer, docs/10-decisions.md Q1; veli portaldan değiştirir). WhatsApp OTP ikincil
+// yapar (şifreyi okul verir, docs/10-decisions.md AA; veli portaldan değiştirebilir). WhatsApp OTP ikincil
 // seçenek olarak korunur ("Şifreni bilmiyor musun?"). Demo yayınında örnek veli düğmesi vardır.
 type Mode = "password" | "otp-phone" | "otp-code";
 
@@ -99,7 +99,7 @@ export default function GuardianLoginPage() {
     mode === "otp-code" ? "Telefonuna gelen kodu gir" : "Veli girişi";
   const subtitle =
     mode === "password"
-      ? "Kayıtlı telefon numaran ve şifrenle giriş yap. İlk şifreni okul yönetimi iletir; girdikten sonra değiştirebilirsin."
+      ? "Kayıtlı telefon numaran ve okulun verdiği şifreyle giriş yap."
       : mode === "otp-phone"
         ? "Kayıtlı telefon numarana WhatsApp üzerinden tek kullanımlık bir kod gönderelim."
         : `${phoneNumber} numarasına gönderilen 6 haneli kodu gir.`;
@@ -165,13 +165,10 @@ export default function GuardianLoginPage() {
                 {login.isPending ? "Giriş yapılıyor…" : "Giriş yap"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => { setMode("otp-phone"); setError(null); }}
-                className="btn btn-quiet mt-2 w-full border-dashed text-xs"
-              >
-                Şifreni bilmiyor musun? WhatsApp ile kod al
-              </button>
+              {/* docs/10-decisions.md AA: şifreyi okul yönetir. "WhatsApp ile kod al" kaldırıldı -
+                  kod şablonu Meta'da açılamadığı için (R2) kod veliye hiç ulaşmıyordu. OTP akışı
+                  kodda duruyor; şablon açılırsa bu giriş noktası geri eklenebilir. */}
+              <p className="mt-3 text-center text-xs text-[var(--muted)]">Şifreni bilmiyor ya da unuttuysan okul yönetiminden yeni şifre iste.</p>
             </form>
           )}
 

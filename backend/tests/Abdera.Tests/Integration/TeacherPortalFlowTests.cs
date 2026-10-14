@@ -160,6 +160,10 @@ public class TeacherPortalFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // Aksi halde öğretmen veli hesabını devralabilecek kalıcı bir şifre üretebilirdi.
         var resetPassword = await mine.Client.PostAsync($"/api/guardians/{guardian.Id}/reset-password", null);
         Assert.Equal(HttpStatusCode.Forbidden, resetPassword.StatusCode);
+        // Veli giriş bilgileri (AA) de öyle: liste ve "Şifreyi göster" yalnızca yöneticide.
+        Assert.Equal(HttpStatusCode.Forbidden, (await mine.Client.GetAsync("/api/guardians/logins")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await mine.Client.PostAsync($"/api/guardians/{guardian.Id}/reveal-password", null)).StatusCode);
 
         // Okul geneli veli rehberi hâlâ yalnızca yöneticide
         Assert.Equal(HttpStatusCode.Forbidden, (await mine.Client.GetAsync("/api/guardians")).StatusCode);
