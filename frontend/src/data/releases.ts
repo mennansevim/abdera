@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.14.2",
+    date: "2026-10-14",
+    items: [
+      { audience: "all", text: "Bir bildiriminizi tam anlayamazsak Hata bildir sayfasında size bir soru görünür; cevabınızı oradan yazdığınızda bildiriminiz yeniden incelenir." },
+      { audience: "admin", text: "Gelen bildirimlerde yeni \"Beklemede\" sekmesi: anlaşılamayan bir bildirim için \"Detay iste\" ile bildirimi yapana soru sorabilirsiniz." },
+    ],
+  },
+  {
     version: "2026.10.14",
     date: "2026-10-14",
     items: [
