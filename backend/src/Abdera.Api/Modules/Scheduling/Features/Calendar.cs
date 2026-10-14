@@ -20,7 +20,12 @@ public static class Calendar
         AttendanceStatus? AttendanceStatus = null,
         // Derse en az bir not yazılmış mı: Bugün ekranındaki "Not girildi" rozeti kart başına
         // ayrı not isteği atmasın diye takvimle birlikte gelir (issue #16).
-        bool HasNote = false);
+        bool HasNote = false,
+        // Grup dersi (Resim gibi) üyesi ise grubun kimliği ve adı: takvim aynı grubun aynı
+        // saatteki derslerini tek sınıf kartı olarak çizer, diğer kurslarla karıştırmaz.
+        Guid? LessonGroupId = null,
+        string? LessonGroupName = null,
+        int? LessonGroupCapacity = null);
 
     public static void MapCalendar(this IEndpointRouteBuilder app)
     {
@@ -129,11 +134,25 @@ public static class Calendar
             .Distinct()
             .ToListAsync()).ToHashSet();
 
-        return lessons.Select(lesson => lesson with
+        var seriesIds = lessons.Where(l => l.LessonSeriesId.HasValue).Select(l => l.LessonSeriesId!.Value).Distinct().ToList();
+        var groupBySeries = (await db.LessonSeries
+                .Where(s => seriesIds.Contains(s.Id) && s.LessonGroupId != null)
+                .Join(db.LessonGroups, s => s.LessonGroupId, g => g.Id, (s, g) => new { SeriesId = s.Id, g.Id, g.Name, g.Capacity })
+                .ToListAsync())
+            .ToDictionary(x => x.SeriesId);
+
+        return lessons.Select(lesson =>
         {
-            HasNote = lessonsWithNotes.Contains(lesson.Id),
-            RsvpResponse = rsvpByLesson.GetValueOrDefault(lesson.Id),
-            AttendanceStatus = attendanceByLesson.TryGetValue(lesson.Id, out var status) ? status : null,
+            var group = lesson.LessonSeriesId is { } seriesId ? groupBySeries.GetValueOrDefault(seriesId) : null;
+            return lesson with
+            {
+                HasNote = lessonsWithNotes.Contains(lesson.Id),
+                RsvpResponse = rsvpByLesson.GetValueOrDefault(lesson.Id),
+                AttendanceStatus = attendanceByLesson.TryGetValue(lesson.Id, out var status) ? status : null,
+                LessonGroupId = group?.Id,
+                LessonGroupName = group?.Name,
+                LessonGroupCapacity = group?.Capacity,
+            };
         }).ToList();
     }
 }

@@ -30,7 +30,7 @@ public static class GrowthIdeaEvaluator
     public const decimal LowUtilization = 0.70m;
     public const decimal HighUtilization = 0.85m;
     private const string GroupPayRule =
-        "Hesap bugünkü ödeme usulüyle yapıldı: grup dersinde öğretmene her öğrenci için ayrı ders ücreti ödeniyor.";
+        "Hesap bugünkü ödeme usulüyle yapıldı: grup dersinde öğretmen, grubun aylık aidat gelirinin %40'ını alıyor.";
 
     public static GrowthIdeaEvaluation Evaluate(GrowthIdeaKind kind, GrowthIdeaParameters p, ProfitBaseline baseline) => kind switch
     {

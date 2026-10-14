@@ -144,6 +144,11 @@ export interface CalendarLesson {
   attendanceStatus?: AttendanceStatus | null;
   // Derse en az bir not yazılmış mı; Bugün ekranının "Not girildi" rozeti buradan beslenir.
   hasNote?: boolean;
+  // Grup dersi (Resim gibi) üyesiyse: takvim aynı grubun aynı saatteki derslerini tek sınıf
+  // kartında toplar.
+  lessonGroupId?: string | null;
+  lessonGroupName?: string | null;
+  lessonGroupCapacity?: number | null;
 }
 
 export function useCalendar(from: string, to: string, options?: { enabled?: boolean; refetchInterval?: number | false }) {
@@ -265,5 +270,96 @@ export function useDeleteTeacherAvailability(teacherId: string) {
   return useMutation({
     mutationFn: (availabilityId: string) => api.delete(`/api/teachers/${teacherId}/availability/${availabilityId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["teacher-availability", teacherId] }),
+  });
+}
+
+// Grup dersleri (Resim gibi) - LessonGroups.cs. Sınıf: öğretmen + kurs + haftalık gün/saat +
+// kapasite; her üye için sunucu Grup türünde kurs kaydı ve gruba bağlı haftalık seri açar.
+export interface LessonGroupMember {
+  studentId: string;
+  studentName: string;
+  enrollmentId: string;
+  seriesId: string;
+  joinedOn: string;
+}
+
+export interface LessonGroup {
+  id: string;
+  name: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentId: string;
+  instrumentName: string;
+  dayOfWeek: string;
+  startTime: string;
+  durationMinutes: number;
+  capacity: number;
+  effectiveFrom: string;
+  status: "Active" | "Ended";
+  endedOn: string | null;
+  members: LessonGroupMember[];
+}
+
+export const LESSON_GROUP_DEFAULT_DURATION = 90;
+export const LESSON_GROUP_DEFAULT_CAPACITY = 6;
+
+function invalidateGroupViews(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["lesson-groups"] });
+  queryClient.invalidateQueries({ queryKey: ["calendar"] });
+  queryClient.invalidateQueries({ queryKey: ["student-lesson-series"] });
+  queryClient.invalidateQueries({ queryKey: ["open-slots"] });
+}
+
+export function useLessonGroups() {
+  return useQuery({ queryKey: ["lesson-groups"], queryFn: () => api.get<LessonGroup[]>("/api/lesson-groups") });
+}
+
+export function useCreateLessonGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      teacherId: string;
+      instrumentId: string;
+      dayOfWeek: string;
+      startTime: string;
+      effectiveFrom: string;
+      durationMinutes: number;
+      capacity: number;
+    }) => api.post<LessonGroup>("/api/lesson-groups", body),
+    onSuccess: () => invalidateGroupViews(queryClient),
+  });
+}
+
+export function useUpdateLessonGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, ...body }: { groupId: string; name?: string | null; capacity?: number | null }) =>
+      api.patch<LessonGroup>(`/api/lesson-groups/${groupId}`, body),
+    onSuccess: () => invalidateGroupViews(queryClient),
+  });
+}
+
+export function useAddLessonGroupMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, ...body }: { groupId: string; studentId: string; startFrom?: string | null }) =>
+      api.post<{ group: LessonGroup; generation: GenerationSummary }>(`/api/lesson-groups/${groupId}/members`, body),
+    onSuccess: () => {
+      invalidateGroupViews(queryClient);
+      // Yeni kurs kaydıyla bu ayın aidatı da açılır.
+      queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
+      queryClient.invalidateQueries({ queryKey: ["student-billing"] });
+      queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+    },
+  });
+}
+
+export function useEndLessonGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) => api.post<LessonGroup>(`/api/lesson-groups/${groupId}/end`, {}),
+    onSuccess: () => invalidateGroupViews(queryClient),
   });
 }

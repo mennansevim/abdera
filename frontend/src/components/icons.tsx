@@ -134,6 +134,8 @@ const SILHOUETTES: Record<string, ReactNode> = {
   piano: <g transform="translate(0 -7)"><path d="M8 48V16a8 8 0 0 1 8-8h12c10 0 13 8 17 15c4 7 11 9 11 17v8z"/><path d="M8 51h5v7H8zM16 51h5v7h-5zM24 51h5v7h-5zM32 51h5v7h-5zM40 51h5v7h-5zM48 51h8v7h-8z"/></g>,
   guitar: <g transform="rotate(-35 32 32)"><circle cx="32" cy="47" r="12"/><circle cx="32" cy="32" r="8.5"/><rect x="29.5" y="4" width="5" height="26"/><rect x="27" y="0" width="10" height="8" rx="2"/></g>,
   violin: <><g transform="rotate(25 32 32)"><ellipse cx="32" cy="46" rx="10" ry="9"/><ellipse cx="32" cy="30" rx="8" ry="7.5"/><rect x="28" y="34" width="8" height="8"/><rect x="30" y="6" width="4" height="22"/><circle cx="32" cy="5" r="3.5"/></g><rect x="4" y="30" width="58" height="2.5" rx="1" transform="rotate(-35 32 32)"/></>,
+  // Resim: palet (başparmak deliği + boya lekeleri) - müzik silüetlerinden şekliyle ayrışır.
+  pencil: <path fillRule="evenodd" d="M32 6C16 6 4 17 4 31c0 13 10 23 22 23c5 0 7-3 7-6c0-4-3-5-3-8c0-3 2-5 6-5h8c10 0 16-6 16-13C60 13 47 6 32 6zM18 26a5 5 0 1 0 0.01 0zM28 15a5 5 0 1 0 0.01 0zM42 16a5 5 0 1 0 0.01 0zM20 40a5 5 0 1 0 0.01 0z"/>,
   drums: <><ellipse cx="32" cy="46" rx="22" ry="7"/><rect x="10" y="28" width="44" height="18"/><ellipse cx="32" cy="28" rx="22" ry="7"/><rect x="14" y="5" width="3" height="24" rx="1.5" transform="rotate(-30 16 18)"/><rect x="47" y="5" width="3" height="24" rx="1.5" transform="rotate(30 48 18)"/></>,
 };
 

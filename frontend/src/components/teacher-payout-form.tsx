@@ -2,13 +2,14 @@
 
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
+import { MonthInput } from "@/components/month-input";
 import { fromIsoDate, relativeWeekName } from "@/components/week-picker";
 import { FormActions, FormMessage } from "@/components/ui";
 import { errorMessage } from "@/lib/library";
 import {
   formatDayMonth, formatPayWeek, payoutMoney, shiftWeekStart,
-  useCreateTeacherPayout, useSetTeacherPayRate, useTeacherPayoutWeek,
-  type TeacherPayoutWeekRow,
+  useCreateTeacherGroupPayout, useCreateTeacherPayout, useSetTeacherPayRate, useTeacherGroupMonth, useTeacherPayoutWeek,
+  type TeacherGroupMonthRow, type TeacherPayoutWeekRow,
 } from "@/lib/teacher-payouts";
 
 // "Gider ekle" formunun "Haftalık" sekmesi: bir öğretmene bir ödeme haftasının (pazartesi →
@@ -160,7 +161,7 @@ function PayoutFields({ row, weekStart, payDay, onClose }: { row: TeacherPayoutW
         <p className="text-sm font-semibold tabular-nums">
           {row.completedLessons} tamamlanan ders × {rateValid ? payoutMoney(parsedRate, row.currency) : "—"} = <strong>{computed === null ? "—" : payoutMoney(computed, row.currency)}</strong>
         </p>
-        <p className="text-meta mt-1">Yalnızca yoklaması girilmiş (tamamlanmış) dersler sayılır; iptal ve ertelenmiş dersler sayılmaz.</p>
+        <p className="text-meta mt-1">Yalnızca yoklaması girilmiş (tamamlanmış) dersler sayılır; iptal ve ertelenmiş dersler sayılmaz. Grup dersleri (Resim) burada sayılmaz, Aylık grup sekmesinden ödenir.</p>
       </div>
 
       <label className="form-label">Ödenecek tutar (₺)
@@ -184,6 +185,147 @@ function PayoutFields({ row, weekStart, payDay, onClose }: { row: TeacherPayoutW
       <p className="text-meta">Ödeme Giderler defterine Maaş kategorisiyle yazılır.</p>
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <FormActions onCancel={onClose} submitLabel="Ödemeyi kaydet" pending={createPayout.isPending || setRate.isPending} pendingLabel="Kaydediliyor…" />
+    </form>
+  );
+}
+
+// "Gider ekle" formunun "Aylık grup" sekmesi (docs/10-decisions.md AC): grup dersi (Resim)
+// öğretmenine, seçilen ayın tahakkuk eden grup aidatlarının %40'ı. Grup dersleri haftalık
+// sekmede sayılmaz - grup öğretmeninin tek ödeme yolu bu sekmedir.
+const MONTH_NAMES = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+const formatPeriod = (period: string) => {
+  const [year, month] = period.split("-").map(Number);
+  return `${MONTH_NAMES[month - 1]} ${year}`;
+};
+const lastDayOf = (period: string) => {
+  const [year, month] = period.split("-").map(Number);
+  return `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
+};
+const todayIso = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+export function TeacherGroupPayoutForm({ onClose }: { onClose: () => void }) {
+  // Varsayılan ay: geçen ay - grup payı ay kapanınca ödenir.
+  const [period, setPeriod] = useState(() => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() - 1);
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}`;
+  });
+  const [teacherId, setTeacherId] = useState("");
+  const { data: month, isLoading, isError } = useTeacherGroupMonth(period);
+  const row = month?.teachers.find((item) => item.teacherId === teacherId) ?? null;
+
+  return (
+    <div className="space-y-3.5">
+      <label className="form-label">Ay
+        <MonthInput value={period} onChange={(value) => setPeriod(value)} label="Ödeme ayı" />
+      </label>
+      <label className="form-label">Öğretmen
+        <select value={teacherId} onChange={(event) => setTeacherId(event.target.value)} required className="field text-sm">
+          <option value="">{month && !month.teachers.length ? "Grup dersi veren öğretmen yok" : "Öğretmen seç"}</option>
+          {(month?.teachers ?? []).map((item) => (
+            <option key={item.teacherId} value={item.teacherId}>
+              {item.firstName} {item.lastName}{item.payout ? " · ödendi" : item.revenueBase > 0 ? ` · ${payoutMoney(item.computedAmount, item.currency)}` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {isError && <FormMessage tone="error">Ay yüklenemedi.</FormMessage>}
+      {!isLoading && month && !row && (
+        <>
+          <p className="text-meta">Grup dersi öğretmenine, seçilen ayın grup aidatlarının %{month.sharePercent}&apos;ı ödenir. Tutar öğretmen seçilince gelir.</p>
+          <FormActions onCancel={onClose} submitLabel="Ödemeyi kaydet" disabled />
+        </>
+      )}
+      {month && row && <GroupPayoutFields key={`${row.teacherId}:${month.period}`} row={row} period={month.period} onClose={onClose} />}
+    </div>
+  );
+}
+
+function GroupPayoutFields({ row, period, onClose }: { row: TeacherGroupMonthRow; period: string; onClose: () => void }) {
+  const createPayout = useCreateTeacherGroupPayout();
+  const [amount, setAmount] = useState(String(row.computedAmount));
+  const lastDay = lastDayOf(period);
+  const [paidOn, setPaidOn] = useState(lastDay < todayIso() ? lastDay : todayIso());
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const parsedAmount = parseAmount(amount);
+  const amountDiffers = Number.isFinite(parsedAmount) && parsedAmount !== row.computedAmount;
+
+  if (row.payout) {
+    return (
+      <>
+        <FormMessage tone="success">
+          {row.firstName} {row.lastName} için {formatPeriod(period)} grup payı ödendi: {payoutMoney(row.payout.amount, row.payout.currency)} ({formatDayMonth(row.payout.paidOn)}). Ödeme kayıtları silinmez; düzeltme gerekiyorsa karşı kayıt gir.
+        </FormMessage>
+        <FormActions onCancel={onClose} submitLabel="Ödemeyi kaydet" disabled />
+      </>
+    );
+  }
+
+  if (row.revenueBase <= 0) {
+    return (
+      <>
+        <p className="text-meta rounded-xl bg-[var(--surface-muted)] px-3 py-2">{formatPeriod(period)} için bu öğretmenin grup aidatı yok; ödenecek bir tutar çıkmıyor.</p>
+        <FormActions onCancel={onClose} submitLabel="Ödemeyi kaydet" disabled />
+      </>
+    );
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return setError("Tutar pozitif bir sayı olmalı.");
+    try {
+      await createPayout.mutateAsync({
+        teacherId: row.teacherId,
+        period,
+        expectedRevenueBase: row.revenueBase,
+        expectedAmount: row.computedAmount,
+        agreedAmount: amountDiffers ? parsedAmount : undefined,
+        paidOn,
+        note: note.trim() || undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err, "Ödeme kaydedilemedi."));
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3.5">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-muted)]/40 p-3">
+        <p className="text-sm font-semibold tabular-nums">
+          {formatPeriod(period)} grup geliri {payoutMoney(row.revenueBase, row.currency)} × %{row.sharePercent} = <strong>{payoutMoney(row.computedAmount, row.currency)}</strong>
+        </p>
+        <p className="text-meta mt-1">{row.receivableCount} öğrencinin bu ay açılan aidatı (indirim sonrası, ödenmiş olsun olmasın). İptal edilen aidat sayılmaz.</p>
+      </div>
+
+      <label className="form-label">Ödenecek tutar (₺)
+        <input type="number" inputMode="decimal" min={0.01} step={0.01} value={amount} onChange={(event) => { setAmount(event.target.value); setError(null); }} required className="field text-sm" />
+        {amountDiffers && (
+          <span className="text-meta mt-1 block">
+            Hesaplanan tutardan farklı; ikisi de ödeme kaydında saklanır.{" "}
+            <button type="button" onClick={() => setAmount(String(row.computedAmount))} className="font-bold text-[var(--brand)] hover:underline">Hesaplanana dön</button>
+          </span>
+        )}
+      </label>
+
+      <label className="form-label">Ödeme tarihi
+        <input type="date" required value={paidOn} min={`${period}-01`} onChange={(event) => setPaidOn(event.target.value)} className="field text-sm" />
+      </label>
+
+      <label className="form-label">Not <span className="font-normal text-[var(--muted)]">(isteğe bağlı)</span>
+        <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={200} placeholder="Örn. elden ödendi" className="field text-sm" />
+      </label>
+
+      <p className="text-meta">Ödeme Giderler defterine Maaş kategorisiyle yazılır.</p>
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <FormActions onCancel={onClose} submitLabel="Ödemeyi kaydet" pending={createPayout.isPending} pendingLabel="Kaydediliyor…" />
     </form>
   );
 }

@@ -49,14 +49,19 @@ public static class ProfitabilitySnapshotBuilder
         var knownRates = activeTeachers.Where(rates.ContainsKey).Select(id => rates[id]).ToList();
         decimal? averageRate = knownRates.Count > 0 ? decimal.Round(knownRates.Average(), 2) : null;
 
+        // Grup dersi satırları ders başı maliyete girmez; grup öğretmeninin maliyeti aylık gelir
+        // payıdır (GroupLessonPay, docs/10-decisions.md AC) ve aşağıda dönem bazında eklenir.
         var lessons = await db.Lessons.AsNoTracking()
             .Where(lesson => lesson.StartAt >= windowStart && lesson.StartAt < windowEnd)
+            .WithoutGroupLessons(db)
             .Select(lesson => new { lesson.TeacherId, lesson.StartAt, lesson.EndAt, lesson.Status })
             .ToListAsync(cancellationToken);
 
         // --- Sabit gider: tekrarlayan kalemler + tek seferlik giderler (öğretmen ödemesi satırları hariç) ---
         var recurring = await db.RecurringExpenses.AsNoTracking().Include(item => item.Amounts).ToListAsync(cancellationToken);
         var payoutExpenseIds = await db.TeacherWeeklyPayouts.AsNoTracking().Select(payout => payout.ExpenseId).ToListAsync(cancellationToken);
+        payoutExpenseIds.AddRange(await db.TeacherMonthlyGroupPayouts.AsNoTracking().Select(payout => payout.ExpenseId).ToListAsync(cancellationToken));
+        var groupRevenue = await GroupLessonPay.RevenueByTeacherAsync(db, periods, cancellationToken: cancellationToken);
         var oneOffs = await db.Expenses.AsNoTracking()
             .Where(expense => expense.ExpenseDate >= months[0] && expense.ExpenseDate < currentMonth.AddMonths(1)
                 && !payoutExpenseIds.Contains(expense.Id))
@@ -80,6 +85,7 @@ public static class ProfitabilitySnapshotBuilder
                 if (rates.TryGetValue(lesson.TeacherId, out var rate)) teacherCost += rate;
                 else { teacherCost += averageRate ?? 0; estimated = true; }
             }
+            teacherCost += groupRevenue.Where(row => row.Period == periods[index]).Sum(row => GroupLessonPay.ComputeAmount(row.RevenueBase));
             var fixedCost = recurring.Sum(item => item.AmountFor(month))
                 + oneOffs.Where(expense => expense.ExpenseDate >= month && expense.ExpenseDate < month.AddMonths(1)).Sum(expense => expense.Amount);
             monthRows.Add(new MonthProfit(

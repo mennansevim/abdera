@@ -148,3 +148,71 @@ export const payoutMoney = (value: number, currency = "TRY") =>
   currency === "TRY"
     ? `₺${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`
     : `${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} ${currency}`;
+
+// Grup dersi (Resim) öğretmen ücreti (docs/10-decisions.md AC): dönemin tahakkuk eden grup
+// aidatlarının %40'ı, ayda bir. Tutarı sunucu hesaplar (GroupLessonPay); istemci teyit eder.
+export interface TeacherGroupPayout {
+  id: string;
+  teacherId: string;
+  period: string;
+  revenueBase: number;
+  receivableCount: number;
+  sharePercent: number;
+  computedAmount: number;
+  amount: number;
+  currency: string;
+  paidOn: string;
+  note: string | null;
+  expenseId: string;
+  createdAt: string;
+}
+
+export interface TeacherGroupMonthRow {
+  teacherId: string;
+  firstName: string;
+  lastName: string;
+  status: TeacherStatus;
+  revenueBase: number;
+  receivableCount: number;
+  sharePercent: number;
+  computedAmount: number;
+  currency: string;
+  payout: TeacherGroupPayout | null;
+}
+
+export interface TeacherGroupMonth {
+  period: string;
+  isCurrentMonth: boolean;
+  sharePercent: number;
+  paidTotal: number;
+  payableTotal: number;
+  currency: string;
+  teachers: TeacherGroupMonthRow[];
+}
+
+export function useTeacherGroupMonth(period: string) {
+  return useQuery({
+    queryKey: ["teacher-group-month", period],
+    queryFn: () => api.get<TeacherGroupMonth>(`/api/teacher-payouts/group-month?period=${period}`),
+  });
+}
+
+export function useCreateTeacherGroupPayout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      teacherId: string;
+      period: string;
+      expectedRevenueBase: number;
+      expectedAmount: number;
+      agreedAmount?: number;
+      paidOn?: string;
+      note?: string;
+    }) => api.post<TeacherGroupPayout>("/api/teacher-payouts/group-month", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["teacher-group-month"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["profitability"] });
+    },
+  });
+}

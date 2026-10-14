@@ -6,6 +6,9 @@ public class LessonSeries
 {
     public Guid Id { get; private set; }
     public Guid EnrollmentId { get; private set; }
+    // Grup dersi üyeliği (LessonGroup). Doluysa gün/saat/süre grubunkidir; aynı gruptaki
+    // seriler birbiriyle öğretmen çakışması sayılmaz.
+    public Guid? LessonGroupId { get; private set; }
     public DayOfWeek DayOfWeek { get; private set; }
     public TimeOnly StartTime { get; private set; }
     public int DurationMinutes { get; private set; }
@@ -24,7 +27,8 @@ public class LessonSeries
         int durationMinutes,
         DateOnly effectiveFrom,
         DateOnly? effectiveUntil,
-        DateTimeOffset now)
+        DateTimeOffset now,
+        Guid? lessonGroupId = null)
     {
         if (durationMinutes <= 0)
             throw new ArgumentException("Ders süresi pozitif olmalı.", nameof(durationMinutes));
@@ -35,6 +39,7 @@ public class LessonSeries
         {
             Id = Guid.NewGuid(),
             EnrollmentId = enrollmentId,
+            LessonGroupId = lessonGroupId,
             DayOfWeek = dayOfWeek,
             StartTime = startTime,
             DurationMinutes = durationMinutes,

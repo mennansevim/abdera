@@ -29,6 +29,7 @@ public static class BillingModule
         app.MapExpenses();
         app.MapRecurringExpenses();
         app.MapTeacherPayouts();
+        app.MapTeacherGroupPayouts();
         app.MapStudentBilling();
         app.MapSendPaymentReminder();
         app.MapDailyBillingCron();

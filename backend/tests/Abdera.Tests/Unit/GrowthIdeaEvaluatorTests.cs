@@ -34,7 +34,8 @@ public class GrowthIdeaEvaluatorTests
     public void Individual_margin_is_price_after_discount_minus_monthly_lesson_pay()
     {
         Assert.Equal(4000m, Baseline().MarginPerStudent(CourseKind.Individual, 500m));
-        Assert.Equal(2500m, Baseline().MarginPerStudent(CourseKind.Group, 500m));
+        // Grup: öğretmen aylık gelirin %40'ını alır, ders başı ücret düşülmez (AC).
+        Assert.Equal(2700m, Baseline().MarginPerStudent(CourseKind.Group, 500m));
     }
 
     [Fact]
@@ -60,24 +61,24 @@ public class GrowthIdeaEvaluatorTests
     }
 
     [Fact]
-    public void Group_class_pays_the_teacher_per_student_and_still_beats_individual_per_teacher_hour()
+    public void Group_class_pays_the_teacher_a_share_of_revenue_and_beats_individual_per_teacher_hour()
     {
         var result = GrowthIdeaEvaluator.Evaluate(GrowthIdeaKind.GroupClass, P with { InstrumentId = Piano, Students = 4 }, Baseline());
 
-        // 4 × (4.500 - 4 × 500) = 10.000; öğretmen saati başına 2.500, birebirde 1.000.
-        Assert.Equal(10000m, result.MonthlyNet);
+        // 4 × 4.500 × (1 - %40) = 10.800; öğretmen saati başına 2.700, birebirde 1.000.
+        Assert.Equal(10800m, result.MonthlyNet);
         Assert.Equal(IdeaVerdict.Recommended, result.Verdict);
-        Assert.Contains(result.Reasons, reason => reason.Contains("her öğrenci için ayrı ders ücreti"));
+        Assert.Contains(result.Reasons, reason => reason.Contains("%40"));
     }
 
     [Fact]
-    public void Group_class_whose_fee_does_not_cover_lesson_pay_is_not_recommended()
+    public void Group_class_cost_does_not_depend_on_the_per_lesson_rate()
     {
+        // Grup öğretmeni ders başı değil gelir payıyla ödendiği için yüksek ders ücreti grubu zarara sokmaz.
         var result = GrowthIdeaEvaluator.Evaluate(GrowthIdeaKind.GroupClass,
             P with { InstrumentId = Piano, Students = 4, TeacherRatePerLesson = 1500m }, Baseline());
 
-        Assert.True(result.MonthlyNet < 0);
-        Assert.Equal(IdeaVerdict.NotRecommended, result.Verdict);
+        Assert.Equal(10800m, result.MonthlyNet);
     }
 
     [Fact]

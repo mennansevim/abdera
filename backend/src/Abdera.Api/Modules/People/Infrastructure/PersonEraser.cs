@@ -96,6 +96,9 @@ public static class PersonEraser
         var payments = await db.Payments.Where(p => receivableIds.Contains(p.ReceivableId)).ToListAsync();
         var payouts = await db.TeacherWeeklyPayouts.Where(p => p.TeacherId == teacherId)
             .Select(p => new { p.Amount }).ToListAsync();
+        // Aylık grup dersi payı da öğretmene yapılmış ödemedir (docs/10-decisions.md AC).
+        payouts.AddRange(await db.TeacherMonthlyGroupPayouts.Where(p => p.TeacherId == teacherId)
+            .Select(p => new { p.Amount }).ToListAsync());
 
         return new TeacherImpact(
             teacherId, $"{teacher.FirstName} {teacher.LastName}",
@@ -264,6 +267,8 @@ public static class PersonEraser
         UPDATE term_reports SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         UPDATE show_items SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         UPDATE library_suggestions SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
+        -- Grup dersi sınıfı üyeleriyle birlikte yeni öğretmene geçer.
+        UPDATE lesson_groups SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         """;
 
     private const string TeacherSql = """
@@ -312,6 +317,8 @@ public static class PersonEraser
         DELETE FROM lessons WHERE id IN (SELECT id FROM _tles);
         DELETE FROM lesson_series WHERE id IN (SELECT id FROM _tser);
         DELETE FROM enrollments WHERE id IN (SELECT id FROM _tenr);
+        -- Üye serileri yukarıda silindi; öğretmenin grup dersi sınıfları da gider.
+        DELETE FROM lesson_groups WHERE teacher_id = @teacher_id;
 
         UPDATE show_items SET teacher_id = NULL WHERE teacher_id = @teacher_id;
         -- Öneri öğrencinin repertuvarıdır ve kalır, eklenen eser okulun kütüphanesidir ve kalır;
@@ -321,6 +328,7 @@ public static class PersonEraser
         -- geçmez: ödenen para ayrılan kişinin geçmişidir. Gider defterindeki karşılıkları
         -- (expenses) okulun kaydıdır ve kalır - o satırların teacher_id'si yoktur, yetim kalmaz.
         DELETE FROM teacher_weekly_payouts WHERE teacher_id = @teacher_id;
+        DELETE FROM teacher_monthly_group_payouts WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_pay_rates WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_availability WHERE teacher_id = @teacher_id;
         DELETE FROM teacher_time_off WHERE teacher_id = @teacher_id;

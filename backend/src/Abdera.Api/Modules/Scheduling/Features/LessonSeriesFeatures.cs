@@ -205,6 +205,9 @@ public static class LessonSeriesFeatures
             ?? throw new NotFoundException("Ders serisi bulunamadı.");
         if (series.Status != LessonSeriesStatus.Active)
             throw new ConflictException("Sonlanmış bir ders programı taşınamaz; yeni bir program oluşturun.");
+        // Grup üyesinin saati grubundan gelir; tek üyeyi taşımak onu sınıftan koparırdı.
+        if (series.LessonGroupId is not null)
+            throw new ConflictException("Bu ders bir grup dersine bağlı; saati Grup dersleri ekranından değişir.");
 
         var enrollment = await db.Enrollments.SingleAsync(e => e.Id == series.EnrollmentId);
         await SchedulingAuthorization.EnsureActsAsSelfAsync(enrollment.TeacherId, principal, db);
@@ -300,7 +303,7 @@ public static class LessonSeriesFeatures
         return Results.Ok(generation);
     }
 
-    private static async Task<GenerationSummary> GenerateForSeriesAsync(
+    internal static async Task<GenerationSummary> GenerateForSeriesAsync(
         LessonSeries series, Enrollment enrollment, AbderaDbContext db, IClock clock, IConfiguration config,
         INotificationScheduler scheduler)
     {
@@ -358,7 +361,7 @@ public static class LessonSeriesFeatures
         return new GenerationSummary(plan.ToCreate.Count, plan.SkippedHolidays, plan.SkippedTeacherTimeOff);
     }
 
-    private static async Task EnsureWithinAvailabilityAsync(
+    internal static async Task EnsureWithinAvailabilityAsync(
         Guid teacherId, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime, AbderaDbContext db)
     {
         var availabilities = await db.TeacherAvailabilities.Where(a => a.TeacherId == teacherId).ToListAsync();
@@ -378,15 +381,23 @@ public static class LessonSeriesFeatures
 
     // excludeSeriesId: bir seriyi yeni gün/saate taşırken serinin kendisi aday listesinden
     // çıkarılır, aksi halde her taşıma kendi eski kaydıyla çakışırdı.
-    private static async Task EnsureNoConflictAsync(
+    // lessonGroupId: grup dersine üye eklerken aynı gruptaki diğer üyelerin serileri (ve grubun
+    // kendisi) öğretmen çakışması sayılmaz - hepsi aynı sınıf. Öğrenci tarafı yine denetlenir.
+    // Öğrencisi henüz olmayan bir grup da saatini rezerve eder: bireysel ders o saate giremez.
+    internal static async Task EnsureNoConflictAsync(
         Enrollment enrollment, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime,
-        DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db, Guid? excludeSeriesId = null)
+        DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db, Guid? excludeSeriesId = null,
+        Guid? lessonGroupId = null)
     {
+        await EnsureTeacherSlotFreeAsync(
+            enrollment.TeacherId, dayOfWeek, startTime, endTime, effectiveFrom, effectiveUntil, db,
+            excludeSeriesId, lessonGroupId);
+
         var candidates = await db.LessonSeries
             .Where(s => s.Status == LessonSeriesStatus.Active && s.DayOfWeek == dayOfWeek)
             .Where(s => excludeSeriesId == null || s.Id != excludeSeriesId)
             .Join(db.Enrollments, s => s.EnrollmentId, e => e.Id, (s, e) => new { Series = s, Enrollment = e })
-            .Where(x => x.Enrollment.TeacherId == enrollment.TeacherId || x.Enrollment.StudentId == enrollment.StudentId)
+            .Where(x => x.Enrollment.StudentId == enrollment.StudentId)
             .ToListAsync();
 
         foreach (var candidate in candidates)
@@ -398,9 +409,50 @@ public static class LessonSeriesFeatures
 
             if (!timeOverlaps || !dateRangeOverlaps) continue;
 
-            var conflictType = candidate.Enrollment.TeacherId == enrollment.TeacherId ? "öğretmenin" : "öğrencinin";
             throw new ConflictException(
-                $"Bu saat aralığı {conflictType} başka bir ders serisiyle çakışıyor ({Describe(candidate.Series.DayOfWeek, candidate.Series.StartTime)}).");
+                $"Bu saat aralığı öğrencinin başka bir ders serisiyle çakışıyor ({Describe(candidate.Series.DayOfWeek, candidate.Series.StartTime)}).");
+        }
+    }
+
+    // Öğretmenin o gün/saatte başka bir dersi (seri) ya da grubu var mı. Grup oluştururken de
+    // kullanılır: grup saati öğretmenin bireysel dersleriyle ve diğer gruplarıyla çakışamaz.
+    internal static async Task EnsureTeacherSlotFreeAsync(
+        Guid teacherId, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime,
+        DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db,
+        Guid? excludeSeriesId = null, Guid? lessonGroupId = null)
+    {
+        var seriesCandidates = await db.LessonSeries
+            .Where(s => s.Status == LessonSeriesStatus.Active && s.DayOfWeek == dayOfWeek)
+            .Where(s => excludeSeriesId == null || s.Id != excludeSeriesId)
+            .Where(s => lessonGroupId == null || s.LessonGroupId != lessonGroupId)
+            .Join(db.Enrollments, s => s.EnrollmentId, e => e.Id, (s, e) => new { Series = s, Enrollment = e })
+            .Where(x => x.Enrollment.TeacherId == teacherId)
+            .Select(x => x.Series)
+            .ToListAsync();
+
+        foreach (var candidate in seriesCandidates)
+        {
+            var candidateEnd = candidate.StartTime.AddMinutes(candidate.DurationMinutes);
+            if (!(startTime < candidateEnd && candidate.StartTime < endTime)) continue;
+            if (!DateRangesOverlap(effectiveFrom, effectiveUntil, candidate.EffectiveFrom, candidate.EffectiveUntil)) continue;
+
+            var label = candidate.LessonGroupId is null ? "başka bir ders serisiyle" : "bir grup dersiyle";
+            throw new ConflictException(
+                $"Bu saat aralığı öğretmenin {label} çakışıyor ({Describe(candidate.DayOfWeek, candidate.StartTime)}).");
+        }
+
+        var groupCandidates = await db.LessonGroups
+            .Where(g => g.Status == LessonGroupStatus.Active && g.TeacherId == teacherId && g.DayOfWeek == dayOfWeek)
+            .Where(g => lessonGroupId == null || g.Id != lessonGroupId)
+            .ToListAsync();
+
+        foreach (var group in groupCandidates)
+        {
+            if (!(startTime < group.EndTime && group.StartTime < endTime)) continue;
+            if (!DateRangesOverlap(effectiveFrom, effectiveUntil, group.EffectiveFrom, null)) continue;
+
+            throw new ConflictException(
+                $"Bu saat aralığı öğretmenin \"{group.Name}\" grup dersiyle çakışıyor ({Describe(group.DayOfWeek, group.StartTime)}).");
         }
     }
 
@@ -409,7 +461,7 @@ public static class LessonSeriesFeatures
     // mükerrer kaydı engelliyordu; aynı enstrümanı iki ayrı öğretmenden almak ya da tek kayıt
     // üzerine ikinci bir haftalık program açmak hâlâ mümkündü - takvimde aynı öğrencinin
     // haftada birkaç kez aynı derste görünmesinin sebebi buydu.
-    private static async Task EnsureSingleSeriesPerInstrumentAsync(
+    internal static async Task EnsureSingleSeriesPerInstrumentAsync(
         Guid studentId, Guid instrumentId, DateOnly effectiveFrom, DateOnly? effectiveUntil,
         AbderaDbContext db, Guid? excludeSeriesId = null)
     {
@@ -435,7 +487,7 @@ public static class LessonSeriesFeatures
         }
     }
 
-    private static async Task EnsureStudentWeeklyLimitAsync(
+    internal static async Task EnsureStudentWeeklyLimitAsync(
         Guid studentId, DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db)
     {
         var existingSeries = await db.LessonSeries
@@ -470,15 +522,16 @@ public static class LessonSeriesFeatures
     private static readonly string[] DayNamesTr =
         ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
 
-    private static string Describe(DayOfWeek day, TimeOnly startTime) =>
+    internal static string Describe(DayOfWeek day, TimeOnly startTime) =>
         $"{DayNamesTr[(int)day]} {startTime:HH\\:mm}";
 
     // CLAUDE.md: jsonb kolonlarına yazılan metin ASLA string interpolation ile kurulmaz -
     // JsonSerializer hem kültürden bağımsız hem de kaçışı otomatik yapar.
-    private static string SerializeSeries(LessonSeries series, Guid teacherId, Guid studentId) =>
+    internal static string SerializeSeries(LessonSeries series, Guid teacherId, Guid studentId) =>
         JsonSerializer.Serialize(new
         {
             series.EnrollmentId,
+            series.LessonGroupId,
             TeacherId = teacherId,
             StudentId = studentId,
             DayOfWeek = series.DayOfWeek.ToString(),
@@ -489,6 +542,6 @@ public static class LessonSeriesFeatures
             Status = series.Status.ToString(),
         });
 
-    private static LessonSeriesResponse ToResponse(LessonSeries s) => new(
+    internal static LessonSeriesResponse ToResponse(LessonSeries s) => new(
         s.Id, s.EnrollmentId, s.DayOfWeek, s.StartTime, s.DurationMinutes, s.EffectiveFrom, s.EffectiveUntil, s.Status);
 }

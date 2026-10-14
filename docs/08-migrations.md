@@ -326,3 +326,16 @@ satırları `Triaged`'a çekmek gerekir.
 ya da `DataProtectionKeys`), veli kendi şifresini belirleyince null'lanır. Backfill: audit'te
 `guardian.password_changed` olan velilerde `password_set_by_guardian = true`. Yeni tablo yok, `PersonEraser`
 değişmez. `Down()` iki kolonu düşürür.
+
+**AddLessonGroups** (Scheduling): yeni `lesson_groups` tablosu (uuid id, `created_at/updated_at`, `xmin`
+optimistic concurrency, `CHECK capacity BETWEEN 2 AND 12`, `CHECK duration_minutes BETWEEN 15 AND 180`,
+`teachers`/`instruments`'a Restrict FK, `(teacher_id, status)` index) ve `lesson_series.lesson_group_id uuid NULL`
+(Restrict FK + index). Yalnızca ekleme: mevcut seriler null kalır. `PersonEraser`: öğretmen devrinde grup yeni
+öğretmene geçer, devirsiz silmede üye serilerinden sonra silinir (`docs/10-decisions.md` AB). `Down()` FK'yı, tabloyu
+ve kolonu düşürür.
+
+**AddTeacherMonthlyGroupPayouts** (Billing): yeni `teacher_monthly_group_payouts` tablosu - grup dersi öğretmenine
+aylık gelir payı ödemesi (`docs/10-decisions.md` AC). Para kolonları `numeric(12,2)` + `currency`,
+`share_percent numeric(5,2)`, `UNIQUE (teacher_id, period)` çift ödeme engeli, `CHECK amount > 0`,
+`CHECK revenue_base > 0`, `CHECK share_percent > 0 AND share_percent <= 100`. Satır silinmez (gider defterine bağlı);
+yalnızca kalıcı öğretmen silmede `PersonEraser` siler, `expenses` satırı kalır. `Down()` tabloyu düşürür.

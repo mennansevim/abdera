@@ -10,6 +10,7 @@ public static class SchedulingModule
         app.MapTeacherTimeOffs();
         app.MapSchoolCalendarDays();
         app.MapLessonSeries();
+        app.MapLessonGroups();
         app.MapCalendar();
         app.MapChangeRequests();
         app.MapCancelLesson();

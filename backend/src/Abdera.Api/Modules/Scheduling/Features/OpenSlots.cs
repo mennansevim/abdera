@@ -89,6 +89,12 @@ public static class OpenSlots
             .Where(x => teacherIds.Contains(x.TeacherId))
             .ToListAsync();
 
+        // Grup dersi saati, üyesi olsun olmasın öğretmenin dolu saatidir; üyelerin serileri ise
+        // tek bir ders gibi sayılır (6 öğrencili grup öğretmenin 6 saatini doldurmaz).
+        var groups = await db.LessonGroups
+            .Where(g => g.Status == LessonGroupStatus.Active && teacherIds.Contains(g.TeacherId))
+            .ToListAsync();
+
         var fromInstant = LessonGenerator.ToUtcInstant(start, TimeOnly.MinValue, clock.SchoolTimeZone);
         var toInstant = LessonGenerator.ToUtcInstant(horizon, TimeOnly.MinValue, clock.SchoolTimeZone);
         var lessons = await db.Lessons
@@ -123,7 +129,10 @@ public static class OpenSlots
                 continue;
             }
 
-            var teacherSeries = series.Where(x => x.TeacherId == teacher.Id).Select(x => x.Series).ToList();
+            var teacherSeries = series.Where(x => x.TeacherId == teacher.Id && x.Series.LessonGroupId == null)
+                .Select(x => (x.Series.DayOfWeek, x.Series.StartTime, x.Series.DurationMinutes))
+                .Concat(groups.Where(g => g.TeacherId == teacher.Id).Select(g => (g.DayOfWeek, g.StartTime, g.DurationMinutes)))
+                .ToList();
             var busy = teacherSeries
                 .Select(s => new OpenSlotFinder.Busy(s.DayOfWeek, s.StartTime, s.DurationMinutes))
                 .ToList();

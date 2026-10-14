@@ -272,6 +272,10 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         var successor = (await ReadAsync<Teachers.CreateResponse>(await admin.PostAsJsonAsync(
             "/api/teachers", new Teachers.CreateRequest("Devralan", "Ogretmen", [piano.Id], "devralan@test.local")))).Teacher;
 
+        // Grup dersi sınıfı da yeni öğretmene geçer.
+        var group = await ReadAsync<LessonGroups.LessonGroupResponse>(await admin.PostAsJsonAsync("/api/lesson-groups",
+            new LessonGroups.CreateRequest("Devir grubu", seeded.TeacherId, piano.Id, DayOfWeek.Sunday, new TimeOnly(9, 0), new DateOnly(2026, 9, 6))));
+
         await using var db = await _factory.CreateDbContextAsync();
         var lessonCountBefore = await db.Lessons.CountAsync(l => l.TeacherId == seeded.TeacherId);
         Assert.True(lessonCountBefore > 0);
@@ -288,6 +292,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(successor.Id, (await db.Enrollments.SingleAsync(e => e.Id == seeded.EnrollmentId)).TeacherId);
         Assert.Equal(lessonCountBefore, await db.Lessons.CountAsync(l => l.TeacherId == successor.Id));
         Assert.False(await db.Lessons.AnyAsync(l => l.TeacherId == seeded.TeacherId));
+        Assert.Equal(successor.Id, (await db.LessonGroups.SingleAsync(g => g.Id == group.Id)).TeacherId);
     }
 
     [Fact]
@@ -295,6 +300,10 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
     {
         var admin = await CreateAdminClientAsync();
         var seeded = await SeedLoadedStudentAsync(admin, "tumden");
+        var piano = (await ReadAsync<List<Instruments.InstrumentResponse>>(await admin.GetAsync("/api/instruments")))
+            .Single(instrument => instrument.Code == "PIANO");
+        await ReadAsync<LessonGroups.LessonGroupResponse>(await admin.PostAsJsonAsync("/api/lesson-groups",
+            new LessonGroups.CreateRequest("Silinecek grup", seeded.TeacherId, piano.Id, DayOfWeek.Sunday, new TimeOnly(9, 0), new DateOnly(2026, 9, 6))));
 
         await using var db = await _factory.CreateDbContextAsync();
         var userId = (await db.Teachers.AsNoTracking().SingleAsync(t => t.Id == seeded.TeacherId)).UserId;
@@ -311,6 +320,11 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         db.TeacherPayRates.Add(TeacherPayRate.Create(seeded.TeacherId, 300m, "TRY", null, now));
         db.TeacherWeeklyPayouts.Add(TeacherWeeklyPayout.Create(
             seeded.TeacherId, payWeek, 3, 300m, 900m, 900m, "TRY", payWeek.End, null, payoutExpense.Id, null, now));
+        // Aylık grup dersi payı (AC) da öğretmene bağlıdır ve silinir; gider satırı kalır.
+        var groupExpense = Expense.Create(ExpenseCategory.Salary, "Aylık grup dersi payı", 1800m, "TRY", payWeek.End, null, null, now);
+        db.Expenses.Add(groupExpense);
+        db.TeacherMonthlyGroupPayouts.Add(TeacherMonthlyGroupPayout.Create(
+            seeded.TeacherId, "2026-09", 4500m, 1, 40m, 1800m, 1800m, "TRY", payWeek.End, null, groupExpense.Id, null, now));
         // Hata bildirimi okulun kaydıdır: kalır, yalnızca gönderen bağı kopar.
         var bugReport = BugReport.Create(userId!.Value, BugReportKind.Bug, "/dashboard", "Silinen öğretmenin bildirimi.", null, null, now);
         db.BugReports.Add(bugReport);
@@ -318,8 +332,8 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
 
         var impact = await ReadAsync<PersonEraser.TeacherImpact>(
             await admin.GetAsync($"/api/teachers/{seeded.TeacherId}/deletion-impact"));
-        Assert.Equal(1, impact.WeeklyPayouts);
-        Assert.Equal(900m, impact.PaidToTeacher);
+        Assert.Equal(2, impact.WeeklyPayouts);
+        Assert.Equal(2700m, impact.PaidToTeacher);
 
         var blocked = await admin.DeleteAsync($"/api/teachers/{seeded.TeacherId}");
         Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
@@ -337,6 +351,9 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.ProgressSummaries.AnyAsync(s => s.TeacherId == seeded.TeacherId));
         Assert.False(await db.TeacherPayRates.AnyAsync(r => r.TeacherId == seeded.TeacherId));
         Assert.False(await db.TeacherWeeklyPayouts.AnyAsync(p => p.TeacherId == seeded.TeacherId));
+        Assert.False(await db.LessonGroups.AnyAsync(g => g.TeacherId == seeded.TeacherId));
+        Assert.False(await db.TeacherMonthlyGroupPayouts.AnyAsync(p => p.TeacherId == seeded.TeacherId));
+        Assert.True(await db.Expenses.AnyAsync(e => e.Id == groupExpense.Id));
         Assert.True(await db.Expenses.AnyAsync(e => e.Id == payoutExpense.Id));
         Assert.Null((await db.BugReports.AsNoTracking().SingleAsync(r => r.Id == bugReport.Id)).CreatedByUserId);
         // Öğrencinin kendisi durur - silinen öğretmendi.

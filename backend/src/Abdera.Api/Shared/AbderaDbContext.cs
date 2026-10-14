@@ -44,6 +44,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<TeacherTimeOff> TeacherTimeOffs => Set<TeacherTimeOff>();
     public DbSet<SchoolCalendarDay> SchoolCalendarDays => Set<SchoolCalendarDay>();
     public DbSet<LessonSeries> LessonSeries => Set<LessonSeries>();
+    public DbSet<LessonGroup> LessonGroups => Set<LessonGroup>();
     public DbSet<Lesson> Lessons => Set<Lesson>();
     public DbSet<LessonChangeRequest> LessonChangeRequests => Set<LessonChangeRequest>();
 
@@ -74,6 +75,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<RecurringExpenseAmount> RecurringExpenseAmounts => Set<RecurringExpenseAmount>();
     public DbSet<TeacherPayRate> TeacherPayRates => Set<TeacherPayRate>();
     public DbSet<TeacherWeeklyPayout> TeacherWeeklyPayouts => Set<TeacherWeeklyPayout>();
+    public DbSet<TeacherMonthlyGroupPayout> TeacherMonthlyGroupPayouts => Set<TeacherMonthlyGroupPayout>();
 
     public DbSet<NotificationJob> NotificationJobs => Set<NotificationJob>();
     public DbSet<StaffNotification> StaffNotifications => Set<StaffNotification>();

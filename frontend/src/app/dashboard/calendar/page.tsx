@@ -28,7 +28,7 @@ const LESSON_CARD_MIN_HEIGHT_REM = 1.85;
 const LESSON_CARD_MIN_MINUTES = Math.ceil((LESSON_CARD_MIN_HEIGHT_REM / GRID_HEIGHT_REM_PER_HOUR) * 60);
 const WEEK_DAYS_TR = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const ALL_INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri"] as const;
+const ALL_INSTRUMENT_FILTERS = ["Hepsi", "Piyano", "Gitar", "Keman", "Bateri", "Resim"] as const;
 type InstrumentFilter = (typeof ALL_INSTRUMENT_FILTERS)[number];
 type QuickAddSlot = { date: string; day: string; time: string };
 type PendingMove = { lesson: CalendarLesson; newStart: Date; newEnd: Date };
@@ -202,6 +202,39 @@ function useDialogBehavior(onClose: () => void, initialFocusRef: RefObject<HTMLE
   }, [initialFocusRef]);
 }
 
+// Grup dersi (Resim gibi): sunucu ders satırını öğrenci başına üretir. Takvimde aynı grubun
+// aynı saatteki satırları tek bir sınıf kaydına toplanır - altı öğrenci altı yan yana kart
+// olarak sütunu bölmesin ve diğer kursların dersleriyle "çakışan dersler" kartına karışmasın.
+type DisplayLesson = CalendarLesson & { groupMembers?: CalendarLesson[] };
+
+function collapseGroupLessons(lessons: CalendarLesson[]): DisplayLesson[] {
+  const result: DisplayLesson[] = [];
+  const classes = new Map<string, DisplayLesson>();
+  for (const lesson of lessons) {
+    if (!lesson.lessonGroupId) {
+      result.push(lesson);
+      continue;
+    }
+    const key = `${lesson.lessonGroupId}|${new Date(lesson.startAt).getTime()}`;
+    const existing = classes.get(key);
+    if (existing) {
+      existing.groupMembers!.push(lesson);
+      if (new Date(lesson.endAt) > new Date(existing.endAt)) existing.endAt = lesson.endAt;
+      continue;
+    }
+    const entry: DisplayLesson = { ...lesson, id: `group-${key}`, studentName: lesson.lessonGroupName ?? "Grup dersi", groupMembers: [lesson] };
+    classes.set(key, entry);
+    result.push(entry);
+  }
+  for (const entry of classes.values()) entry.groupMembers!.sort((a, b) => a.studentName.localeCompare(b.studentName, "tr-TR"));
+  return result;
+}
+
+function groupHeadcount(lesson: DisplayLesson) {
+  if (!lesson.groupMembers) return null;
+  return `${lesson.groupMembers.length}${lesson.lessonGroupCapacity ? `/${lesson.lessonGroupCapacity}` : ""} öğrenci`;
+}
+
 function isShownOnCalendar(lesson: CalendarLesson) {
   return lesson.status !== "Rescheduled" && lesson.status !== "Cancelled";
 }
@@ -316,6 +349,8 @@ function CalendarPageContent() {
     const matchesStudent = studentFilter === "all" || lesson.studentId === studentFilter;
     return matchesInstrument && matchesTeacher && matchesStudent;
   }), [instrumentFilter, studentFilter, teacherFilter, timelineLessons]);
+  const displayLessons = useMemo(() => collapseGroupLessons(visibleLessons), [visibleLessons]);
+  const displayTimelineLessons = useMemo(() => collapseGroupLessons(visibleTimelineLessons), [visibleTimelineLessons]);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const isCurrentWeek = startOfWeek(now).getTime() === weekStart.getTime();
   const colors = useMemo(() => buildInstrumentColorMap([...lessons, ...timelineLessons].map((lesson) => lesson.instrumentName)), [lessons, timelineLessons]);
@@ -324,7 +359,8 @@ function CalendarPageContent() {
     [visibleLessons],
   );
   const hourWindow = useMemo(() => computeHourWindow(visibleLessons), [visibleLessons]);
-  const totalMinutes = useMemo(() => visibleLessons.reduce((total, lesson) => total + lessonDurationMinutes(lesson), 0), [visibleLessons]);
+  // Grup dersi bir ders sayılır (öğretmenin bir saati), öğrenci sayısı kadar değil.
+  const totalMinutes = useMemo(() => displayLessons.reduce((total, lesson) => total + lessonDurationMinutes(lesson), 0), [displayLessons]);
   const activeFilterCount = Number(instrumentFilter !== "Hepsi")
     + Number(isAdmin && teacherFilter !== "all")
     + Number(isAdmin && studentFilter !== "all");
@@ -345,7 +381,7 @@ function CalendarPageContent() {
       <header>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <h1 className="font-serif text-[1.45rem] font-bold tracking-[-0.01em] sm:text-[1.7rem]">Ders Programı</h1>
-          <p className="text-xs font-semibold text-[var(--muted)]">{visibleLessons.length} ders · {formatLessonTotal(totalMinutes)}</p>
+          <p className="text-xs font-semibold text-[var(--muted)]">{displayLessons.length} ders · {formatLessonTotal(totalMinutes)}</p>
           {/* Renk açıklaması: dar kartlarda enstrüman adı yazılamadığı için hangi rengin hangi
               ders olduğu burada okunur. Yalnızca bu haftanın görünen enstrümanları listelenir. */}
           {legendInstruments.length > 0 && (
@@ -488,7 +524,7 @@ function CalendarPageContent() {
         <div className="grid items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_17.5rem]">
           <WeeklyGrid
             weekDays={weekDays}
-            lessons={visibleLessons}
+            lessons={displayLessons}
             loading={isLoading}
             colors={colors}
             isAdmin={isAdmin}
@@ -498,7 +534,7 @@ function CalendarPageContent() {
             onDoubleClickSlot={(slot) => { setQuickAddSlot(slot); setShowMakeupScheduler(false); setMakeupContext(null); setShowSeriesForm(false); }}
             onPlanMakeup={planMakeup}
           />
-          <UpcomingLessonsRail lessons={visibleTimelineLessons} colors={colors} now={now} loading={timelineLoading} error={timelineError} retrying={timelineFetching} onRetry={() => void refetchTimeline()} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
+          <UpcomingLessonsRail lessons={displayTimelineLessons} colors={colors} now={now} loading={timelineLoading} error={timelineError} retrying={timelineFetching} onRetry={() => void refetchTimeline()} onOpenWeek={() => setWeekStart(startOfWeek(new Date()))} />
         </div>
       )}
     </div>
@@ -518,7 +554,7 @@ function WeeklyGrid({
   onPlanMakeup,
 }: {
   weekDays: Date[];
-  lessons: CalendarLesson[];
+  lessons: DisplayLesson[];
   loading: boolean;
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
@@ -539,6 +575,8 @@ function WeeklyGrid({
   const [hoverSlot, setHoverSlot] = useState<{ day: string; minutes: number; label: string; heightPercent: number } | null>(null);
   const [toast, setToast] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [openLesson, setOpenLesson] = useState<CalendarLesson | null>(null);
+  const [openClass, setOpenClass] = useState<DisplayLesson | null>(null);
+  const openEntry = (lesson: DisplayLesson) => (lesson.groupMembers ? setOpenClass(lesson) : setOpenLesson(lesson));
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   // Taşıma hatası pencerenin İÇİNDE gösterilir: toast pencerenin arka planında kalıyordu ve
   // kullanıcı işlemin neden olmadığını göremiyordu (pencere açık, hiçbir şey değişmiyor).
@@ -760,7 +798,7 @@ function WeeklyGrid({
               onDragOverColumn={(event) => handleDragOver(event, day)}
               onDropColumn={(event) => handleDrop(event, day)}
               onDoubleClickColumn={(event) => handleDoubleClick(event, day)}
-              onOpenLesson={setOpenLesson}
+              onOpenLesson={openEntry}
               now={now}
             />
           ))}
@@ -779,13 +817,25 @@ function WeeklyGrid({
                 {WEEK_DAYS_TR[index]}
               </h3>
               <div className="space-y-2 sm:pl-9">
-                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} onOpen={() => setOpenLesson(lesson)} />)}
+                {dayLessons.map((lesson) => <AgendaLessonCard key={lesson.id} lesson={lesson} tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]} showTeacher={isAdmin} active={isLessonActive(lesson, now)} onOpen={() => openEntry(lesson)} />)}
                 {!dayLessons.length && <p className="py-2 text-xs text-[var(--muted)]">Planlanmış ders yok.</p>}
               </div>
             </div>
           );
         })}
       </div>
+      {openClass?.groupMembers && (
+        <LessonGroupDialog
+          lessons={openClass.groupMembers}
+          title={openClass.lessonGroupName ?? "Grup dersi"}
+          subtitle={`${groupHeadcount(openClass)} · ${openClass.instrumentName}${isAdmin ? ` · ${openClass.teacherName}` : ""}`}
+          colors={colors}
+          isAdmin={isAdmin}
+          now={now}
+          onOpenLesson={(lesson) => { setOpenClass(null); setOpenLesson(lesson); }}
+          onClose={() => setOpenClass(null)}
+        />
+      )}
       {openLesson && <LessonDetailsDialog lesson={openLesson} isAdmin={isAdmin} canManage={canSchedule} now={now} onUpdated={(message) => showToast("success", message ?? "Ders ayrıntıları güncellendi.")} onPlanMakeup={(lesson) => { setOpenLesson(null); onPlanMakeup(lesson); }} onClose={() => setOpenLesson(null)} />}
     </section>
   );
@@ -929,7 +979,7 @@ function GridDayColumn({
   now,
 }: {
   day: Date;
-  lessons: CalendarLesson[];
+  lessons: DisplayLesson[];
   colors: Map<string, InstrumentTone>;
   isAdmin: boolean;
   canManage: boolean;
@@ -942,7 +992,7 @@ function GridDayColumn({
   onDragOverColumn: (event: DragEvent<HTMLDivElement>) => void;
   onDropColumn: (event: DragEvent<HTMLDivElement>) => void;
   onDoubleClickColumn: (event: MouseEvent<HTMLDivElement>) => void;
-  onOpenLesson: (lesson: CalendarLesson) => void;
+  onOpenLesson: (lesson: DisplayLesson) => void;
   now: Date;
 }) {
   const entries = lessons.filter((lesson) => new Date(lesson.startAt).toDateString() === day.toDateString());
@@ -995,6 +1045,19 @@ function GridDayColumn({
           );
         }
         const { lesson, position } = block;
+        if (lesson.groupMembers) {
+          return (
+            <ClassCard
+              key={lesson.id}
+              lesson={lesson}
+              position={position}
+              tone={colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0]}
+              showTeacher={isAdmin}
+              now={now}
+              onOpen={() => onOpenLesson(lesson)}
+            />
+          );
+        }
         const start = new Date(lesson.startAt);
         const end = new Date(lesson.endAt);
         const tone = colors.get(lesson.instrumentName) ?? INSTRUMENT_TONES[0];
@@ -1072,11 +1135,11 @@ function GridDayColumn({
 const MAX_SIDE_BY_SIDE = 2;
 
 type GridBlock =
-  | { kind: "lesson"; lesson: CalendarLesson; position: LessonLayout }
+  | { kind: "lesson"; lesson: DisplayLesson; position: LessonLayout }
   | { kind: "group"; lessons: CalendarLesson[]; top: number; height: number };
 
-function buildGridBlocks(entries: CalendarLesson[], layout: Map<string, LessonLayout>): GridBlock[] {
-  const clusters = new Map<number, { lesson: CalendarLesson; position: LessonLayout }[]>();
+function buildGridBlocks(entries: DisplayLesson[], layout: Map<string, LessonLayout>): GridBlock[] {
+  const clusters = new Map<number, { lesson: DisplayLesson; position: LessonLayout }[]>();
   for (const lesson of entries) {
     const position = layout.get(lesson.id);
     if (!position) continue;
@@ -1094,12 +1157,70 @@ function buildGridBlocks(entries: CalendarLesson[], layout: Map<string, LessonLa
     const bottom = Math.max(...members.map((member) => member.position.top + member.position.height));
     blocks.push({
       kind: "group",
-      lessons: members.map((member) => member.lesson).sort((a, b) => a.startAt.localeCompare(b.startAt) || a.studentName.localeCompare(b.studentName, "tr-TR")),
+      // Taşan kümede grup dersi öğrencileri tek tek listelenir (pencere ders bazında açılır).
+      lessons: members.flatMap((member) => member.lesson.groupMembers ?? [member.lesson]).sort((a, b) => a.startAt.localeCompare(b.startAt) || a.studentName.localeCompare(b.studentName, "tr-TR")),
       top,
       height: bottom - top,
     });
   }
   return blocks;
+}
+
+// Grup dersi sınıf kartı: tek ders kartıyla aynı yerde ve renkte, ama öğrenci adı yerine grup
+// adı, doluluk ve öğrenci baş harfleri. Sürüklenmez - grubun saati Grup dersleri ekranından
+// değişir; tek öğrencinin dersi açılan listeden düzenlenir (iptal, yoklama, taşıma).
+function ClassCard({ lesson, position, tone, showTeacher, now, onOpen }: { lesson: DisplayLesson; position: LessonLayout; tone: InstrumentTone; showTeacher: boolean; now: Date; onOpen: () => void }) {
+  const members = lesson.groupMembers ?? [];
+  const start = new Date(lesson.startAt);
+  const end = new Date(lesson.endAt);
+  const isPast = end.getTime() <= now.getTime();
+  const active = members.some((member) => isLessonActive(member, now));
+  const split = position.columns > 1;
+  const gapPx = 4;
+  const width = `calc(${100 / position.columns}% - ${gapPx + (split ? 0 : 4)}px)`;
+  const left = `calc(${(position.column / position.columns) * 100}% + ${gapPx / 2 + (split ? 0 : 2)}px)`;
+  const flagged = members.find((member) => member.rsvpResponse === "NotAttending" && rsvpAlert(member)) ?? members.find((member) => rsvpAlert(member));
+  const shown = members.slice(0, split ? 3 : 6);
+  return (
+    <button
+      type="button"
+      data-testid={`calendar-class-${lesson.lessonGroupId}`}
+      onClick={onOpen}
+      onDoubleClick={(event) => event.stopPropagation()}
+      title={`${lesson.studentName} · ${groupHeadcount(lesson)} · ${lesson.teacherName}`}
+      aria-label={`Grup dersi ${lesson.studentName}, ${lesson.instrumentName}, ${formatTime(start)} - ${formatTime(end)}, ${groupHeadcount(lesson)}${isPast ? ", geçmiş ders" : ""}. Öğrenci listesini aç`}
+      className={`pressable absolute z-10 flex flex-col overflow-hidden rounded-lg border-2 border-dashed px-2.5 py-1 text-left shadow-[0_1px_2px_rgba(80,48,24,.08)] hover:z-20 hover:shadow-md ${isPast ? "opacity-70" : ""} ${active ? "ring-2 ring-[var(--brand)] ring-offset-1" : ""}`}
+      style={{ top: `${position.top * 100}%`, height: `${position.height * 100}%`, left, width, minHeight: `${LESSON_CARD_MIN_HEIGHT_REM}rem`, background: tone.bg, borderColor: tone.border, color: tone.text }}
+    >
+      <InstrumentSilhouette
+        instrumentName={lesson.instrumentName}
+        className="pointer-events-none absolute bottom-0 right-0 aspect-square h-auto w-[min(4.1rem,55%)] translate-x-[18%] translate-y-[24%] opacity-15"
+        style={{ color: tone.border }}
+      />
+      <span className="relative flex min-w-0 items-center gap-1.5">
+        <span className="shrink-0 rounded px-1 text-[.65rem] font-extrabold uppercase tracking-[.06em] text-white" style={{ background: tone.border }}>Grup</span>
+        <span className="min-w-0 flex-1 truncate text-[.8rem] font-bold leading-tight">{lesson.studentName}</span>
+        {flagged && <RsvpAlertBadge lesson={flagged} />}
+      </span>
+      <span className="relative mt-0.5 block truncate text-[.75rem] tabular-nums opacity-80">
+        {split ? formatTime(start) : `${formatTime(start)} – ${formatTime(end)}`} · {groupHeadcount(lesson)}
+      </span>
+      <span className="relative mt-1 flex min-w-0 items-center">
+        {shown.map((member, index) => (
+          <span
+            key={member.id}
+            className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.5px] border-white bg-white/80 text-[.6rem] font-extrabold ${index > 0 ? "-ml-1.5" : ""}`}
+            style={{ color: tone.text, boxShadow: `inset 0 0 0 1.5px ${tone.border}`, zIndex: shown.length - index }}
+            aria-hidden="true"
+          >
+            {studentInitials(member.studentName)}
+          </span>
+        ))}
+        {members.length > shown.length && <span className="ml-1 text-[.65rem] font-bold">+{members.length - shown.length}</span>}
+      </span>
+      {showTeacher && !split && lessonDurationMinutes(lesson) >= 60 && <span className="relative mt-auto block truncate text-[.75rem] opacity-65">{lesson.teacherName}</span>}
+    </button>
+  );
 }
 
 function LessonGroupCard({ lessons, top, height, colors, now, onOpen }: { lessons: CalendarLesson[]; top: number; height: number; colors: Map<string, InstrumentTone>; now: Date; onOpen: () => void }) {
@@ -1150,14 +1271,14 @@ function LessonGroupCard({ lessons, top, height, colors, now, onOpen }: { lesson
   );
 }
 
-function LessonGroupDialog({ lessons, colors, isAdmin, now, onOpenLesson, onClose }: { lessons: CalendarLesson[]; colors: Map<string, InstrumentTone>; isAdmin: boolean; now: Date; onOpenLesson: (lesson: CalendarLesson) => void; onClose: () => void }) {
+function LessonGroupDialog({ lessons, title, subtitle, colors, isAdmin, now, onOpenLesson, onClose }: { lessons: CalendarLesson[]; title?: string; subtitle?: string; colors: Map<string, InstrumentTone>; isAdmin: boolean; now: Date; onOpenLesson: (lesson: CalendarLesson) => void; onClose: () => void }) {
   const first = new Date(lessons[0]!.startAt);
   const last = new Date(Math.max(...lessons.map((lesson) => new Date(lesson.endAt).getTime())));
   return (
     <Modal
       open
-      title={`Çakışan ${lessons.length} ders`}
-      description={`${first.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · ${formatTime(first)} – ${formatTime(last)}`}
+      title={title ?? `Çakışan ${lessons.length} ders`}
+      description={`${first.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })} · ${formatTime(first)} – ${formatTime(last)}${subtitle ? ` · ${subtitle}` : ""}`}
       onClose={onClose}
     >
       <ul className="space-y-1.5">
@@ -1199,7 +1320,7 @@ function LessonGroupDialog({ lessons, colors, isAdmin, now, onOpenLesson, onClos
   );
 }
 
-function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }: { lesson: CalendarLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; onOpen: () => void }) {
+function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }: { lesson: DisplayLesson; tone: InstrumentTone; showTeacher: boolean; active?: boolean; onOpen: () => void }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   const time = `${formatTime(start)}–${formatTime(end)}`;
@@ -1216,7 +1337,7 @@ function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }:
         </span>
         <span className="block truncate text-[.75rem] text-[var(--muted)]">
           <span className="font-bold tabular-nums sm:hidden" style={{ color: tone.text }}>{time} · </span>
-          {lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}
+          {groupHeadcount(lesson) ? `${groupHeadcount(lesson)} · ` : ""}{lesson.instrumentName}{showTeacher ? ` · ${lesson.teacherName}` : ""}
         </span>
       </span>
       <LessonStatusChip lesson={lesson} />
@@ -1320,7 +1441,7 @@ function UpcomingLessonsRail({
   );
 }
 
-function ActiveLessonCard({ lesson, tone, now }: { lesson: CalendarLesson; tone: InstrumentTone; now: Date }) {
+function ActiveLessonCard({ lesson, tone, now }: { lesson: DisplayLesson; tone: InstrumentTone; now: Date }) {
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   const duration = Math.max(1, end.getTime() - start.getTime());
@@ -1335,7 +1456,7 @@ function ActiveLessonCard({ lesson, tone, now }: { lesson: CalendarLesson; tone:
           <span className="text-[.75rem] font-bold tabular-nums">{formatTime(start)}–{formatTime(end)}</span>
         </div>
         <h3 className="mt-3 text-sm font-extrabold">{lesson.studentName}</h3>
-        <p className="mt-1 text-[.75rem] font-semibold opacity-75">{lesson.instrumentName} · {lesson.teacherName}</p>
+        <p className="mt-1 text-[.75rem] font-semibold opacity-75">{groupHeadcount(lesson) ? `${groupHeadcount(lesson)} · ` : ""}{lesson.instrumentName} · {lesson.teacherName}</p>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/65">
           <span className="block h-full rounded-full transition-[width] duration-500" style={{ width: `${progress}%`, background: tone.border }} />
         </div>
@@ -1345,7 +1466,7 @@ function ActiveLessonCard({ lesson, tone, now }: { lesson: CalendarLesson; tone:
   );
 }
 
-function UpcomingLessonItem({ lesson, tone, now, first }: { lesson: CalendarLesson; tone: InstrumentTone; now: Date; first: boolean }) {
+function UpcomingLessonItem({ lesson, tone, now, first }: { lesson: DisplayLesson; tone: InstrumentTone; now: Date; first: boolean }) {
   const start = new Date(lesson.startAt);
   const tomorrow = addDays(now, 1);
   const dayLabel = start.toDateString() === now.toDateString()
@@ -1363,7 +1484,7 @@ function UpcomingLessonItem({ lesson, tone, now, first }: { lesson: CalendarLess
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[.75rem] font-extrabold">{lesson.studentName}</span>
-        <span className="mt-0.5 block truncate text-[.75rem] text-[var(--muted)]">{lesson.instrumentName} · {lesson.teacherName}</span>
+        <span className="mt-0.5 block truncate text-[.75rem] text-[var(--muted)]">{groupHeadcount(lesson) ? `${groupHeadcount(lesson)} · ` : ""}{lesson.instrumentName} · {lesson.teacherName}</span>
       </span>
       {first && <Icon name="chevron" className="h-3.5 w-3.5 shrink-0 text-[var(--brand)]" />}
     </article>

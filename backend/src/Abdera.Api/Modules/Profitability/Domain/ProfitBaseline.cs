@@ -31,8 +31,11 @@ public record ProfitBaseline(
     public decimal PriceOf(CourseKind kind) => kind == CourseKind.Group ? GroupPrice : IndividualPrice;
 
     // Öğrenci başına aylık katkı: indirim sonrası aidat - ayın ders ücretleri.
-    public decimal MarginPerStudent(CourseKind kind, decimal teacherRate) =>
-        PriceOf(kind) * (1 - AverageDiscountRate) - LessonsPerMonth * teacherRate;
+    // Grup dersinde öğretmen ders başı değil, aylık gelirin payını alır (docs/10-decisions.md AC):
+    // öğrenci başı kalan = aidat × (1 - pay). Birebirde ders başı ücret düşülür.
+    public decimal MarginPerStudent(CourseKind kind, decimal teacherRate) => kind == CourseKind.Group
+        ? PriceOf(kind) * (1 - AverageDiscountRate) * (1 - Billing.Domain.GroupLessonPay.SharePercent / 100m)
+        : PriceOf(kind) * (1 - AverageDiscountRate) - LessonsPerMonth * teacherRate;
 
     public decimal RateFor(Guid? instrumentId) =>
         Instruments.FirstOrDefault(row => row.Id == instrumentId)?.TeacherRate ?? AverageTeacherRate ?? 0;

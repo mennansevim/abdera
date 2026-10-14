@@ -12,6 +12,7 @@ public class LessonSeriesConfiguration : IEntityTypeConfiguration<LessonSeries>
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Id).HasColumnName("id");
         builder.Property(s => s.EnrollmentId).HasColumnName("enrollment_id");
+        builder.Property(s => s.LessonGroupId).HasColumnName("lesson_group_id");
         builder.Property(s => s.DayOfWeek).HasColumnName("day_of_week").HasConversion<int>();
         builder.Property(s => s.StartTime).HasColumnName("start_time");
         builder.Property(s => s.DurationMinutes).HasColumnName("duration_minutes");
@@ -22,5 +23,8 @@ public class LessonSeriesConfiguration : IEntityTypeConfiguration<LessonSeries>
         builder.Property(s => s.UpdatedAt).HasColumnName("updated_at");
 
         builder.HasIndex(s => s.EnrollmentId);
+        builder.HasIndex(s => s.LessonGroupId);
+        builder.HasOne<LessonGroup>().WithMany()
+            .HasForeignKey(s => s.LessonGroupId).OnDelete(DeleteBehavior.Restrict);
     }
 }

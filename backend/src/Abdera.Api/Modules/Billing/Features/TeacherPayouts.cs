@@ -107,6 +107,13 @@ public static class TeacherPayouts
             .ToDictionaryAsync(item => item.LessonId, item => item.Status);
         var payout = await db.TeacherWeeklyPayouts.AsNoTracking()
             .SingleOrDefaultAsync(item => item.TeacherId == teacherId && item.WeekStart == week.Start);
+        // Grup dersleri yoklama için listede kalır ama haftalık ödeme sayısına girmez (aylık pay).
+        var groupLessonIds = (await db.Lessons.AsNoTracking()
+                .Where(lesson => lessonIds.Contains(lesson.Id))
+                .OnlyGroupLessons(db)
+                .Select(lesson => lesson.Id)
+                .ToListAsync())
+            .ToHashSet();
 
         var lessons = rows
             .Select(row => new MyWeekLesson(row.Id, row.StartAt, row.StudentName, row.InstrumentName, row.Status,
@@ -115,7 +122,7 @@ public static class TeacherPayouts
         return Results.Ok(new MyWeekResponse(
             week.Start, week.End, week.End, week == TeacherPayWeek.Containing(todayLocal),
             // Ödeme haftasındaki tamamlanan sayı yönetici tablosuyla aynı tanım: Completed ders.
-            lessons.Count(lesson => lesson.Status == LessonStatus.Completed),
+            lessons.Count(lesson => lesson.Status == LessonStatus.Completed && !groupLessonIds.Contains(lesson.LessonId)),
             lessons.Count(lesson => lesson.Status != LessonStatus.Completed),
             payout is not null, payout?.PaidOn, lessons));
     }
@@ -302,9 +309,12 @@ public static class TeacherPayouts
         var fromAt = LessonGenerator.ToUtcInstant(week.Start, TimeOnly.MinValue, clock.SchoolTimeZone);
         var toAt = LessonGenerator.ToUtcInstant(week.ExclusiveEnd, TimeOnly.MinValue, clock.SchoolTimeZone);
 
+        // Grup dersi satırları sayılmaz: grup öğretmeni aylık gelir payı alır (GroupLessonPay,
+        // docs/10-decisions.md AC) - burada da sayılsaydı aynı ders iki kez ödenirdi.
         var query = db.Lessons.AsNoTracking()
             .Where(lesson => lesson.Status == LessonStatus.Completed
-                && lesson.StartAt >= fromAt && lesson.StartAt < toAt);
+                && lesson.StartAt >= fromAt && lesson.StartAt < toAt)
+            .WithoutGroupLessons(db);
         if (teacherId is { } id) query = query.Where(lesson => lesson.TeacherId == id);
 
         var rows = await query

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { MonthInput } from "@/components/month-input";
-import { TeacherPayoutForm } from "@/components/teacher-payout-form";
+import { TeacherGroupPayoutForm, TeacherPayoutForm } from "@/components/teacher-payout-form";
 import { AdminGate, FormActions, FormMessage, Modal, PageHeader, Panel, RowMenu, RowMenuItem, SearchInput, SectionHeader, Segmented, StatStrip } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
@@ -878,19 +878,23 @@ function LedgerRow({ title, meta, amount, tone }: { title: string; meta: string;
 
 // Tek "Gider ekle" girişi, üç tür: her ay tekrar eden kalem (varsayılan - kullanıcı isteği:
 // "her ay girilmesin"), tarihli tek seferlik gider ya da öğretmenin haftalık ders ödemesi
-// (docs/10-decisions.md O1 - tutarı tamamlanan dersten sunucu hesaplar, ayrı form bileşeni).
-type ExpenseKind = "recurring" | "oneOff" | "weekly";
-const KIND_LABEL: [ExpenseKind, string][] = [["recurring", "Her ay tekrar eden"], ["oneOff", "Tek seferlik"], ["weekly", "Haftalık"]];
+// (docs/10-decisions.md O1 - tutarı tamamlanan dersten sunucu hesaplar, ayrı form bileşeni) ya da
+// grup dersi öğretmeninin aylık gelir payı (AC - grup aidatlarının %40'ı).
+type ExpenseKind = "recurring" | "oneOff" | "weekly" | "groupMonthly";
+const KIND_LABEL: [ExpenseKind, string][] = [["recurring", "Her ay tekrar eden"], ["oneOff", "Tek seferlik"], ["weekly", "Haftalık"], ["groupMonthly", "Aylık grup"]];
 
 function CreateExpenseForm({ initialKind, initialTeacherId, initialWeek, initialDate, initialMonth, initialCategory, onClose }: { initialKind: ExpenseKind; initialTeacherId?: string; initialWeek?: string; initialDate: string | null; initialMonth: string; initialCategory: ExpenseCategory; onClose: () => void }) {
   const [kind, setKind] = useState<ExpenseKind>(initialKind);
   const tabs = (
-    <div className="grid grid-cols-3 rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Gider türü">
+    <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] p-1 sm:grid-cols-4" role="group" aria-label="Gider türü">
       {KIND_LABEL.map(([value, label]) => (
         <button key={value} type="button" onClick={() => setKind(value)} aria-pressed={kind === value} className={`pressable min-h-10 rounded-lg px-2 text-xs font-bold ${kind === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
       ))}
     </div>
   );
+  if (kind === "groupMonthly") {
+    return <div className="space-y-3.5">{tabs}<TeacherGroupPayoutForm onClose={onClose} /></div>;
+  }
   if (kind === "weekly") {
     return <div className="space-y-3.5">{tabs}<TeacherPayoutForm initialTeacherId={initialTeacherId} initialWeek={initialWeek} onClose={onClose} /></div>;
   }

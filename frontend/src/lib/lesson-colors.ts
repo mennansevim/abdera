@@ -21,6 +21,10 @@ const FIXED_TONE_INDEX: Record<string, number> = {
   gitar: 1,
   keman: 2,
   bateri: 3,
+  // Resim (grup dersi) ve Çello sabitlenir: hash ikisini aynı tona düşürebiliyordu ve grup
+  // kartı takvimde bireysel derslerden renkle de ayrışmalı.
+  resim: 4,
+  "çello": 5,
 };
 
 function toneIndexFor(name: string): number {

@@ -23,6 +23,7 @@ const CORE_LINKS: NavItem[] = [
   { href: "/dashboard/library", label: "Kütüphane", icon: "note", section: "Eğitim" },
   { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers", section: "Eğitim" },
   { href: "/dashboard/calendar", label: "Takvim", icon: "calendar", section: "Planlama" },
+  { href: "/dashboard/groups", label: "Grup dersleri", icon: "students", section: "Planlama" },
   { href: "/dashboard/shows", label: "Yıl Sonu Gösterisi", icon: "music", section: "Planlama" },
 ];
 
