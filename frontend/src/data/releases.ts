@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.14",
+    date: "2026-10-14",
+    items: [
+      { audience: "admin", text: "Yeni \"Veli girişleri\" ekranı: veliye 6 haneli şifre verebilir, verdiğiniz şifreyi veli kendi şifresini belirleyene kadar tekrar görebilirsiniz. Veli giriş ekranında şifresini bilmeyen veliye okul yönetiminden yeni şifre istemesi söylenir." },
+      { audience: "admin", text: "Müsaitlik ekranındaki \"Veliye seçenekleri kopyala\" artık her günün yalnızca ilk boş saatini değil, tüm boş aralıklarını yazar (örneğin \"Cuma 15:00–19:00 arası\")." },
+    ],
+  },
+  {
     version: "2026.10.13.4",
     date: "2026-10-13",
     items: [
