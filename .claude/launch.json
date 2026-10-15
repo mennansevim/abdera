@@ -15,6 +15,18 @@
       ],
       "port": 3001,
       "autoPort": false
+    },
+    {
+      "name": "platform-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "platform/web",
+        "run",
+        "dev"
+      ],
+      "port": 3100,
+      "autoPort": false
     }
   ]
 }
