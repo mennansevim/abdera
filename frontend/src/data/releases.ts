@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.15.3",
+    date: "2026-10-15",
+    items: [
+      { audience: "all", text: "Ayarlar'da artık kendine bir görünen ad seçebilirsin; menüdeki kullanıcı kartında ve karşılama ekranında bu ad görünür. Öğretmenler ad seçmezse kendi adlarıyla görünür." },
+    ],
+  },
+  {
     version: "2026.10.15.2",
     date: "2026-10-15",
     items: [
