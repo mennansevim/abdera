@@ -11,5 +11,7 @@ public static class InstanceModule
         app.MapInstanceConfig();
         app.MapSchoolProfile();
         app.MapSchoolPolicy();
+        app.MapInstanceProvisioning();
+        app.MapInstanceTelemetry();
     }
 }

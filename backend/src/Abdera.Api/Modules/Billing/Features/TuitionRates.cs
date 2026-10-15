@@ -54,8 +54,18 @@ public static class TuitionRates
             });
 
         var now = clock.UtcNow;
-        var actorId = AuthContext.GetUserId(principal);
+        var rate = await AddRateAsync(request, AuthContext.GetUserId(principal), db, now);
+        await db.SaveChangesAsync();
 
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
+        return Results.Created($"/api/tuition-rates/{rate.Id}", ToResponse(rate, today));
+    }
+
+    // Tarife açmanın tek yeri: yönetici ekranı ve okul kurulumu (InstanceProvisioning) aynı kuralı
+    // (önceki açık tarifeyi bir gün öncesinden kapat, geçmişi kapsayan tarifeyi en eskiden önce kapat)
+    // kullanır. Kaydetmez; çağıran SaveChanges yapar ki kurulum tek transaction'da kalsın.
+    internal static async Task<TuitionRate> AddRateAsync(CreateRequest request, Guid? actorId, AbderaDbContext db, DateTimeOffset now)
+    {
         // Aynı ders türünün açık uçlu tarifesi varsa yeni tarifenin BİR GÜN ÖNCESİNDE
         // kapatılır - böylece hiçbir gün iki tarifeye birden düşmez ve DB'deki
         // "tür başına tek açık tarife" unique index'i ihlal edilmez.
@@ -110,10 +120,7 @@ public static class TuitionRates
                 effectiveUntil = rate.EffectiveUntil,
             })));
 
-        await db.SaveChangesAsync();
-
-        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
-        return Results.Created($"/api/tuition-rates/{rate.Id}", ToResponse(rate, today));
+        return rate;
     }
 
     private static TuitionRateResponse ToResponse(TuitionRate rate, DateOnly today) => new(
