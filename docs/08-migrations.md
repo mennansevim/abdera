@@ -364,3 +364,7 @@ telafi bildirim süresi (saat), telafi hakkı geçerliliği ve mazeretli telafi 
 başlangıçtan sonra, sayılar pozitif. Satır yoksa bugünkü değerler geçerlidir (koddaki sabitler ve `Policy:*`
 yapılandırması), yani migration tek başına hiçbir davranışı değiştirmez. Kişiye/derse/aidata referans yok,
 `PersonEraser` değişmez. `Down()` tabloyu düşürür.
+
+**AddSchoolProfileContact** (Instance, yalnızca `arch/multi-tenant` branch'i): `school_profile`'a iki boş bırakılabilir
+kolon - `legal_name varchar(200)` (gizlilik metnindeki veri sorumlusu unvanı) ve `contact_email varchar(254)` (KVKK
+başvuru adresi). Yalnızca ekleme; boşken gizlilik sayfası bugünkü Abdera metnini gösterir. `Down()` kolonları düşürür.

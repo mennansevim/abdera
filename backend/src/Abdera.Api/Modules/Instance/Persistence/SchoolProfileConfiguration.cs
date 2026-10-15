@@ -14,6 +14,8 @@ public class SchoolProfileConfiguration : IEntityTypeConfiguration<SchoolProfile
         builder.Property(p => p.Name).HasColumnName("name").HasMaxLength(SchoolProfile.MaxNameLength).IsRequired();
         builder.Property(p => p.ShortName).HasColumnName("short_name").HasMaxLength(SchoolProfile.MaxShortNameLength).IsRequired();
         builder.Property(p => p.PrimaryColor).HasColumnName("primary_color").HasMaxLength(7);
+        builder.Property(p => p.LegalName).HasColumnName("legal_name").HasMaxLength(SchoolProfile.MaxLegalNameLength);
+        builder.Property(p => p.ContactEmail).HasColumnName("contact_email").HasMaxLength(SchoolProfile.MaxContactEmailLength);
         builder.Property(p => p.Logo).HasColumnName("logo");
         builder.Property(p => p.LogoContentType).HasColumnName("logo_content_type").HasMaxLength(20);
         builder.Property(p => p.LogoVersion).HasColumnName("logo_version");

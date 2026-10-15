@@ -27,7 +27,7 @@ public static class InstanceProvisioning
     public const int MinTemporaryPasswordLength = 12;
 
     public record AdminRequest(string Email, string TemporaryPassword, string? DisplayName);
-    public record ProfileRequest(string Name, string ShortName, string? PrimaryColor, string? LogoBase64);
+    public record ProfileRequest(string Name, string ShortName, string? PrimaryColor, string? LogoBase64, string? LegalName = null, string? ContactEmail = null);
     public record PolicyRequest(
         decimal GroupLessonSharePercent, int MaxWeeklyLessons, int MakeupNoticeHours, int MakeupCreditValidDays,
         int ExcusedMakeupWindowDays, TimeOnly SchoolDayStart, TimeOnly SchoolDayEnd);
@@ -77,6 +77,7 @@ public static class InstanceProvisioning
 
         var profile = SchoolProfile.CreateDefault(now);
         profile.UpdateIdentity(request.Profile.Name, request.Profile.ShortName, request.Profile.PrimaryColor, admin.Id, now);
+        profile.UpdateContact(request.Profile.LegalName, request.Profile.ContactEmail, admin.Id, now);
         if (!string.IsNullOrWhiteSpace(request.Profile.LogoBase64))
         {
             byte[] logo;

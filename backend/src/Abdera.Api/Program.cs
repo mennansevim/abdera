@@ -234,6 +234,10 @@ if (string.Equals(emailProvider, "Smtp", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 }
+else if (string.Equals(emailProvider, "Disabled", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IEmailSender, DisabledEmailSender>();
+}
 else
 {
     builder.Services.AddSingleton<IEmailSender, FakeEmailSender>();

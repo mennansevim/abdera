@@ -39,14 +39,18 @@ function ProfileForm({ profile }: { profile: SchoolProfile }) {
   const update = useUpdateSchoolProfile();
   const [name, setName] = useState(profile.name);
   const [shortName, setShortName] = useState(profile.shortName);
+  const [legalName, setLegalName] = useState(profile.legalName ?? "");
+  const [contactEmail, setContactEmail] = useState(profile.contactEmail ?? "");
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const changed = name.trim() !== profile.name || shortName.trim() !== profile.shortName;
+  const changed = name.trim() !== profile.name || shortName.trim() !== profile.shortName
+    || legalName.trim() !== (profile.legalName ?? "") || contactEmail.trim() !== (profile.contactEmail ?? "");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMessage(null);
     try {
-      await update.mutateAsync({ name, shortName, primaryColor: profile.primaryColor });
+      // Boş metin sunucuda alanı temizler (unvan/e-posta isteğe bağlı).
+      await update.mutateAsync({ name, shortName, primaryColor: profile.primaryColor, legalName, contactEmail });
       setMessage({ tone: "success", text: "Okul bilgileri kaydedildi." });
     } catch (err) {
       setMessage({ tone: "error", text: describe(err, "Okul bilgileri kaydedilemedi.") });
@@ -62,6 +66,13 @@ function ProfileForm({ profile }: { profile: SchoolProfile }) {
         <label className="form-label">Kısa ad
           <input value={shortName} onChange={(event) => setShortName(event.target.value)} required maxLength={40} className="field text-sm" placeholder="Örn. Abdera" />
           <span className="text-meta mt-1 block font-normal">Menüde büyük yazılır. Tam ad kısa adla başlıyorsa kalanı alt satırda görünür.</span>
+        </label>
+        <label className="form-label">Resmi unvan (isteğe bağlı)
+          <input value={legalName} onChange={(event) => setLegalName(event.target.value)} maxLength={200} className="field text-sm" placeholder="Örn. Deniz Müzik Eğitim Ltd. Şti." />
+          <span className="text-meta mt-1 block font-normal">Gizlilik metninde veri sorumlusu olarak yazılır; boşsa okulun tam adı kullanılır.</span>
+        </label>
+        <label className="form-label">KVKK iletişim e-postası (isteğe bağlı)
+          <input type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} maxLength={254} className="field text-sm" placeholder="kvkk@okulunuz.com" />
         </label>
       </div>
       {message && <FormMessage tone={message.tone}>{message.text}</FormMessage>}

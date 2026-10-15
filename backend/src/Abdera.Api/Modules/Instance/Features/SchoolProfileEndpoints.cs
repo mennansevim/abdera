@@ -11,7 +11,8 @@ namespace Abdera.Api.Modules.Instance.Features;
 // sunulur çünkü giriş ekranında (oturum açılmadan) da görünür.
 public static class SchoolProfileEndpoints
 {
-    public record UpdateRequest(string Name, string ShortName, string? PrimaryColor);
+    // LegalName/ContactEmail verilmezse (eski istemci) dokunulmaz; boş metin alanı temizler.
+    public record UpdateRequest(string Name, string ShortName, string? PrimaryColor, string? LegalName = null, string? ContactEmail = null);
 
     public static void MapSchoolProfile(this IEndpointRouteBuilder app)
     {
@@ -48,14 +49,16 @@ public static class SchoolProfileEndpoints
         var now = clock.UtcNow;
         var actorId = AuthContext.GetUserId(principal);
         var profile = await LoadOrCreateAsync(db, now);
-        var before = JsonSerializer.Serialize(new { profile.Name, profile.ShortName, profile.PrimaryColor });
+        var before = JsonSerializer.Serialize(new { profile.Name, profile.ShortName, profile.PrimaryColor, profile.LegalName, profile.ContactEmail });
 
         profile.UpdateIdentity(request.Name, request.ShortName, request.PrimaryColor, actorId, now);
+        if (request.LegalName is not null || request.ContactEmail is not null)
+            profile.UpdateContact(request.LegalName ?? profile.LegalName, request.ContactEmail ?? profile.ContactEmail, actorId, now);
 
         db.AuditLogs.Add(AuditLog.Record(
             actorId, "school_profile.updated", nameof(SchoolProfile), profile.Id, now,
             beforeJson: before,
-            afterJson: JsonSerializer.Serialize(new { profile.Name, profile.ShortName, profile.PrimaryColor })));
+            afterJson: JsonSerializer.Serialize(new { profile.Name, profile.ShortName, profile.PrimaryColor, profile.LegalName, profile.ContactEmail })));
         await db.SaveChangesAsync();
 
         return Results.Ok(InstanceConfig.ToProfileResponse(profile));

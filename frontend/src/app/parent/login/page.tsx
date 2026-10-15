@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
+import { useDemoEnabled } from "@/lib/instance";
 import { ApiError } from "@/lib/api";
 import {
   useDebugGuardianLogin,
@@ -13,10 +14,9 @@ import {
 } from "@/lib/guardian-auth";
 
 const EXAMPLE_GUARDIAN_PHONE = "0555 000 00 01";
-// login/page.tsx'teki DEMO_ENABLED ile aynı bayrak - üretimde (Demo:Enabled=false) backend
+// login/page.tsx'teki demo bayrağıyla aynı (useDemoEnabled) - üretimde (Demo:Enabled=false) backend
 // /api/guardian/debug-login'i hiç kaydetmiyor, bu yüzden örnek numara ve "demo veli" butonu da
 // gerçek bir veliyi yanıltmasın diye burada gizlenir.
-const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 
 // docs/10-decisions.md Karar F (ikinci) reversal: veli artık telefon + KALICI ŞİFRE ile giriş
 // yapar (şifreyi okul verir, docs/10-decisions.md AA; veli portaldan değiştirebilir). WhatsApp OTP ikincil
@@ -43,7 +43,14 @@ export default function GuardianLoginPage() {
   const debugLogin = useDebugGuardianLogin();
   const codeRef = useRef<HTMLInputElement>(null);
 
-  const [phoneNumber, setPhoneNumber] = useState(DEMO_ENABLED ? EXAMPLE_GUARDIAN_PHONE : "");
+  const demoEnabled = useDemoEnabled();
+  const [phoneNumber, setPhoneNumber] = useState("");
+  // Demo bayrağı yapılandırmayla gelir; örnek numara alan boşken bir kez doldurulur.
+  const [prefilled, setPrefilled] = useState(false);
+  if (demoEnabled && !prefilled && phoneNumber === "") {
+    setPrefilled(true);
+    setPhoneNumber(EXAMPLE_GUARDIAN_PHONE);
+  }
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<Mode>("password");
@@ -247,9 +254,9 @@ export default function GuardianLoginPage() {
             </form>
           )}
 
-          {/* Demo veli - yalnızca dev/demo backend'inde çalışır, üretimde DEMO_ENABLED false
+          {/* Demo veli - yalnızca dev/demo backend'inde çalışır, üretimde demo bayrağı false
               olduğundan hem bu buton hem backend ucu (guardian/debug-login) birlikte kapanır. */}
-          {DEMO_ENABLED && (
+          {demoEnabled && (
             <button
               type="button"
               onClick={handleDebugLogin}

@@ -217,4 +217,33 @@ public class ProductionSecretsGuardTests
 
         Assert.Contains("Backup__EncryptionKey", ex.Message);
     }
+
+    // docs/multi-tenant/ARCHITECTURE.md §5.2 madde 7: WhatsApp'ı ve bankası kapalı okul Meta/banka
+    // sırrı girmek zorunda değil; açık modülün sırrı yine zorunlu.
+    [Fact]
+    public void Disabled_modules_do_not_require_their_secrets()
+    {
+        var configuration = CompleteProductionConfiguration();
+        foreach (var key in configuration.Keys.Where(key => key.StartsWith("WhatsApp:") || key.StartsWith("Banking:")).ToList())
+            configuration.Remove(key);
+        configuration["Modules:Enabled"] = "progress";
+
+        ProductionSecretsGuard.EnsureConfigured(BuildApp("Production", configuration));
+
+        configuration["Modules:Enabled"] = "progress,whatsapp";
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(BuildApp("Production", configuration)));
+        Assert.Contains("WhatsApp__Provider", ex.Message);
+    }
+
+    [Fact]
+    public void Short_platform_tokens_are_rejected()
+    {
+        var configuration = CompleteProductionConfiguration();
+        configuration["Telemetry:Token"] = "kisa";
+        configuration["Alerts:WebhookUrl"] = "http://platform.example/alerts";
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ProductionSecretsGuard.EnsureConfigured(BuildApp("Production", configuration)));
+        Assert.Contains("Telemetry__Token", ex.Message);
+        Assert.Contains("Alerts__WebhookUrl", ex.Message);
+    }
 }

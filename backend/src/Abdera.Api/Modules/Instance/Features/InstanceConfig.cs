@@ -9,10 +9,12 @@ namespace Abdera.Api.Modules.Instance.Features;
 public static class InstanceConfig
 {
     public record ModuleResponse(string Key, string Name, bool IsCore, bool Enabled, IReadOnlyList<string> Requires);
-    public record ProfileResponse(string Name, string ShortName, string? PrimaryColor, string? LogoUrl);
+    public record ProfileResponse(string Name, string ShortName, string? PrimaryColor, string? LogoUrl, string? LegalName, string? ContactEmail);
     // Okul günü saatleri gizli değil ve takvim ekranları açılışta ihtiyaç duyuyor (school_policy).
     public record SchoolDayResponse(TimeOnly Start, TimeOnly End);
-    public record ConfigResponse(ProfileResponse Profile, IReadOnlyList<ModuleResponse> Modules, SchoolDayResponse SchoolDay);
+    // Demo: tanıtım yayınında giriş ekranı örnek hesapları doldurur. Eskiden NEXT_PUBLIC_DEMO_ENABLED
+    // ile derleme anında gömülüyordu; tek ön yüz imajı her okulda çalışsın diye çalışma anına taşındı (A10).
+    public record ConfigResponse(ProfileResponse Profile, IReadOnlyList<ModuleResponse> Modules, SchoolDayResponse SchoolDay, bool Demo);
 
     public static void MapInstanceConfig(this IEndpointRouteBuilder app)
     {
@@ -33,12 +35,15 @@ public static class InstanceConfig
                 .Select(module => new ModuleResponse(
                     module.Key, module.Name, module.IsCore, enabled.Contains(module.Key), module.Requires))
                 .ToList(),
-            new SchoolDayResponse(policy.SchoolDayStart, policy.SchoolDayEnd)));
+            new SchoolDayResponse(policy.SchoolDayStart, policy.SchoolDayEnd),
+            config.GetValue<bool>("Demo:Enabled")));
     }
 
     public static ProfileResponse ToProfileResponse(SchoolProfile profile) => new(
         profile.Name,
         profile.ShortName,
         profile.PrimaryColor,
-        profile.LogoVersion is { } version ? $"/api/instance/logo?v={version:N}" : null);
+        profile.LogoVersion is { } version ? $"/api/instance/logo?v={version:N}" : null,
+        profile.LegalName,
+        profile.ContactEmail);
 }

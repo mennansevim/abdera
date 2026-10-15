@@ -5,7 +5,7 @@ import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormE
 import { AppLoader } from "@/components/app-loader";
 import { Icon, type IconName } from "@/components/icons";
 import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
-import { useModuleEnabled } from "@/lib/instance";
+import { useDemoEnabled, useModuleEnabled } from "@/lib/instance";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
 import { readLastRole, readSavedEmail, rememberLastRole, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
@@ -43,19 +43,18 @@ function RoleCardContent({ option }: { option: (typeof ROLE_OPTIONS)[number] }) 
 }
 
 const DEMO_PASSWORD = "AbderaDemo2026!";
-const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
 // Yönetici için demo hesabı yok - eski demo yönetici okulun gerçek hesabı oldu
 // (RenameDemoAdminAccount), onun bilgileri burada önceden doldurulmaz.
 const DEMO_EMAILS: Partial<Record<StaffRole, string>> = {
   Teacher: "demo.ogretmen@abdera.com",
 };
 
-function demoEmailFor(role: StaffRole) {
-  return DEMO_ENABLED ? DEMO_EMAILS[role] ?? "" : "";
+function demoEmailFor(role: StaffRole, demo: boolean) {
+  return demo ? DEMO_EMAILS[role] ?? "" : "";
 }
 
-function demoPasswordFor(role: StaffRole) {
-  return DEMO_ENABLED && DEMO_EMAILS[role] ? DEMO_PASSWORD : "";
+function demoPasswordFor(role: StaffRole, demo: boolean) {
+  return demo && DEMO_EMAILS[role] ? DEMO_PASSWORD : "";
 }
 
 // Yerel geliştirmede şifre yerine hesap listesinden seçilir (/api/dev/auth/*). Karar
@@ -93,8 +92,10 @@ function LoginPageContent() {
   const emailRef = useRef<HTMLInputElement>(null);
   const roleRefs = useRef<Partial<Record<StaffRole, HTMLButtonElement | null>>>({});
   const [selectedRole, setSelectedRole] = useState<LoginRole>("Admin");
-  const [email, setEmail] = useState(demoEmailFor("Admin"));
-  const [password, setPassword] = useState(demoPasswordFor("Admin"));
+  // Demo bayrağı sunucudan gelir (useDemoEnabled); Yönetici için demo hesabı yok, ilk değer boş.
+  const demoEnabled = useDemoEnabled();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const roleAccounts = selectedRole === "Guardian" ? [] : devAccounts?.filter((account) => account.role === selectedRole) ?? [];
   // Rol değişince önceki rolün seçimi geçersiz kalır; o durumda rolün ilk hesabı seçili sayılır.
@@ -137,10 +138,10 @@ function LoginPageContent() {
   // cihazda o rolle son girilen e-posta ve tarayıcının kayıtlı şifresi (bkz. saved-logins.ts).
   function prefillFor(role: StaffRole) {
     const request = ++prefillRequest.current;
-    const demoEmail = demoEmailFor(role);
+    const demoEmail = demoEmailFor(role, demoEnabled);
     if (demoEmail) {
       setEmail(demoEmail);
-      setPassword(demoPasswordFor(role));
+      setPassword(demoPasswordFor(role, demoEnabled));
       return;
     }
     const savedEmail = readSavedEmail(role);
@@ -257,7 +258,7 @@ function LoginPageContent() {
 
           {selectedRole !== "Guardian" && (
             <form onSubmit={handleSubmit} className="mt-7">
-              {DEMO_ENABLED && (
+              {demoEnabled && (
                 <div className="mb-5 flex items-center gap-3 text-[.75rem] text-[var(--muted)] before:h-px before:flex-1 before:bg-[var(--line)] after:h-px after:flex-1 after:bg-[var(--line)]">
                   demo bilgileri hazır
                 </div>
@@ -275,7 +276,7 @@ function LoginPageContent() {
                 </>
               ) : (
                 <>
-                <label htmlFor="email" className={`${DEMO_ENABLED ? "" : "mt-5"} mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]`}>E-posta</label>
+                <label htmlFor="email" className={`${demoEnabled ? "" : "mt-5"} mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]`}>E-posta</label>
                 <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
 
                 <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>

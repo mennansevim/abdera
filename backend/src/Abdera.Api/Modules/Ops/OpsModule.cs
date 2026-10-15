@@ -19,6 +19,9 @@ public static class OpsModule
         services.AddSingleton<SystemHealthMonitor>();
         // Diğer modüllerin BackgroundService'leri tur sonunda buraya yazar (#31).
         services.AddSingleton<JobHeartbeatRecorder>();
+        // Alarmların platforma iletilmesi (Alerts__WebhookUrl tanımlıysa).
+        services.AddHttpClient(AlertWebhookNotifier.HttpClientName);
+        services.AddSingleton<AlertWebhookNotifier>();
         services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
         services.AddHostedService(sp => sp.GetRequiredService<SystemHealthMonitor>());
     }

@@ -19,11 +19,17 @@ public partial class SchoolProfile
     public const int MaxNameLength = 120;
     public const int MaxShortNameLength = 40;
     public const int MaxLogoBytes = 512 * 1024;
+    public const int MaxLegalNameLength = 200;
+    public const int MaxContactEmailLength = 254;
 
     public Guid Id { get; private set; }
     public string Name { get; private set; } = DefaultName;
     public string ShortName { get; private set; } = DefaultShortName;
     public string? PrimaryColor { get; private set; }
+    // Gizlilik metnindeki veri sorumlusu unvanı ve KVKK başvuru adresi (herkese açık okul bilgisi).
+    // Boşsa bugünkü Abdera metni gösterilir.
+    public string? LegalName { get; private set; }
+    public string? ContactEmail { get; private set; }
     public byte[]? Logo { get; private set; }
     public string? LogoContentType { get; private set; }
     // Logo değiştikçe yenilenir; ETag ve istemci önbelleğini kırmak için URL'e eklenir.
@@ -67,6 +73,23 @@ public partial class SchoolProfile
         Name = name;
         ShortName = shortName;
         PrimaryColor = primaryColor;
+        UpdatedBy = updatedBy;
+        UpdatedAt = now;
+    }
+
+    public void UpdateContact(string? legalName, string? contactEmail, Guid? updatedBy, DateTimeOffset now)
+    {
+        var errors = new Dictionary<string, string[]>();
+        legalName = string.IsNullOrWhiteSpace(legalName) ? null : legalName.Trim();
+        contactEmail = string.IsNullOrWhiteSpace(contactEmail) ? null : contactEmail.Trim().ToLowerInvariant();
+        if (legalName is { Length: > MaxLegalNameLength })
+            errors["legalName"] = [$"Unvan en fazla {MaxLegalNameLength} karakter olabilir."];
+        if (contactEmail is not null && (contactEmail.Length > MaxContactEmailLength || !System.Net.Mail.MailAddress.TryCreate(contactEmail, out _)))
+            errors["contactEmail"] = ["Geçerli bir iletişim e-postası girilmeli."];
+        if (errors.Count > 0) throw new ValidationFailedException(errors);
+
+        LegalName = legalName;
+        ContactEmail = contactEmail;
         UpdatedBy = updatedBy;
         UpdatedAt = now;
     }

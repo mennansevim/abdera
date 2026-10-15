@@ -38,6 +38,9 @@ export interface SchoolProfile {
   shortName: string;
   primaryColor: string | null;
   logoUrl: string | null;
+  // Gizlilik metninin veri sorumlusu unvanı ve KVKK başvuru adresi; boşsa bugünkü Abdera metni.
+  legalName?: string | null;
+  contactEmail?: string | null;
 }
 
 // Backend TimeOnly "HH:mm:ss" olarak gelir.
@@ -50,6 +53,7 @@ export interface InstanceConfig {
   profile: SchoolProfile;
   modules: InstanceModule[];
   schoolDay?: SchoolDay;
+  demo?: boolean;
 }
 
 // Yapılandırma okunamazsa (yükleniyor, ağ hatası, eski API) bugünkü kimlik ve "her şey açık"
@@ -106,6 +110,8 @@ export interface UpdateSchoolProfileRequest {
   name: string;
   shortName: string;
   primaryColor: string | null;
+  legalName?: string;
+  contactEmail?: string;
 }
 
 // Profil/logo değişince menü, giriş ekranı ve diğer sekmeler bir sonraki config okumasında yenilenir.
@@ -187,4 +193,13 @@ export function useSchedulingRules(): { schoolDay: SchoolDay; maxWeeklyLessons?:
   const schoolDay = useSchoolDay();
   const { data: policy } = useSchoolPolicy();
   return { schoolDay, maxWeeklyLessons: policy?.maxWeeklyLessons };
+}
+
+// Tanıtım (demo) yayını: sunucunun Demo:Enabled ayarından okunur. Eski derleme anı bayrağı
+// (NEXT_PUBLIC_DEMO_ENABLED) geriye dönük uyumluluk için hâlâ açabilir.
+const BUILD_TIME_DEMO = process.env.NEXT_PUBLIC_DEMO_ENABLED === "true";
+
+export function useDemoEnabled(): boolean {
+  const { data } = useInstanceConfig();
+  return BUILD_TIME_DEMO || Boolean(data?.demo);
 }

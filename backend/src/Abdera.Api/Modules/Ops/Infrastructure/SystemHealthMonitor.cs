@@ -83,11 +83,15 @@ public class SystemHealthMonitor(
             if (status.ShouldSendAlert(now, cooldown))
             {
                 await SendAlertAsync(emailSender, config, level, detail, clock, now, cancellationToken);
+                await scope.ServiceProvider.GetRequiredService<AlertWebhookNotifier>()
+                    .NotifyAsync("health", level, detail, now, cancellationToken);
                 status.MarkAlertSent(now);
             }
             else if (level == SystemHealthLevel.Healthy && previousLevel != SystemHealthLevel.Healthy)
             {
                 await SendRecoveryAlertAsync(emailSender, config, clock, now, cancellationToken);
+                await scope.ServiceProvider.GetRequiredService<AlertWebhookNotifier>()
+                    .NotifyAsync("recovery", level, "Sistem tekrar sağlıklı durumda.", now, cancellationToken);
             }
 
             await db.SaveChangesAsync(cancellationToken);

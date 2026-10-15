@@ -163,6 +163,8 @@ public class BackupService(
                 {
                     logger.LogError(emailEx, "Yedekleme hatası e-postası gönderilemedi.");
                 }
+                await scope.ServiceProvider.GetRequiredService<AlertWebhookNotifier>()
+                    .NotifyAsync("backup_failed", SystemHealthLevel.Degraded, ex.Message, clock.UtcNow, cancellationToken);
             }
             finally
             {

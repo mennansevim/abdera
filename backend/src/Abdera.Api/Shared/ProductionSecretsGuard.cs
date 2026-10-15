@@ -1,6 +1,7 @@
 using Abdera.Api.Modules.Banking.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Shared.Modules;
 
 namespace Abdera.Api.Shared;
 
@@ -24,6 +25,13 @@ public static class ProductionSecretsGuard
         }
 
         var missing = new List<string>();
+        // Kapalı modülün sağlayıcısı/sırrı istenmez (docs/multi-tenant/ARCHITECTURE.md §5.2 madde 7):
+        // WhatsApp'ı olmayan okul Meta anahtarı girmek zorunda kalmasın. Modül kapalıyken o sağlayıcı
+        // çalışma anında zaten kullanılmaz (Program.cs).
+        var modules = ModuleCatalog.ResolveEnabled(app.Configuration[EnabledModules.ConfigurationKey]);
+        var whatsAppEnabled = modules.Contains(ModuleKeys.WhatsApp);
+        var bankingEnabled = modules.Contains(ModuleKeys.Banking);
+        var aiEnabled = modules.Contains(ModuleKeys.Ai);
         // Demo modu anonim debug-login gibi yalnızca tanıtım/staging yüzeylerini açar.
         // Yanlış bir production ortam değişkeni gerçek kimlik doğrulamasını baypas eden bir
         // uç yayınlamamalı; rota ayrıca Production'da hiç kaydedilmese de burada fail-fast
@@ -47,7 +55,7 @@ public static class ProductionSecretsGuard
         }
 
         var whatsAppProvider = app.Configuration["WhatsApp:Provider"];
-        if (!WhatsAppProviderModes.IsAllowedInProduction(whatsAppProvider))
+        if (whatsAppEnabled && !WhatsAppProviderModes.IsAllowedInProduction(whatsAppProvider))
         {
             missing.Add($"WhatsApp__Provider ({WhatsAppProviderModes.Cloud} veya {WhatsAppProviderModes.Disabled})");
         }
@@ -74,7 +82,11 @@ public static class ProductionSecretsGuard
         // için paylaşılan sır da beklenmez. Yalnızca gerçek bir sağlayıcı seçiliyken
         // Banking__WebhookSharedSecret zorunlu olur.
         var bankingProvider = app.Configuration["Banking:Provider"];
-        if (!BankingProviderModes.IsAllowedInProduction(bankingProvider))
+        if (!bankingEnabled)
+        {
+            // Banka modülü kapalı: sağlayıcı kullanılmaz, sır beklenmez.
+        }
+        else if (!BankingProviderModes.IsAllowedInProduction(bankingProvider))
         {
             missing.Add($"Banking__Provider (gerçek sağlayıcı veya '{BankingProviderModes.Manual}')");
         }
@@ -84,7 +96,7 @@ public static class ProductionSecretsGuard
             missing.Add("Banking__WebhookSharedSecret");
         }
 
-        if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Cloud, StringComparison.OrdinalIgnoreCase))
+        if (whatsAppEnabled && string.Equals(whatsAppProvider, WhatsAppProviderModes.Cloud, StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrEmpty(app.Configuration["WhatsApp:AppSecret"]))
             {
@@ -154,7 +166,7 @@ public static class ProductionSecretsGuard
         // AI (Faz 10) OPSİYONELDİR - yapılandırılmamış olması production'ı engellemez.
         // Ama sağlayıcı açıkça seçilmişken anahtar boşsa özellik sessizce hiç çalışmaz
         // (yukarıdaki WhatsApp/Backup ile aynı gerekçe: erken ve açık hata).
-        if (string.Equals(app.Configuration["Ai:Provider"], "OpenAi", StringComparison.OrdinalIgnoreCase) &&
+        if (aiEnabled && string.Equals(app.Configuration["Ai:Provider"], "OpenAi", StringComparison.OrdinalIgnoreCase) &&
             string.IsNullOrWhiteSpace(app.Configuration["Ai:ApiKey"]))
         {
             missing.Add("Ai__ApiKey");
@@ -167,6 +179,23 @@ public static class ProductionSecretsGuard
         RejectPlaceholder(app.Configuration, "Backup:EncryptionKey", "Backup__EncryptionKey", missing);
         RejectPlaceholder(app.Configuration, "Banking:WebhookSharedSecret", "Banking__WebhookSharedSecret", missing);
         RejectPlaceholder(app.Configuration, "Bootstrap:AdminPassword", "Bootstrap__AdminPassword", missing);
+
+        // Platform jetonları (§5.4): tanımlıysa tahmin edilemeyecek uzunlukta olmalı. Kısa jeton
+        // PlatformAccess'te zaten reddedilir (uç 404 kalır); burada hatalı kurulum görünür olsun.
+        foreach (var (key, name) in new[]
+        {
+            ("Provisioning:Token", "Provisioning__Token"), ("Telemetry:Token", "Telemetry__Token"), ("Alerts:WebhookSecret", "Alerts__WebhookSecret"),
+        })
+        {
+            var value = app.Configuration[key];
+            if (!string.IsNullOrEmpty(value) && value.Length < 32) missing.Add($"{name} (en az 32 karakter)");
+            RejectPlaceholder(app.Configuration, key, name, missing);
+        }
+        if (!string.IsNullOrWhiteSpace(app.Configuration["Alerts:WebhookUrl"]) &&
+            (!Uri.TryCreate(app.Configuration["Alerts:WebhookUrl"], UriKind.Absolute, out var alertsUri) || alertsUri.Scheme != Uri.UriSchemeHttps))
+        {
+            missing.Add("Alerts__WebhookUrl (https://)");
+        }
 
         if (missing.Count > 0)
         {
