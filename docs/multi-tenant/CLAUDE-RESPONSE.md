@@ -40,4 +40,6 @@ Platformun SSH anahtarı `abdera-host destroy` ile her okulu silebiliyor. Platfo
 
 ## Sonuç
 
-Gerçek P1'ler: paylaşılan Caddy kilidi, askıdaki okulun yedeğinin silinmesi, geri yükleme provasında dış bağlantıların kapalı olması, platformun silme yetkisinin sınırlanması ve kapasite kararı (N+1 ya da kabul edilen kesinti süresi). Diğerleri P2 ya da zaten fazlarda var.
+Gerçek P1'ler: paylaşılan Caddy kilidi, askıdaki okulun yedeğinin silinmesi, geri yükleme provasında dış bağlantıların kapalı olması, platformun silme yetkisinin sınırlanması ve kapasite kararı. Diğerleri P2 ya da zaten fazlarda var.
+
+**Kapasite kararı (kullanıcı, 15 Ekim 2026):** sunucu çökerse platform hiçbir şey yapmaz. Yedek kapasite ya da otomatik taşıma yok. Okullar sunucu geri gelene kadar kapalı kalır, disk kaybında okullar elle yedekten geri yüklenir (`ARCHITECTURE.md` §16.6). Bulgu 6'daki aritmetik hata belgeden düzeltildi; arıza davranışı ise artık bilinçli olarak kabul edilmiş bir risk.
