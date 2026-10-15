@@ -149,24 +149,38 @@ export function instrumentBadgeStyle(instrumentName: string) {
   return INSTRUMENT_BADGE_STYLES[instrumentName] ?? { icon: "music" as const, className: "bg-[var(--surface-muted)] text-[var(--muted)]" };
 }
 
-export function BrandMark({ compact = false }: { compact?: boolean }) {
+// Varsayılan değerler bugünkü kimliktir; okul kurulumuna göre değişen sürüm için
+// components/school-brand.tsx (SchoolBrandMark) kullanılır - bu dosya sunucu bileşenlerinden de
+// içe aktarıldığı için hook çağıramaz.
+export function BrandMark({
+  compact = false,
+  title = "Abdera",
+  subtitle = "SANAT AKADEMİ",
+  logoSrc = "/abdera-logo.webp",
+  initials,
+}: { compact?: boolean; title?: string; subtitle?: string; logoSrc?: string | null; initials?: string }) {
+  const markClass = `${compact ? "h-9 w-9" : "h-11 w-11"} shrink-0 rounded-full bg-white object-cover shadow-[0_7px_18px_rgba(70,34,30,.2)] ring-1 ring-white/35`;
   return (
     <span className="inline-flex items-center gap-2.5">
-      <Image
-        src="/abdera-logo.webp"
-        alt=""
-        width={44}
-        height={44}
-        sizes="44px"
-        loading="eager"
-        unoptimized
-        aria-hidden="true"
-        className={`${compact ? "h-9 w-9" : "h-11 w-11"} shrink-0 rounded-full bg-white object-cover shadow-[0_7px_18px_rgba(70,34,30,.2)] ring-1 ring-white/35`}
-      />
+      {logoSrc ? (
+        <Image
+          src={logoSrc}
+          alt=""
+          width={44}
+          height={44}
+          sizes="44px"
+          loading="eager"
+          unoptimized
+          aria-hidden="true"
+          className={markClass}
+        />
+      ) : (
+        <span aria-hidden="true" className={`${markClass} grid place-items-center font-serif text-sm font-bold italic text-[var(--brand-strong)]`}>{initials}</span>
+      )}
       {!compact && (
-        <span className="leading-none">
-          <span className="block font-serif text-[1.25rem] font-bold italic tracking-[-0.03em]">Abdera</span>
-          <span className="mt-1 block text-[.75rem] font-medium tracking-[0.08em] opacity-60">SANAT AKADEMİ</span>
+        <span className="min-w-0 leading-none">
+          <span className="block truncate font-serif text-[1.25rem] font-bold italic tracking-[-0.03em]">{title}</span>
+          {subtitle && <span className="mt-1 block truncate text-[.75rem] font-medium tracking-[0.08em] opacity-60">{subtitle}</span>}
         </span>
       )}
     </span>

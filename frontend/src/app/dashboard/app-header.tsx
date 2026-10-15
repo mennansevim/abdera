@@ -3,35 +3,39 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
-import { BrandMark, Icon, type IconName } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
+import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
 import { NotificationBell, NotificationToasts } from "@/components/notification-bell";
 import { WhatsNewDialog } from "@/components/whats-new";
 import type { Me } from "@/lib/api";
 import { useBankTransactions } from "@/lib/banking";
+import { DEFAULT_PROFILE, isModuleEnabled, useInstanceConfig, type ModuleKey } from "@/lib/instance";
 import { useNotifications } from "@/lib/messaging";
 import { CURRENT_VERSION } from "@/lib/releases";
 import { meDisplayName, meInitials, useLogout } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 
-type NavItem = { href: string; label: string; icon: IconName; alert?: boolean; section: "Genel" | "Eğitim" | "Planlama" | "Finans" | "İletişim" | "Sistem" };
+// `module`: bağlı olduğu opsiyonel modül (docs/multi-tenant/ARCHITECTURE.md §5.2). Kapalıysa
+// link menüden düşer, sayfaya doğrudan gidilirse "bu okulda açık değil" ekranı görünür.
+type NavItem = { href: string; label: string; icon: IconName; alert?: boolean; module?: ModuleKey; section: "Genel" | "Eğitim" | "Planlama" | "Finans" | "İletişim" | "Sistem" };
 
 const CORE_LINKS: NavItem[] = [
   { href: "/dashboard", label: "Bugün", icon: "home", section: "Genel" },
   { href: "/dashboard/students", label: "Öğrenciler", icon: "students", section: "Eğitim" },
-  { href: "/dashboard/progress", label: "Gelişim", icon: "activity", section: "Eğitim" },
+  { href: "/dashboard/progress", label: "Gelişim", icon: "activity", module: "progress", section: "Eğitim" },
   { href: "/dashboard/attendance", label: "Yoklama", icon: "check", section: "Eğitim" },
-  { href: "/dashboard/library", label: "Kütüphane", icon: "note", section: "Eğitim" },
+  { href: "/dashboard/library", label: "Kütüphane", icon: "note", module: "library", section: "Eğitim" },
   { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers", section: "Eğitim" },
   { href: "/dashboard/calendar", label: "Takvim", icon: "calendar", section: "Planlama" },
   { href: "/dashboard/groups", label: "Grup dersleri", icon: "students", section: "Planlama" },
-  { href: "/dashboard/shows", label: "Yıl Sonu Gösterisi", icon: "music", section: "Planlama" },
+  { href: "/dashboard/shows", label: "Yıl Sonu Gösterisi", icon: "music", module: "show", section: "Planlama" },
 ];
 
 const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/availability", label: "Müsaitlik", icon: "clock", section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
   { href: "/dashboard/costs", label: "Gelir ve gider", icon: "bank", section: "Finans" },
-  { href: "/dashboard/banking", label: "Banka", icon: "bank", section: "Finans" },
+  { href: "/dashboard/banking", label: "Banka", icon: "bank", module: "banking", section: "Finans" },
   { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", section: "İletişim" },
   { href: "/dashboard/guardians", label: "Veli girişleri", icon: "shield", section: "İletişim" },
   { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
@@ -43,8 +47,8 @@ const ADMIN_LINKS: NavItem[] = [
 // kartının kullandığı sayılara bakıyor (Banka: NeedsReview; Mesaj Merkezi: Failed). Talepler
 // menüden kalktı: sayfa Bugün ekranındaki kart ve zildeki bildirimden açılır. Yalnızca Admin bu
 // linkleri gördüğü için sorgular Teacher oturumunda hiç çalışmasın diye `enabled` ile kapatılır.
-function useAdminAlerts(enabled: boolean): Record<string, boolean> {
-  const { data: bankItems } = useBankTransactions("NeedsReview", 1, 1, { enabled });
+function useAdminAlerts(enabled: boolean, bankingEnabled: boolean): Record<string, boolean> {
+  const { data: bankItems } = useBankTransactions("NeedsReview", 1, 1, { enabled: enabled && bankingEnabled });
   const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled });
 
   return {
@@ -60,9 +64,15 @@ const BUG_REPORT_LINK: NavItem = { href: "/dashboard/bug-report", label: "Hata b
 
 // Hata bildir formunun "Hangi sayfada?" listesi menüden türer - ayrıca elle tutulan bir liste
 // olsaydı yeni sayfa eklendiğinde unutulurdu.
-export function navPagesFor(isAdmin: boolean): { href: string; label: string }[] {
+export function navPagesFor(isAdmin: boolean, enabledModule: (key: ModuleKey | undefined) => boolean = () => true): { href: string; label: string }[] {
   return (isAdmin ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK])
+    .filter((link) => enabledModule(link.module))
     .map(({ href, label }) => ({ href, label }));
+}
+
+// Kapalı bir modülün sayfası (menüden düşse de yer imi/eski bağlantıyla açılabilir).
+function disabledModulePage(pathname: string, enabledModule: (key: ModuleKey | undefined) => boolean): NavItem | undefined {
+  return [...CORE_LINKS, ...ADMIN_LINKS].find((link) => link.module && pathname.startsWith(link.href) && !enabledModule(link.module));
 }
 const SECTION_ORDER: NavItem["section"][] = ["Genel", "Eğitim", "Planlama", "Finans", "İletişim", "Sistem"];
 const sidebarStorageOptions = { decode: (value: string) => value === "true" };
@@ -80,13 +90,18 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const [sidebarCollapsed, setSidebarCollapsed] = useSessionState("abdera:sidebar-collapsed", false, sidebarStorageOptions);
   const isLibrary = pathname.startsWith("/dashboard/library");
   const isAdmin = me.role === "Admin";
-  const alerts = useAdminAlerts(isAdmin);
+  const { data: instance } = useInstanceConfig();
+  const profile = instance?.profile ?? DEFAULT_PROFILE;
+  const enabledModule = (key: ModuleKey | undefined) => isModuleEnabled(instance, key);
+  const alerts = useAdminAlerts(isAdmin, enabledModule("banking"));
+  const disabledPage = disabledModulePage(pathname, enabledModule);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
   // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
   // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor.
   const links = (isAdmin
     ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK, BUG_REPORT_LINK]
     : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK, BUG_REPORT_LINK])
+    .filter((link) => enabledModule(link.module))
     .map((link) => (alerts[link.href] ? { ...link, alert: true } : link))
     .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
   const navItem = (href: string) => links.find((link) => link.href === href)!;
@@ -100,7 +115,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         { ...navItem("/dashboard"), label: "Bugün" },
         { ...navItem("/dashboard/calendar"), label: "Takvimim" },
         { ...navItem("/dashboard/students"), label: "Öğrenciler" },
-        { ...navItem("/dashboard/progress"), label: "Gelişim" },
+        // Gelişim modülü kapalı okulda dördüncü sekme Yoklama olur.
+        enabledModule("progress") ? { ...navItem("/dashboard/progress"), label: "Gelişim" } : navItem("/dashboard/attendance"),
       ];
 
   useEffect(() => {
@@ -133,7 +149,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
     <div className={`min-h-dvh bg-[var(--background)] lg:grid ${sidebarCollapsed ? "lg:grid-cols-[4.5rem_minmax(0,1fr)]" : "lg:grid-cols-[15rem_minmax(0,1fr)]"}`}>
       <aside id="desktop-sidebar" className={`sticky top-0 hidden h-dvh flex-col overflow-hidden bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)] py-5 text-white lg:flex ${sidebarCollapsed ? "px-2" : "px-3"}`}>
         <div className={`mb-6 flex shrink-0 items-center ${sidebarCollapsed ? "flex-col gap-3" : "justify-between gap-2 pl-2"}`}>
-          <Link href="/dashboard" className="min-w-0 text-white" aria-label="Abdera ana sayfa"><BrandMark compact={sidebarCollapsed} /></Link>
+          <Link href="/dashboard" className="min-w-0 text-white" aria-label={`${profile.shortName} ana sayfa`}><BrandMark compact={sidebarCollapsed} /></Link>
           <button
             type="button"
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -215,7 +231,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         <WhatsNewDialog me={me} />
 
         <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-6 lg:pb-8 lg:pt-5 xl:px-8 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
-          {children}
+          {disabledPage ? <DisabledModuleNotice label={disabledPage.label} /> : children}
         </main>
 
         {/* 320px'lik telefonda (iPhone SE) öğretmenin altı sekmesi ~53px'e düşer: yazı küçülür ki
@@ -271,5 +287,20 @@ function MobileNavLink({ link, active }: { link: NavItem; active: boolean }) {
     <Link href={link.href} aria-current={active ? "page" : undefined} className={`pressable flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium max-[359px]:text-[.66rem] ${active ? "text-[var(--brand)]" : "text-[var(--muted)]"}`}>
       <Icon name={link.icon} className="h-[1.05rem] w-[1.05rem]" /><span className="max-w-full truncate">{link.label}</span>
     </Link>
+  );
+}
+
+function DisabledModuleNotice({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-[60dvh] place-items-center">
+      <div className="app-card w-full max-w-md p-6 text-center">
+        <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-[var(--surface-muted)] text-[var(--muted)]" aria-hidden="true">
+          <Icon name="shield" className="h-5 w-5" />
+        </span>
+        <h1 className="mt-4 text-lg font-bold">{label} bu okulda açık değil</h1>
+        <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Bu bölüm okulunuzun kurulumunda kullanılmıyor. Açılmasını istiyorsanız yöneticinize başvurun.</p>
+        <Link href="/dashboard" className="btn btn-primary mt-4">Bugün ekranına dön</Link>
+      </div>
+    </div>
   );
 }

@@ -45,14 +45,24 @@ public static class ModuleCatalog
     public static ModuleDefinition? Find(string key) =>
         All.FirstOrDefault(module => string.Equals(module.Key, key, StringComparison.OrdinalIgnoreCase));
 
+    // "Hiçbir opsiyonel modül seçilmedi" boş değerle yazılamaz (boş = eski kurulum, hepsi açık);
+    // platform sihirbazı bu durumda açıkça bu değeri yazar.
+    public const string NoneSentinel = "none";
+
     // Modules:Enabled boş/tanımsızsa TÜM modüller açıktır - bugünkü tek okullu kurulumun davranışı
-    // birebir korunur. Doluysa virgülle ayrılmış opsiyonel modül anahtarlarıdır; çekirdek modüller
-    // listede olmasa da her zaman açıktır.
+    // birebir korunur. "none" yalnızca çekirdek modülleri açar. Doluysa virgülle ayrılmış opsiyonel
+    // modül anahtarlarıdır; çekirdek modüller listede olmasa da her zaman açıktır.
     public static IReadOnlySet<string> ResolveEnabled(string? configured)
     {
         if (string.IsNullOrWhiteSpace(configured))
         {
             return All.Select(module => module.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (string.Equals(configured.Trim(), NoneSentinel, StringComparison.OrdinalIgnoreCase))
+        {
+            return All.Where(module => module.IsCore).Select(module => module.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
         var requested = configured

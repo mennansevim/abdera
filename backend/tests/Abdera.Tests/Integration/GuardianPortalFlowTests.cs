@@ -9,7 +9,9 @@ using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Progress.Features;
 using Abdera.Api.Modules.Scheduling.Features;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Abdera.Api.Modules.Messaging.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -83,7 +85,7 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
             $"Öğretmen{suffix} Soyad", piano.Name);
     }
 
-    private static async Task<HttpClient> LoginAsGuardianAsync(AbderaWebApplicationFactory factory, string rawPhone)
+    private static async Task<HttpClient> LoginAsGuardianAsync(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory, string rawPhone)
     {
         var client = factory.CreateClient();
 
@@ -328,6 +330,30 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
         var rsvpResponse = await guardianClient.PostAsJsonAsync(
             $"/api/guardian/me/lessons/{someoneElses.LessonId}/rsvp", new GuardianPortal.SetRsvpRequest(RsvpResponse.Attending));
         Assert.Equal(HttpStatusCode.Forbidden, rsvpResponse.StatusCode);
+    }
+
+    // docs/multi-tenant/ARCHITECTURE.md §5.2 madde 5: banka modülü kapalı okulda eskiden açılmış
+    // sanal IBAN veliye gösterilmez - o hesaba düşen havale otomatik işlenmez.
+    [Fact]
+    public async Task Virtual_iban_is_hidden_from_guardian_when_banking_module_is_disabled()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "gp-no-bank");
+        db.VirtualIbans.Add(VirtualIban.Create(seeded.GuardianId, "TR000000000000000000000077", "FakeBank", "test", DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+
+        using var schoolWithoutBanking = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [Abdera.Api.Shared.Modules.EnabledModules.ConfigurationKey] = "progress",
+            })));
+        using var guardianClient = await LoginAsGuardianAsync(schoolWithoutBanking, seeded.GuardianPhone);
+
+        var billing = await (await guardianClient.GetAsync("/api/guardian/me/billing"))
+            .Content.ReadFromJsonAsync<GuardianPortalData.GuardianBillingResponse>(TestJson.Options);
+        Assert.Contains(billing!.Enrollments, enrollment => enrollment.StudentId == seeded.StudentId);
+        Assert.Null(billing.VirtualIban);
     }
 
     [Fact]

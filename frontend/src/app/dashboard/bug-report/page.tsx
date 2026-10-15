@@ -9,6 +9,7 @@ import {
   BUG_REPORT_ISSUE_URL, useAwaitingMe, useBugReports, useConfirmBugReport, useCreateBugReport, useProvideBugReportDetails, useTriageBugReport,
   type BugReport, type BugReportKind, type BugReportStatus,
 } from "@/lib/bug-reports";
+import { isModuleEnabled, useInstanceConfig } from "@/lib/instance";
 import { CURRENT_VERSION } from "@/lib/releases";
 import { useMe } from "@/lib/use-auth";
 import { navPagesFor } from "../app-header";
@@ -74,7 +75,8 @@ function matchPage(pages: { href: string; label: string }[], path: string | null
 }
 
 function ReportForm({ me, fromPath }: { me: Me; fromPath: string | null }) {
-  const pages = useMemo(() => navPagesFor(me.role === "Admin"), [me.role]);
+  const { data: instance } = useInstanceConfig();
+  const pages = useMemo(() => navPagesFor(me.role === "Admin", (key) => isModuleEnabled(instance, key)), [me.role, instance]);
   const createReport = useCreateBugReport();
   const [kind, setKind] = useState<BugReportKind>("Bug");
   const [page, setPage] = useState(() => matchPage(pages, fromPath)?.href ?? "");

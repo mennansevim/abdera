@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.People.Features;
@@ -58,7 +59,7 @@ public static class GuardianPortalData
     }
 
     private static async Task<IResult> BillingAsync(
-        ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        ClaimsPrincipal principal, AbderaDbContext db, IClock clock, EnabledModules modules)
     {
         var guardianId = AuthContext.GetUserId(principal);
         var studentIds = await db.StudentGuardians
@@ -134,7 +135,9 @@ public static class GuardianPortalData
                 credit.Id, credit.StudentId, credit.EarnedReason, credit.EarnedAt, credit.ExpiresAt))
             .ToListAsync();
 
-        var virtualIban = await db.VirtualIbans
+        // Banka modülü kapalıyken eskiden açılmış bir IBAN veliye gösterilmez: o hesaba düşen havale
+        // otomatik işlenmeyeceği için veliyi oraya yönlendirmek parayı askıda bırakır.
+        var virtualIban = !modules.IsEnabled(ModuleKeys.Banking) ? null : await db.VirtualIbans
             .Where(iban => iban.GuardianId == guardianId && iban.Status == VirtualIbanStatus.Active)
             .Select(iban => new GuardianVirtualIbanResponse(iban.Iban, iban.Provider))
             .SingleOrDefaultAsync();

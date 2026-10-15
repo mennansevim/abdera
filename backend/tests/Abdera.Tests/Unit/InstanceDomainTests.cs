@@ -32,6 +32,17 @@ public class InstanceDomainTests
         Assert.DoesNotContain(ModuleKeys.Progress, enabled);
     }
 
+    [Theory]
+    [InlineData("none")]
+    [InlineData(" NONE ")]
+    public void Explicit_none_enables_only_core_modules(string configured)
+    {
+        // Sihirbazda hiçbir opsiyon seçilmeyen okul boş değerle "hepsi açık"a düşmemeli.
+        var enabled = ModuleCatalog.ResolveEnabled(configured);
+
+        Assert.All(ModuleCatalog.All, module => Assert.Equal(module.IsCore, enabled.Contains(module.Key)));
+    }
+
     [Fact]
     public void Unknown_module_key_is_rejected()
     {

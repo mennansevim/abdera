@@ -8,6 +8,7 @@ import { MonthInput } from "@/components/month-input";
 import { TeacherGroupPayoutForm, TeacherPayoutForm } from "@/components/teacher-payout-form";
 import { AdminGate, FormActions, FormMessage, Modal, PageHeader, Panel, RowMenu, RowMenuItem, SearchInput, SectionHeader, Segmented, StatStrip } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { useModuleEnabled } from "@/lib/instance";
 import {
   COURSE_KIND_LABEL, recurringAmountFor, useBillingDues, useChangeRecurringExpenseAmount, useCreateExpense, useCreateRecurringExpense, useEndRecurringExpense,
   useExpenses, useRecurringExpenses,
@@ -120,6 +121,8 @@ function CostDashboard() {
   const payTeacherId = searchParams.get("odeme");
   const payWeek = searchParams.get("hafta");
   const [view, setView] = useState<View>(payTeacherId !== null ? "expenses" : "summary");
+  // Kârlılık opsiyonel modül (docs/multi-tenant/ARCHITECTURE.md §5.2): kapalı okulda sekme yok.
+  const profitabilityEnabled = useModuleEnabled("profitability");
   const [showCreate, setShowCreate] = useState(payTeacherId !== null);
   const [breakdown, setBreakdown] = useState<{ title: string; entries: IncomeEntry[] } | null>(null);
   function closeCreate() {
@@ -214,7 +217,7 @@ function CostDashboard() {
                 { value: "summary", label: "Özet", icon: "activity" },
                 { value: "income", label: "Gelirler", icon: "wallet" },
                 { value: "expenses", label: "Giderler", icon: "bank" },
-                { value: "profit", label: "Kârlılık", icon: "target" },
+                ...(profitabilityEnabled ? [{ value: "profit" as const, label: "Kârlılık", icon: "target" as const }] : []),
               ]}
               value={view}
               onChange={(value) => { setView(value); setPeriod((current) => ({ ...current, day: null })); }}
@@ -227,7 +230,7 @@ function CostDashboard() {
       />
 
       {/* Kârlılık sekmesi döneme bağlı değil: her zaman bu ay ve son 6 ay. */}
-      {view === "profit" && <ProfitabilityView />}
+      {view === "profit" && profitabilityEnabled && <ProfitabilityView />}
 
       {view !== "profit" && <section className="app-card flex flex-wrap items-center gap-2 p-3" aria-label={view === "expenses" ? "Dönem ve kategori filtreleri" : "Dönem filtresi"}>
         <Segmented

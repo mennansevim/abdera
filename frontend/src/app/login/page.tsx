@@ -3,7 +3,8 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AppLoader } from "@/components/app-loader";
-import { BrandMark, Icon, type IconName } from "@/components/icons";
+import { Icon, type IconName } from "@/components/icons";
+import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
 import { readLastRole, readSavedEmail, rememberLastRole, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
