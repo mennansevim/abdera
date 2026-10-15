@@ -53,11 +53,11 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 
 | # | Soru | Öneri (henüz onaylanmadı) |
 |---|---|---|
-| B1 | `PACKAGE` tipi paket hangi ders durumunda tükeniyor? | **Hâlâ uygulanmadı.** Phase 4, `PACKAGE`'ı bir `billing_type` seçeneği olarak (fiyat kalemi + ücret planı + tek seferlik `Receivable`) destekliyor, ama "N ders sonra paket biter, otomatik yeni `Receivable` üretilir" tüketim takibi (Attendance→Billing bağlantısı) kodda yok. Öneri hâlâ geçerli: `COMPLETED` + habersiz `ABSENT` düşer; `CANCELLED`/okul kaynaklı iptal düşmez — ama bu, Attendance modülünde bir "paket kredisi düş" adımı gerektirir, henüz yazılmadı. |
-| B2 | Devamsızlık aidatı etkiliyor mu? | `MONTHLY` için fiilen doğrulandı: `Receivable.Amount`, `FeePlan`'dan sabit snapshot alınır, hiçbir kod yolu yoklama durumuna göre bu tutarı değiştirmiyor — "devamsızlık aidatı etkilemez" örtük olarak uygulanmış durumda. |
-| D4 | Deploy hedefi: Cloudflare + managed Postgres mi, yoksa Raspberry Pi mi (diğer projelerinle tutarlı)? | Phase 7'den önce netleşmeli — yedekleme ve kaynak planlamasını etkiliyor |
+| B1 | `PACKAGE` tipi paket hangi ders durumunda tükeniyor? | **Kapsam dışı (2026-10-15).** H1 ile fiyat listesi → kalem → ücret planı modeli ve onunla `PACKAGE` faturalama tipi kaldırıldı; aidatın tek ekseni ders türü. Paket ders satışı gündeme gelirse ve artık kullanılmayan `PackageEnding` job tipinin akıbeti GitHub #45'te karar bekliyor. |
+| B2 | Devamsızlık aidatı etkiliyor mu? | Hayır, fiilen doğrulandı: `Receivable` oluşurken tutar `TuitionCalculator` ile tarifeden snapshot'lanır (H1), hiçbir kod yolu yoklama durumuna göre bu tutarı değiştirmiyor. Mazeretli yoklama yalnızca telafi hakkı doğurur. |
+| D4 | Deploy hedefi: Cloudflare + managed Postgres mi, yoksa Raspberry Pi mi (diğer projelerinle tutarlı)? | **Kapandı:** önce Vercel + Supabase denendi, 2026-09-29'da tek Hetzner Cloud sunucusuna geçildi (P1, `docs/19-hetzner-runbook.md`). |
 
-**Not:** B3 ve B4 aşağıda kendi öneri notlarıyla birlikte kabul edilmiş kararlar olarak işlendi (net alternatifleri yoktu, tersi mantıksız olurdu); B1 kod düzeyinde hâlâ eksik, D4 hâlâ açık — ikisi de ilgili faz tamamlanmadan önce netleşmeli (B1: bir sonraki Billing/Attendance dokunuşu, D4: Phase 7).
+**Not:** B3 ve B4 aşağıda kendi öneri notlarıyla birlikte kabul edilmiş kararlar olarak işlendi (net alternatifleri yoktu, tersi mantıksız olurdu). B1 kapsam dışına çıktı, B2 ve D4 kapandı (2026-10-15 doküman eşitlemesi, GitHub #33).
 
 ## Kabul edilen varsayımlar (B3, B5 ve devamı)
 
@@ -76,7 +76,7 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 | C3 | `ProgressSummaryGenerator` AI arayüzü Phase 0'da açılması | Sıfır implementasyonlu arayüz spekülatif soyutlama — Phase 6'ya ertelendi. **2026-09-24: kullanıcı isteğiyle açıldı, bkz. L bölümü.** |
 | C4 | Her testte Testcontainers | Yalnızca gerçek Postgres davranışı gerektiren ~8 testte (bkz. `docs/09-testing.md`) |
 | C5 | Dashboard'daki "upcoming recital" için ayrı entity | `SchoolCalendarDay`'e `EVENT` tipi olarak girdi, ayrı tablo açılmadı |
-| C6 | FluentValidation (denetim ARC-4, `docs/13-audit-fix-prompt.md`) | Paket `csproj`'da duruyordu ama kodda tek bir `AbstractValidator` yoktu - doğrulama her yerde elle `throw new ValidationFailedException(...)` ile yapılıyor. Bu ölçekte (69 endpoint, çoğu tek-iki alanlık kontrol) ayrı bir doğrulama kütüphanesi gereksiz görülüp paket kaldırıldı; mevcut elle doğrulama deseni tek tutarlı yaklaşım olarak korundu. |
+| C6 | FluentValidation (denetim ARC-4, `docs/13-audit-fix-prompt.md`) | Paket `csproj`'da duruyordu ama kodda tek bir `AbstractValidator` yoktu - doğrulama her yerde elle `throw new ValidationFailedException(...)` ile yapılıyor. Bu ölçekte (o tarihte 69 endpoint, çoğu tek-iki alanlık kontrol) ayrı bir doğrulama kütüphanesi gereksiz görülüp paket kaldırıldı; mevcut elle doğrulama deseni tek tutarlı yaklaşım olarak korundu. |
 
 ## D — Risk ve operasyon notları
 
@@ -85,7 +85,7 @@ Bu ölçekte (6–8 öğretmen, ~150 öğrenci, ~500 ders/hafta) hiçbir stack'i
 | D1 | Repo **public** | Secret hiçbir zaman commit'lenmez; `.gitignore` + `.env.example` (şablon, gerçek değer yok) ilk commit'te var |
 | D2 | Meta WABA onayı günler–haftalar sürebilir, kod bunu beklememeli | `IWhatsAppClient`: `FakeWhatsAppClient` (dev varsayılanı) + `CloudApiWhatsAppClient`; dev-only sahte webhook uç noktası. WABA başvurusu ve `lesson_reminder_rsvp` template'i **paralel, bugün** başlatılmalı — kodla ilgisi yok. |
 | D3 | KVKK — çocuk verisi + veli telefonu işleniyor | Zaman damgalı açık rıza (`notification_consent` + `consent_updated_at`), aydınlatma metni (ürün/hukuk tarafı, bu repo kapsamı dışı), saklama süresi, ayrılan öğrenci için silme (mali kayıt hariç) — Phase 7'den önce netleşmeli |
-| D4 | Deploy hedefi belirsiz | Yukarıda B tablosunda — açık |
+| D4 | Deploy hedefi | Kapandı - Hetzner (P1) |
 | D5 | Saat dilimi | Türkiye 2016'dan beri sabit UTC+3, DST yok. Yine de DB'de `timestamptz` (UTC instant), yerel hesap `Europe/Istanbul` konfigürasyondan |
 | D6 | MVP birebir ders varsayıyor (`Lesson.studentId` tekil) | Bilinçli sınır — grup dersi (teori, orkestra) gelirse şema değişir. **Güncelleme (AB):** grup dersi `lesson_groups` ile geldi; `Lesson.studentId` tekil kaldı. |
 | D7 | Kardeş indirimi | MVP dışı, ama `PriceList` tasarımı bunu ileride engellemez |

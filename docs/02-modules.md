@@ -1,6 +1,6 @@
 # Modül Haritası
 
-10 modül, master prompt'un 8'ine ek olarak **Banking** (`docs/10-decisions.md` E1 — master prompt'un başlangıçta hariç tuttuğu, sonradan onaylanan bir kapsam). Her modül `Domain/ Features/ Persistence/` dikey dilimiyle organize edilir — `CLAUDE.md`'deki katman kuralına bak.
+13 modül, master prompt'un 8'ine ek olarak **Banking** (`docs/10-decisions.md` E1 — master prompt'un başlangıçta hariç tuttuğu, sonradan onaylanan bir kapsam). Her modül `Domain/ Features/ Persistence/` dikey dilimiyle organize edilir — `CLAUDE.md`'deki katman kuralına bak.
 
 ```
 Modules/
@@ -8,11 +8,14 @@ Modules/
 ├── People/        öğrenci, veli, öğretmen, enstrüman, kayıt
 ├── Scheduling/     ders serisi, ders, öğretmen izni/uygunluğu, okul takvimi
 ├── Attendance/     RSVP, gerçek yoklama
-├── Billing/        ücret planı, aidat, ödeme, telafi kredisi
-├── Progress/       ders notu, yetenek tanımı/değerlendirme, ödev
+├── Billing/        tarife, aidat, tahsilat, telafi kredisi, gider, öğretmen ödemesi
+├── Progress/       ders notu, yetenek değerlendirme, ödev, pratik günlüğü, karne
 ├── Messaging/       bildirim işi, WhatsApp mesajı/webhook, şablon
 ├── Banking/         sanal IBAN, gelen havale eşleştirme         ← yeni (E1, Phase 6)
 ├── Profitability/   kârlılık özeti, fikirler, aylık AI yorumu    ← yeni (10-decisions V)
+├── Show/            yıl sonu gösterisi, program, sahne akışı (10-decisions I)
+├── Library/         eser kataloğu, nota PDF'leri, öğrenciye eser önerisi
+├── Ops/             yedekleme, sistem sağlığı, arka plan işi kaydı, hata bildirimi
 └── Dashboard/       salt-okunur sorgu modeli (kendi tablosu yok)
 ```
 

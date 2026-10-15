@@ -4,7 +4,7 @@ Bu dosya kod yazarken tekrar tekrar anlatılmaması gereken mimari kararları sa
 
 ## Stack
 
-.NET 10 (LTS) · ASP.NET Core Minimal API · EF Core 10 + Npgsql · PostgreSQL 16 · FluentValidation · `PasswordHasher<T>` + httpOnly cookie oturumu (tam ASP.NET Core Identity değil — kendi minimal `users` tablomuz var, bkz. `docs/03-erd.md`) · Serilog · Next.js 16 (App Router) + TypeScript + Tailwind + TanStack Query (shadcn/ui Phase 2'de UI büyüyünce eklenecek).
+.NET 10 (LTS) · ASP.NET Core Minimal API · EF Core 10 + Npgsql · PostgreSQL 16 · elle doğrulama (`ValidationFailedException`; FluentValidation kullanılmıyor, `docs/10-decisions.md` C6) · `PasswordHasher<T>` + httpOnly cookie oturumu (tam ASP.NET Core Identity değil — kendi minimal `users` tablomuz var, bkz. `docs/03-erd.md`) · Serilog · Next.js 16 (App Router) + TypeScript + Tailwind + TanStack Query (shadcn/ui Phase 2'de UI büyüyünce eklenecek).
 
 Yeni bağımlılık eklemeden önce sor: bu ölçekte (6–8 öğretmen, ~150 öğrenci) gerçekten gerekli mi, yoksa `BackgroundService` / `DbContext` / dahili bir sınıfla zaten çözülüyor mu? Şüpheye düşersen eklemeden bırak, `docs/10-decisions.md`'ye not düş.
 
@@ -101,7 +101,7 @@ geri dönme: o API fontları **derleme anında** fonts.googleapis.com'dan çeker
 `npm run build` `module not found: [next]/internal/font/google/<aile>_*.module.css` ile düşer. Gerçek bir
 CI hatası olarak bulundu — aynı commit runner üzerinde sorunsuz derlenirken Docker imajı derlenirken
 düştü ve `docker compose up` hiç ayağa kalkmadı, e2e smoke da onun arkasında kaldı. Üretim imajının
-(ve Vercel derlemesinin) üçüncü parti bir servise bağlı olmaması gerekir.
+üçüncü parti bir servise bağlı olmaması gerekir.
 
 Yeni bir ağırlık/stil gerekirse dosyayı indirip `fonts/`'a ekle. Hepsi **değişken (variable)** font:
 aile başına tek dosya tüm ağırlıkları taşır, bu yüzden `weight` tek değer değil aralık verilir

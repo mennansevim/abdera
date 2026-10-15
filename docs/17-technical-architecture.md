@@ -43,12 +43,14 @@ backend/src/Abdera.Api/
 │   ├── People/     # öğrenci, veli, öğretmen, kayıt, veli portalı
 │   ├── Scheduling/ # seri ders, takvim, değişiklik, tatil/izin
 │   ├── Attendance/ # RSVP, yoklama, telafi tetikleri
-│   ├── Progress/   # ders notları
-│   ├── Pricing/    # fiyat listesi ve toplu fiyat güncelleme
-│   ├── Billing/    # aidat, ödeme, gider, telafi kredisi
+│   ├── Progress/   # ders notları, gelişim, ödev, pratik günlüğü, karne
+│   ├── Billing/    # tarife, aidat, tahsilat, gider, telafi kredisi, öğretmen ödemesi
+│   ├── Profitability/ # kârlılık özeti, büyüme fikirleri, aylık AI yorumu
+│   ├── Show/       # yıl sonu gösterisi ve sahne akışı
+│   ├── Library/    # eser kataloğu ve nota PDF'leri
 │   ├── Messaging/  # template, webhook, bildirim kuyruğu
 │   ├── Banking/    # sanal IBAN, gelen işlem, eşleştirme
-│   ├── Ops/        # yedekleme ve sistem sağlığı
+│   ├── Ops/        # yedekleme, sistem sağlığı, arka plan işi kaydı, hata bildirimi
 │   └── Dashboard/  # rol kapsamlı özet sorguları
 └── Shared/
     ├── AbderaDbContext.cs
