@@ -29,7 +29,7 @@ Sürüm 1 "tek uygulama + okul başına database" öneriyordu. Bu sürümde kull
 | | Sürüm 1: tek uygulama, DB/kiracı | Sürüm 2: okul başına bağımsız kurulum |
 |---|---|---|
 | Okul uygulamasında kod değişikliği | Büyük: kiracı çözümleme, 7 işçinin kiracı döngüsü, singleton → scoped, cookie claim | **Küçük**: marka, modül anahtarları, kurulum ucu. Domain kodu tek kiracılı kalır |
-| Veri sızıntısı riski | Kod hatasıyla mümkün | Fiziksel olarak ayrı process + DB; pratikte yok |
+| Veri sızıntısı riski | Kod hatasıyla mümkün | Ayrı process + DB + ağ; kod hatasıyla okul atlamaz. Aynı sunucu ve platform ortak güven sınırıdır, sunucu/platform ele geçirilirse o sunucudaki tüm okullar etkilenir (§16.1) |
 | Okula özel sürüm / kademeli güncelleme | Zor (herkes aynı sürüm) | Doğal: her okulun kendi sürümü, kanarya güncelleme |
 | WhatsApp webhook'u | Tek uç, numaradan okula yönlendirme gerekir | Her okulun kendi alan adında kendi webhook'u; değişiklik yok |
 | Bellek | ~100 okul tek process | Okul başına ~0,5–0,8 GB → 100 okul için 2–3 sunucu |
@@ -281,7 +281,7 @@ Rate limit: mevcut `webhooks` politikası. İki jeton da platformda şifreli sak
 ### 6.1 Sunucu ajanı `abdera-host`
 - Yer: `deploy/host/abdera-host` (bugünkü `deploy/hetzner/abdera-deploy`'un yanına). Platform'un SSH anahtarı `authorized_keys`'te `command="/usr/local/bin/abdera-host",restrict` ile bağlı; başka komut çalıştıramaz.
 - Komutlar: `create`, `pull`, `up`, `down`, `upgrade`, `rollback`, `suspend`, `resume`, `backup-now`, `route add|remove`, `status`, `destroy`, `host-info`.
-- Girdi doğrulama: slug `^[a-z][a-z0-9-]{2,30}$`, sürüm `^\d{4}\.\d{2}\.\d{2}\.\d+$`, domain biçimi; `flock` ile okul başına kilit (aynı okulda iki işlem aynı anda koşmaz).
+- Girdi doğrulama: slug `^[a-z][a-z0-9-]{2,30}$`, sürüm `^\d{4}\.\d{2}\.\d{2}\.\d+$`, domain biçimi; `flock` ile okul başına kilit (aynı okulda iki işlem aynı anda koşmaz). Paylaşılan Caddy yapılandırmasına dokunan komutlar (`route add|remove`, `suspend`, `resume`) ayrıca **sunucu düzeyinde** kilit alır (§16.2).
 - `upgrade`: bugünkü `abdera-deploy` mantığı okul başına — önce `pg_dump` (alınamazsa durur), yeni etiket, `/health` bekle, olmazsa önceki etikete dön.
 - Ajan okul veritabanının içeriğini okumaz; yalnızca container yaşam döngüsü ve döküm dosyası.
 
@@ -294,7 +294,7 @@ Rate limit: mevcut `webhooks` politikası. İki jeton da platformda şifreli sak
   <slug>/.env                  # 0600, yalnızca root
   <slug>/predeploy/*.sql.gz    # son 5 güncelleme öncesi döküm
 ```
-- Paylaşılan Docker ağı `abdera-edge`: Caddy ve her okulun `api`/`web` servisleri buna bağlanır (`<slug>-api`, `<slug>-web` takma adlarıyla). Okulların `db`'si yalnızca kendi iç ağında; okullar birbirinin DB'sine ağ düzeyinde ulaşamaz.
+- Ağ: her okulun kendi `<slug>-edge` ağı var. Bu ağda o okulun `api`/`web` servisleri ve Caddy bulunur, Caddy bütün okul ağlarına bağlıdır. Okulların `db`'si yalnızca kendi iç ağında. Böylece okullar birbirinin DB, API ve web servislerine ağ düzeyinde ulaşamaz (§16.1). Ortak bir `abdera-edge` ağı **kullanılmaz**.
 - Sunucu başına tek Caddy (okul başına değil).
 
 ## 7. Güncelleme (filo)
@@ -324,9 +324,9 @@ flowchart LR
 
 - Her okulun kendi `backup-gw` (rclone sftp → R2) servisi, R2'de `abdera-backups/<slug>/` öneki ve **okul başına ayrı şifreleme anahtarı** — bir anahtarın sızması tek okulu etkiler.
 - Platform kutucukta son yedek yaşını gösterir; 36 saati geçerse kırmızı.
-- Geri yükleme: `abdera-host restore <slug> <yedek>` (yeni okul kurulumunun 7. adımı + `pg_restore`) — önce test okuluna geri yükleme tatbikatı (`docs/16-backup-restore.md` genişletilir).
-- Askıya alma: api/web durur, Caddy "Hesap askıda — okul yönetimiyle iletişime geçin" sayfası gösterir; DB ve yedek sürer.
-- Silme: son yedek → 30 gün bekleme (geri alınabilir) → container + volume + DNS + Caddy bloğu + sırlar silinir. R2'deki yedekler mevcut kilit/lifecycle kuralıyla (60/65 gün) kendiliğinden düşer. `platform_audit_log` kalır.
+- Geri yükleme: `abdera-host restore <slug> <yedek>` (yeni okul kurulumunun 7. adımı + `pg_restore`) — önce test okuluna geri yükleme tatbikatı (`docs/16-backup-restore.md` genişletilir). Prova/test geri yüklemesi dış bağlantılar **kapalı** başlar (§16.7).
+- Askıya alma: önce son bir yedek alınır ve saklama kuralı dışındaki `abdera-backups/<slug>/suspended/` önekine kopyalanır. Sonra api/web durur, Caddy "Hesap askıda — okul yönetimiyle iletişime geçin" sayfası gösterir; DB volume'ü durur. Yedek üreticisi API içinde olduğu için askıda yeni yedek **alınmaz**. Alınmasına gerek de yoktur, çünkü yazan kimse yok (§16.3).
+- Silme: son yedek → 30 gün bekleme (geri alınabilir; süreyi platform değil **ajan** zorlar, §16.9) → container + volume + DNS + Caddy bloğu + sırlar silinir. R2'deki yedekler mevcut kilit/lifecycle kuralıyla (60/65 gün) kendiliğinden düşer. `platform_audit_log` kalır.
 
 ## 10. Kapasite ve maliyet (tahmin — yük testiyle doğrulanmalı)
 
@@ -338,14 +338,14 @@ flowchart LR
 | backup-gw | ~20 MB | ~60 MB (yedek sırasında) |
 | **Okul başına** | **~0,4 GB** | **~0,8 GB** |
 
-- Planlama değeri okul başına 768 MB rezerv. 64 GB'lık bir sunucuda (~%20 pay bırakarak) ~65 okul. **100 okul ≈ 2 okul sunucusu + 1 küçük platform sunucusu**, tek sunucu çökerse diğerine taşıma için kapasite payı.
+- Planlama değeri okul başına 768 MB rezerv. 64 GB'lık bir sunucuda (~%20 pay bırakarak) ~65 okul. **100 okul ≈ 2 okul sunucusu + 1 küçük platform sunucusu.** Bu yerleşimde bir sunucu çökerse kalan sunucu 100 okulu **taşıyamaz** (2 × 65 = 130 normal kapasite, tek sunucuda 65). Arıza planı ayrı yapılır (§16.6).
 - Bellek baskısı artarsa ilk iyileştirme: sunucu başına paylaşılan tek Postgres (okul başına ayrı database + ayrı kullanıcı) — okulun "bağımsızlığı" uygulama düzeyinde sürer, ~100 Postgres process'i 2'ye iner. Başlangıçta gerekmez.
 - `.NET` için `DOTNET_GCHeapHardLimit` ve `DOTNET_gcServer=0` (workstation GC) okul başına belleği belirgin düşürür.
 - Doğrulama: `loadtest/` senaryosu tek okul profiliyle, 30 okul aynı sunucuda eşzamanlı.
 
 ## 11. Güvenlik ve KVKK
 
-- Okullar arası izolasyon: ayrı container, ayrı DB, ayrı ağ, ayrı sırlar, ayrı yedek anahtarı.
+- Okullar arası izolasyon: ayrı container, ayrı DB, okul başına ayrı ağ, ayrı sırlar, ayrı yedek anahtarı. Bu, kod hatasına ve ele geçirilmiş **tek bir okul uygulamasına** karşı korur. Sunucu (Docker = root) ya da platform ele geçirilirse o sunucudaki/filodaki tüm okullar etkilenir (§16.1, §16.9).
 - Platform okulların kişisel verisini okumaz; telemetri yalnızca sayı. Destek için okula giriş gerekiyorsa okul yöneticisinin açtığı geçici destek hesabıyla, okulun `audit_log`'una yazılarak.
 - Platform: ayrı sunucu, TOTP, IP kısıtı, sırlar Data Protection ile şifreli ve anahtar dizini yedekli (kaybolursa tüm okulların sırları okunamaz → anahtar ayrıca parola yöneticisinde).
 - Ajan: tek komut, girdi doğrulamalı, okul başına kilitli.
@@ -371,7 +371,7 @@ flowchart LR
 ### B. Dağıtım (`deploy/`, `.github/`)
 13. CI: `abdera-api` ve `abdera-web` imajlarını sürüm etiketiyle GHCR'ye itme.
 14. `deploy/instance/compose.yml` şablonu + `.env` şablonu (bellek sınırları, küçük havuz).
-15. `deploy/host/abdera-host` ajanı + sunucu kurulum betiği (Docker, `abdera-edge` ağı, paylaşılan Caddy, `authorized_keys` kısıtı).
+15. `deploy/host/abdera-host` ajanı + sunucu kurulum betiği (Docker, okul başına `<slug>-edge` ağı, paylaşılan Caddy, sunucu düzeyinde Caddy kilidi, `authorized_keys` kısıtı).
 16. Paylaşılan Caddy yapılandırması (`import sites/*.caddy`, askı sayfası).
 17. `deploy.yml` ve `abdera-deploy` → kanarya okulu güncellemesi; mevcut okulun `/opt/abdera`'dan `/srv/abdera/abdera/` düzenine taşınması (bir kerelik, bakım penceresinde, döküm + geri yükleme ile).
 18. DNS'in Cloudflare'e taşınması.
@@ -394,7 +394,7 @@ flowchart LR
 | Faz | Kapsam | Çıktı | Canlı okula etkisi |
 |---|---|---|---|
 | F1 | A1, A3–A5, A8–A10, B13 | Bugünkü okul kendi logosu/adıyla, tüm modüller açık, GHCR imajıyla çalışıyor | Görsel değişiklik yok |
-| F2 | B14–B16, A6 | İkinci okul **elle** (`abdera-host` komutlarıyla) kurulabiliyor | Yok |
+| F2 | B14–B16, A6, §16.1–16.3, 16.7, 16.9 | İkinci okul **elle** (`abdera-host` komutlarıyla) kurulabiliyor; izolasyon, Caddy kilidi, askı yedeği, prova geri yüklemesi ve iki aşamalı silme kanıtlanmış | Yok |
 | F3 | C19–C21, B18 | Platform API kurulumu uçtan uca yürütebiliyor (arayüzsüz) | Yok |
 | F4 | C22–C23 | Kutucuklar + sihirbaz | Yok |
 | F5 | A2, A11, A7, B17, C20 (rollout) | Okul kuralları ayarda, filo güncellemesi, mevcut okul platforma taşındı | Bakım penceresi |
@@ -419,3 +419,21 @@ flowchart LR
 | 2026-10-15 | F1 (A3, A4 kısmi, A8 kısmi, A9) | `Modules__Enabled=none` yalnızca çekirdeği açar (boş değer eski kurulum = hepsi açık; ChatGPT incelemesi madde 5). Banka kapalıyken veli portalı sanal IBAN göstermez. Ön yüz: `lib/instance.ts` (`useInstanceConfig`, yüklenemezse hepsi açık + "Abdera"), menü modüle göre süzülür, kapalı modül sayfasına doğrudan gidilirse "bu okulda açık değil" ekranı, Gelir-gider'de Kârlılık sekmesi modüle bağlı, Hata bildir sayfa listesi süzülür, banka uyarı sorgusu modül kapalıyken çalışmaz. Marka: `SchoolBrandMark` menüde ve girişte okulun kısa adı/alt satırı/logosunu gösterir; logosu olmayan başka okul Abdera logosu yerine baş harfleri taşır. | 3 yeni test (tüm paket 716/717, düşen test yine saate bağlı `SwapLessonsFlowTests`); ayrı yerel DB üzerinde `Modules__Enabled=progress` ile tarayıcıda: Kütüphane/Gösteri/Banka menüden düştü, `/dashboard/banking` kapalı ekranı gösterdi, Kârlılık sekmesi yok, okul adı değişince menü markası değişti |
 
 **Sıradaki adımlar (F1 devamı):** A8'in kalanı — `generateMetadata` ile sayfa başlığı, dinamik manifest/ikonlar, `app-loader` ve veli portalında marka, gizlilik metni; okul profili düzenleme ekranı (Ayarlar'da ad/logo yükleme; uçlar hazır). A9'un kalanı — öğrenci detayındaki gelişim/karne bağlantıları gibi menü dışı giriş noktalarının modüle bağlanması, `/parent`'ın `parent-portal` modülüne bağlanması. A10 — `NEXT_PUBLIC_DEMO_ENABLED`'ın çalışma zamanına taşınması (göreli `/api` üretimde zaten var). Kalan modüller (WhatsApp, e-posta, grup dersleri, gelir-gider, veli portalı, AI) ve onların modüller arası çağrıları (A4, A5); CI'da GHCR imajı (B13).
+
+## 16. İnceleme sonrası düzeltmeler
+
+`CHATGPT-REVIEW.md` ve yanıtı `CLAUDE-RESPONSE.md`'den kabul edilenler. **P1** maddeleri ilgili faz bitmeden kapanmalı.
+
+| # | Konu | Öncelik | Karar | Faz | Kabul kanıtı |
+|---|---|---|---|---|---|
+| 16.1 | İzolasyon sınırı | P2 | Okul başına `<slug>-edge` ağı (§6.2). API forwarded header'lara yalnızca Caddy'nin adresinden güvenir (`KnownProxies`/`KnownNetworks` okul ağına sabitlenir). Belgede güven sınırı açıkça yazılır (§11) | F2 | A okulu container'ından B'nin DB/API/web servislerine bağlantı kurulamaz; A oturum çerezi B'de geçersiz. Bu testin sunucu ele geçirilmesine karşı güvence olmadığı not edilir |
+| 16.2 | Paylaşılan Caddy yapılandırması | **P1** | Caddy'ye dokunan ajan komutları `/srv/abdera/caddy/.lock` ile sunucu düzeyinde kilit alır. Yeni site bloğu geçici dosyaya yazılır, `caddy validate` geçerse `rename` ile yerine konur, sonra `caddy reload`. Doğrulama düşerse eski yapılandırma kalır. Her adım "durumu şuna getir" biçimindedir (dizin varsa dokunma, blok aynıysa yeniden yazma). Temizlik yalnızca `<slug>` önekli kaynaklara dokunur. İşlem kimliği/lease mekanizması tek işçili platformda **eklenmez** | F2 | İki okul eşzamanlı kurulunca iki yönlendirme de korunur. Her yan etki adımı sonrası kesinti ve yeniden denemede çift kaynak oluşmaz |
+| 16.3 | Askıdaki okulun yedeği | **P1** | `suspend` önce `backup-now` çalıştırır, başarısızsa durur. Yedek `suspended/` önekine kopyalanır; bu önek 60/65 günlük saklama kuralının dışındadır, okul silinene kadar kalır. `resume` öneki temizlemez (son askı yedeği yeni yedekler gelene kadar korunur) | F2 | 70 gün askıda kalmış bir okulun (saat ileri alınarak) askı yedeği R2'de durur ve boş DB'ye geri yüklenir |
+| 16.4 | Sürüm ve geri dönüş | P2 | Okullar etiket yerine **digest** ile çeker; `releases` kaydı digest'i tutar. CI her sürümde yeni migration'lar uygulanmış DB üzerinde bir önceki imajı başlatıp giriş + ders listesi + tahsilat duman testinden geçirir. Migration'lar yalnızca ekleyici kalır (kolon silme iki sürüme yayılır). "En düşük yükseltme sürümü" şimdilik gereksiz: EF bekleyen bütün migration'ları sırayla uygular | F3 (CI kısmı F2) | Bir önceki imaj yeni şemada sağlıklı açılır; uyumsuz geri dönüş platformca reddedilir |
+| 16.5 | Modül davranış sözleşmesi | P2 | `Modules__Enabled=none` yalnızca çekirdeği açar (yapıldı, `5949d98`). Platformun yazdığı `.env` şablonunda `Modules__Enabled` zorunludur; boş/tanımsız değer yalnızca eski kurulumun uyumluluğu içindir. A4/A5 her opsiyonel modül için menü, okuma, yazma, işçi, bekleyen iş ve dış entegrasyon davranışını tanımlar; kapalı modülün geçmiş verisi gizlenir, silinmez | F1–F2 | Modül kapalıyken veli portalı, dashboard ve bekleyen bildirimler; yeniden açınca veri geri gelir |
+| 16.6 | Arıza kapasitesi | **P1 (karar)** | İki seçenek: **(a) N+1:** 100 okul için 3 okul sunucusu, her biri en fazla ~45 okul; bir sunucu düşerse okullar diğer ikisine geri yüklenir. **(b) Yeni sunucu + geri yükleme:** 2 sunucu; arızada yeni sunucu açılır (Hetzner dakikalar), okullar son yedekten geri yüklenir. Kesinti birkaç saat, veri kaybı en fazla son yedekten bu yana. Seçim kabul edilen kesinti süresi ve veri kaybı penceresine bağlı bir **iş kararıdır**, pilot öncesi verilir. Bellek tahmini (§10) pilotta ölçülerek güncellenir | F5 öncesi | Bir sunucu kayıp sayılıp okulları hedef süre içinde başka sunucuda ayağa kalkar, birleşik yük ölçülür |
+| 16.7 | Geri yükleme provası ve dış yan etkiler | **P1** | `abdera-host restore --drill` (prova/test okulu) okulu `WhatsApp__Provider=Disabled`, `Email__Provider=Disabled`, `Banking__Provider=Manual` ve bildirim işçileri kapalı başlatır; bekleyen `NotificationJob`'lar gönderilmez. Prova okulu dışarıya yayınlanmaz (Caddy bloğu yok) | F2 | İçinde bekleyen job olan bir yedek prova okuluna geri yüklenir, Fake/Cloud istemcisine hiçbir çağrı gitmez |
+| 16.8 | Katalog ve yapılandırma sahipliği | P2 | Modül kataloğu her sürümle `module-catalog.json` olarak yayımlanır (OCI annotation veya sürüm dosyası). Sihirbaz hedef sürümün kataloğunu oradan okur, kurulmamış okulun API'sinden değil. Sahiplik: okul profili ve okul kuralları okul DB'sindedir, platform yalnızca kurulumda yazar, sonra okur (eski kopyayı geri itmez). Ortam değişkenlerinin (modüller, sağlayıcılar, sırlar) sahibi platformdur | F3 | Platform, hiç kurulmamış bir sürümün modül listesini gösterir; okul yöneticisinin değiştirdiği ad platform işleminden sonra korunur |
+| 16.9 | Platformun silme yetkisi | **P1** | `destroy` iki aşamalıdır: önce okulu `pending-destroy` yapar (container durur, veri kalır); kalıcı silme ancak ajanın kendi tuttuğu 30 günlük süre dolunca ikinci bir komutla yapılır. Platform bu süreyi kısaltamaz. Okulların R2 anahtarlarında silme yetkisi yoktur; eski yedekleri yalnızca nesne kilidi + saklama kuralı temizler. Platform ele geçirilse bile okullar 30 gün içinde ve yedekleri her durumda kurtarılabilir | F2 | `destroy` sonrası 30 gün içinde `abdera-host undestroy` okulu geri getirir; okul R2 anahtarıyla bir nesne silme denemesi reddedilir |
+
+Fazlara etkisi: F2'nin kabul ölçütüne 16.1, 16.2, 16.3, 16.7 ve 16.9 eklenir. 16.6 kararı F5'teki taşıma ve filo güncellemesinden önce verilir.
