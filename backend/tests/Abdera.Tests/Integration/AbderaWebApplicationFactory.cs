@@ -3,29 +3,105 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace Abdera.Tests.Integration;
 
 // docs/09-testing.md: Testcontainers yalnizca gercek Postgres davranisi gerektiren
 // entegrasyon testlerinde kullanilir (migration, SKIP LOCKED, unique kisit, idempotency).
-// Bu fabrika o testler icin gercek bir Postgres container'i ayaga kaldirir.
+//
+// Tum test kosusu TEK bir Postgres container'i paylasir: migration'lar bir kez bos bir
+// sablon veritabanina uygulanir (MigrationTests'in "bos veritabaninda bastan sona" garantisi
+// tam olarak bu adimdir), her fabrika (= her test sinifi) ondan `CREATE DATABASE ... TEMPLATE`
+// ile kendi kopyasini acar. Siniflar arasi izolasyon eskisi gibi veritabani seviyesinde;
+// degisen yalnizca sinif basina container baslatip tum migration'lari yeniden kosmamak.
 public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
-        .WithDatabase("abdera_test")
-        .WithUsername("abdera_test")
-        .WithPassword("abdera_test")
-        .Build();
+    private const string TemplateDatabase = "abdera_template";
+
+    private static readonly Lazy<Task<PostgreSqlContainer>> SharedPostgres = new(StartSharedPostgresAsync);
+    // CREATE DATABASE ... TEMPLATE, sablona baska bir oturum bagliyken reddedilir; kopyalar
+    // sirayla acilir (her biri milisaniyeler surer).
+    private static readonly SemaphoreSlim CloneLock = new(1, 1);
+
+    private string _connectionString = "";
+    private string _databaseName = "";
 
     public async Task InitializeAsync()
     {
-        await _postgres.StartAsync();
+        var postgres = await SharedPostgres.Value;
+        _databaseName = $"abdera_{Guid.NewGuid():N}";
+
+        await CloneLock.WaitAsync();
+        try
+        {
+            await ExecuteOnServerAsync(postgres, $"CREATE DATABASE \"{_databaseName}\" TEMPLATE \"{TemplateDatabase}\"");
+        }
+        finally
+        {
+            CloneLock.Release();
+        }
+
+        _connectionString = new NpgsqlConnectionStringBuilder(postgres.GetConnectionString())
+        {
+            Database = _databaseName,
+        }.ConnectionString;
     }
 
     public new async Task DisposeAsync()
     {
-        await _postgres.DisposeAsync();
+        // Once host (arka plan servisleri dahil) kapanir, sonra sinifin veritabani silinir.
+        // Container'in kendisi kosu bitince Testcontainers'in Ryuk temizleyicisiyle gider.
+        await base.DisposeAsync();
+        await using (var connection = new NpgsqlConnection(_connectionString))
+        {
+            NpgsqlConnection.ClearPool(connection);
+        }
+        var postgres = await SharedPostgres.Value;
+        await ExecuteOnServerAsync(postgres, $"DROP DATABASE IF EXISTS \"{_databaseName}\" WITH (FORCE)");
+    }
+
+    private static async Task<PostgreSqlContainer> StartSharedPostgresAsync()
+    {
+        var postgres = new PostgreSqlBuilder("postgres:16-alpine")
+            .WithDatabase("abdera_test")
+            .WithUsername("abdera_test")
+            .WithPassword("abdera_test")
+            // Eskiden her sinifin kendi sunucusu (100 baglanti) vardi; simdi ayni anda kosan
+            // tum siniflarin host'lari + arka plan servisleri tek sunucuyu paylasiyor.
+            .WithCommand("-c", "max_connections=500")
+            .Build();
+        await postgres.StartAsync();
+
+        await ExecuteOnServerAsync(postgres, $"CREATE DATABASE \"{TemplateDatabase}\"");
+        var templateConnection = new NpgsqlConnectionStringBuilder(postgres.GetConnectionString())
+        {
+            Database = TemplateDatabase,
+            Pooling = false,
+        }.ConnectionString;
+        await using (var db = new AbderaDbContext(new DbContextOptionsBuilder<AbderaDbContext>()
+            .UseNpgsql(templateConnection).Options))
+        {
+            await db.Database.MigrateAsync();
+        }
+
+        return postgres;
+    }
+
+    private static async Task ExecuteOnServerAsync(PostgreSqlContainer postgres, string sql)
+    {
+        // Pooling=false: havuzda acik kalan bir baglanti sablonu "baska kullanici bagli"
+        // durumuna dusurup sonraki kopyayi reddettirmesin.
+        var connectionString = new NpgsqlConnectionStringBuilder(postgres.GetConnectionString())
+        {
+            Database = "postgres",
+            Pooling = false,
+        }.ConnectionString;
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -35,7 +111,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Default"] = _postgres.GetConnectionString(),
+                ["ConnectionStrings:Default"] = _connectionString,
                 ["WhatsApp:Provider"] = "Fake",
                 // SEC-1/SEC-2: WebhookSignatureVerifier/RsvpButtonPayload artik bos anahtarda
                 // fail-closed olduklarindan testlerin gercekci (bos olmayan) bir test secret'i
@@ -66,7 +142,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
     public async Task<AbderaDbContext> CreateDbContextAsync()
     {
         var options = new DbContextOptionsBuilder<AbderaDbContext>()
-            .UseNpgsql(_postgres.GetConnectionString())
+            .UseNpgsql(_connectionString)
             .Options;
         var context = new AbderaDbContext(options);
         await context.Database.MigrateAsync();

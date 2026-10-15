@@ -38,7 +38,8 @@ jobs:
       # Backup:Provider=Fake yalnizca depolama/e-postayi sahteler, pg_dump gercek calisir) -
       # ubuntu-latest runner imajinda genelde hazir gelir ama acikca kurmak bu bagimliligi
       # dokumante eder ve imaj varsayilanlarindaki degisikliklere karsi kirilgan olmaz.
-      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      # Runner imajinda pg_dump zaten varsa apt-get update'in ~10 sn'si atlanir.
+      - run: command -v pg_dump || (sudo apt-get update && sudo apt-get install -y postgresql-client)
       - run: dotnet restore backend/Abdera.slnx
       - run: dotnet build backend/Abdera.slnx --no-restore
       - run: dotnet test backend/Abdera.slnx --no-build
@@ -53,18 +54,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci --prefix frontend
       - run: npm run lint --prefix frontend
       - run: npm run build --prefix frontend
 
+  # Diger islere `needs` ile bagli DEGIL: smoke kendi Compose imajlarini sifirdan kurdugu
+  # icin onlarin ciktisina ihtiyaci yok, paralel kosunca CI ~3 dk kisaliyor. Deploy yine
+  # tum islerin yesilini bekler - deploy.yml CI koşusunun TOPLAM sonucuna
+  # (workflow_run.conclusion == success) bakar, abdera-deploy skill'i de `gh run watch
+  # --exit-status` ile tum kosuyu bekler; herhangi bir is kirmiziysa kosu kirmizidir.
   e2e-smoke:
     runs-on: ubuntu-latest
-    needs: [backend-build-test, frontend-build-lint]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Development smoke ortamini hazirla
         run: |
           cp .env.example .env
@@ -79,10 +88,30 @@ jobs:
           sed -i 's/^RateLimiting__LoginPermitLimit=.*/RateLimiting__LoginPermitLimit=50/' .env
           sed -i 's/^RateLimiting__GuardianOtpPermitLimit=.*/RateLimiting__GuardianOtpPermitLimit=50/' .env
       - run: npm ci --prefix frontend
-      - run: npx playwright install --with-deps chromium
+      # Tarayici ikilileri Playwright surumune gore onbellege alinir; sistem paketleri
+      # (install-deps) onbellekte tutulamadigi icin her kosuda kurulur.
+      - name: Playwright surumunu bul
+        id: playwright
+        run: echo "version=$(node -p "require('./frontend/node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
         working-directory: frontend
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+        working-directory: frontend
+      # Compose imajlari buildx + GitHub Actions cache ile kurulur: restore/npm ci/apk
+      # katmanlari degismedikce yeniden calismaz (.github/docker-compose.ci-cache.yml).
+      - uses: docker/setup-buildx-action@v3
+      # type=gha onbellegi ACTIONS_RUNTIME_TOKEN/ACTIONS_RESULTS_URL ister; bunlari
+      # yalnizca build-push-action kendiliginden gecirir, compose icin disari aktarilir.
+      - uses: crazy-max/ghaction-github-runtime@v3
       - name: Compose uygulamasini baslat
-        run: docker compose up --build -d
+        run: docker compose -f docker-compose.yml -f .github/docker-compose.ci-cache.yml up --build -d
       - name: Saglik kontrolunu bekle
         run: |
           for attempt in $(seq 1 30); do
@@ -100,7 +129,7 @@ jobs:
         run: npm run test:e2e --prefix frontend
       - name: Hata durumunda servis loglari
         if: failure()
-        run: docker compose logs --no-color --tail=250
+        run: docker compose -f docker-compose.yml -f .github/docker-compose.ci-cache.yml logs --no-color --tail=250
       - name: Compose kaynaklarini temizle
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f .github/docker-compose.ci-cache.yml down -v

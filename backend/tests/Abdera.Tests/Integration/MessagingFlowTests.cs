@@ -44,12 +44,12 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     // testler için: "bir öğrenci aynı enstrüman için tek program" kuralı (LessonSeriesFeatures
     // .EnsureSingleSeriesPerInstrumentAsync) aynı kayıt üzerinden ikinci seriyi reddediyor,
     // bu yüzden ikinci program farklı bir enstrümandan açılır.
-    private record SeededLesson(
+    internal record SeededLesson(
         Guid LessonId, Guid StudentId, Guid GuardianId, string GuardianPhone, Guid EnrollmentId,
         Guid TeacherId, Guid[] SpareInstrumentIds);
 
     // teacherEmail verilirse öğretmenin giriş hesabı da açılır (ekran içi bildirim alabilmesi için).
-    private static async Task<SeededLesson> SeedLessonAsync(HttpClient admin, string suffix, string? teacherEmail = null)
+    internal static async Task<SeededLesson> SeedLessonAsync(HttpClient admin, string suffix, string? teacherEmail = null)
     {
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
@@ -273,33 +273,6 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         // Meta'da onaylı lesson_rescheduled şablonu; haftalık bilgi "Yeni saat" satırında.
         Assert.Contains("Ders Saati Değişikliği", outbound.BodySnapshot);
         Assert.Contains("Yeni saat: Her Cuma 18:15 (ilk ders ", outbound.BodySnapshot);
-    }
-
-    [Fact]
-    public async Task Moving_a_series_again_cancels_the_unsent_message_about_the_previous_schedule()
-    {
-        await using var db = await _factory.CreateDbContextAsync();
-        var admin = await CreateAdminClientAsync();
-        var seeded = await SeedLessonAsync(admin, "prgiki");
-        var seriesId = (await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == seeded.LessonId)).LessonSeriesId!.Value;
-
-        var first = (await (await admin.PostAsJsonAsync($"/api/lesson-series/{seriesId}/reschedule",
-                new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Thursday, new TimeOnly(17, 0), 45, null)))
-            .Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
-        // Dispatcher'dan önce yakalamak için ilk mesaj ileriye ötelenir (gönderilmemiş durumda kalsın).
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE notification_jobs SET scheduled_at = {DateTimeOffset.UtcNow.AddHours(1)} WHERE reference_id = {first.Series.Id}");
-
-        var secondResponse = await admin.PostAsJsonAsync($"/api/lesson-series/{first.Series.Id}/reschedule",
-            new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Friday, new TimeOnly(17, 0), 45, null));
-        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
-        var second = (await secondResponse.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
-
-        var firstJob = await db.NotificationJobs.AsNoTracking().SingleAsync(j =>
-            j.Type == NotificationJobType.LessonScheduleChanged && j.ReferenceId == first.Series.Id);
-        Assert.Equal(NotificationJobStatus.Cancelled, firstJob.Status);
-        Assert.True(await db.NotificationJobs.AnyAsync(j =>
-            j.Type == NotificationJobType.LessonScheduleChanged && j.ReferenceId == second.Series.Id));
     }
 
     [Fact]

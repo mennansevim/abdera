@@ -32,6 +32,14 @@
 2. `notification_jobs` üzerindeki `FOR UPDATE SKIP LOCKED` — iki eşzamanlı worker aynı job'ı iki kez işlemiyor
 3. Unique kısıt ihlalleri gerçekten reddediyor (`lesson_series_id + start_at`, `type+reference_type+reference_id`, `provider_event_id`, `enrollment_id+period`)
 4. Webhook idempotency — aynı `provider_event_id` iki kez POST edilince ikinci seferde iş etkisi tekrarlanmıyor
+
+Altyapı: tüm koşu **tek** bir Postgres container'ı paylaşır. Migration'lar bir kez boş bir
+şablon veritabanına uygulanır (madde 1'in kendisi), her test sınıfı (`IClassFixture`) bundan
+`CREATE DATABASE … TEMPLATE` ile kendi kopyasını açar ve sınıf bitince siler. Sınıflar arası
+izolasyon veritabanı seviyesinde kalır; sınıf başına container + 59 migration maliyeti kalktı
+(yerel tam paket 68 sn → 47 sn). Arka plan işçisiyle (ör. `NotificationDispatcher`) yarışan
+bir senaryo için o işçiyi kaldıran ayrı bir fabrika kullan (`NoDispatcherWebApplicationFactory`)
+— satırı oluştuktan sonra "işçi yakalamadan" güncellemeye çalışmak CI'da kararsızdı.
 5. Rol bazlı yetkilendirme — `TEACHER` başka öğretmenin dersine yazamıyor (`403`)
 
 **Ek önkoşul (Faz 4, `Integration/OpsFlowTests.cs`):** `BackupService` gerçek `pg_dump` çalıştırıyor (`Backup:Provider=Fake` yalnızca depolama/e-postayı sahteler, veritabanı dökümü her zaman gerçek). Bu testlerin çalıştığı makinede/CI runner'ında `pg_dump` PATH'te olmalı — yerel geliştirmede genelde `brew install libpq`/`postgresql` ile gelir, CI'da `.github/workflows/ci.yml`'e açıkça kurma adımı eklendi.

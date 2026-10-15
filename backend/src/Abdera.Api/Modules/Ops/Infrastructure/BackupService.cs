@@ -109,7 +109,10 @@ public class BackupService(
             var localDate = clock.ToSchoolLocal(now);
             LastRunDate = DateOnly.FromDateTime(localDate.Date);
 
-            var tempDir = Path.Combine(Path.GetTempPath(), "abdera-backups");
+            // Koşuya özel klasör: dosya adı saniye çözünürlüğünde, aynı makinede aynı saniyede
+            // başlayan iki süreç (ör. paralel test host'ları, eski + yeni konteyner) paylaşılan
+            // klasörde aynı adı alıp birbirinin dosyasını finally'de siliyordu.
+            var tempDir = Path.Combine(Path.GetTempPath(), "abdera-backups", run.Id.ToString("N"));
             Directory.CreateDirectory(tempDir);
             var dumpFileName = $"abdera-{localDate:yyyyMMdd-HHmmss}.sql";
             var dumpPath = Path.Combine(tempDir, dumpFileName);
@@ -163,8 +166,7 @@ public class BackupService(
             }
             finally
             {
-                File.Delete(dumpPath);
-                File.Delete(encryptedPath);
+                Directory.Delete(tempDir, recursive: true);
             }
 
             await db.SaveChangesAsync(cancellationToken);
