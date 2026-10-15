@@ -50,7 +50,7 @@ public static class LoadTestFixtures
             });
         }
 
-        var schoolZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+        var schoolZone = clock.SchoolTimeZone;
         var now = clock.UtcNow;
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, schoolZone).DateTime);
         var from = today.AddDays(-7 * req.HistoryWeeks);

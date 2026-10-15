@@ -98,7 +98,7 @@ public static class DevelopmentMockData
         IPasswordHasher<User> passwordHasher,
         IClock clock)
     {
-        var schoolZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+        var schoolZone = clock.SchoolTimeZone;
         var demoTeacherEmails = TeacherSpecs.Select(spec => spec.Email).ToArray();
         var existingDemoTeacherCount = await db.Users.CountAsync(user => demoTeacherEmails.Contains(user.Email));
         if (existingDemoTeacherCount == TeacherSpecs.Length)
