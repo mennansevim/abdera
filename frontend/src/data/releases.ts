@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.15.2",
+    date: "2026-10-15",
+    items: [
+      { audience: "admin", text: "Gider eklerken yeni kategoriler var: Reklam, Bakım / akort, Vergi / SGK, Malzeme / kırtasiye ve Enstrüman / ekipman. Giderler ekranında kategori filtresi artık açılır listede; dağılımda yalnızca o dönemde tutarı olan kategoriler görünür." },
+      { audience: "admin", text: "Aylık aidat üretimi, WhatsApp gönderimi ve hatırlatmalar gibi otomatik işler artık izleniyor: biri üst üste çalışmazsa ana ekranda uyarı çıkar ve e-posta gelir. Yedekleme ekranında her işin son çalışma zamanı görünür." },
+    ],
+  },
+  {
     version: "2026.10.15",
     date: "2026-10-15",
     items: [
