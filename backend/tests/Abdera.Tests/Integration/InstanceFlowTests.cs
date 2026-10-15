@@ -8,6 +8,7 @@ using Abdera.Api.Shared.Modules;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -176,6 +177,47 @@ public class InstanceFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var everything = await LoginAsync(_factory, "admin@test.local", "Test1234!");
         var passed = await everything.PostAsJsonAsync($"/api/students/{unknownStudent}/enrollments", groupEnrollment);
         Assert.Equal(HttpStatusCode.NotFound, passed.StatusCode);
+    }
+
+    // WhatsApp, e-posta ve AI kapalı okul: sağlayıcı yapılandırılmış olsa bile veliye iş kurulmaz,
+    // Mesaj Merkezi/webhook/OTP uçları kapanır, AI üreticisi "kullanılamaz" görünür.
+    [Fact]
+    public async Task Disabled_whatsapp_email_and_ai_do_not_schedule_or_expose_anything()
+    {
+        using var coreOnly = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [EnabledModules.ConfigurationKey] = ModuleCatalog.NoneSentinel,
+            })));
+
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var guardian = Abdera.Api.Modules.People.Domain.Guardian.Create("Rıza", "Açık", "0555 777 66 55", DateTimeOffset.UtcNow);
+            guardian.SetNotificationConsent(true, DateTimeOffset.UtcNow);
+            db.Guardians.Add(guardian);
+            await db.SaveChangesAsync();
+
+            using var offScope = coreOnly.Services.CreateScope();
+            var offScheduler = offScope.ServiceProvider.GetRequiredService<Abdera.Api.Modules.Messaging.Features.INotificationScheduler>();
+            Assert.False(await offScheduler.ScheduleAsync(
+                Abdera.Api.Modules.Messaging.Domain.NotificationJobType.Birthday, "test", Guid.NewGuid(), guardian.Id, DateTimeOffset.UtcNow.AddDays(1)));
+            Assert.False(offScope.ServiceProvider.GetRequiredService<Abdera.Api.Modules.Progress.Domain.IProgressSummaryGenerator>().IsAvailable);
+
+            // Aynı veliye modül açıkken iş kurulur - false yalnızca modülden geliyor.
+            using var onScope = _factory.Services.CreateScope();
+            var onScheduler = onScope.ServiceProvider.GetRequiredService<Abdera.Api.Modules.Messaging.Features.INotificationScheduler>();
+            Assert.True(await onScheduler.ScheduleAsync(
+                Abdera.Api.Modules.Messaging.Domain.NotificationJobType.Birthday, "test", Guid.NewGuid(), guardian.Id, DateTimeOffset.UtcNow.AddDays(1)));
+        }
+
+        using var anonymous = coreOnly.CreateClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync("/api/webhooks/whatsapp")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/guardian/otp/request", new { phoneNumber = "05557776655" })).StatusCode);
+
+        var admin = await LoginAsync(coreOnly, "admin@test.local", "Test1234!");
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/notifications")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/notification-automation-settings")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/me/notifications")).StatusCode);
     }
 
     private static MultipartFormDataContent LogoForm(byte[] content, string claimedType)

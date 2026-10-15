@@ -346,7 +346,7 @@ public class GuardianPortalFlowTests : IClassFixture<AbderaWebApplicationFactory
         using var schoolWithoutBanking = _factory.WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [Abdera.Api.Shared.Modules.EnabledModules.ConfigurationKey] = "progress,parent-portal",
+                [Abdera.Api.Shared.Modules.EnabledModules.ConfigurationKey] = "progress,parent-portal,whatsapp",
             })));
         using var guardianClient = await LoginAsGuardianAsync(schoolWithoutBanking, seeded.GuardianPhone);
 

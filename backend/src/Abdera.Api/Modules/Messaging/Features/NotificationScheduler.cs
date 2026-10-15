@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Messaging.Features;
@@ -28,11 +29,14 @@ public interface INotificationScheduler
     Task ScheduleUpcomingLessonRemindersAsync(Guid guardianId);
 }
 
-public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotificationScheduler
+public class NotificationScheduler(AbderaDbContext db, IClock clock, EnabledModules modules) : INotificationScheduler
 {
     public async Task<bool> ScheduleAsync(
         NotificationJobType type, string referenceType, Guid referenceId, Guid guardianId, DateTimeOffset scheduledAt)
     {
+        // WhatsApp modülü kapalı okulda veliye giden iş kurulmaz (docs/multi-tenant/ARCHITECTURE.md §5.2).
+        if (!modules.IsEnabled(ModuleKeys.WhatsApp)) return false;
+
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId);
         // docs/06-whatsapp.md A8: rızası kapalı veliye asla job açılmaz.
         if (guardian is null || !guardian.NotificationConsent) return false;
@@ -89,6 +93,9 @@ public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotifica
 
     public async Task ScheduleUpcomingLessonRemindersAsync(Guid guardianId)
     {
+        // WhatsApp modülü kapalı okulda veliye giden iş kurulmaz (docs/multi-tenant/ARCHITECTURE.md §5.2).
+        if (!modules.IsEnabled(ModuleKeys.WhatsApp)) return;
+
         var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId);
         if (guardian is null || !guardian.NotificationConsent) return;
 

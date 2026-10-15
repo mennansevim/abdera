@@ -20,7 +20,10 @@ export type ModuleKey =
   | "profitability"
   | "parent-portal"
   | "groups"
-  | "finance";
+  | "finance"
+  | "whatsapp"
+  | "email"
+  | "ai";
 
 export interface InstanceModule {
   key: ModuleKey;

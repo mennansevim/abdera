@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
@@ -48,8 +49,11 @@ public static class GuardianAuth
     public static void MapGuardianAuth(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/guardian/login", LoginAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
-        app.MapPost("/api/guardian/otp/request", RequestOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
-        app.MapPost("/api/guardian/otp/verify", VerifyOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp");
+        // OTP kodu WhatsApp ile gider: WhatsApp kapalı okulda veli yalnızca şifreyle girer.
+        app.MapPost("/api/guardian/otp/request", RequestOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp")
+            .RequireModule(ModuleKeys.WhatsApp);
+        app.MapPost("/api/guardian/otp/verify", VerifyOtpAsync).AllowAnonymous().RequireRateLimiting("guardian-otp")
+            .RequireModule(ModuleKeys.WhatsApp);
         app.MapGet("/api/guardian/me", MeAsync).RequireAuthorization(AuthorizationPolicies.GuardianOnly);
         app.MapPost("/api/guardian/change-password", ChangePasswordAsync)
             .RequireAuthorization(AuthorizationPolicies.GuardianOnly)

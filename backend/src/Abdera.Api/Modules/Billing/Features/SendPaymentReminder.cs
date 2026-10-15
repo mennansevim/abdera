@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Billing.Features;
@@ -15,7 +16,8 @@ public static class SendPaymentReminder
     public static void MapSendPaymentReminder(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/receivables/{receivableId:guid}/send-reminder", HandleAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.WhatsApp);
     }
 
     private static async Task<IResult> HandleAsync(

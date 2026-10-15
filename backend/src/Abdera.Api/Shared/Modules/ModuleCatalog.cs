@@ -23,6 +23,9 @@ public static class ModuleKeys
     public const string ParentPortal = "parent-portal";
     public const string Groups = "groups";
     public const string Finance = "finance";
+    public const string WhatsApp = "whatsapp";
+    public const string Email = "email";
+    public const string Ai = "ai";
 }
 
 public sealed record ModuleDefinition(string Key, string Name, bool IsCore, IReadOnlyList<string> Requires);
@@ -46,6 +49,12 @@ public static class ModuleCatalog
         new(ModuleKeys.Finance, "Gelir-gider ve öğretmen ödemeleri", false, [ModuleKeys.Billing]),
         // Kârlılık ders başı maliyeti öğretmen ücretinden, sabit gideri gider tablosundan okur.
         new(ModuleKeys.Profitability, "Kârlılık", false, [ModuleKeys.Finance]),
+        // Sağlayıcı (Cloud/Smtp/OpenAi) açılışta yapısal olarak seçilir; modül kapalıysa her
+        // istekte "devre dışı" uygulamasına düşülür (Program.cs), bekleyen işler üretilmez.
+        new(ModuleKeys.WhatsApp, "WhatsApp bildirimleri", false, []),
+        new(ModuleKeys.Email, "E-posta hatırlatmaları", false, []),
+        // Yorumlar Gelişim ve Kârlılık ekranlarının içinde; ikisi de kapalıysa görünmez.
+        new(ModuleKeys.Ai, "Yapay zekâ yorumları", false, []),
         new(ModuleKeys.ParentPortal, "Veli portalı", false, [ModuleKeys.People, ModuleKeys.Billing]),
     ];
 

@@ -165,7 +165,6 @@ if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Cloud, StringCompariso
 }
 else if (string.Equals(whatsAppProvider, WhatsAppProviderModes.Disabled, StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddSingleton<DisabledWhatsAppClient>();
     resolveProviderClient = sp => sp.GetRequiredService<DisabledWhatsAppClient>();
 }
 else
@@ -173,9 +172,15 @@ else
     builder.Services.AddSingleton<FakeWhatsAppClient>();
     resolveProviderClient = sp => sp.GetRequiredService<FakeWhatsAppClient>();
 }
+// WhatsApp modülü kapalı okulda (docs/multi-tenant/ARCHITECTURE.md §5.2) yapılandırılmış sağlayıcı
+// ne olursa olsun gönderim "devre dışı" sonucuyla döner. Modül listesi istek anında okunur.
+builder.Services.AddSingleton<DisabledWhatsAppClient>();
 // Her gönderim velinin bildirim onayından geçer (ConsentGatedWhatsAppClient) - sağlayıcı ne olursa olsun.
 builder.Services.AddScoped<IWhatsAppClient>(sp => new ConsentGatedWhatsAppClient(
-    resolveProviderClient(sp), sp.GetRequiredService<AbderaDbContext>(),
+    sp.GetRequiredService<EnabledModules>().IsEnabled(ModuleKeys.WhatsApp)
+        ? resolveProviderClient(sp)
+        : sp.GetRequiredService<DisabledWhatsAppClient>(),
+    sp.GetRequiredService<AbderaDbContext>(),
     sp.GetRequiredService<ILogger<ConsentGatedWhatsAppClient>>()));
 
 // --- Banka entegrasyonu sağlayıcısı: docs/10-decisions.md E1 - WhatsApp'takiyle aynı
@@ -240,16 +245,22 @@ else
 // WhatsApp/Banking ile aynı yapısal DI kararı, bu yüzden Build()'den önce okunuyor.
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
 var aiProvider = builder.Configuration["Ai:Provider"] ?? "Disabled";
+builder.Services.AddSingleton<DisabledProgressSummaryGenerator>();
+builder.Services.AddSingleton<DisabledProfitCommentaryGenerator>();
+Func<IServiceProvider, IProgressSummaryGenerator> resolveProgressGenerator = sp => sp.GetRequiredService<DisabledProgressSummaryGenerator>();
+Func<IServiceProvider, IProfitCommentaryGenerator> resolveProfitGenerator = sp => sp.GetRequiredService<DisabledProfitCommentaryGenerator>();
 if (string.Equals(aiProvider, "OpenAi", StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddHttpClient<IProgressSummaryGenerator, OpenAiProgressSummaryGenerator>();
-    builder.Services.AddHttpClient<IProfitCommentaryGenerator, OpenAiProfitCommentaryGenerator>();
+    builder.Services.AddHttpClient<OpenAiProgressSummaryGenerator>();
+    builder.Services.AddHttpClient<OpenAiProfitCommentaryGenerator>();
+    resolveProgressGenerator = sp => sp.GetRequiredService<OpenAiProgressSummaryGenerator>();
+    resolveProfitGenerator = sp => sp.GetRequiredService<OpenAiProfitCommentaryGenerator>();
 }
-else
-{
-    builder.Services.AddSingleton<IProgressSummaryGenerator, DisabledProgressSummaryGenerator>();
-    builder.Services.AddSingleton<IProfitCommentaryGenerator, DisabledProfitCommentaryGenerator>();
-}
+// AI modülü kapalı okulda yapılandırılmış sağlayıcı kullanılmaz; ekranlar yorum kutusu olmadan çalışır.
+builder.Services.AddTransient<IProgressSummaryGenerator>(sp => sp.GetRequiredService<EnabledModules>().IsEnabled(ModuleKeys.Ai)
+    ? resolveProgressGenerator(sp) : sp.GetRequiredService<DisabledProgressSummaryGenerator>());
+builder.Services.AddTransient<IProfitCommentaryGenerator>(sp => sp.GetRequiredService<EnabledModules>().IsEnabled(ModuleKeys.Ai)
+    ? resolveProfitGenerator(sp) : sp.GetRequiredService<DisabledProfitCommentaryGenerator>());
 
 // --- Kimlik doğrulama: httpOnly cookie oturumu (docs/10-decisions.md B4 - JWT'nin
 // refresh/iptal derdi 8 kullanıcılık sistemde karşılıksız) ---

@@ -36,7 +36,7 @@ const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
   { href: "/dashboard/costs", label: "Gelir ve gider", icon: "bank", module: "finance", section: "Finans" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", module: "banking", section: "Finans" },
-  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", section: "İletişim" },
+  { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", module: "whatsapp", section: "İletişim" },
   { href: "/dashboard/guardians", label: "Veli girişleri", icon: "shield", module: "parent-portal", section: "İletişim" },
   { href: "/dashboard/backups", label: "Yedekleme", icon: "shield", section: "Sistem" },
   { href: "/dashboard/benchmark", label: "Performans", icon: "activity", section: "Eğitim" },
@@ -47,9 +47,9 @@ const ADMIN_LINKS: NavItem[] = [
 // kartının kullandığı sayılara bakıyor (Banka: NeedsReview; Mesaj Merkezi: Failed). Talepler
 // menüden kalktı: sayfa Bugün ekranındaki kart ve zildeki bildirimden açılır. Yalnızca Admin bu
 // linkleri gördüğü için sorgular Teacher oturumunda hiç çalışmasın diye `enabled` ile kapatılır.
-function useAdminAlerts(enabled: boolean, bankingEnabled: boolean): Record<string, boolean> {
+function useAdminAlerts(enabled: boolean, bankingEnabled: boolean, whatsAppEnabled: boolean): Record<string, boolean> {
   const { data: bankItems } = useBankTransactions("NeedsReview", 1, 1, { enabled: enabled && bankingEnabled });
-  const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled });
+  const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled: enabled && whatsAppEnabled });
 
   return {
     "/dashboard/banking": Boolean(bankItems?.items.length),
@@ -101,7 +101,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const waitingForModules = instancePending && !instanceError && isModulePage(pathname);
   const profile = instance?.profile ?? DEFAULT_PROFILE;
   const enabledModule = (key: ModuleKey | undefined) => isModuleEnabled(instance, key);
-  const alerts = useAdminAlerts(isAdmin, useModuleQueryEnabled("banking"));
+  const alerts = useAdminAlerts(isAdmin, useModuleQueryEnabled("banking"), useModuleQueryEnabled("whatsapp"));
   const disabledPage = disabledModulePage(pathname, enabledModule);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
   // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
@@ -118,7 +118,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
     href === BUG_REPORT_LINK.href && !pathname.startsWith(href) ? `${href}?from=${encodeURIComponent(pathname)}` : href;
   const mobilePrimary: NavItem[] = me.role === "Admin"
     // Alt çubukta beş sütun ~70px: "Mesaj Merkezi" 375px'lik telefonda "Mesaj Merk…" diye kesiliyordu.
-    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), { ...navItem("/dashboard/notifications"), label: "Mesajlar" }]
+    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), enabledModule("whatsapp") ? { ...navItem("/dashboard/notifications"), label: "Mesajlar" } : navItem("/dashboard/students")]
     : [
         { ...navItem("/dashboard"), label: "Bugün" },
         { ...navItem("/dashboard/calendar"), label: "Takvimim" },

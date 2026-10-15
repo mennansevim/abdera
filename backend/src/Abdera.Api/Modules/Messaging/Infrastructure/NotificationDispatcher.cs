@@ -3,6 +3,7 @@ using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Messaging.Infrastructure;
@@ -40,6 +41,20 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
             var whatsAppClient = scope.ServiceProvider.GetRequiredService<IWhatsAppClient>();
 
             var now = clock.UtcNow;
+
+            // WhatsApp modülü kapalıyken vadesi gelmiş işler gönderilmez, iptal edilir: modül sonradan
+            // açılınca eski hatırlatmalar topluca gitmesin. Yeni iş zaten kurulmaz (NotificationScheduler).
+            if (!scope.ServiceProvider.GetRequiredService<EnabledModules>().IsEnabled(ModuleKeys.WhatsApp))
+            {
+                var stale = await db.NotificationJobs
+                    .Where(job => job.Status == NotificationJobStatus.Pending && job.ScheduledAt <= now)
+                    .Take(500)
+                    .ToListAsync(cancellationToken);
+                foreach (var job in stale) job.Cancel(now);
+                if (stale.Count > 0) await db.SaveChangesAsync(cancellationToken);
+                await heartbeat.SucceededAsync(BackgroundJobs.NotificationDispatcher, cancellationToken);
+                return;
+            }
             var quietStart = TimeOnly.Parse(config["Notifications:QuietHoursStart"] ?? "21:00");
             var quietEnd = TimeOnly.Parse(config["Notifications:QuietHoursEnd"] ?? "09:00");
             var maxAttempts = config.GetValue("Notifications:MaxAttempts", 5);

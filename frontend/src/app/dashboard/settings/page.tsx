@@ -10,6 +10,7 @@ import { useMe } from "@/lib/use-auth";
 import { ChangePasswordForm } from "../change-password-form";
 import { DisplayNameForm } from "../display-name-form";
 import { SchoolProfilePanel } from "./school-profile-panel";
+import { useModuleEnabled } from "@/lib/instance";
 
 const FONT_SIZE_OPTIONS: Array<{ value: FontSizePreference; label: string; detail: string }> = [
   { value: "small", label: "Küçük", detail: "Daha kompakt" },
@@ -28,6 +29,7 @@ export default function SettingsPage() {
     () => "standard" as FontSizePreference,
   );
   const { data: me, refetch } = useMe();
+  const whatsAppEnabled = useModuleEnabled("whatsapp");
   const passwordChangeRequired = me?.mustChangePassword ?? false;
 
   function changeFontSize(value: FontSizePreference) {
@@ -104,9 +106,9 @@ export default function SettingsPage() {
         </section>
       )}
 
-      <section className="app-card p-4">
+      {whatsAppEnabled && <section className="app-card p-4">
         <SectionHeader title="Mesaj Merkezi" description="Ders hatırlatmaları, WhatsApp şablonları ve gönderim tercihleri Mesaj Merkezi'nde yönetilir." />
-      </section>
+      </section>}
       {me?.role === "Admin" && <MaintenanceSettingsPanel />}
     </div>
   );

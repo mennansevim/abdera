@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Messaging.Features;
@@ -82,7 +83,7 @@ public interface IStaffNotifier
 }
 
 public class StaffNotifier(
-    AbderaDbContext db, IClock clock, IEmailSender emailSender, ILogger<StaffNotifier> logger) : IStaffNotifier
+    AbderaDbContext db, IClock clock, IEmailSender emailSender, EnabledModules modules, ILogger<StaffNotifier> logger) : IStaffNotifier
 {
     private readonly List<(string To, string Subject, string Body)> _pendingEmails = [];
 
@@ -244,6 +245,13 @@ public class StaffNotifier(
 
     public async Task FlushEmailsAsync(CancellationToken cancellationToken = default)
     {
+        // E-posta modülü kapalı okulda personel e-postası gönderilmez; ekran içi bildirim (çekirdek) sürer.
+        if (!modules.IsEnabled(ModuleKeys.Email))
+        {
+            _pendingEmails.Clear();
+            return;
+        }
+
         var batch = _pendingEmails.ToList();
         _pendingEmails.Clear();
         foreach (var (to, subject, body) in batch)

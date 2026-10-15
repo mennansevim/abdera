@@ -53,7 +53,9 @@ function AdminDashboard({ me }: { me: Me }) {
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: lessons, isLoading: lessonsLoading, isError: lessonsError, isFetching: lessonsFetching, refetch: refetchLessons } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
   const { data: today, isLoading: statsLoading } = useDashboardToday();
-  const { data: failedNotifications } = useNotifications("Failed", 1, 1);
+  // Gönderilemeyen WhatsApp bildirimi yalnızca WhatsApp modülü açık okulda vardır.
+  const whatsAppEnabled = useModuleQueryEnabled("whatsapp");
+  const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled: whatsAppEnabled });
   // Yan panel (talepler, banka, doğum günleri...) her açılışta KAPALI başlar: ilk görünen ekran
   // geniş takvim olsun (kullanıcı isteği). Kapalıyken dar şeritteki rozetler bekleyen iş olduğunu
   // söyler; tercih bilerek saklanmıyor ki ekran her seferinde geniş takvimle açılsın.
@@ -69,7 +71,7 @@ function AdminDashboard({ me }: { me: Me }) {
         items={[
           { key: "today", label: "Bugünkü ders", value: today?.todayLessons ?? 0, loading: statsLoading, href: "/dashboard/calendar" },
           { key: "requests", label: "Bekleyen değişiklik talebi", value: today?.pendingChangeRequests ?? 0, tone: today?.pendingChangeRequests ? "warning" : undefined, loading: statsLoading, href: "/dashboard/change-requests" },
-          { key: "failed", label: "Gönderilemeyen bildirim", value: failedNotifications?.totalCount ?? 0, tone: failedNotifications?.totalCount ? "danger" : undefined, loading: statsLoading, href: "/dashboard/notifications" },
+          ...(!whatsAppEnabled ? [] : [{ key: "failed", label: "Gönderilemeyen bildirim", value: failedNotifications?.totalCount ?? 0, tone: failedNotifications?.totalCount ? "danger" : undefined, loading: statsLoading, href: "/dashboard/notifications" } as const]),
         ]}
       />
 
@@ -87,7 +89,9 @@ function DashboardTopbar({ me }: { me: Me }) {
   const [query, setQuery] = useState("");
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
-  const { data: failedNotifications } = useNotifications("Failed", 1, 1);
+  // Gönderilemeyen WhatsApp bildirimi yalnızca WhatsApp modülü açık okulda vardır.
+  const whatsAppEnabled = useModuleQueryEnabled("whatsapp");
+  const { data: failedNotifications } = useNotifications("Failed", 1, 1, { enabled: whatsAppEnabled });
   const normalized = query.trim().toLocaleLowerCase("tr-TR");
   const results = normalized
     ? [
@@ -119,10 +123,10 @@ function DashboardTopbar({ me }: { me: Me }) {
             </div>
           )}
         </div>
-        <Link href="/dashboard/notifications" className="icon-btn icon-btn-quiet relative shrink-0 text-[var(--brand-strong)]" aria-label={failedNotifications?.totalCount ? `Bildirimleri aç, ${failedNotifications.totalCount} gönderilemeyen bildirim` : "Bildirimleri aç"}>
+        {whatsAppEnabled && <Link href="/dashboard/notifications" className="icon-btn icon-btn-quiet relative shrink-0 text-[var(--brand-strong)]" aria-label={failedNotifications?.totalCount ? `Bildirimleri aç, ${failedNotifications.totalCount} gönderilemeyen bildirim` : "Bildirimleri aç"}>
           <Icon name="bell" className="h-[1.1rem] w-[1.1rem]" />
           {!!failedNotifications?.totalCount && <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--danger)] ring-2 ring-white" aria-hidden="true" />}
-        </Link>
+        </Link>}
       </div>
     </header>
   );
