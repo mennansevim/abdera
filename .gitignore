@@ -84,3 +84,6 @@ tools/bulk-seed/last-run-report.*
 
 # Tanıtım sitesi tasarım taslakları (yapay görseller, 19 MB) - yalnızca yerelde tutulur.
 /design/
+
+# Platform yerel geliştirme Data Protection anahtarları
+platform/api/Abdera.Platform.Api/.dev-keys/

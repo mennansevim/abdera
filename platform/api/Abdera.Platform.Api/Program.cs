@@ -96,6 +96,9 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
 });
 builder.Services.AddProblemDetails();
+// Üretimde panel ve API aynı origin'de (Caddy). Geliştirmede panel ayrı portta: yalnızca yapılandırılmış
+// origin'e, çerezli istek için izin verilir. Origin, istek anında DI'dan okunur (test overlay'i görülsün).
+builder.Services.AddCors();
 
 var app = builder.Build();
 
@@ -127,6 +130,11 @@ app.UseExceptionHandler(handler => handler.Run(async context =>
     await context.Response.WriteAsJsonAsync(new { title, status, detail, errors });
 }));
 
+app.UseCors(cors =>
+{
+    var origins = (app.Configuration["Frontend:Origin"] ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    if (origins.Length > 0) cors.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+});
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
