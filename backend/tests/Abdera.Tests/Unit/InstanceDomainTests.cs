@@ -22,15 +22,34 @@ public class InstanceDomainTests
     }
 
     [Fact]
-    public void Core_modules_stay_enabled_when_only_optional_modules_are_listed()
+    public void Standard_modules_stay_enabled_when_only_paid_add_ons_are_listed()
     {
-        var enabled = ModuleCatalog.ResolveEnabled("library");
+        var enabled = ModuleCatalog.ResolveEnabled("banking");
 
+        Assert.Contains(ModuleKeys.Banking, enabled);
         Assert.Contains(ModuleKeys.Library, enabled);
-        Assert.Contains(ModuleKeys.Billing, enabled);
-        Assert.Contains(ModuleKeys.People, enabled);
-        Assert.DoesNotContain(ModuleKeys.Banking, enabled);
-        Assert.DoesNotContain(ModuleKeys.Progress, enabled);
+        Assert.Contains(ModuleKeys.Progress, enabled);
+        Assert.Contains(ModuleKeys.Groups, enabled);
+        Assert.Contains(ModuleKeys.ParentPortal, enabled);
+        Assert.DoesNotContain(ModuleKeys.WhatsApp, enabled);
+        Assert.DoesNotContain(ModuleKeys.Ai, enabled);
+    }
+
+    [Fact]
+    public void Only_paid_add_ons_are_optional()
+    {
+        // Standart paket her okulda aynı; opsiyonel = dış maliyeti olan, ayrıca satılan eklenti.
+        Assert.Equal(
+            new[] { ModuleKeys.Ai, ModuleKeys.Banking, ModuleKeys.WhatsApp },
+            ModuleCatalog.All.Where(module => !module.IsCore).Select(module => module.Key).Order().ToArray());
+    }
+
+    [Fact]
+    public void Keys_that_used_to_be_optional_are_still_accepted()
+    {
+        // Eski kurulumların .env'inde kalan anahtarlar açılışı bozmamalı; zaten açıklar.
+        var enabled = ModuleCatalog.ResolveEnabled("progress,groups,finance,profitability,library,show,parent-portal,email");
+        Assert.All(ModuleCatalog.All.Where(module => module.IsCore), module => Assert.Contains(module.Key, enabled));
     }
 
     [Theory]

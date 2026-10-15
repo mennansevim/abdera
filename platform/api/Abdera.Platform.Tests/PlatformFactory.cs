@@ -111,6 +111,13 @@ public class PlatformFactory : WebApplicationFactory<Program>, IAsyncLifetime
         new { key = "email", name = "E-posta", isCore = false, requires = Array.Empty<string>() },
     ];
 
+    public static object[] Categories =>
+    [
+        new { key = "music", name = "Müzik", unitLabel = "Enstrüman", unitLabelPlural = "Enstrümanlar", suggestions = new[] { "Piyano", "Gitar" } },
+        new { key = "dance", name = "Dans", unitLabel = "Dans türü", unitLabelPlural = "Dans türleri", suggestions = new[] { "Bale", "Hip hop" } },
+        new { key = "other", name = "Diğer", unitLabel = "Ders", unitLabelPlural = "Dersler", suggestions = Array.Empty<string>() },
+    ];
+
     public async Task RegisterReleaseAsync(HttpClient client, string version, char digit)
     {
         var response = await client.PostAsJsonAsync("/api/releases", new
@@ -121,6 +128,7 @@ public class PlatformFactory : WebApplicationFactory<Program>, IAsyncLifetime
             revision = "abc123",
             modules = Catalog,
             notes = (string?)null,
+            categories = Categories,
         });
         if ((int)response.StatusCode >= 300) throw new InvalidOperationException(await response.Content.ReadAsStringAsync());
     }

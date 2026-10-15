@@ -9,8 +9,9 @@ import { useSearchParams } from "next/navigation";
 import { AdminGate, FormMessage, onInvalidTurkish, PageHeader, resetValidity } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { lookupGuardianByPhone, useInstruments, useRegisterStudent, useTeachers, type GuardianPhoneLookup, type RegisterStudentResult } from "@/lib/people";
+import { lookupGuardianByPhone, useInstruments, useRegisterStudent, useTeachers, type GuardianPhoneLookup, type RegisterStudentResult, isSelectable } from "@/lib/people";
 import { DAY_NAMES_TR } from "@/lib/scheduling";
+import { useBranchTerms } from "@/lib/instance";
 
 // Yerel takvim günü: `toISOString()` UTC verir ve İstanbul'da 00:00-03:00 arası dünü gösterirdi.
 function localIsoDate() {
@@ -49,6 +50,7 @@ export default function NewStudentPage() {
 }
 
 function NewStudentForm() {
+  const terms = useBranchTerms();
   // Müsaitlik ekranındaki "Kayıt aç" öğretmen, enstrüman, gün, saat, süre ve ilk boş tarihi
   // buraya taşır; form yine aynı form, yalnızca ilk değerleri dolu gelir.
   const searchParams = useSearchParams();
@@ -100,7 +102,8 @@ function NewStudentForm() {
   const [result, setResult] = useState<RegisterStudentResult | null>(null);
 
   const selectedTeacher = activeTeachers.find((t) => t.id === teacherId);
-  const teacherInstruments = selectedTeacher?.instrumentIds ?? [];
+  const teacherInstruments = (selectedTeacher?.instrumentIds ?? [])
+    .filter((id) => isSelectable(instrumentsQuery.data?.find((instrument) => instrument.id === id) ?? {}));
 
   function onTeacherChange(id: string) {
     setTeacherId(id);
@@ -121,7 +124,7 @@ function NewStudentForm() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    if (!teacherId || !instrumentId) { setError("Lütfen öğretmen ve enstrüman seç."); return; }
+    if (!teacherId || !instrumentId) { setError(`Lütfen öğretmen ve ${terms.branchLower} seç.`); return; }
     try {
       const res = await register.mutateAsync({
         student: { firstName, lastName, birthDate },
@@ -214,9 +217,9 @@ function NewStudentForm() {
                 {activeTeachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
               </select>
             </label>
-            <label className="form-label">Enstrüman
+            <label className="form-label">{terms.branch}
               <select className="field" required value={instrumentId} onChange={resetValidity((e) => setInstrumentId(e.target.value))} onInvalid={onInvalidTurkish} disabled={!teacherId}>
-                <option value="" disabled>{teacherId ? "Enstrüman seç…" : "Önce öğretmen seç"}</option>
+                <option value="" disabled>{teacherId ? `${terms.branch} seç…` : "Önce öğretmen seç"}</option>
                 {teacherInstruments.map((id) => <option key={id} value={id}>{instrumentName.get(id) ?? id}</option>)}
               </select>
             </label>

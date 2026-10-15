@@ -217,7 +217,7 @@ export function ModulesTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
         <ModulePicker catalog={catalog.data} selected={selected} onChange={setSelected} disabled={!editable} />
       </Panel>
       <Panel title="Entegrasyonlar" meta="Yalnızca değiştirmek istediğin alanları doldur">
-        <IntegrationFields modules={selected} values={integrations} stored={stored} onChange={(key, value) => setIntegrations((currentValues) => ({ ...currentValues, [key]: value }))} />
+        <IntegrationFields modules={new Set([...selected, ...(catalog.data ?? []).filter((m) => m.isCore).map((m) => m.key)])} values={integrations} stored={stored} onChange={(key, value) => setIntegrations((currentValues) => ({ ...currentValues, [key]: value }))} />
       </Panel>
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="text-meta">Kaydetmek okulun yapılandırmasını yeniden yazar; api/web ~30 sn yeniden başlar. Kapatılan modülün verisi silinmez.</span>

@@ -10,7 +10,9 @@ namespace Abdera.Platform.Api.Features;
 public static class Releases
 {
     public record ModuleEntry(string Key, string Name, bool IsCore, IReadOnlyList<string> Requires);
-    public record CreateRequest(string Version, string ApiImage, string WebImage, string? Revision, IReadOnlyList<ModuleEntry> Modules, string? Notes);
+    public record CategoryEntry(string Key, string Name, string UnitLabel, string UnitLabelPlural, IReadOnlyList<string> Suggestions);
+    public record CreateRequest(string Version, string ApiImage, string WebImage, string? Revision, IReadOnlyList<ModuleEntry> Modules, string? Notes,
+        IReadOnlyList<CategoryEntry>? Categories = null);
     public record ReleaseResponse(string Version, string ApiImage, string WebImage, string? Revision, string? Notes, bool IsWithdrawn, DateTimeOffset ReleasedAt, int SchoolCount);
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -21,6 +23,7 @@ public static class Releases
         group.MapGet("", ListAsync);
         group.MapPost("", CreateAsync);
         group.MapGet("/{version}/modules", ModulesAsync);
+        group.MapGet("/{version}/categories", CategoriesAsync);
         group.MapPost("/{version}/withdraw", WithdrawAsync);
     }
 
@@ -49,7 +52,8 @@ public static class Releases
             throw new ConflictException("Bu sürüm farklı imajlarla zaten kayıtlı.");
         }
         var release = Release.Create(request.Version, request.ApiImage, request.WebImage, request.Revision,
-            JsonSerializer.Serialize(request.Modules, Json), request.Notes, time.GetUtcNow());
+            JsonSerializer.Serialize(request.Modules, Json), request.Notes, time.GetUtcNow(),
+            JsonSerializer.Serialize(request.Categories ?? [], Json));
         db.Releases.Add(release);
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "release.registered", null, time.GetUtcNow(),
             afterJson: JsonSerializer.Serialize(new { release.Version, release.ApiImage, release.WebImage })));
@@ -62,6 +66,16 @@ public static class Releases
         var release = await db.Releases.SingleOrDefaultAsync(r => r.Version == version) ?? throw new NotFoundException("Sürüm bulunamadı.");
         return Results.Ok(Catalog(release));
     }
+
+    // Sihirbaz: hedef sürümün kategori ve alt birim önerileri. Kataloğu olmayan eski sürümde boş liste.
+    private static async Task<IResult> CategoriesAsync(string version, PlatformDbContext db)
+    {
+        var release = await db.Releases.SingleOrDefaultAsync(r => r.Version == version) ?? throw new NotFoundException("Sürüm bulunamadı.");
+        return Results.Ok(Categories(release));
+    }
+
+    public static IReadOnlyList<CategoryEntry> Categories(Release release) =>
+        JsonSerializer.Deserialize<List<CategoryEntry>>(release.CategoryCatalogJson, Json) ?? [];
 
     private static async Task<IResult> WithdrawAsync(string version, ClaimsPrincipal principal, PlatformDbContext db, TimeProvider time)
     {

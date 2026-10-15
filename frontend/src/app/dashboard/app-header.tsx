@@ -9,7 +9,7 @@ import { NotificationBell, NotificationToasts } from "@/components/notification-
 import { WhatsNewDialog } from "@/components/whats-new";
 import type { Me } from "@/lib/api";
 import { useBankTransactions } from "@/lib/banking";
-import { DEFAULT_PROFILE, isModuleEnabled, useInstanceConfig, useModuleQueryEnabled, type ModuleKey } from "@/lib/instance";
+import { DEFAULT_PROFILE, isModuleEnabled, useInstanceConfig, useModuleQueryEnabled, useTeachesMusic, type ModuleKey } from "@/lib/instance";
 import { useNotifications } from "@/lib/messaging";
 import { CURRENT_VERSION } from "@/lib/releases";
 import { meDisplayName, meInitials, useLogout } from "@/lib/use-auth";
@@ -101,6 +101,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const waitingForModules = instancePending && !instanceError && isModulePage(pathname);
   const profile = instance?.profile ?? DEFAULT_PROFILE;
   const enabledModule = (key: ModuleKey | undefined) => isModuleEnabled(instance, key);
+  // Nota kütüphanesi müziğe özel: dans/spor/dil okulunun menüsünde görünmez (sayfa yine açılabilir).
+  const teachesMusic = useTeachesMusic();
   const alerts = useAdminAlerts(isAdmin, useModuleQueryEnabled("banking"), useModuleQueryEnabled("whatsapp"));
   const disabledPage = disabledModulePage(pathname, enabledModule);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
@@ -109,7 +111,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const links = (isAdmin
     ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK, BUG_REPORT_LINK]
     : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK, BUG_REPORT_LINK])
-    .filter((link) => enabledModule(link.module))
+    .filter((link) => enabledModule(link.module) && (teachesMusic || link.href !== "/dashboard/library"))
     .map((link) => (alerts[link.href] ? { ...link, alert: true } : link))
     .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));
   const navItem = (href: string) => links.find((link) => link.href === href)!;

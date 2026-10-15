@@ -11,6 +11,15 @@ export interface ModuleEntry {
   requires: string[];
 }
 
+// Branş kategorileri kataloğu (okul uygulamasının BranchCatalog'u; sürüm kaydıyla gelir, §5.6).
+export interface CategoryEntry {
+  key: string;
+  name: string;
+  unitLabel: string;
+  unitLabelPlural: string;
+  suggestions: string[];
+}
+
 export interface Release {
   version: string;
   apiImage: string;
@@ -29,6 +38,7 @@ export interface ReleaseInput {
   revision: string | null;
   modules: ModuleEntry[];
   notes: string | null;
+  categories?: CategoryEntry[];
 }
 
 export function useReleases() {
@@ -39,6 +49,16 @@ export function useReleaseModules(version: string | null | undefined) {
   return useQuery({
     queryKey: ["releases", version, "modules"],
     queryFn: () => api.get<ModuleEntry[]>(`/api/releases/${encodeURIComponent(version!)}/modules`),
+    enabled: Boolean(version),
+    staleTime: 5 * 60_000,
+  });
+}
+
+// Kataloğu olmayan eski sürümde boş liste döner; sihirbaz o durumda yalnızca serbest ad alır.
+export function useReleaseCategories(version: string | null | undefined) {
+  return useQuery({
+    queryKey: ["releases", version, "categories"],
+    queryFn: () => api.get<CategoryEntry[]>(`/api/releases/${encodeURIComponent(version!)}/categories`),
     enabled: Boolean(version),
     staleTime: 5 * 60_000,
   });

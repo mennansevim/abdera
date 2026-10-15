@@ -2,7 +2,7 @@
 
 import { INTEGRATION_FIELDS, INTEGRATION_TITLES, OPS_ALERT_FIELD, type IntegrationField } from "@/lib/modules";
 
-// Entegrasyon ayarları - yalnızca seçili modüllerin alanları gösterilir. Değerler platformun
+// Entegrasyon ayarları - yalnızca açık modüllerin (standart paket + seçilen eklentiler) alanları gösterilir. Değerler platformun
 // sır kasasında şifreli saklanır, ekrana bir daha dönmez; boş bırakılan sağlayıcı kapalı kalır.
 // `stored` verilirse (okul detayı) kasada zaten değeri olan alanlar "kayıtlı" diye işaretlenir.
 export function IntegrationFields({ modules, values, onChange, stored }: {
@@ -34,7 +34,7 @@ export function IntegrationFields({ modules, values, onChange, stored }: {
 
   return (
     <div className="grid gap-4">
-      {groups.length === 0 && <p className="text-meta">Seçili modüller arasında dış hesap gerektiren yok (WhatsApp, E-posta, Yapay zekâ).</p>}
+      {groups.length === 0 && <p className="text-meta">Açık modüller arasında dış hesap gerektiren yok (WhatsApp, E-posta, Yapay zekâ).</p>}
       {groups.map((group) => (
         <fieldset key={group} className="grid gap-3 rounded-2xl border border-[var(--line)] p-3 sm:p-4">
           <legend className="px-1 text-sm font-bold">{INTEGRATION_TITLES[group]}</legend>

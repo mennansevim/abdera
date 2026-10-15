@@ -11,7 +11,7 @@ import { Icon, InstrumentSilhouette } from "@/components/icons";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/library";
 import { buildInstrumentColorMap, INSTRUMENT_TONES } from "@/lib/lesson-colors";
-import { ENROLLMENT_END_REASON_LABELS, useInstruments, useStudents, useTeachers, type EnrollmentEndReason } from "@/lib/people";
+import { ENROLLMENT_END_REASON_LABELS, useInstruments, useStudents, useTeachers, type EnrollmentEndReason, isSelectable } from "@/lib/people";
 import {
   DAY_NAMES_TR,
   LESSON_GROUP_DEFAULT_CAPACITY,
@@ -191,7 +191,7 @@ function CreateGroupDialog({ onClose, onCreated }: { onClose: () => void; onCrea
           <label className="form-label">
             Kurs
             <select value={resolvedInstrumentId} onChange={(event) => { setInstrumentId(event.target.value); setTeacherId(""); }} required className="field text-sm">
-              {instruments?.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
+              {instruments?.filter(isSelectable).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
           </label>
           <label className="form-label">

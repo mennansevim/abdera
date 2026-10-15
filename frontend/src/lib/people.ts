@@ -10,11 +10,17 @@ export type StudentStatus = "Active" | "Inactive";
 export type TeacherStatus = "Active" | "Inactive";
 export type EnrollmentStatus = "Active" | "Paused" | "Ended";
 
+// Okulun alt birimi (branş): enstrüman, dans türü, spor branşı... (backend Instrument + BranchCatalog).
+// Pasif alt birim eski kayıtlarda adıyla görünür ama yeni kayıtta seçilmez.
 export interface Instrument {
   id: string;
   name: string;
   code: string;
+  category?: string;
+  isActive?: boolean;
 }
+
+export const isSelectable = (instrument: object) => (instrument as { isActive?: boolean }).isActive !== false;
 
 export interface Student {
   id: string;
@@ -157,6 +163,22 @@ export const INSTRUMENT_VARIANT_MAX_LENGTH = 40;
 
 export function useInstruments() {
   return useQuery({ queryKey: ["instruments"], queryFn: () => api.get<Instrument[]>("/api/instruments") });
+}
+
+// Ayarlar → Branşlar (yalnızca Admin). Alt birim eklenince/değişince arayüz terimi de değişebilir
+// (tek kategori "Enstrüman", karışık "Branş"), bu yüzden okul yapılandırması da tazelenir.
+export function useSaveInstrument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id?: string; name: string; category: string; isActive?: boolean }) =>
+      input.id
+        ? api.put<Instrument>(`/api/instruments/${input.id}`, { name: input.name, category: input.category, isActive: input.isActive ?? true })
+        : api.post<Instrument>("/api/instruments", { name: input.name, category: input.category }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["instruments"] });
+      queryClient.invalidateQueries({ queryKey: ["instance-config"] });
+    },
+  });
 }
 
 // Açılır menüler ve listeler ekranda "Ad Soyad" gösteriyor; sunucu ise soyada ve veritabanı

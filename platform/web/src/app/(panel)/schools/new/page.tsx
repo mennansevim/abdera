@@ -12,8 +12,8 @@ import { Badge, FormMessage, LoadError, PageHeader, Panel, ProgressBar, Skeleton
 import { errorMessage } from "@/lib/api";
 import { formatDate, readableTextOn } from "@/lib/format";
 import { HOST_STATUS_LABEL, useHosts, type ServerHost } from "@/lib/hosts";
-import { INTEGRATION_FIELDS, INTEGRATION_TITLES, MODULE_DESCRIPTIONS, OPS_ALERT_FIELD, optionalOnly } from "@/lib/modules";
-import { useReleaseModules, useReleases, type ModuleEntry } from "@/lib/releases";
+import { INTEGRATION_FIELDS, INTEGRATION_TITLES, MODULE_DESCRIPTIONS, OPS_ALERT_FIELD, isModuleOn, optionalOnly } from "@/lib/modules";
+import { useReleaseCategories, useReleaseModules, useReleases, type CategoryEntry, type ModuleEntry } from "@/lib/releases";
 import { checkSlug, useCreateSchool } from "@/lib/schools";
 import {
   LOGO_TYPES,
@@ -36,7 +36,7 @@ import {
 // bilgi amaçlı tahmin; asıl seçimi kurulumun "Sunucu seç" adımı yapar.
 const SCHOOL_RESERVE_MB = 768;
 
-// `+` → yeni okul sihirbazı (ARCHITECTURE.md §4.2). Dokuz adım, durum bellekte; "İleri"
+// `+` → yeni okul sihirbazı (ARCHITECTURE.md §4.2). On adım, durum bellekte; "İleri"
 // adımın doğrulamasından geçmeden ilerlemez, "Geri" her zaman serbest. Son adım isteği
 // gönderir ve okul detayına (canlı kurulum ilerlemesi) yönlendirir.
 export default function NewSchoolPage() {
@@ -65,6 +65,7 @@ export default function NewSchoolPage() {
 
   const releases = useReleases();
   const catalog = useReleaseModules(state.version || null);
+  const categories = useReleaseCategories(state.version || null);
 
   const context: ValidationContext = { slugCheck, slugChecking, catalog: catalog.data };
   const step = STEPS[stepIndex];
@@ -103,7 +104,7 @@ export default function NewSchoolPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Yeni okul"
-        description="Dokuz adımda okulu tanımla; platform sunucuyu seçip kurulumu başlatır."
+        description="Okulu adım adım tanımla: kimlik, alanlar ve dersler, eklentiler, kurallar. Platform sunucuyu seçip kurulumu başlatır."
         actions={<Link href="/" className="btn btn-quiet"><Icon name="arrow-left" className="h-4 w-4" />Okullar</Link>}
       />
 
@@ -150,6 +151,7 @@ export default function NewSchoolPage() {
             slugChecking={slugChecking}
             releases={releases}
             catalog={catalog}
+            categories={categories}
             invalidSteps={invalidSteps.map((item) => item.title)}
             onGoTo={(key) => setStepIndex(STEPS.findIndex((item) => item.key === key))}
           />
@@ -200,6 +202,7 @@ interface StepProps {
   slugChecking: boolean;
   releases: ReturnType<typeof useReleases>;
   catalog: ReturnType<typeof useReleaseModules>;
+  categories: ReturnType<typeof useReleaseCategories>;
   invalidSteps: string[];
   onGoTo: (key: StepKey) => void;
 }
@@ -208,6 +211,7 @@ function StepBody(props: StepProps) {
   switch (props.step) {
     case "identity": return <IdentityStep {...props} />;
     case "version": return <VersionStep {...props} />;
+    case "branches": return <BranchesStep {...props} />;
     case "modules": return <ModulesStep {...props} />;
     case "admin": return <AdminStep {...props} />;
     case "policy": return <PolicyStep {...props} />;
@@ -377,13 +381,121 @@ function VersionStep({ state, update, errors, releases }: StepProps) {
 
 // --- 3. Modüller ---
 
+// --- 3. Alanlar ve dersler (§5.6) ---
+// Kategori seç (Müzik, Dans, Spor...), altındaki önerilerden ekle ya da kendi adını yaz. Okul yöneticisi
+// sonradan Ayarlar → Eğitim alanları'ndan değiştirebilir. Ekranlardaki terim buna göre değişir.
+
+function BranchesStep({ state, update, errors, categories }: StepProps) {
+  const [custom, setCustom] = useState("");
+  const [customCategory, setCustomCategory] = useState<string>("");
+  if (categories.isLoading) return <Skeleton className="h-48" />;
+  if (categories.error) return <LoadError message={errorMessage(categories.error)} onRetry={() => categories.refetch()} />;
+  // Kataloğu olmayan eski sürüm: yalnızca serbest ad, kategori "Diğer".
+  const catalog: CategoryEntry[] = categories.data && categories.data.length > 0
+    ? categories.data
+    : [{ key: "other", name: "Diğer", unitLabel: "Ders", unitLabelPlural: "Dersler", suggestions: [] }];
+  const has = (name: string) => state.branches.some((b) => b.name.trim().toLocaleLowerCase("tr-TR") === name.trim().toLocaleLowerCase("tr-TR"));
+  const selectedCategories = catalog.filter((category) => state.categories.has(category.key));
+  const targetCategory = customCategory && state.categories.has(customCategory) ? customCategory : selectedCategories[0]?.key ?? catalog[0].key;
+  const unitOf = (key: string) => catalog.find((c) => c.key === key)?.unitLabel ?? "Ders";
+  const term = new Set(state.branches.map((b) => b.category)).size === 1 ? unitOf(state.branches[0].category) : "Branş";
+
+  function toggleCategory(key: string) {
+    const next = new Set(state.categories);
+    if (next.has(key)) {
+      next.delete(key);
+      update({ categories: next, branches: state.branches.filter((b) => b.category !== key) });
+    } else {
+      next.add(key);
+      update({ categories: next });
+    }
+  }
+
+  function toggleBranch(category: string, name: string) {
+    update({ branches: has(name) ? state.branches.filter((b) => b.name.trim().toLocaleLowerCase("tr-TR") !== name.toLocaleLowerCase("tr-TR")) : [...state.branches, { category, name }] });
+  }
+
+  function addCustom() {
+    const name = custom.trim();
+    if (!name || has(name)) return;
+    const next = new Set(state.categories);
+    next.add(targetCategory);
+    update({ categories: next, branches: [...state.branches, { category: targetCategory, name }] });
+    setCustom("");
+  }
+
+  return (
+    <div className="grid gap-4">
+      <p className="text-meta">Okul ne öğretiyor? Bir ya da birden fazla alan seç; her alanın altındaki derslerden ekle ya da kendi dersini yaz. Bireysel ve grup (çoklu) ders her alanda standart.</p>
+      <div>
+        <h3 className="text-micro text-[var(--muted)]">Alanlar</h3>
+        <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Alanlar">
+          {catalog.map((category) => {
+            const on = state.categories.has(category.key);
+            return (
+              <button key={category.key} type="button" onClick={() => toggleCategory(category.key)} aria-pressed={on}
+                className={`pressable rounded-2xl border px-3 py-2 text-left ${on ? "border-[var(--brand)] bg-[var(--brand-soft)]/50" : "border-[var(--line)]"}`}>
+                <span className="block text-sm font-bold">{category.name}</span>
+                <span className="text-meta">{category.unitLabelPlural}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedCategories.map((category) => (
+        <div key={category.key} className="rounded-2xl border border-[var(--line)] p-3">
+          <p className="text-sm font-bold">{category.name} · {category.unitLabelPlural}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {category.suggestions.map((name) => {
+              const on = has(name);
+              return (
+                <button key={name} type="button" onClick={() => toggleBranch(category.key, name)} aria-pressed={on}
+                  className={`pressable rounded-full border px-3 py-1 text-sm font-semibold ${on ? "border-[var(--brand)] bg-[var(--brand)] text-white" : "border-dashed border-[var(--line)]"}`}>
+                  {on ? <Icon name="check" className="mr-1 inline h-3.5 w-3.5" /> : "+ "}{name}
+                </button>
+              );
+            })}
+            {state.branches.filter((b) => b.category === category.key && !category.suggestions.some((s) => s.toLocaleLowerCase("tr-TR") === b.name.trim().toLocaleLowerCase("tr-TR"))).map((b) => (
+              <button key={b.name} type="button" onClick={() => toggleBranch(category.key, b.name)} aria-pressed
+                className="pressable rounded-full border border-[var(--brand)] bg-[var(--brand)] px-3 py-1 text-sm font-semibold text-white" title="Kaldırmak için tıkla">
+                <Icon name="check" className="mr-1 inline h-3.5 w-3.5" />{b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+        <Field label="Listede olmayan bir ders ekle" hint="Ör. Yaratıcı drama, İngilizce - Konuşma, Satranç">
+          <input className="field" value={custom} maxLength={100} onChange={(event) => setCustom(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustom(); } }} />
+        </Field>
+        <Field label="Alan">
+          <select className="field" value={targetCategory} onChange={(event) => setCustomCategory(event.target.value)}>
+            {catalog.map((category) => <option key={category.key} value={category.key}>{category.name}</option>)}
+          </select>
+        </Field>
+        <button type="button" onClick={addCustom} disabled={!custom.trim()} className="btn btn-quiet">Ekle</button>
+      </div>
+
+      <p className="text-meta">
+        {state.branches.length === 0 ? "Henüz ders eklenmedi." : `${state.branches.length} ders seçildi. Okulun ekranlarında “${term}” olarak görünecek.`}
+      </p>
+      {errors.branches && <span className="form-error">{errors.branches}</span>}
+    </div>
+  );
+}
+
+// --- 4. Eklentiler ---
+
 function ModulesStep({ state, update, errors, catalog }: StepProps) {
   if (catalog.isLoading) return <Skeleton className="h-48" />;
   if (catalog.error) return <LoadError message={errorMessage(catalog.error)} onRetry={() => catalog.refetch()} />;
   if (!catalog.data) return <span className="form-error">{errors.modules}</span>;
   return (
     <div className="grid gap-3">
-      <p className="text-meta">Modüller v{state.version} sürümünün kataloğundan gelir. Kapalı bir modül sonradan okul detayından açılabilir; kapatmak veriyi silmez.</p>
+      <p className="text-meta">Standart paket her okulda açık. Yalnızca ücretli eklentiler (dış sağlayıcı maliyeti olanlar) seçilir; sonradan okul detayından açılıp kapatılabilir, kapatmak veriyi silmez.</p>
       <ModulePicker catalog={catalog.data} selected={state.modules} onChange={(modules) => update({ modules })} />
     </div>
   );
@@ -422,8 +534,8 @@ function NumberField({ label, value, onChange, error, hint, suffix }: { label: s
   );
 }
 
-function PolicyStep({ state, update, errors }: StepProps) {
-  const groups = state.modules.has("groups");
+function PolicyStep({ state, update, errors, catalog }: StepProps) {
+  const groups = isModuleOn("groups", state.modules, catalog.data);
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {groups && (
@@ -461,8 +573,8 @@ function TariffCard({ title, prefix, draft, onChange, errors }: { title: string;
   );
 }
 
-function BillingStep({ state, update, errors }: StepProps) {
-  const groups = state.modules.has("groups");
+function BillingStep({ state, update, errors, catalog }: StepProps) {
+  const groups = isModuleOn("groups", state.modules, catalog.data);
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-3">
@@ -481,7 +593,7 @@ function BillingStep({ state, update, errors }: StepProps) {
 
 // --- 7. Entegrasyonlar ---
 
-function IntegrationsStep({ state, update, errors }: StepProps) {
+function IntegrationsStep({ state, update, errors, catalog }: StepProps) {
   const errorList = Object.values(errors);
   return (
     <div className="grid gap-4">
@@ -489,7 +601,7 @@ function IntegrationsStep({ state, update, errors }: StepProps) {
         Değerler platformun sır kasasında şifreli saklanır ve bir daha ekranda gösterilmez. Boş bırakılan sağlayıcı kapalı kalır; okul o modülü “devre dışı” olarak çalıştırır. Sonradan okul detayından eklenebilir.
       </FormMessage>
       <IntegrationFields
-        modules={state.modules}
+        modules={new Set([...state.modules, ...(catalog.data ?? []).filter((m) => m.isCore).map((m) => m.key)])}
         values={state.integrations}
         onChange={(key, value) => update({ integrations: { ...state.integrations, [key]: value } })}
       />
@@ -564,8 +676,8 @@ function SummarySection({ title, step, onGoTo, children }: { title: string; step
 function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepProps) {
   const entries: ModuleEntry[] = catalog.data ?? [];
   const optional = optionalOnly(state.modules, entries);
-  const groups = state.modules.has("groups");
-  const integrations = integrationsFor(state);
+  const groups = isModuleOn("groups", state.modules, entries);
+  const integrations = integrationsFor(state, entries);
   const allFields = [...Object.values(INTEGRATION_FIELDS).flat(), OPS_ALERT_FIELD];
   const domain = state.customDomain.trim().toLowerCase() || slugCheck?.domain || `${state.slug}.abdera.app`;
   const name = (key: string) => entries.find((m) => m.key === key)?.name ?? key;
@@ -584,10 +696,15 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
         <SummaryRow label="Renk / logo"><span className="font-mono">{state.primaryColor}</span> · {state.logoName ?? "logo yok"}</SummaryRow>
         <SummaryRow label="Unvan / iletişim">{state.legalName || "—"} · {state.contactEmail || "—"}</SummaryRow>
       </SummarySection>
-      <SummarySection title="Sürüm ve modüller" step="modules" onGoTo={onGoTo}>
+      <SummarySection title="Alanlar ve dersler" step="branches" onGoTo={onGoTo}>
+        <SummaryRow label="Dersler">
+          <span className="flex flex-wrap gap-1">{state.branches.map((b) => <Badge key={b.name} tone="brand">{b.name}</Badge>)}</span>
+        </SummaryRow>
+      </SummarySection>
+      <SummarySection title="Sürüm ve eklentiler" step="modules" onGoTo={onGoTo}>
         <SummaryRow label="Sürüm"><span className="font-mono">v{state.version}</span>{state.isCanary && <Badge tone="warning" className="ml-2">Kanarya</Badge>}</SummaryRow>
-        <SummaryRow label="Opsiyonel modüller">
-          {optional.length === 0 ? "Yalnızca çekirdek" : (
+        <SummaryRow label="Ücretli eklentiler">
+          {optional.length === 0 ? "Yok (standart paket)" : (
             <span className="flex flex-wrap gap-1">{optional.map((key) => <Badge key={key} tone="brand"><span title={MODULE_DESCRIPTIONS[key]}>{name(key)}</span></Badge>)}</span>
           )}
         </SummaryRow>
@@ -610,7 +727,7 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
       </SummarySection>
       <SummarySection title="Entegrasyonlar" step="integrations" onGoTo={onGoTo}>
         {Object.keys(integrations).length === 0 ? <SummaryRow label="Durum">Hiçbiri girilmedi (sağlayıcılar kapalı)</SummaryRow> : (
-          Object.entries(INTEGRATION_TITLES).filter(([key]) => state.modules.has(key)).map(([key, title]) => {
+          Object.entries(INTEGRATION_TITLES).filter(([key]) => isModuleOn(key, state.modules, entries)).map(([key, title]) => {
             const filled = INTEGRATION_FIELDS[key].filter((field) => integrations[field.key]);
             return <SummaryRow key={key} label={title}>{filled.length > 0 ? `${filled.length}/${INTEGRATION_FIELDS[key].length} alan girildi` : "Girilmedi — kapalı kalır"}</SummaryRow>;
           })

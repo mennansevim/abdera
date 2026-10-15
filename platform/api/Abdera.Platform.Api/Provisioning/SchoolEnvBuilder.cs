@@ -29,7 +29,8 @@ public class SchoolEnvBuilder(IConfiguration config)
             .ToDictionary(pair => pair.Key[SecretNames.IntegrationPrefix.Length..], pair => pair.Value);
 
         var whatsApp = school.Modules.Contains(ModuleWhatsApp) && WhatsAppKeys.Where(key => key != "WhatsApp__BusinessAccountId").All(integrations.ContainsKey);
-        var email = school.Modules.Contains(ModuleEmail) && SmtpKeys.All(integrations.ContainsKey);
+        // E-posta standart pakette (okul uygulamasının kataloğunda çekirdek): SMTP bilgisi girildiyse açık.
+        var email = SmtpKeys.All(integrations.ContainsKey);
         var ai = school.Modules.Contains(ModuleAi) && integrations.ContainsKey("Ai__ApiKey");
         var platformUrl = (config["Platform:PublicUrl"] ?? "https://platform.abdera.app").TrimEnd('/');
 

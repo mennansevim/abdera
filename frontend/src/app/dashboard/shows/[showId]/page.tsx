@@ -7,7 +7,7 @@ import { Icon } from "@/components/icons";
 import { FormActions, FormMessage, Modal, PageHeader, StatStrip } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
-import { useInstruments, useStudents, useTeachers } from "@/lib/people";
+import { useInstruments, useStudents, useTeachers, isSelectable } from "@/lib/people";
 import {
   SHOW_ITEM_KIND_LABEL,
   SHOW_STATUS_LABEL,
@@ -22,6 +22,7 @@ import {
   type ShowItemInput,
   type ShowItemKind,
 } from "@/lib/shows";
+import { useBranchTerms } from "@/lib/instance";
 
 // Program ekranı: gösterinin sıralı akışı. Resital yazılımlarının (Pembee, RecitalDash,
 // CompuDance) ortak yüzeyi - sıra numarası, öğrenci, enstrüman, eser + besteci, öğretmen,
@@ -49,6 +50,7 @@ function emptyItem(groupName: string | null): ShowItemInput {
 }
 
 export default function ShowProgramPage() {
+  const terms = useBranchTerms();
   const params = useParams<{ showId: string }>();
   const showId = params.showId;
   const { data: me } = useMe();
@@ -164,7 +166,7 @@ export default function ShowProgramPage() {
           <div className="grid min-h-48 place-items-center p-8 text-center">
             <div>
               <p className="text-sm font-bold">Program boş</p>
-              <p className="text-meta mt-1">İlk sırayı ekleyerek başla: öğrenci, enstrüman ve çalacağı eser.</p>
+              <p className="text-meta mt-1">İlk sırayı ekleyerek başla: öğrenci, {terms.branchLower} ve sunacağı eser.</p>
               {isAdmin && <button type="button" onClick={() => setAdding(emptyItem("1. Bölüm"))} className="btn btn-primary mt-3">Sıra ekle</button>}
             </div>
           </div>
@@ -313,6 +315,7 @@ function ItemModal({
   knownGroups: string[];
   onClose: () => void;
 }) {
+  const terms = useBranchTerms();
   const addItem = useAddShowItem(showId);
   const updateItem = useUpdateShowItem(showId);
   const { data: students } = useStudents();
@@ -397,10 +400,10 @@ function ItemModal({
             {draft.studentId && <PhotoField studentId={draft.studentId} />}
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="form-label">Enstrüman
+              <label className="form-label">{terms.branch}
                 <select value={draft.instrumentId ?? ""} onChange={(event) => patch({ instrumentId: event.target.value })} className="field text-sm">
                   <option value="">Seç…</option>
-                  {instruments?.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
+                  {instruments?.filter(isSelectable).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
                 </select>
               </label>
               <label className="form-label">Öğretmen

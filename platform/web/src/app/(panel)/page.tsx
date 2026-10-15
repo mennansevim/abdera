@@ -7,6 +7,7 @@ import { SchoolAvatar, StatusBadge } from "@/components/school-bits";
 import { LoadError, PageHeader, ProgressBar, SearchInput, Segmented, Skeleton } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { formatAge, formatNumber, hoursSince } from "@/lib/format";
+import { compareVersions, useReleaseCategories, useReleases } from "@/lib/releases";
 import { BACKUP_STALE_HOURS, RUN_KIND_LABEL, isRunOpen, useSchools, type SchoolTile } from "@/lib/schools";
 import { useNow } from "@/lib/use-now";
 
@@ -32,8 +33,19 @@ export default function SchoolsHomePage() {
   const now = useNow();
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+
+  // Alan adları (Müzik, Dans...) en yeni sürümün kataloğundan; kataloğu yoksa anahtar görünür.
+  const releases = useReleases();
+  const latest = useMemo(() => (releases.data ?? []).filter((r) => !r.isWithdrawn).map((r) => r.version).sort(compareVersions).at(-1), [releases.data]);
+  const categoryCatalog = useReleaseCategories(latest);
+  const categoryName = useMemo(() => {
+    const names = new Map((categoryCatalog.data ?? []).map((c) => [c.key, c.name]));
+    return (key: string) => names.get(key) ?? key;
+  }, [categoryCatalog.data]);
 
   const schools = useMemo(() => data ?? [], [data]);
+  const usedCategories = useMemo(() => [...new Set(schools.flatMap((s) => s.categories ?? []))].sort(), [schools]);
   const counts = useMemo(() => ({
     all: schools.length,
     Active: schools.filter((s) => s.status === "Active").length,
@@ -47,11 +59,12 @@ export default function SchoolsHomePage() {
     const query = search.trim().toLocaleLowerCase("tr-TR");
     return schools.filter((school) => {
       if (filter === "problem" ? problemsOf(school, now).length === 0 : filter !== "all" && school.status !== filter) return false;
+      if (category && !(school.categories ?? []).includes(category)) return false;
       if (!query) return true;
       return [school.displayName, school.shortName, school.slug, school.primaryDomain, school.hostName ?? ""]
         .some((value) => value.toLocaleLowerCase("tr-TR").includes(query));
     });
-  }, [schools, filter, search, now]);
+  }, [schools, filter, search, now, category]);
 
   return (
     <div className="grid gap-5">
@@ -75,6 +88,15 @@ export default function SchoolsHomePage() {
             { value: "PendingDestroy", label: `Silinecek ${counts.PendingDestroy}` },
           ]}
         />
+        {usedCategories.length > 1 && (
+          <label className="relative">
+            <span className="sr-only">Alana göre süz</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value)} className="field appearance-none pr-8 text-sm">
+              <option value="">Tüm alanlar</option>
+              {usedCategories.map((key) => <option key={key} value={key}>{categoryName(key)}</option>)}
+            </select>
+          </label>
+        )}
         <SearchInput value={search} onChange={setSearch} label="Okul ara" placeholder="Ad, kısaltma, alan adı…" />
       </div>
 
@@ -82,7 +104,7 @@ export default function SchoolsHomePage() {
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
         {isLoading && Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-48" />)}
-        {visible.map((school) => <SchoolTileCard key={school.id} school={school} now={now} />)}
+        {visible.map((school) => <SchoolTileCard key={school.id} school={school} now={now} categoryName={categoryName} />)}
         <Link
           href="/schools/new"
           className="pressable grid min-h-48 place-items-center rounded-[1.1rem] border-2 border-dashed border-[var(--line-strong)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"
@@ -111,7 +133,7 @@ export default function SchoolsHomePage() {
   );
 }
 
-function SchoolTileCard({ school, now }: { school: SchoolTile; now: number }) {
+function SchoolTileCard({ school, now, categoryName }: { school: SchoolTile; now: number; categoryName: (key: string) => string }) {
   const problems = problemsOf(school, now);
   const telemetry = school.telemetry;
   const backupAge = hoursSince(telemetry?.lastBackupAt, now);
@@ -134,6 +156,11 @@ function SchoolTileCard({ school, now }: { school: SchoolTile; now: number }) {
       <div className="min-w-0">
         <p className="truncate text-sm font-bold">{school.displayName}</p>
         <p className="text-meta truncate">{school.primaryDomain}</p>
+        {(school.categories ?? []).length > 0 && (
+          <p className="mt-1 flex flex-wrap gap-1">
+            {school.categories!.map((key) => <span key={key} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.68rem] font-bold text-[var(--muted)]">{categoryName(key)}</span>)}
+          </p>
+        )}
       </div>
 
       {run ? (

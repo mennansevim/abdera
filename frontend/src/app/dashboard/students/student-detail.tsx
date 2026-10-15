@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem, RowMenuSeparator } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useModuleEnabled } from "@/lib/instance";
+import { useModuleEnabled, useBranchTerms } from "@/lib/instance";
 import {
   formatWeeklySchedule,
   useCreateLessonSeries,
@@ -37,8 +37,7 @@ import {
   type GuardianPhoneLookup,
   type Student,
   type StudentGuardianLink,
-  whatsAppChatUrl,
-} from "@/lib/people";
+  whatsAppChatUrl, isSelectable } from "@/lib/people";
 
 // isAdmin=false (Teacher) iken veli bilgisi hiç istenmez - /api/students/{id}/guardians
 // Admin-only olduğu için Teacher'a 403 dönerdi (docs/04-permissions.md).
@@ -51,6 +50,7 @@ export function StudentDetail({
   canManage = isAdmin,
   onDelete,
 }: { student: Student; isAdmin: boolean; canManage?: boolean; onDelete?: () => void }) {
+  const terms = useBranchTerms();
   const studentId = student.id;
   const [showGuardianForm, setShowGuardianForm] = useState(false);
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
@@ -196,7 +196,7 @@ export function StudentDetail({
                   studentId={studentId}
                   enrollmentId={enrollment.id}
                   teacherId={enrollment.teacherId}
-                  instrumentName={instrument?.name ?? "Enstrüman"}
+                  instrumentName={instrument?.name ?? terms.branch}
                   instrumentVariant={enrollment.instrumentVariant}
                   teacherName={teacher ? `${teacher.firstName} ${teacher.lastName}` : "Öğretmen"}
                   series={lessonSeries?.find((item) => item.enrollmentId === enrollment.id) ?? null}
@@ -214,7 +214,7 @@ export function StudentDetail({
       {canManage && (
         <>
           <AddGuardianForm studentId={studentId} isAdmin={isAdmin} open={showGuardianForm} onClose={() => setShowGuardianForm(false)} />
-          <Modal open={showEnrollmentForm} title="Kurs ekle" description="Öğretmen ve enstrümanı seçerek bu öğrenciye bağla." onClose={() => setShowEnrollmentForm(false)} size="sm">
+          <Modal open={showEnrollmentForm} title="Kurs ekle" description={`Öğretmen ve ${terms.branchLower} seçerek bu öğrenciye bağla.`} onClose={() => setShowEnrollmentForm(false)} size="sm">
             <AddEnrollmentForm studentId={studentId} teachers={teachers ?? []} instruments={instruments ?? []} onClose={() => setShowEnrollmentForm(false)} />
           </Modal>
           <Modal open={editingStudent} title="Öğrenciyi düzenle" onClose={() => setEditingStudent(false)} size="sm">
@@ -389,6 +389,7 @@ function EditGuardianForm({ studentId, guardian, isAdmin, onClose }: { studentId
 }
 
 function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, instrumentVariant, teacherName, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; instrumentVariant: string | null; teacherName: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
+  const terms = useBranchTerms();
   const endEnrollment = useEndEnrollment(studentId);
   const setVariant = useSetInstrumentVariant(studentId);
   // null = kapalı; metin = düzenleniyor. Alt dal (Gitar -> Elektro/Bas) yalnızca bilgi etiketi.
@@ -512,7 +513,7 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
               ))}
             </div>
           )}
-          <p className="text-meta mt-2">Yalnızca bilgi etiketidir; enstrüman {instrumentName} olarak kalır, aidat ve program değişmez. Boş bırakıp kaydedersen etiket kalkar.</p>
+          <p className="text-meta mt-2">Yalnızca bilgi etiketidir; {terms.branchLower} {instrumentName} olarak kalır, aidat ve program değişmez. Boş bırakıp kaydedersen etiket kalkar.</p>
           <div className="mt-2 flex justify-end gap-2">
             <button type="button" onClick={() => { setVariantDraft(null); setError(null); }} disabled={setVariant.isPending} className="btn btn-quiet text-xs">Vazgeç</button>
             <button type="submit" disabled={setVariant.isPending} className="btn btn-primary text-xs disabled:opacity-60">{setVariant.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
@@ -745,15 +746,16 @@ function AddEnrollmentForm({
   instruments: { id: string; name: string }[];
   onClose: () => void;
 }) {
+  const terms = useBranchTerms();
   const createEnrollment = useCreateEnrollment(studentId);
   const [teacherId, setTeacherId] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState<string | null>(null);
 
-  const availableInstruments = teacherId
+  const availableInstruments = (teacherId
     ? instruments.filter((i) => teachers.find((t) => t.id === teacherId)?.instrumentIds.includes(i.id))
-    : instruments;
+    : instruments).filter(isSelectable);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -777,9 +779,9 @@ function AddEnrollmentForm({
             {teachers.map((t) => <option key={t.id} value={t.id}>{t.firstName} {t.lastName}</option>)}
           </select>
         </label>
-        <label className="form-label">Enstrüman
+        <label className="form-label">{terms.branch}
           <select value={instrumentId} onChange={(e) => setInstrumentId(e.target.value)} required disabled={!teacherId} className="field text-sm">
-            <option value="">Enstrüman seç</option>
+            <option value="">{terms.branch} seç</option>
             {availableInstruments.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
           </select>
         </label>

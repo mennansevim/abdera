@@ -13,10 +13,10 @@ export const MODULE_DESCRIPTIONS: Record<string, string> = {
   "core.notifications": "Personele ekran içi bildirimler.",
   "core.ops": "Sağlık denetimi ve günlük yedek.",
   progress: "Öğrenci gelişim notları ve dönem karnesi.",
-  library: "Nota ve kaynak kütüphanesi.",
-  show: "Yıl sonu gösterisi programı ve sahne akışı.",
-  banking: "Sanal IBAN ile gelen havalenin aidata otomatik işlenmesi.",
-  groups: "Grup dersleri; grup tarifesi ve öğretmen gelir payı.",
+  library: "Kaynak kütüphanesi (müzik okulunda nota arşivi).",
+  show: "Gösteri ve etkinlik programı, sahne akışı.",
+  banking: "Sanal IBAN ile gelen havalenin aidata otomatik işlenmesi (sağlayıcı ücreti).",
+  groups: "Bireysel ve grup (çoklu) dersler; grup tarifesi ve öğretmen gelir payı.",
   finance: "Gelir-gider defteri ve haftalık öğretmen ödemeleri.",
   profitability: "Aylık kârlılık ve büyüme önerileri.",
   whatsapp: "Veliye WhatsApp ile ders/aidat hatırlatmaları (Meta hesabı gerekir).",
@@ -55,6 +55,12 @@ export function enableModule(key: string, selected: Set<string>, catalog: Module
     }
   }
   return { next, added };
+}
+
+// Modül bu sürümde açık mı: çekirdekse her zaman, opsiyonelse seçildiyse. Eski sürüm kataloglarında
+// opsiyonel olan modüller (groups, email...) yeni sürümlerde standart pakete girdi (§5.2).
+export function isModuleOn(key: string, selected: Set<string>, catalog: ModuleEntry[] | undefined): boolean {
+  return Boolean(catalog?.find((m) => m.key === key)?.isCore) || selected.has(key);
 }
 
 // Katalogda olmayan ya da çekirdek anahtarları ayıklar - istek yalnızca opsiyonel modül taşır.

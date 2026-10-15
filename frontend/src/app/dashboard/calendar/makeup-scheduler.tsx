@@ -7,7 +7,7 @@ import { useUseMakeupCredit, type MakeupCredit } from "@/lib/billing";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { checkManualSlot, findOpenSlots, type SuggestedSlot } from "@/lib/smart-scheduling";
 import { useCalendar, useTeacherAvailability } from "@/lib/scheduling";
-import { useSchedulingRules } from "@/lib/instance";
+import { useSchedulingRules, useBranchTerms } from "@/lib/instance";
 
 export interface MakeupSchedulerContext {
   studentId: string;
@@ -62,6 +62,7 @@ export function MakeupScheduler({
   onPlaced?: (summary: string) => void;
   onCancel?: () => void;
 }) {
+  const terms = useBranchTerms();
   const [studentId, setStudentId] = useState(context?.studentId ?? "");
   const [enrollmentId, setEnrollmentId] = useState("");
   const [creditId, setCreditId] = useState("");
@@ -228,7 +229,7 @@ export function MakeupScheduler({
 
       {!creditsLoading && !context && !eligibleStudents.length && !creditsError && <p className="rounded-xl bg-[var(--warning-soft)] px-3 py-3 text-xs font-semibold text-[var(--warning-strong)]">Kullanılabilir telafi hakkı olan öğrenci yok.</p>}
       {context && activeStudentId && enrollmentsLoading && <div className="grid gap-2 sm:grid-cols-3" aria-label="Ders kaydı yükleniyor">{[1, 2, 3].map((item) => <span key={item} className="skeleton h-14 rounded-xl" />)}</div>}
-      {context && activeStudentId && !enrollmentsLoading && !enrollment && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-xs font-semibold text-[var(--danger-strong)]">Bu öğrenci, öğretmen ve enstrüman için aktif ders kaydı bulunamadı.</p>}
+      {context && activeStudentId && !enrollmentsLoading && !enrollment && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-xs font-semibold text-[var(--danger-strong)]">{`Bu öğrenci, öğretmen ve ${terms.branchLower} için aktif ders kaydı bulunamadı.`}</p>}
 
       {enrollment && activeCredit && (
         <div className="space-y-3">

@@ -32,6 +32,10 @@ public sealed record ModuleDefinition(string Key, string Name, bool IsCore, IRea
 
 public static class ModuleCatalog
 {
+    // Standart paket her okulda açıktır (IsCore). Opsiyonel olanlar yalnızca ücretli eklentilerdir: dış
+    // sağlayıcı maliyeti olan (Meta mesaj ücreti, yapay zekâ API'si, sanal IBAN sağlayıcısı) ve okula ayrıca
+    // satılan özellikler. Eski kurulumlarda opsiyonel olan anahtarlar (progress, groups...) Modules:Enabled'da
+    // geçerli kalır; artık çekirdek oldukları için zaten açıktırlar.
     public static readonly IReadOnlyList<ModuleDefinition> All =
     [
         new(ModuleKeys.People, "Öğrenci, veli, öğretmen", true, []),
@@ -40,22 +44,24 @@ public static class ModuleCatalog
         new(ModuleKeys.Billing, "Aidat ve tahsilat", true, [ModuleKeys.People]),
         new(ModuleKeys.Notifications, "Ekran içi bildirimler", true, []),
         new(ModuleKeys.Ops, "Sağlık ve yedek", true, []),
-
-        new(ModuleKeys.Progress, "Gelişim ve karne", false, [ModuleKeys.Scheduling]),
-        new(ModuleKeys.Library, "Kütüphane", false, []),
-        new(ModuleKeys.Show, "Yıl sonu gösterisi", false, [ModuleKeys.People]),
-        new(ModuleKeys.Banking, "Banka entegrasyonu", false, [ModuleKeys.Billing]),
-        new(ModuleKeys.Groups, "Grup dersleri", false, [ModuleKeys.Scheduling, ModuleKeys.Billing]),
-        new(ModuleKeys.Finance, "Gelir-gider ve öğretmen ödemeleri", false, [ModuleKeys.Billing]),
+        new(ModuleKeys.Groups, "Bireysel ve grup (çoklu) dersler", true, [ModuleKeys.Scheduling, ModuleKeys.Billing]),
+        new(ModuleKeys.Progress, "Gelişim ve karne", true, [ModuleKeys.Scheduling]),
+        new(ModuleKeys.Library, "Kaynak kütüphanesi", true, []),
+        new(ModuleKeys.Show, "Gösteri ve etkinlik", true, [ModuleKeys.People]),
+        new(ModuleKeys.Finance, "Gelir-gider ve öğretmen ödemeleri", true, [ModuleKeys.Billing]),
         // Kârlılık ders başı maliyeti öğretmen ücretinden, sabit gideri gider tablosundan okur.
-        new(ModuleKeys.Profitability, "Kârlılık", false, [ModuleKeys.Finance]),
-        // Sağlayıcı (Cloud/Smtp/OpenAi) açılışta yapısal olarak seçilir; modül kapalıysa her
-        // istekte "devre dışı" uygulamasına düşülür (Program.cs), bekleyen işler üretilmez.
+        new(ModuleKeys.Profitability, "Kârlılık", true, [ModuleKeys.Finance]),
+        new(ModuleKeys.ParentPortal, "Veli portalı", true, [ModuleKeys.People, ModuleKeys.Billing]),
+        // E-posta standarttır; SMTP bilgisi verilmemiş okulda sağlayıcı "devre dışı" çalışır (Program.cs).
+        new(ModuleKeys.Email, "E-posta hatırlatmaları", true, []),
+
+        // --- Ücretli eklentiler ---
+        // Sağlayıcı (Cloud/OpenAi) açılışta yapısal olarak seçilir; modül kapalıysa her istekte "devre dışı"
+        // uygulamasına düşülür, bekleyen işler üretilmez.
         new(ModuleKeys.WhatsApp, "WhatsApp bildirimleri", false, []),
-        new(ModuleKeys.Email, "E-posta hatırlatmaları", false, []),
-        // Yorumlar Gelişim ve Kârlılık ekranlarının içinde; ikisi de kapalıysa görünmez.
+        // Yorumlar Gelişim ve Kârlılık ekranlarının içinde.
         new(ModuleKeys.Ai, "Yapay zekâ yorumları", false, []),
-        new(ModuleKeys.ParentPortal, "Veli portalı", false, [ModuleKeys.People, ModuleKeys.Billing]),
+        new(ModuleKeys.Banking, "Banka entegrasyonu (sanal IBAN)", false, [ModuleKeys.Billing]),
     ];
 
     public static ModuleDefinition? Find(string key) =>

@@ -11,7 +11,7 @@ import { AdminGate, EmptyState, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { useInstruments, useTeachers } from "@/lib/people";
 import { DAY_NAMES_TR, useOpenSlots, type OpenSlot, type TeacherOpenSlots } from "@/lib/scheduling";
-import { useSchoolDay } from "@/lib/instance";
+import { useSchoolDay, useBranchTerms } from "@/lib/instance";
 
 const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_SHORT: Record<string, string> = { Monday: "Pzt", Tuesday: "Sal", Wednesday: "Çar", Thursday: "Per", Friday: "Cum", Saturday: "Cmt", Sunday: "Paz" };
@@ -77,6 +77,7 @@ export default function AvailabilityPage() {
 }
 
 function AvailabilityBoard() {
+  const terms = useBranchTerms();
   const [instrumentId, setInstrumentId] = useState("");
   const [durationMinutes, setDurationMinutes] = useState(45);
   const [preference, setPreference] = useState<Preference>("afterSchool");
@@ -199,7 +200,7 @@ function AvailabilityBoard() {
       />
 
       <section className="app-card space-y-3 p-4">
-        <FilterRow label="Enstrüman">
+        <FilterRow label={terms.branch}>
           <button type="button" onClick={() => setInstrumentId("")} aria-pressed={!instrumentId} className={chipClass(!instrumentId)}>Tümü</button>
           {instruments.map((i) => (
             <button key={i.id} type="button" onClick={() => setInstrumentId(i.id)} aria-pressed={instrumentId === i.id} className={chipClass(instrumentId === i.id)}>{i.name}</button>

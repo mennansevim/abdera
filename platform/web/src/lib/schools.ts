@@ -53,6 +53,8 @@ export interface SchoolTile {
   telemetry: Telemetry | null;
   openRun: RunSummary | null;
   openAlerts: number;
+  // Okulun öğrettiği alan kategorileri (music, dance, sport...). Eski kayıtlarda boş.
+  categories?: string[];
 }
 
 export interface Step {
@@ -131,6 +133,8 @@ export interface CreateSchoolInput {
   tariffs: { courseKind: "Individual" | "Group"; lessonsPerMonth: number; monthlyAmount: number; currency: string; effectiveFrom: string }[] | null;
   integrations: Record<string, string> | null;
   isCanary: boolean;
+  // Okulun alt birimleri (branş): kategori sürümün kataloğundan, ad serbest.
+  branches: { category: string; name: string }[];
 }
 
 // Var olan okulu taşıma - backend Schools.AdoptRequest. Kurulum ucu çağrılmaz; okulun verisi

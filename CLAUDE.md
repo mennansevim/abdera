@@ -147,13 +147,22 @@ Kod, tip adı, değişken adı, commit mesajı gövdesi: **İngilizce**. Kullan�
 
 ## Modül anahtarları ve okul kuralları (yalnızca `arch/multi-tenant`)
 
-Okul başına kurulumda (`docs/multi-tenant/ARCHITECTURE.md`) her okul hangi opsiyonel modülleri kullanacağını seçer.
+Okul başına kurulumda (`docs/multi-tenant/ARCHITECTURE.md`) her okul hangi **ücretli eklentileri** kullanacağını seçer. Standart paket her okulda açıktır; opsiyonel (`IsCore = false`) yalnızca dış sağlayıcı maliyeti olan, ayrıca satılan modüllerdir (WhatsApp, yapay zekâ, banka/sanal IBAN). Yeni bir opsiyonel modül açmadan önce onay al: "standart mı, ücretli eklenti mi" bir ürün kararıdır.
 
 - **Yeni bir özellik eklerken önce hangi modüle ait olduğuna karar ver** (`Shared/Modules/ModuleCatalog.cs`). Opsiyonel modülün uçları `MapModule(...)` / `.RequireModule(...)` ile bağlanır; kapalıyken 404 döner. Ön yüzde menü öğesine `module` alanı, sorgulara `useModuleQueryEnabled(...)` eklenir. Başka bir modülden kapalı modüle dokunan her yer açıkça korunur (örn. veli portalında IBAN, öğrenci kaydında Grup, bildirim zamanlayıcısında WhatsApp).
 - Modül kapatmak veri silmez; arka plan işi turu atlar ama sağlık kaydını başarılı yazar.
 - Sağlayıcı (Cloud/Smtp/OpenAi) açılışta yapısal seçilir; modülün açık/kapalı olması **istek anında** `EnabledModules` ile okunur.
 - **Okula özel sabit koda yazılmaz:** `school_policy` (`SchoolPolicy.GetCurrentAsync`). Hesabın tek yeri değişmez, sabiti oradan okur.
 - Okulun kimliği (`school_profile`) ve kuralları değişirse audit'e yazılır. Platform yalnızca kurulumda yazar, sonra okur.
+
+## Genel eğitim alanları — Abdera yalnızca müzik okulu değil (yalnızca `arch/multi-tenant`)
+
+Dans, spor, dil, kodlama... her okulda ders/seri/yoklama/aidat aynı; değişen "neyin dersi" sorusudur (`docs/multi-tenant/ARCHITECTURE.md` §5.6).
+
+- `Instrument` = **alt birim (branş)**: enstrüman, dans türü, spor branşı, dil dersi. Ad tarihsel, tablo yeniden adlandırılmadı; kavram `Shared/Branches/BranchCatalog.cs`'te. Her alt birimin bir **kategorisi** vardır (music, dance, sport, language...). Alt birim silinmez, pasife alınır.
+- **Arayüzde "Enstrüman" yazma.** Terim okulun kategorisinden gelir: `useBranchTerms()` (`branch`, `branchPlural`, `branchLower`...). Tek kategorili okulda "Enstrüman"/"Dans türü", karışık okulda "Branş". Cümle içinde Türkçe ek gerektiren yapı ("Enstrümana göre") kurma; terimden bağımsız kalıp kullan ("{terim} filtresi").
+- **Müziğe özel özellik** (enstrüman bakımı, nota kütüphanesi) yalnızca müzik öğreten okulda görünür: `useTeachesMusic()`. Yeni bir alana özel özellik eklerken kategori kontrolü koy; varsayılan her alana uyan davranıştır.
+- Yeni kategori ya da öneri `BranchCatalog`'a eklenir; platform sihirbazı sürüm kaydındaki kopyasını okur (`--print-branch-catalog`).
 
 ## Yapılmayacaklar
 

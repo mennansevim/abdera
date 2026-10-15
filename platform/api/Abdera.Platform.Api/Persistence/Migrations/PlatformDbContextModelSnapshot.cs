@@ -247,6 +247,13 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("api_image");
 
+                    b.Property<string>("CategoryCatalogJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("category_catalog_json");
+
                     b.Property<bool>("IsWithdrawn")
                         .HasColumnType("boolean")
                         .HasColumnName("is_withdrawn");
@@ -342,6 +349,13 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                     b.Property<string>("AppVersion")
                         .HasColumnType("text")
                         .HasColumnName("app_version");
+
+                    b.PrimitiveCollection<List<string>>("Categories")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("categories")
+                        .HasDefaultValueSql("'{}'::text[]");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")

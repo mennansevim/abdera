@@ -42,7 +42,8 @@ jobs:
           # dotnet run "Building..." satırını stdout'a yazar; derlenmiş dll doğrudan çalıştırılır.
           dotnet build backend/src/Abdera.Api -c Release -o "$RUNNER_TEMP/api" -v quiet
           dotnet "$RUNNER_TEMP/api/Abdera.Api.dll" --print-module-catalog > module-catalog.json
-          python3 -c "import json; json.load(open('module-catalog.json'))"
+          dotnet "$RUNNER_TEMP/api/Abdera.Api.dll" --print-branch-catalog > branch-catalog.json
+          python3 -c "import json; json.load(open('module-catalog.json')); json.load(open('branch-catalog.json'))"
 
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -116,6 +117,7 @@ jobs:
               "apiImage": "ghcr.io/$OWNER/abdera-api@${{ steps.api.outputs.digest }}",
               "webImage": "ghcr.io/$OWNER/abdera-web@${{ steps.web.outputs.digest }}",
               "modules": json.load(open("module-catalog.json")),
+              "categories": json.load(open("branch-catalog.json")),
           }
           json.dump(release, open("release.json", "w"), ensure_ascii=False, indent=2)
           PY

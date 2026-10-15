@@ -4,7 +4,7 @@
 // Doğrulama sınırları okul uygulamasının kurulum ucuyla birebir (SchoolProfile, SchoolPolicy,
 // BillingSettings, InstanceProvisioning.Validate): o uç kurulumun SONUNDA çalışır, burada
 // yakalanmayan bir değer kurulumu "Okulu hazırla" adımında düşürür.
-import { optionalOnly } from "@/lib/modules";
+import { isModuleOn, optionalOnly } from "@/lib/modules";
 import type { ModuleEntry } from "@/lib/releases";
 import type { CreateSchoolInput, SlugCheck } from "@/lib/schools";
 
@@ -12,6 +12,12 @@ export interface TariffDraft {
   lessonsPerMonth: string;
   monthlyAmount: string;
   effectiveFrom: string;
+}
+
+// Okulun alt birimi (branş): kategori anahtarı + ad ("dance" / "Bale").
+export interface BranchDraft {
+  category: string;
+  name: string;
 }
 
 export interface WizardState {
@@ -29,6 +35,9 @@ export interface WizardState {
   version: string;
   isCanary: boolean;
   modules: Set<string>;
+  // Seçilen kategoriler (öneriler bunlara göre gösterilir) ve okulun alt birimleri.
+  categories: Set<string>;
+  branches: BranchDraft[];
   adminEmail: string;
   adminDisplayName: string;
   groupLessonSharePercent: string;
@@ -49,7 +58,8 @@ export interface WizardState {
 export const STEPS = [
   { key: "identity", title: "Kimlik" },
   { key: "version", title: "Sürüm" },
-  { key: "modules", title: "Modüller" },
+  { key: "branches", title: "Alanlar ve dersler" },
+  { key: "modules", title: "Eklentiler" },
   { key: "admin", title: "Yönetici" },
   { key: "policy", title: "Okul kuralları" },
   { key: "billing", title: "Aidat" },
@@ -83,6 +93,8 @@ export function initialState(): WizardState {
     version: "",
     isCanary: false,
     modules: new Set(),
+    categories: new Set(),
+    branches: [],
     adminEmail: "",
     adminDisplayName: "",
     groupLessonSharePercent: "40",
@@ -154,7 +166,8 @@ export interface ValidationContext {
 
 export function validateStep(step: StepKey, state: WizardState, context: ValidationContext): Errors {
   const errors: Errors = {};
-  const groups = state.modules.has("groups");
+  // Grup (çoklu) ders yeni sürümlerde standart; eski sürüm kataloğunda opsiyonel olabilir.
+  const groups = isModuleOn("groups", state.modules, context.catalog);
   switch (step) {
     case "identity": {
       const name = state.displayName.trim();
@@ -176,6 +189,18 @@ export function validateStep(step: StepKey, state: WizardState, context: Validat
     case "version":
       if (!state.version) errors.version = "Bir sürüm seç.";
       break;
+    case "branches": {
+      if (state.branches.length === 0) errors.branches = "En az bir ders/alt birim ekle (ör. Piyano, Bale, Robotik kodlama).";
+      const seen = new Set<string>();
+      for (const branch of state.branches) {
+        const key = branch.name.trim().toLocaleLowerCase("tr-TR");
+        if (key.length === 0 || key.length > 100) errors.branches = "Ad 1-100 karakter olmalı.";
+        else if (seen.has(key)) errors.branches = `“${branch.name.trim()}” iki kez eklenmiş.`;
+        seen.add(key);
+      }
+      if (state.branches.length > 200) errors.branches = "En fazla 200 alt birim eklenebilir.";
+      break;
+    }
     case "modules":
       if (!context.catalog) errors.modules = "Modül listesi yükleniyor…";
       break;
@@ -222,15 +247,16 @@ export function validateStep(step: StepKey, state: WizardState, context: Validat
   return errors;
 }
 
-// Seçili modüller için girilmiş (boş olmayan) entegrasyon değerleri. Kapalı modülün alanı gönderilmez.
-export function integrationsFor(state: WizardState): Record<string, string> {
+// Açık modüller için girilmiş (boş olmayan) entegrasyon değerleri. Kapalı modülün alanı gönderilmez.
+// E-posta yeni sürümlerde standart: SMTP bilgisi girildiyse gönderilir.
+export function integrationsFor(state: WizardState, catalog?: ModuleEntry[]): Record<string, string> {
   const prefixes: Record<string, string> = { whatsapp: "WhatsApp__", email: "Email__", ai: "Ai__" };
   const result: Record<string, string> = {};
   for (const [key, raw] of Object.entries(state.integrations)) {
     const value = raw.trim();
     if (!value) continue;
     const owner = Object.entries(prefixes).find(([, prefix]) => key.startsWith(prefix))?.[0];
-    if (owner && !state.modules.has(owner)) continue;
+    if (owner && !isModuleOn(owner, state.modules, catalog)) continue;
     result[key] = value;
   }
   return result;
@@ -239,7 +265,7 @@ export function integrationsFor(state: WizardState): Record<string, string> {
 const toTime = (value: string) => (value.length === 5 ? `${value}:00` : value);
 
 export function buildRequest(state: WizardState, catalog: ModuleEntry[]): CreateSchoolInput {
-  const groups = state.modules.has("groups");
+  const groups = isModuleOn("groups", state.modules, catalog);
   const tariff = (kind: "Individual" | "Group", draft: TariffDraft) => ({
     courseKind: kind,
     lessonsPerMonth: parseNumber(draft.lessonsPerMonth),
@@ -247,7 +273,7 @@ export function buildRequest(state: WizardState, catalog: ModuleEntry[]): Create
     currency: "TRY",
     effectiveFrom: draft.effectiveFrom,
   });
-  const integrations = integrationsFor(state);
+  const integrations = integrationsFor(state, catalog);
   return {
     slug: state.slug,
     displayName: state.displayName.trim(),
@@ -278,6 +304,7 @@ export function buildRequest(state: WizardState, catalog: ModuleEntry[]): Create
     tariffs: [tariff("Individual", state.individual), ...(groups ? [tariff("Group", state.group)] : [])],
     integrations: Object.keys(integrations).length > 0 ? integrations : null,
     isCanary: state.isCanary,
+    branches: state.branches.map((branch) => ({ category: branch.category, name: branch.name.trim() })),
   };
 }
 

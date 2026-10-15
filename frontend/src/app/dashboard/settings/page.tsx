@@ -9,9 +9,10 @@ import { useInstruments, useInstrumentMaintenanceSettings, useRunDueMaintenanceR
 import { useMe } from "@/lib/use-auth";
 import { ChangePasswordForm } from "../change-password-form";
 import { DisplayNameForm } from "../display-name-form";
+import { BranchesPanel } from "./branches-panel";
 import { SchoolPolicyPanel } from "./school-policy-panel";
 import { SchoolProfilePanel } from "./school-profile-panel";
-import { useModuleEnabled } from "@/lib/instance";
+import { useModuleEnabled, useTeachesMusic } from "@/lib/instance";
 
 const FONT_SIZE_OPTIONS: Array<{ value: FontSizePreference; label: string; detail: string }> = [
   { value: "small", label: "Küçük", detail: "Daha kompakt" },
@@ -30,6 +31,8 @@ export default function SettingsPage() {
     () => "standard" as FontSizePreference,
   );
   const { data: me, refetch } = useMe();
+  // Enstrüman bakımı müziğe özel; başka alanda öğreten okulda görünmez.
+  const teachesMusic = useTeachesMusic();
   const whatsAppEnabled = useModuleEnabled("whatsapp");
   const passwordChangeRequired = me?.mustChangePassword ?? false;
 
@@ -43,6 +46,7 @@ export default function SettingsPage() {
       <PageHeader title="Ayarlar" description="Hesap güvenliği, görünüm ve bildirim tercihleri." />
 
       {me?.role === "Admin" && <SchoolProfilePanel />}
+      {me?.role === "Admin" && <BranchesPanel />}
       {me?.role === "Admin" && <SchoolPolicyPanel />}
 
       {me && (
@@ -111,7 +115,7 @@ export default function SettingsPage() {
       {whatsAppEnabled && <section className="app-card p-4">
         <SectionHeader title="Mesaj Merkezi" description="Ders hatırlatmaları, WhatsApp şablonları ve gönderim tercihleri Mesaj Merkezi'nde yönetilir." />
       </section>}
-      {me?.role === "Admin" && <MaintenanceSettingsPanel />}
+      {me?.role === "Admin" && teachesMusic && <MaintenanceSettingsPanel />}
     </div>
   );
 }

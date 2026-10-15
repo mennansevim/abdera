@@ -35,6 +35,7 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.PrimaryColor).HasMaxLength(7);
             e.Property(x => x.Modules).HasColumnType("text[]");
+            e.Property(x => x.Categories).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]");
             e.Property(x => x.RowVersion).IsRowVersion();
             e.Ignore(x => x.ModulesEnvValue);
         });
@@ -86,6 +87,7 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.HasKey(x => x.Version);
             e.Property(x => x.Version).HasMaxLength(20);
             e.Property(x => x.ModuleCatalogJson).HasColumnType("jsonb");
+            e.Property(x => x.CategoryCatalogJson).HasColumnType("jsonb").HasDefaultValue("[]");
         });
 
         model.Entity<Rollout>(e =>

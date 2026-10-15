@@ -15,7 +15,7 @@ import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { PendingLessonNotes } from "../pending-lesson-notes";
 import { TermReportsPanel } from "./term-reports-panel";
-import { useModuleQueryEnabled } from "@/lib/instance";
+import { useModuleQueryEnabled, useBranchTerms } from "@/lib/instance";
 
 type TimelineFilter = "all" | "pieces" | "homework";
 
@@ -665,13 +665,14 @@ function Timeline({
 }
 
 function RepertoireFilters({ entries, filters, activeCount, onTeacher, onInstrument, onDifficulty, onLastWorkedFrom, onClear }: { entries: ProgressEntry[]; filters: TimelineFilters; activeCount: number; onTeacher: (value: string) => void; onInstrument: (value: string) => void; onDifficulty: (value: string) => void; onLastWorkedFrom: (value: string) => void; onClear: () => void }) {
+  const terms = useBranchTerms();
   const teachers = Array.from(new Map(entries.map((entry) => [entry.teacherId, entry.teacherName])).entries());
   const instruments = Array.from(new Map(entries.map((entry) => [entry.instrumentId, entry.instrumentName])).entries());
   const labelClass = "text-xs font-semibold text-[var(--muted)]";
   return (
     <div className="mt-3 grid grid-cols-2 gap-2.5 lg:grid-cols-4" aria-label="Repertuvar filtreleri">
       <label className={labelClass}>Öğretmen<select value={filters.teacherFilter} onChange={(event) => onTeacher(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{teachers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
-      <label className={labelClass}>Enstrüman<select value={filters.instrumentFilter} onChange={(event) => onInstrument(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{instruments.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+      <label className={labelClass}>{terms.branch}<select value={filters.instrumentFilter} onChange={(event) => onInstrument(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{instruments.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
       <label className={labelClass}>Zorluk<select value={filters.difficultyFilter} onChange={(event) => onDifficulty(event.target.value)} className="field mt-1 text-sm"><option value="all">Tümü</option>{[1, 2, 3, 4, 5].map((level) => <option key={level} value={level}>{level}/5 · {difficultyLabel(level)}</option>)}</select></label>
       <label className={labelClass}>Şu tarihten beri<input type="date" value={filters.lastWorkedFrom} onChange={(event) => onLastWorkedFrom(event.target.value)} className="field mt-1 text-sm" /></label>
       {activeCount > 0 && <button type="button" onClick={onClear} className="col-span-2 min-h-11 justify-self-start px-1 text-xs font-bold text-[var(--brand-strong)] underline lg:col-span-4">Filtreleri temizle</button>}

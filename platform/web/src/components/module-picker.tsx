@@ -6,8 +6,9 @@ import type { ModuleEntry } from "@/lib/releases";
 import { Icon } from "./icons";
 import { Toggle } from "./ui";
 
-// Modül kartları (sihirbaz adım 3 ve okul detayı > Modüller). Kurallar (§4.2 adım 4):
-// çekirdek modüller kilitli açık; bir modül açılınca bağımlılıkları da açılır ve bilgi notu
+// Modül kartları (sihirbaz "Eklentiler" adımı ve okul detayı > Modüller). Standart paket her okulda
+// açık; opsiyonel olanlar yalnızca ücretli eklentiler (dış sağlayıcı maliyeti olan, §5.2). Kurallar:
+// standart modüller kilitli açık; bir modül açılınca bağımlılıkları da açılır ve bilgi notu
 // çıkar; başka bir açık modülün bağımlı olduğu modül kapatılamaz.
 export function ModulePicker({ catalog, selected, onChange, disabled = false }: {
   catalog: ModuleEntry[];
@@ -41,7 +42,7 @@ export function ModulePicker({ catalog, selected, onChange, disabled = false }: 
   return (
     <div className="grid gap-4">
       <div>
-        <h3 className="text-micro text-[var(--muted)]">Çekirdek (her zaman açık)</h3>
+        <h3 className="text-micro text-[var(--muted)]">Standart paket (her okulda açık)</h3>
         <div className="mt-2 flex flex-wrap gap-2">
           {core.map((entry) => (
             <span key={entry.key} title={MODULE_DESCRIPTIONS[entry.key]} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--line)] bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-bold">
@@ -54,7 +55,8 @@ export function ModulePicker({ catalog, selected, onChange, disabled = false }: 
       {note && <p role="status" className="rounded-xl bg-[var(--info-soft)] px-3 py-2 text-xs font-semibold text-[var(--info-strong)]">{note}</p>}
 
       <div>
-        <h3 className="text-micro text-[var(--muted)]">Opsiyonel</h3>
+        <h3 className="text-micro text-[var(--muted)]">Ücretli eklentiler</h3>
+        {optional.length === 0 && <p className="text-meta mt-2">Bu sürümde ücretli eklenti yok.</p>}
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {optional.map((entry) => {
             const on = selected.has(entry.key);

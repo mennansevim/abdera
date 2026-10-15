@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput, Segmented } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useModuleEnabled } from "@/lib/instance";
+import { useModuleEnabled, useBranchTerms } from "@/lib/instance";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, useUpdateStudent, type RecentAttendanceWeek, type Student, type StudentStatus } from "@/lib/people";
@@ -15,6 +15,7 @@ import { StudentDetail } from "./student-detail";
 // docs/04-permissions.md: öğrenci oluşturma/veli/kayıt yönetimi yalnızca Admin - Teacher
 // yalnızca kendisine atanmış öğrencileri görür, formlar 403 vermesin diye gizlenir.
 export default function StudentsPage() {
+  const terms = useBranchTerms();
   const router = useRouter();
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
@@ -79,7 +80,7 @@ export default function StudentsPage() {
         title="Öğrenciler"
         description={isLoading ? "Öğrenciler, dersleri ve kayıt bilgileri." : `${activeStudentCount} aktif öğrenci`}
         actions={<>
-          <SearchInput value={search} onChange={setSearch} label="Öğrenci ara" placeholder="Ad veya enstrüman ara…" />
+          <SearchInput value={search} onChange={setSearch} label="Öğrenci ara" placeholder={`Ad veya ${terms.branchLower} ara…`} />
           {isTeacher && <AddButton label="Öğrenci ekle" onClick={() => setShowCreate(true)} />}
           {isAdmin && <AddButton label="Öğrenci ekle" onClick={() => router.push("/dashboard/students/new")} />}
         </>}
@@ -91,9 +92,9 @@ export default function StudentsPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2">
           <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{visibleRows.length}</strong> öğrenci gösteriliyor</p>
           <label className="relative min-w-44 flex-1 sm:flex-none">
-            <span className="sr-only">Enstrümana göre filtrele</span>
+            <span className="sr-only">{terms.branch} filtresi</span>
             <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field appearance-none pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
-              <option value="">Tüm enstrümanlar</option>
+              <option value="">Tüm {terms.branchPluralLower}</option>
               {instrumentOptions.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
@@ -305,6 +306,7 @@ function TeacherCreateStudentForm({
   onClose: () => void;
   onCreated: (studentId: string, name: string) => void;
 }) {
+  const terms = useBranchTerms();
   const createStudent = useCreateStudentForTeacher(teacherId);
   const { data: instruments } = useInstruments();
   const own = (instruments ?? []).filter((instrument) => instrumentIds.includes(instrument.id));
@@ -343,7 +345,7 @@ function TeacherCreateStudentForm({
   if (own.length === 0) {
     return (
       <p className="rounded-xl bg-[var(--warning-soft)]/60 p-4 text-sm text-[var(--warning-strong)]">
-        Sana atanmış bir enstrüman yok, bu yüzden öğrenci ekleyemezsin. Yöneticiden branşını tanımlamasını iste.
+        Sana atanmış bir {terms.branchLower} yok, bu yüzden öğrenci ekleyemezsin. Yöneticiden branşını tanımlamasını iste.
       </p>
     );
   }

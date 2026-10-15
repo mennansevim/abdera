@@ -8,7 +8,7 @@ import { MonthInput } from "@/components/month-input";
 import { TeacherGroupPayoutForm, TeacherPayoutForm } from "@/components/teacher-payout-form";
 import { AdminGate, FormActions, FormMessage, Modal, PageHeader, Panel, RowMenu, RowMenuItem, SearchInput, SectionHeader, Segmented, StatStrip } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useModuleEnabled } from "@/lib/instance";
+import { useModuleEnabled, useBranchTerms } from "@/lib/instance";
 import {
   COURSE_KIND_LABEL, recurringAmountFor, useBillingDues, useChangeRecurringExpenseAmount, useCreateExpense, useCreateRecurringExpense, useEndRecurringExpense,
   useExpenses, useRecurringExpenses,
@@ -43,7 +43,7 @@ const WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const CATEGORIES: ExpenseCategory[] = ["Salary", "Rent", "Utilities", "Marketing", "Maintenance", "TaxAndInsurance", "Supplies", "Equipment", "Other"];
 const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
   Salary: "Maaş", Utilities: "Elektrik / su", Rent: "Kira", Marketing: "Reklam", Maintenance: "Bakım / akort",
-  TaxAndInsurance: "Vergi / SGK", Supplies: "Malzeme / kırtasiye", Equipment: "Enstrüman / ekipman", Other: "Diğer",
+  TaxAndInsurance: "Vergi / SGK", Supplies: "Malzeme / kırtasiye", Equipment: "Ekipman / araç-gereç", Other: "Diğer",
 };
 const COURSE_KINDS: CourseKind[] = ["Individual", "Group"];
 // İki seri, dataviz doğrulayıcısından geçti (beyaz zemin, CVD ΔE ≥ 15). Sabit = marka turuncusu.
@@ -107,6 +107,7 @@ const sumTotals = (rows: MonthTotal[]) => rows.reduce((total, row) => total + ro
 interface FlowColumn { key: string; planned: boolean; income: Record<CourseKind, number>; expense: Record<ExpenseCategory, number> }
 
 function CostDashboard() {
+  const terms = useBranchTerms();
   const today = useMemo(() => new Date(), []);
   const currentMonth = monthKey(today.getFullYear(), today.getMonth());
   const [period, setPeriod] = useState<Period>({ scope: "month", year: today.getFullYear(), month: today.getMonth(), day: null });
@@ -312,8 +313,8 @@ function CostDashboard() {
             meta={`${periodLabel(period)} · ${listedIncome.length} ödeme`}
             actions={
               <>
-                <SearchInput value={incomeSearch} onChange={setIncomeSearch} label="Tahsilatlarda ara" placeholder="Öğrenci veya enstrüman" />
-                <button type="button" disabled={!listedIncome.length} onClick={() => downloadIncomeCsv(listedIncome, `gelir-dokumu-${fileSlug(periodLabel(period))}.csv`)} className="btn btn-quiet" title="Listelenen tahsilatları Excel/CSV olarak indir"><Icon name="download" className="h-4 w-4" />İndir</button>
+                <SearchInput value={incomeSearch} onChange={setIncomeSearch} label="Tahsilatlarda ara" placeholder={`Öğrenci veya ${terms.branchLower}`} />
+                <button type="button" disabled={!listedIncome.length} onClick={() => downloadIncomeCsv(listedIncome, `gelir-dokumu-${fileSlug(periodLabel(period))}.csv`, terms.branch)} className="btn btn-quiet" title="Listelenen tahsilatları Excel/CSV olarak indir"><Icon name="download" className="h-4 w-4" />İndir</button>
               </>
             }
           >

@@ -7,7 +7,7 @@ import { AddButton, AdminGate, EmptyState, FormActions, FormMessage, Modal, Noti
 import { DeleteTeacherDialog } from "@/components/delete-person-dialog";
 import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
 import { ApiError } from "@/lib/api";
-import { useModuleEnabled, useModuleQueryEnabled } from "@/lib/instance";
+import { useModuleEnabled, useModuleQueryEnabled, useBranchTerms } from "@/lib/instance";
 import { useMe } from "@/lib/use-auth";
 import {
   useCreateEnrollment,
@@ -22,8 +22,7 @@ import {
   type Student,
   type Teacher,
   type TeacherStatus,
-  type TeacherStudentEnrollment,
-} from "@/lib/people";
+  type TeacherStudentEnrollment, isSelectable } from "@/lib/people";
 import { useTeacherBenchmark, type TeacherBenchmarkRow } from "@/lib/benchmark";
 import { WeekPicker, mondayOf, toIsoDate } from "@/components/week-picker";
 import { payoutMoney, useTeacherPayoutWeek, type TeacherPayoutWeekRow } from "@/lib/teacher-payouts";
@@ -36,6 +35,7 @@ export default function TeachersPage() {
 // öğretmenleri gezme ihtiyacı yok (kullanıcı isteği). Kenar çubuğundan zaten kaldırıldı
 // (app-header.tsx); AdminGate doğrudan adres yazılmasına karşı ikinci katman.
 function TeachersPageContent() {
+  const terms = useBranchTerms();
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
   const { data: teachers, isLoading, isError: teachersError, refetch: refetchTeachers, isFetching: teachersFetching } = useTeachers();
@@ -131,7 +131,7 @@ function TeachersPageContent() {
           ? "Öğretmenler ve öğrenci dağılımları."
           : `${activeTeacherCount} aktif öğretmen · ${studentCount} öğrenci`}
         actions={<>
-          <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder="Ad veya enstrüman ara…" />
+          <SearchInput value={search} onChange={setSearch} label="Öğretmen ara" placeholder={`Ad veya ${terms.branchLower} ara…`} />
           {isAdmin && <AddButton label="Öğretmen ekle" onClick={() => setShowCreate(true)} />}
         </>}
       />
@@ -152,9 +152,9 @@ function TeachersPageContent() {
           <p className="text-meta mr-auto"><strong className="text-[var(--foreground)]">{teacherRows.length}</strong> öğretmen gösteriliyor{weekRows ? <> · seçilen hafta <strong className="text-[var(--foreground)] tabular-nums">{weekTotals.completed}</strong>/<span className="tabular-nums">{weekTotals.lessons}</span> ders tamamlandı</> : null}</p>
           {isAdmin && <WeekPicker monday={weekMonday} onChange={setWeekMonday} />}
           <label className="relative min-w-44 flex-1 sm:flex-none">
-            <span className="sr-only">Enstrümana göre filtrele</span>
+            <span className="sr-only">{terms.branch} filtresi</span>
             <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} className="field appearance-none pr-8 text-xs font-semibold" aria-label="Enstrümana göre filtrele">
-              <option value="">Tüm enstrümanlar</option>
+              <option value="">Tüm {terms.branchPluralLower}</option>
               {(instruments ?? []).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
             </select>
             <Icon name="chevron" className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-[var(--muted)]" />
@@ -189,6 +189,7 @@ function TeachersPageContent() {
 }
 
 function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, payRow, weekMonday, isAdmin, financeEnabled, expanded, onToggle }: { financeEnabled: boolean; teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; payRow: TeacherPayoutWeekRow | null; weekMonday: Date; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
+  const terms = useBranchTerms();
   const router = useRouter();
   const [studentSearch, setStudentSearch] = useState("");
   const [detailTab, setDetailTab] = useState<"students" | "availability">("students");
@@ -227,9 +228,9 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
       <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-11 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem]">
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
-          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders` : ""}{payRow?.payout ? " · ödendi" : payRow && payRow.completedLessons > 0 ? " · ödenmedi" : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
+          <span className="text-meta mt-0.5 block truncate md:hidden">{teacherInstruments.map((instrument) => instrument.name).join(", ") || `${terms.branch} atanmadı`} · {groupedStudents.length} öğrenci{weekRow ? ` · hafta ${weekRow.weekCompleted}/${weekRow.weekLessons} ders` : ""}{payRow?.payout ? " · ödendi" : payRow && payRow.completedLessons > 0 ? " · ödenmedi" : ""}{teacher.status === "Inactive" ? " · Pasif" : ""}</span>
         </span>
-        <span className="text-meta hidden truncate md:block">{teacherInstruments.map((instrument) => instrument.name).join(", ") || "Enstrüman atanmadı"}</span>
+        <span className="text-meta hidden truncate md:block">{teacherInstruments.map((instrument) => instrument.name).join(", ") || `${terms.branch} atanmadı`}</span>
         <span className="text-meta hidden text-right tabular-nums md:block"><strong className="text-sm text-[var(--foreground)]">{groupedStudents.length}</strong></span>
         <WeeklyLessonsCells weekRow={weekRow} />
         <PayoutStatusCell payRow={payRow} />
@@ -325,6 +326,7 @@ function PayoutStatusCell({ payRow }: { payRow: TeacherPayoutWeekRow | null }) {
 // arayüzde hiç kullanılmıyordu). Ad/soyad ve aktif/pasif durumu da aynı formda - üçü de
 // aynı PATCH isteğine gidiyor.
 function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; instruments: { id: string; name: string }[]; onClose: () => void }) {
+  const terms = useBranchTerms();
   const updateTeacher = useUpdateTeacher(teacher.id);
   const resetPassword = useResetTeacherPassword(teacher.id);
   const [firstName, setFirstName] = useState(teacher.firstName);
@@ -374,7 +376,7 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
       </div>
 
       <div>
-        <p className="form-label">Enstrümanlar</p>
+        <p className="form-label">{terms.branchPlural}</p>
         <div className="mt-1.5 flex flex-wrap gap-2">
           {instruments.map((instrument) => {
             const checked = selectedInstruments.includes(instrument.id);
@@ -437,14 +439,15 @@ function AddStudentToTeacherForm({
   onAdded,
 }: {
   teacher: Teacher;
-  teacherInstruments: { id: string; name: string }[];
+  teacherInstruments: { id: string; name: string; isActive?: boolean }[];
   students: Student[];
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const terms = useBranchTerms();
   const [mode, setMode] = useState<"new" | "existing">("new");
   const [studentId, setStudentId] = useState("");
-  const [instrumentId, setInstrumentId] = useState(teacherInstruments[0]?.id ?? "");
+  const [instrumentId, setInstrumentId] = useState(teacherInstruments.find(isSelectable)?.id ?? "");
   const [startedAt, setStartedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -493,9 +496,9 @@ function AddStudentToTeacherForm({
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="form-label">Enstrüman
+        <label className="form-label">{terms.branch}
           <select value={instrumentId} onChange={(event) => setInstrumentId(event.target.value)} required className="field text-sm">
-            {teacherInstruments.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
+            {teacherInstruments.filter(isSelectable).map((instrument) => <option key={instrument.id} value={instrument.id}>{instrument.name}</option>)}
           </select>
         </label>
         <label className="form-label">Başlangıç<input type="date" value={startedAt} onChange={(event) => setStartedAt(event.target.value)} required className="field text-sm" /></label>
@@ -514,6 +517,7 @@ function AddStudentToTeacherForm({
 }
 
 function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: { id: string; name: string }[]; onClose: () => void; onCreated: (temporaryPassword: string | null, name: string) => void }) {
+  const terms = useBranchTerms();
   const createTeacher = useCreateTeacher();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -552,9 +556,9 @@ function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: {
       </label>
 
       <div>
-        <p className="form-label">Enstrümanlar</p>
+        <p className="form-label">{terms.branchPlural}</p>
         <div className="mt-1.5 flex flex-wrap gap-2">
-          {instruments.map((instrument) => {
+          {instruments.filter(isSelectable).map((instrument) => {
             const checked = selectedInstruments.includes(instrument.id);
             return (
               <button

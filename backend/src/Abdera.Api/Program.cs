@@ -64,6 +64,20 @@ if (args.Contains("--print-module-catalog"))
     })));
     return;
 }
+// Branş kategorileri kataloğu (BranchCatalog): platform sihirbazı yeni okulun kategori ve alt birim
+// önerilerini sürüm kaydındaki bu kopyadan okur.
+if (args.Contains("--print-branch-catalog"))
+{
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(Abdera.Api.Shared.Branches.BranchCatalog.All.Select(category => new
+    {
+        key = category.Key,
+        name = category.Name,
+        unitLabel = category.UnitLabel,
+        unitLabelPlural = category.UnitLabelPlural,
+        suggestions = category.Suggestions,
+    })));
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

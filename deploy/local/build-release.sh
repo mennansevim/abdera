@@ -24,12 +24,14 @@ podman push -q --tls-verify=false "$REGISTRY/abdera-web:$VERSION"
 echo "Modül kataloğu..."
 dotnet build "$ROOT/backend/src/Abdera.Api" -c Release -o "$OUT/api-build" -v quiet >/dev/null
 dotnet "$OUT/api-build/Abdera.Api.dll" --print-module-catalog > "$OUT/module-catalog.json"
+dotnet "$OUT/api-build/Abdera.Api.dll" --print-branch-catalog > "$OUT/branch-catalog.json"
 
 python3 - "$VERSION" "$REGISTRY/abdera-api@$(digest_of abdera-api)" "$REGISTRY/abdera-web@$(digest_of abdera-web)" \
-  "$(git -C "$ROOT" rev-parse --short HEAD)" "$OUT/module-catalog.json" > "$OUT/release-$VERSION.json" <<'PY'
+  "$(git -C "$ROOT" rev-parse --short HEAD)" "$OUT/module-catalog.json" "$OUT/branch-catalog.json" > "$OUT/release-$VERSION.json" <<'PY'
 import json, sys
-version, api, web, revision, catalog = sys.argv[1:]
+version, api, web, revision, catalog, branches = sys.argv[1:]
 print(json.dumps({"version": version, "apiImage": api, "webImage": web, "revision": revision,
-                  "modules": json.load(open(catalog)), "notes": "yerel test sürümü"}, ensure_ascii=False))
+                  "modules": json.load(open(catalog)), "categories": json.load(open(branches)),
+                  "notes": "yerel test sürümü"}, ensure_ascii=False))
 PY
 echo "Sürüm kaydı: $OUT/release-$VERSION.json"

@@ -18,6 +18,7 @@ import { Modal, Notice } from "@/components/ui";
 import { CreateSeriesForm } from "./create-series-form";
 import { MakeupScheduler, type MakeupSchedulerContext } from "./makeup-scheduler";
 import { canSwapLesson, SwapLessonPanel } from "./swap-lesson-panel";
+import { useBranchTerms } from "@/lib/instance";
 
 // Saat penceresi ve çakışma yerleşimi dashboard önizlemesiyle (dashboard/page.tsx) aynı
 // paylaşılan modülden (lib/week-grid-layout.ts) gelir. Çekirdek 12:00-18:00 aralığı boşken de
@@ -102,6 +103,7 @@ function formatLessonTotal(minutes: number) {
 // GERÇEK genişliğe göre verilir - kenar çubuğu açık/kapalıyken ve enstrüman sayısı değiştikçe
 // sığma durumu değişiyor. Düğmelerin doğal genişliği görünmez bir ölçüm satırından okunur.
 function InstrumentFilterPicker<T extends string>({ filters, value, onChange }: { filters: readonly T[]; value: T; onChange: (value: T) => void }) {
+  const terms = useBranchTerms();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const [fits, setFits] = useState(true);
@@ -126,7 +128,7 @@ function InstrumentFilterPicker<T extends string>({ filters, value, onChange }: 
         {filters.map((filter) => <span key={filter} className={chipClass(false)}>{filter}</span>)}
       </div>
       {fits ? (
-        <div className="flex gap-1.5" role="group" aria-label="Enstrümana göre filtrele">
+        <div className="flex gap-1.5" role="group" aria-label={`${terms.branch} filtresi`}>
           {filters.map((filter) => (
             <button key={filter} type="button" onClick={() => onChange(filter)} aria-pressed={value === filter} className={chipClass(value === filter)}>
               {filter}
@@ -135,9 +137,9 @@ function InstrumentFilterPicker<T extends string>({ filters, value, onChange }: 
         </div>
       ) : (
         <label className="block">
-          <span className="sr-only">Enstrümana göre filtrele</span>
+          <span className="sr-only">{terms.branch} filtresi</span>
           <select value={value} onChange={(event) => onChange(event.target.value as T)} className={`field bg-white text-xs font-bold xl:min-h-9 xl:py-1 ${value !== filters[0] ? "border-[var(--brand)] text-[var(--brand-strong)]" : ""}`}>
-            {filters.map((filter) => <option key={filter} value={filter}>{filter === filters[0] ? `Enstrüman: ${filter}` : filter}</option>)}
+            {filters.map((filter) => <option key={filter} value={filter}>{filter === filters[0] ? `${terms.branch}: ${filter}` : filter}</option>)}
           </select>
         </label>
       )}
@@ -250,6 +252,7 @@ export default function CalendarPage() {
 }
 
 function CalendarPageContent() {
+  const terms = useBranchTerms();
   const { data: me } = useMe();
   const router = useRouter();
   // Bildirimden gelen ders (?lesson=<id>): ders penceresi doğrudan açılır, kapanınca takvim o
@@ -386,7 +389,7 @@ function CalendarPageContent() {
           {/* Renk açıklaması: dar kartlarda enstrüman adı yazılamadığı için hangi rengin hangi
               ders olduğu burada okunur. Yalnızca bu haftanın görünen enstrümanları listelenir. */}
           {legendInstruments.length > 0 && (
-            <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:ml-auto" aria-label="Enstrüman renkleri">
+            <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:ml-auto" aria-label={`${terms.branch} renkleri`}>
               {legendInstruments.map((name) => {
                 const tone = colors.get(name) ?? INSTRUMENT_TONES[0];
                 return (
@@ -1523,6 +1526,7 @@ function LessonStatusChip({ lesson }: { lesson: CalendarLesson }) {
 }
 
 function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPlanMakeup, onClose }: { lesson: CalendarLesson; isAdmin: boolean; canManage: boolean; now: Date; onUpdated: (message?: string) => void; onPlanMakeup: (lesson: CalendarLesson) => void; onClose: () => void }) {
+  const terms = useBranchTerms();
   const start = new Date(lesson.startAt);
   const end = new Date(lesson.endAt);
   const duration = Math.round((end.getTime() - start.getTime()) / 60000);
@@ -1694,7 +1698,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
               <label className="text-micro text-[var(--muted)]">Yeni saat<input type="time" value={timeValue} onChange={(event) => setTimeValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
               <label className="text-micro text-[var(--muted)]">Süre (dk)<input type="number" inputMode="numeric" min={15} max={180} step={5} value={durationValue} onChange={(event) => setDurationValue(event.target.value)} className="field mt-1 min-h-11 bg-white text-sm font-semibold" required /></label>
             </div>
-            <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isMakeupLesson ? "Telafi dersi, telafi hakkının geçerli olduğu günlere taşınabilir. " : ""}{isAdmin ? "Öğretmen seçenekleri öğrencinin bu enstrümandaki aktif kurs kayıtlarından gelir. " : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
+            <p className="mt-3 text-[.75rem] text-[var(--muted)]">{isMakeupLesson ? "Telafi dersi, telafi hakkının geçerli olduğu günlere taşınabilir. " : ""}{isAdmin ? `Öğretmen seçenekleri öğrencinin bu ${terms.branchLower} için aktif kurs kayıtlarından gelir. ` : "Yalnızca bu dersin tarih, saat ve süresi değişir. "}Tüm değişiklikler çakışma ve yetki kontrolünden geçer.</p>
             {error && <p role="alert" className="mt-3 rounded-lg bg-[var(--danger-soft)] px-3 py-2 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
             <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap justify-end gap-2 border-t border-[var(--line)] bg-[var(--surface-muted)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
               <button type="button" onClick={() => { setEditing(false); setError(null); }} className="btn btn-quiet px-4 text-sm font-bold text-[var(--foreground)]">İptal</button>

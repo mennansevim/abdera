@@ -249,6 +249,27 @@ Not: oran değişikliği geçmiş satırları etkilemez — `Receivable` ve öde
 
 Rate limit: mevcut `webhooks` politikası. İki jeton da platformda şifreli saklanır, okulda env'de.
 
+### 5.6 Genel eğitim alanları (yalnızca müzik değil)
+
+Abdera her türlü kurs merkezine satılır: müzik, dans, bale, drama, resim, taekwondo, İngilizce, robotik kodlama...
+Hepsinde ortak olan çekirdek aynıdır: öğrenci/veli/öğretmen, bireysel ve grup (çoklu) ders, seri ders, yoklama,
+telafi, aidat. Değişen yalnızca "neyin dersi" sorusudur.
+
+- **Kategori** (sabit katalog, `Shared/Branches/BranchCatalog.cs`): Müzik, Dans, Drama ve tiyatro, Görsel sanatlar,
+  Spor, Yabancı dil, Teknoloji ve kodlama, Akademik destek, Zekâ ve strateji, Diğer. Her kategorinin alt birim adı
+  ("Enstrüman", "Dans türü", "Branş", "Atölye", "Ders") ve önerilen alt birimleri vardır.
+- **Alt birim (branş)**: okulun kendi listesi (`instruments` tablosu; `Instrument` = branş, ad tarihsel). Kategori +
+  ad; öneriden seçilir ya da serbest yazılır ("Zumba", "İngilizce - Konuşma"). Silinmez, pasife alınır.
+- **Terim**: tek kategorili okulda kategorinin alt birim adı, karışık okulda "Branş" (`/api/instance/config` → `terms`).
+- **Müziğe özel** (enstrüman bakımı, nota kütüphanesi, müzik becerileri) yalnızca müzik öğreten okulda.
+- **Kurulum**: sihirbazın "Alanlar ve dersler" adımı alt birimleri kurulum isteğinde gönderir; okul, migration'ın
+  müzik tohumları (enstrümanlar, enstrümana bağlı beceriler) yerine kendi listesiyle başlar. Liste boşsa eski davranış.
+- **Katalog sahipliği** (§16.8 ile aynı): katalog okul uygulamasındadır, sürüm kaydıyla platforma gider
+  (`--print-branch-catalog` → `release.json` `categories`). Platform okulun kategorilerini yalnızca gösterim ve süzme
+  için tutar; alt birimlerin kendisi okulun veritabanındadır, okul yöneticisi Ayarlar → Eğitim alanları'ndan değiştirir.
+- **Modüller sadeleşti**: standart paket her okulda açık; opsiyonel yalnızca ücretli eklentiler (WhatsApp, yapay zekâ,
+  banka/sanal IBAN). Eski kurulumların `Modules__Enabled` değerlerindeki anahtarlar geçerli kalır.
+
 ### 5.5 İmaj ve yapılandırma
 - **İmajlar sunucuda derlenmez.** Bugün `abdera-deploy` `docker compose up --build` yapıyor (decision P3: "GHCR'ye taşımak ayrı iş"). 100 okulda her sunucuda derleme imkânsız → CI `ghcr.io/<org>/abdera-api:<sürüm>` ve `abdera-web:<sürüm>` imajlarını iter, okullar etikete göre çeker.
 - **Ön yüz tek imaj olmalı.** `NEXT_PUBLIC_API_BASE_URL` derleme anında gömülüyor (`frontend/src/lib/api.ts`). Caddy api ve web'i aynı origin'de sunduğu için göreli `/api` kullanılır; okul başına derleme gerekmez. `NEXT_PUBLIC_DEMO_ENABLED` de çalışma zamanı ayarına (`/api/instance/config`) taşınır.
@@ -428,6 +449,8 @@ flowchart LR
 | 2026-10-15 | F2 kanıtı | `deploy/host/test/e2e-real-docker.sh`: ajan **gerçek Docker**'la (gerçek Postgres, ağlar, paylaşılan Caddy; okul imajı yerine busybox vekil) iki okul kurar. macOS'ta `e2e-podman.sh` ile. | 30/30: okullar arası ağ izolasyonu (IP ile de), Caddy validate + reload ve bozuk yapılandırmanın reddi, şifreli askı dökümü + askı sayfası, devam, dış bağlantıları kapalı prova geri yükleme, iki aşamalı silme. Gerçek okul imajlarıyla ve gerçek bir Hetzner sunucusunda prova **henüz yapılmadı** |
 
 | 2026-10-16 | Yerel uçtan uca prova (§14) | `deploy/local/`: gerçek okul imajları (yerel depo, digest ile), platform → gerçek SSH → ajan → Docker, paylaşılan Caddy (yerel sertifika), yerel S3 (`rclone serve s3`). İki okul (biri çoğu modül açık, biri yalnız çekirdek), 6 aylık örnek veri. | Sihirbaz ve API ile kurulum (12 adım, `https` duman testi), yarım kurulumun iptal temizliği (iz kalmadı), telemetri (`https`, 12 öğrenci), modül açma (yeniden yapılandırma, kapı 404/401 doğru), okullar arası ağ izolasyonu (IP ile) ve **oturum çerezi izolasyonu** (A'nın çerezi B'de 401), kanarya → filo güncellemesi, **bilerek bozuk sürümde** otomatik geri dönüş + dağıtımın durması (diğer okula dokunulmadı), askı (askı sayfası + S3 `suspended/` kopyası), devam, prova geri yükleme (veri geldi, dış bağlantılar kapalı, yayında değil). **Bulunup düzeltilen 4 hata:** kanarya bekleme süresi hiç dolmuyordu (dağıtım 0. dalgada kalıyordu); bozuk imajda `compose up` hata dönünce ajan geri dönmeden çıkıyordu (okul kapalı kalıyordu); prova kopyası `destroy` ile silinemiyordu; başarısız güncellemeden sonra hedef sürüm temizlenmiyordu. Her biri için regresyon testi (platform 29, ajan 76, gerçek Docker 31). Gerçek imaj değişikliği içeren güncelleme ve yük testi yapılmadı (iki sürüm aynı kaynaktan derlendiği için imajlar birebir aynı) |
+
+| 2026-10-16 | §5.6 Genel eğitim alanları | Kategori kataloğu (10 kategori, öneriler), alt birim = branş (kategori + aktif/pasif, migration), branş uçları (ekle/düzenle/pasife al), kurulumda branş listesi (müzik tohumları ve müziğe özel beceriler kalkar), arayüz terimi (`useBranchTerms`, ~35 metin), müziğe özel ekranlar yalnız müzik okulunda, Ayarlar → Eğitim alanları paneli. Modüller: standart paket + 3 ücretli eklenti. Platform: sürüm kaydında kategori kataloğu, okulda kategoriler, sihirbazda "Alanlar ve dersler" adımı, "Eklentiler" adımı, kutucuklarda alan etiketi ve süzgeci. | Okul 742/742, platform 30/30. Yerelde gerçek imajlarla sihirbazdan **dans ve drama okulu** kuruldu: terim "Branş", 6 alt birim (biri serbest yazılmış), müzik tohumu yok, ücretli eklenti kapalı |
 
 **Kalan işler (yerelde yapılamayanlar, altyapı ve onay gerektirir):**
 1. Gerçek bir test sunucusu (Hetzner) + `setup-host.sh` + gerçek GHCR imajlarıyla sihirbazdan ilk okulun uçtan uca kurulumu (§14 kurulum ölçütü). Gerekenler: test sunucusu, Cloudflare'de DNS bölgesi ve jetonu, R2 bucket'ı, GHCR'ye ilk sürüm etiketi.

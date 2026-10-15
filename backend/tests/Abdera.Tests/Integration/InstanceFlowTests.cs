@@ -104,86 +104,52 @@ public class InstanceFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Disabled_module_returns_404_to_everyone_while_core_keeps_working()
+    public async Task Disabled_paid_add_on_returns_404_to_everyone_while_standard_modules_keep_working()
     {
-        await using var db = await _factory.CreateDbContextAsync();
-        using var schoolWithoutLibrary = _factory.WithWebHostBuilder(builder =>
+        using var schoolWithoutBanking = _factory.WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                [EnabledModules.ConfigurationKey] = "progress,banking",
+                [EnabledModules.ConfigurationKey] = "whatsapp",
             })));
 
-        using var anonymous = schoolWithoutLibrary.CreateClient();
-        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync("/api/library/pieces")).StatusCode);
-
-        var admin = await LoginAsync(schoolWithoutLibrary, "admin@test.local", "Test1234!");
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/library/pieces")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/shows")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/profitability")).StatusCode);
+        var admin = await LoginAsync(schoolWithoutBanking, "admin@test.local", "Test1234!");
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/bank-transactions")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/library/pieces")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/shows")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/instruments")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/bank-transactions")).StatusCode);
 
+        using var anonymous = schoolWithoutBanking.CreateClient();
         var config = await anonymous.GetFromJsonAsync<InstanceConfig.ConfigResponse>("/api/instance/config", TestJson.Options);
-        Assert.False(config!.Modules.Single(module => module.Key == ModuleKeys.Library).Enabled);
-        Assert.True(config.Modules.Single(module => module.Key == ModuleKeys.Banking).Enabled);
-        Assert.True(config.Modules.Single(module => module.Key == ModuleKeys.Billing).Enabled);
+        Assert.False(config!.Modules.Single(module => module.Key == ModuleKeys.Banking).Enabled);
+        Assert.True(config.Modules.Single(module => module.Key == ModuleKeys.WhatsApp).Enabled);
+        Assert.True(config.Modules.Single(module => module.Key == ModuleKeys.Library).Enabled);
     }
 
-    // Veli portalı kapalı okulda veli girişi ve "Veli girişleri" ekranı yoktur; veli kaydının
-    // kendisi (iletişim, WhatsApp bildirimi) çekirdekte kalır.
+    // Yalnızca standart paket ("none"): grup dersi, gelir-gider ve veli girişleri standarttır, açık kalır.
     [Fact]
-    public async Task Disabled_parent_portal_closes_guardian_login_but_keeps_guardian_records()
+    public async Task Standard_package_keeps_groups_finance_and_parent_logins_open()
     {
-        using var schoolWithoutPortal = _factory.WithWebHostBuilder(builder =>
+        using var standardOnly = _factory.WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [EnabledModules.ConfigurationKey] = ModuleCatalog.NoneSentinel,
             })));
+        var admin = await LoginAsync(standardOnly, "admin@test.local", "Test1234!");
 
-        using var anonymous = schoolWithoutPortal.CreateClient();
-        var otp = await anonymous.PostAsJsonAsync("/api/guardian/otp/request", new { phoneNumber = "05551234567" });
-        Assert.Equal(HttpStatusCode.NotFound, otp.StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync("/api/guardian/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/lesson-groups")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/expenses")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/guardians/logins")).StatusCode);
 
-        var admin = await LoginAsync(schoolWithoutPortal, "admin@test.local", "Test1234!");
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/guardians/logins")).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/guardians")).StatusCode);
-    }
-
-    // Grup dersleri ve gelir-gider kapalı okul: uçlar 404, yeni grup kaydı açılamaz. Kayıt
-    // kontrolü öğrenci aranmadan önce yapılır, bu yüzden olmayan bir öğrenciyle de 400 döner.
-    [Fact]
-    public async Task Disabled_groups_and_finance_close_their_endpoints_and_group_enrollment()
-    {
-        using var coreOnly = _factory.WithWebHostBuilder(builder =>
-            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                [EnabledModules.ConfigurationKey] = ModuleCatalog.NoneSentinel,
-            })));
-        var admin = await LoginAsync(coreOnly, "admin@test.local", "Test1234!");
-
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/lesson-groups")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/expenses")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/recurring-expenses")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/teacher-payouts/week")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/teacher-payouts/group-month?period=2026-10")).StatusCode);
-
-        var unknownStudent = Guid.NewGuid();
+        // Grup kaydı modül kontrolünü geçer ve öğrenci aramasına düşer.
         var groupEnrollment = new { teacherId = Guid.NewGuid(), instrumentId = Guid.NewGuid(), startedAt = "2026-10-01", courseKind = "Group" };
-        var refused = await admin.PostAsJsonAsync($"/api/students/{unknownStudent}/enrollments", groupEnrollment);
-        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
-        Assert.Contains("Grup dersleri bu okulda açık değil", await refused.Content.ReadAsStringAsync());
-
-        // Aynı istek tüm modüller açıkken grup kontrolünü geçer ve öğrenci aramasına düşer.
-        var everything = await LoginAsync(_factory, "admin@test.local", "Test1234!");
-        var passed = await everything.PostAsJsonAsync($"/api/students/{unknownStudent}/enrollments", groupEnrollment);
+        var passed = await admin.PostAsJsonAsync($"/api/students/{Guid.NewGuid()}/enrollments", groupEnrollment);
         Assert.Equal(HttpStatusCode.NotFound, passed.StatusCode);
     }
 
-    // WhatsApp, e-posta ve AI kapalı okul: sağlayıcı yapılandırılmış olsa bile veliye iş kurulmaz,
+    // WhatsApp ve AI (ücretli eklentiler) kapalı okul: sağlayıcı yapılandırılmış olsa bile veliye iş kurulmaz,
     // Mesaj Merkezi/webhook/OTP uçları kapanır, AI üreticisi "kullanılamaz" görünür.
     [Fact]
-    public async Task Disabled_whatsapp_email_and_ai_do_not_schedule_or_expose_anything()
+    public async Task Disabled_whatsapp_and_ai_do_not_schedule_or_expose_anything()
     {
         using var coreOnly = _factory.WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>

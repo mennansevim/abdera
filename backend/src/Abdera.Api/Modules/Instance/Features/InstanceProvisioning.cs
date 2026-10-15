@@ -25,6 +25,8 @@ public static class InstanceProvisioning
 {
     public const string ProvisionedAction = "instance.provisioned";
     public const int MinTemporaryPasswordLength = 12;
+    // CompleteProgressModule tohumundaki müziğe özel genel beceriler (Teknik ve Çalışma Disiplini her alana uyar).
+    private static readonly string[] MusicOnlySkills = ["RHYTHM", "TEMPO_CONTROL", "SIGHT_READING", "MUSICAL_EXPRESSION"];
 
     public record AdminRequest(string Email, string TemporaryPassword, string? DisplayName);
     public record ProfileRequest(string Name, string ShortName, string? PrimaryColor, string? LogoBase64, string? LegalName = null, string? ContactEmail = null);
@@ -33,8 +35,11 @@ public static class InstanceProvisioning
         int ExcusedMakeupWindowDays, TimeOnly SchoolDayStart, TimeOnly SchoolDayEnd);
     public record BillingRequest(decimal MultiCourseDiscountPercent, decimal SiblingDiscountPercent, int DueDayOfMonth);
     public record TariffRequest(CourseKind CourseKind, int LessonsPerMonth, decimal MonthlyAmount, string? Currency, DateOnly EffectiveFrom);
+    // Alt birim (branş): kategori BranchCatalog anahtarı, ad okulun kendi verdiği ad ("Bale", "Robotik kodlama").
+    public record BranchRequest(string Category, string Name);
     public record ProvisionRequest(
-        AdminRequest Admin, ProfileRequest Profile, PolicyRequest? Policy, BillingRequest? Billing, IReadOnlyList<TariffRequest>? Tariffs);
+        AdminRequest Admin, ProfileRequest Profile, PolicyRequest? Policy, BillingRequest? Billing, IReadOnlyList<TariffRequest>? Tariffs,
+        IReadOnlyList<BranchRequest>? Branches = null);
     public record ProvisionResponse(bool AlreadyProvisioned, string AdminEmail, DateTimeOffset ProvisionedAt);
 
     public static void MapInstanceProvisioning(this IEndpointRouteBuilder app)
@@ -119,6 +124,27 @@ public static class InstanceProvisioning
             await db.SaveChangesAsync();
         }
 
+        // Migration'lar Abdera'nın müzik enstrümanlarını tohum olarak ekler (SeedInstruments). Okul kendi
+        // alt birimlerini getirdiyse (dans okulu "Piyano" ile başlamasın) ve henüz hiçbir kayıt/öğretmen
+        // onlara bağlanmadıysa tohum satırlar kaldırılır, okulun listesi eklenir.
+        if (request.Branches is { Count: > 0 } branches)
+        {
+            if (!await db.Enrollments.AnyAsync() && !await db.TeacherInstruments.AnyAsync() && !await db.LessonGroups.AnyAsync())
+            {
+                // Enstrümana bağlı tohumlar da müziğe özel: gelişim becerileri, enstrüman bakım ayarları.
+                await db.SkillDefinitions.Where(skill => skill.InstrumentId != null).ExecuteDeleteAsync();
+                // Genel becerilerin bir kısmı da müziğe özel; müzik öğretmeyen okulda yalnız alan bağımsızları kalır.
+                if (!branches.Any(branch => string.Equals(branch.Category, Shared.Branches.BranchCatalog.Music, StringComparison.OrdinalIgnoreCase)))
+                    await db.SkillDefinitions.Where(skill => MusicOnlySkills.Contains(skill.Code)).ExecuteDeleteAsync();
+                await db.InstrumentMaintenanceSettings.ExecuteDeleteAsync();
+                await db.GrowthIdeas.Where(idea => idea.InstrumentId != null).ExecuteDeleteAsync();
+                await db.Instruments.ExecuteDeleteAsync();
+            }
+            foreach (var branch in branches)
+                if (!await db.Instruments.AnyAsync(i => i.Name == branch.Name.Trim()))
+                    await People.Features.Instruments.AddAsync(db, branch.Name, null, branch.Category);
+        }
+
         foreach (var tariff in (request.Tariffs ?? []).OrderBy(tariff => tariff.EffectiveFrom))
         {
             await TuitionRates.AddRateAsync(
@@ -136,6 +162,7 @@ public static class InstanceProvisioning
                 adminEmail = email,
                 schoolName = profile.Name,
                 tariffCount = request.Tariffs?.Count ?? 0,
+                branchCount = request.Branches?.Count ?? 0,
                 policy = request.Policy is not null,
             })));
 
@@ -157,6 +184,13 @@ public static class InstanceProvisioning
             if (tariff.MonthlyAmount < 0) errors[$"tariffs[{index}].monthlyAmount"] = ["Tutar negatif olamaz."];
             if (tariff.LessonsPerMonth is < 1 or > 31) errors[$"tariffs[{index}].lessonsPerMonth"] = ["Aylık ders sayısı 1 ile 31 arasında olmalı."];
         }
+        foreach (var (branch, index) in (request.Branches ?? []).Select((branch, index) => (branch, index)))
+        {
+            if (Shared.Branches.BranchCatalog.Find(branch.Category) is null) errors[$"branches[{index}].category"] = ["Bilinmeyen kategori."];
+            if (string.IsNullOrWhiteSpace(branch.Name) || branch.Name.Trim().Length > 100) errors[$"branches[{index}].name"] = ["Ad 1-100 karakter olmalı."];
+        }
+        if ((request.Branches ?? []).GroupBy(b => (b.Name ?? "").Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
+            errors["branches"] = ["Aynı ad iki kez verilmiş."];
         if (errors.Count > 0) throw new ValidationFailedException(errors);
     }
 

@@ -1,5 +1,7 @@
 using Abdera.Api.Modules.Instance.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Branches;
+using Microsoft.EntityFrameworkCore;
 using Abdera.Api.Shared.Modules;
 
 namespace Abdera.Api.Modules.Instance.Features;
@@ -14,7 +16,12 @@ public static class InstanceConfig
     public record SchoolDayResponse(TimeOnly Start, TimeOnly End);
     // Demo: tanıtım yayınında giriş ekranı örnek hesapları doldurur. Eskiden NEXT_PUBLIC_DEMO_ENABLED
     // ile derleme anında gömülüyordu; tek ön yüz imajı her okulda çalışsın diye çalışma anına taşındı (A10).
-    public record ConfigResponse(ProfileResponse Profile, IReadOnlyList<ModuleResponse> Modules, SchoolDayResponse SchoolDay, bool Demo);
+    // Alt birim terimleri (BranchCatalog.TermsFor): tek kategorili okulda "Enstrüman", karışıkta "Branş".
+    public record TermsResponse(string Branch, string BranchPlural);
+    public record CategoryResponse(string Key, string Name, string UnitLabel, string UnitLabelPlural, IReadOnlyList<string> Suggestions, bool InUse);
+    public record ConfigResponse(
+        ProfileResponse Profile, IReadOnlyList<ModuleResponse> Modules, SchoolDayResponse SchoolDay, bool Demo,
+        TermsResponse Terms, IReadOnlyList<CategoryResponse> Categories);
 
     public static void MapInstanceConfig(this IEndpointRouteBuilder app)
     {
@@ -26,6 +33,8 @@ public static class InstanceConfig
         var profile = await SchoolProfile.GetCurrentAsync(db);
         var policy = await SchoolPolicy.GetCurrentAsync(db, config);
         var enabled = modules.Current;
+        var inUse = await db.Instruments.Where(i => i.IsActive).Select(i => i.Category).Distinct().ToListAsync();
+        var (branch, branchPlural) = BranchCatalog.TermsFor(inUse);
 
         // Okul adı/renk/modül değişikliği bir sonraki sayfa açılışında hemen yansısın.
         http.Response.Headers.CacheControl = "no-cache";
@@ -36,7 +45,11 @@ public static class InstanceConfig
                     module.Key, module.Name, module.IsCore, enabled.Contains(module.Key), module.Requires))
                 .ToList(),
             new SchoolDayResponse(policy.SchoolDayStart, policy.SchoolDayEnd),
-            config.GetValue<bool>("Demo:Enabled")));
+            config.GetValue<bool>("Demo:Enabled"),
+            new TermsResponse(branch, branchPlural),
+            BranchCatalog.All
+                .Select(c => new CategoryResponse(c.Key, c.Name, c.UnitLabel, c.UnitLabelPlural, c.Suggestions, inUse.Contains(c.Key)))
+                .ToList()));
     }
 
     public static ProfileResponse ToProfileResponse(SchoolProfile profile) => new(

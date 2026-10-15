@@ -11,13 +11,16 @@ public partial class Release
     public string WebImage { get; private set; } = null!;
     public string? Revision { get; private set; }
     public string ModuleCatalogJson { get; private set; } = "[]";
+    // Branş kategorileri kataloğu (okul uygulamasının BranchCatalog'u, §5.6). Eski sürümlerde boş.
+    public string CategoryCatalogJson { get; private set; } = "[]";
     public string? Notes { get; private set; }
     public bool IsWithdrawn { get; private set; }
     public DateTimeOffset ReleasedAt { get; private set; }
 
     private Release() { }
 
-    public static Release Create(string version, string apiImage, string webImage, string? revision, string moduleCatalogJson, string? notes, DateTimeOffset now)
+    public static Release Create(string version, string apiImage, string webImage, string? revision, string moduleCatalogJson, string? notes, DateTimeOffset now,
+        string categoryCatalogJson = "[]")
     {
         var errors = new Dictionary<string, string[]>();
         if (!VersionPattern().IsMatch(version ?? "")) errors["version"] = ["Sürüm YYYY.MM.DD.N biçiminde olmalı."];
@@ -32,6 +35,7 @@ public partial class Release
             WebImage = webImage!,
             Revision = revision,
             ModuleCatalogJson = moduleCatalogJson,
+            CategoryCatalogJson = categoryCatalogJson,
             Notes = notes,
             ReleasedAt = now,
         };

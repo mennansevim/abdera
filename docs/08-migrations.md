@@ -368,3 +368,10 @@ yapılandırması), yani migration tek başına hiçbir davranışı değiştirm
 **AddSchoolProfileContact** (Instance, yalnızca `arch/multi-tenant` branch'i): `school_profile`'a iki boş bırakılabilir
 kolon - `legal_name varchar(200)` (gizlilik metnindeki veri sorumlusu unvanı) ve `contact_email varchar(254)` (KVKK
 başvuru adresi). Yalnızca ekleme; boşken gizlilik sayfası bugünkü Abdera metnini gösterir. `Down()` kolonları düşürür.
+
+**AddBranchCategory** (People, yalnızca `arch/multi-tenant` branch'i): `instruments`'a `category varchar(40) NOT NULL
+DEFAULT 'music'` ve `is_active boolean NOT NULL DEFAULT true`. Alt birim (branş) genelleştirmesi
+(`docs/multi-tenant/ARCHITECTURE.md` §5.6); var olan satırlar müzik kategorisinde ve aktif kalır, yani bugünkü okulun
+davranışı değişmez. Yalnızca ekleme; kişiye referans yok, `PersonEraser` değişmez. `Down()` kolonları düşürür.
+Platform veritabanında aynı turda **AddBranchCategories**: `schools.categories text[]` ve
+`releases.category_catalog_json jsonb` (ikisi de boş varsayılanla).

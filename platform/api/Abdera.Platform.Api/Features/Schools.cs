@@ -23,7 +23,9 @@ public static class Schools
         string Slug, string DisplayName, string ShortName, string? PrimaryColor, string? LogoBase64,
         string? LegalName, string? ContactEmail, string? CustomDomain, string Version, IReadOnlyList<string> Modules,
         AdminRequest Admin, PolicyRequest? Policy, BillingRequest? Billing, IReadOnlyList<TariffRequest>? Tariffs,
-        IReadOnlyDictionary<string, string>? Integrations, bool IsCanary);
+        IReadOnlyDictionary<string, string>? Integrations, bool IsCanary, IReadOnlyList<BranchRequest>? Branches = null);
+    // Okulun alt birimi (branş): kategori sürümün kataloğundan (Releases.CategoryEntry), ad serbest.
+    public record BranchRequest(string Category, string Name);
 
     public record TelemetryResponse(
         DateTimeOffset TakenAt, bool Reachable, string? Health, string? HealthDetail, string? AppVersion, int? ActiveStudents,
@@ -32,7 +34,7 @@ public static class Schools
     public record TileResponse(
         Guid Id, string Slug, string DisplayName, string ShortName, string? PrimaryColor, SchoolStatus Status, string PrimaryDomain,
         string? AppVersion, string? TargetVersion, string? HostName, bool IsCanary, bool IsVersionPinned, TelemetryResponse? Telemetry,
-        RunSummary? OpenRun, int OpenAlerts);
+        RunSummary? OpenRun, int OpenAlerts, IReadOnlyList<string> Categories);
     public record RunSummary(Guid Id, RunKind Kind, RunStatus Status, int CurrentStep, int TotalSteps, string? CurrentStepName, string? Error, DateTimeOffset CreatedAt);
     public record StepResponse(int Step, string Name, StepStatus Status, int Attempt, string? Log, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
     public record RunResponse(Guid Id, RunKind Kind, RunStatus Status, int CurrentStep, IReadOnlyList<string> Plan, string? TargetVersion, string? Error,
@@ -98,6 +100,7 @@ public static class Schools
         var release = await db.Releases.SingleOrDefaultAsync(r => r.Version == request.Version && !r.IsWithdrawn)
             ?? throw ValidationFailedException.For("version", "Sürüm bulunamadı ya da geri çekilmiş.");
         var modules = ValidateModules(request.Modules ?? [], Releases.Catalog(release));
+        var branches = ValidateBranches(request.Branches ?? [], Releases.Categories(release));
         ValidateIntegrations(request.Integrations);
         var email = request.Admin?.Email?.Trim().ToLowerInvariant() ?? "";
         if (!System.Net.Mail.MailAddress.TryCreate(email, out _)) throw ValidationFailedException.For("admin.email", "Geçerli bir yönetici e-postası girilmeli.");
@@ -110,6 +113,7 @@ public static class Schools
 
         var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
         if (request.IsCanary) school.SetCanary(true, now);
+        school.SetCategories(branches.Select(branch => branch.Category), now);
         db.Schools.Add(school);
 
         // Geçici parolayı platform üretir: okulun kurulum ucu cevabı kaybolsa da parola bilinir.
@@ -130,6 +134,8 @@ public static class Schools
             policy = request.Policy,
             billing = request.Billing,
             tariffs = request.Tariffs,
+            // Boşsa okul migration'ın müzik tohumlarıyla açılır (eski davranış).
+            branches = branches.Count > 0 ? branches : null,
         }, Json));
         foreach (var (key, value) in request.Integrations ?? new Dictionary<string, string>())
             if (!string.IsNullOrWhiteSpace(value)) await vault.SetAsync(school.Id, SecretNames.IntegrationPrefix + key, value.Trim());
@@ -139,7 +145,7 @@ public static class Schools
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.created", school.Id, now,
             afterJson: JsonSerializer.Serialize(new
             {
-                school.Slug, school.DisplayName, school.PrimaryDomain, release.Version, modules, adminEmail = email,
+                school.Slug, school.DisplayName, school.PrimaryDomain, release.Version, modules, adminEmail = email, categories = school.Categories,
                 integrations = (request.Integrations ?? new Dictionary<string, string>()).Keys.Order().ToList(),
             })));
         await db.SaveChangesAsync();
@@ -175,6 +181,26 @@ public static class Schools
     }
 
     // Seçilen opsiyonel modüller sürümün kataloğunda olmalı ve bağımlılıkları da seçilmiş olmalı.
+    // Kategori sürümün kataloğunda olmalı (kataloğu olmayan eski sürümde yalnızca "other"); ad 1-100
+    // karakter ve okul içinde benzersiz. En fazla 200 alt birim.
+    public static List<BranchRequest> ValidateBranches(IReadOnlyList<BranchRequest> branches, IReadOnlyList<Releases.CategoryEntry> catalog)
+    {
+        var known = catalog.Select(c => c.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (known.Count == 0) known.Add("other");
+        if (branches.Count > 200) throw ValidationFailedException.For("branches", "En fazla 200 alt birim eklenebilir.");
+        var result = new List<BranchRequest>();
+        foreach (var (branch, index) in branches.Select((branch, index) => (branch, index)))
+        {
+            var name = branch.Name?.Trim() ?? "";
+            if (!known.Contains(branch.Category ?? "")) throw ValidationFailedException.For($"branches[{index}].category", "Bu sürümde olmayan kategori.");
+            if (name.Length is 0 or > 100) throw ValidationFailedException.For($"branches[{index}].name", "Ad 1-100 karakter olmalı.");
+            if (result.Any(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)))
+                throw ValidationFailedException.For($"branches[{index}].name", $"'{name}' iki kez verilmiş.");
+            result.Add(new BranchRequest(branch.Category!.ToLowerInvariant(), name));
+        }
+        return result;
+    }
+
     public static List<string> ValidateModules(IReadOnlyList<string> selected, IReadOnlyList<Releases.ModuleEntry> catalog)
     {
         var byKey = catalog.ToDictionary(m => m.Key);
@@ -215,7 +241,7 @@ public static class Schools
             s.HostId is { } h ? hosts.GetValueOrDefault(h) : null, s.IsCanary, s.IsVersionPinned,
             latest.TryGetValue(s.Id, out var t) ? ToTelemetry(t) : null,
             openRuns.TryGetValue(s.Id, out var r) && (r.IsOpen || s.Status == SchoolStatus.Failed) ? Summary(r, engine) : null,
-            alerts.GetValueOrDefault(s.Id))).ToList();
+            alerts.GetValueOrDefault(s.Id), s.Categories)).ToList();
     }
 
     private static RunSummary Summary(ProvisioningRun run, ProvisioningEngine engine)

@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui";
 import { formatPeriod } from "@/lib/billing-format";
 import { COURSE_KIND_LABEL, type BillingDue, type CourseKind, type PaymentMethod } from "@/lib/billing";
 import { methodLabel } from "../billing/collect-sheet";
+import { useBranchTerms } from "@/lib/instance";
 
 // Gelir dökümü: Gelir ve gider ekranındaki her gelir rakamına (Özet'teki Gelir kartı, nakit
 // akışı tablosunun aidat hücreleri, Gelirler sekmesi) dokununca açılır ve rakamın hangi
@@ -89,8 +90,8 @@ function csvCell(value: string | number) {
   return /[";\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export function downloadIncomeCsv(entries: IncomeEntry[], fileName: string) {
-  const header = ["Ödeme tarihi", "Öğrenci", "Enstrüman", "Öğretmen", "Ders türü", "Aidat dönemi", "Gelir türü", "Yöntem", "Peşin plan (ay)", "Referans", "Düzeltildi", "Tutar (TRY)"];
+export function downloadIncomeCsv(entries: IncomeEntry[], fileName: string, branchLabel = "Enstrüman") {
+  const header = ["Ödeme tarihi", "Öğrenci", branchLabel, "Öğretmen", "Ders türü", "Aidat dönemi", "Gelir türü", "Yöntem", "Peşin plan (ay)", "Referans", "Düzeltildi", "Tutar (TRY)"];
   const rows = [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.studentName.localeCompare(b.studentName, "tr-TR")).map((entry) => [
     dateTr(entry.date), entry.studentName, entry.instrumentName, entry.teacherName, COURSE_KIND_LABEL[entry.courseKind], formatPeriod(entry.period),
     BUCKET_LABEL[bucketOf(entry)], methodLabel(entry.method), entry.prepayPlanMonths ? String(entry.prepayPlanMonths) : "", entry.reference ?? "", entry.corrected ? "Evet" : "",
@@ -126,6 +127,7 @@ function groupSum<K extends string>(entries: IncomeEntry[], key: (entry: IncomeE
 }
 
 export function IncomeBreakdownModal({ open, title, entries, onClose }: { open: boolean; title: string; entries: IncomeEntry[]; onClose: () => void }) {
+  const terms = useBranchTerms();
   const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
   const buckets = useMemo(() => splitByBucket(entries), [entries]);
   const students = useMemo(() => new Set(entries.map((entry) => entry.studentName)).size, [entries]);
@@ -143,7 +145,7 @@ export function IncomeBreakdownModal({ open, title, entries, onClose }: { open: 
             <p className="text-2xl font-bold tabular-nums text-[var(--success-strong)]">{money(total)}</p>
             <p className="text-meta">{entries.length} ödeme · {students} öğrenci</p>
           </div>
-          <button type="button" disabled={!entries.length} onClick={() => downloadIncomeCsv(entries, `gelir-dokumu-${fileSlug(title)}.csv`)} className="btn btn-primary">
+          <button type="button" disabled={!entries.length} onClick={() => downloadIncomeCsv(entries, `gelir-dokumu-${fileSlug(title)}.csv`, terms.branch)} className="btn btn-primary">
             <Icon name="download" className="h-4 w-4" />Detaylı dökümü indir (Excel/CSV)
           </button>
         </div>
@@ -173,7 +175,7 @@ export function IncomeBreakdownModal({ open, title, entries, onClose }: { open: 
 
         <div className="grid gap-3 md:grid-cols-3">
           <BreakdownTable title="Aidat dönemine göre" rows={byPeriod.map(([period, value]) => ({ label: formatPeriod(period), ...value }))} />
-          <BreakdownTable title="Enstrüman ve ders türü" rows={byInstrument.map(([label, value]) => ({ label, ...value }))} />
+          <BreakdownTable title={`${terms.branch} ve ders türü`} rows={byInstrument.map(([label, value]) => ({ label, ...value }))} />
           <BreakdownTable title="Ödeme yöntemi" rows={byMethod.map(([label, value]) => ({ label, ...value }))} />
         </div>
 

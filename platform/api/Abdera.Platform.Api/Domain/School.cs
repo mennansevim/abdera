@@ -24,6 +24,9 @@ public class School
     public string? AppVersion { get; private set; }
     public string? TargetVersion { get; private set; }
     public List<string> Modules { get; private set; } = [];
+    // Okulun öğrettiği alan kategorileri (music, dance, sport...; §5.6). Yalnızca panelde gösterim ve
+    // süzme için; alt birimlerin kendisi okulun veritabanındadır, okul yöneticisi sonradan değiştirebilir.
+    public List<string> Categories { get; private set; } = [];
     public string? PrimaryColor { get; private set; }
     // Filo güncellemesinde ilk dalga (kanarya) ve güncellemeden muaf tutma (§7).
     public bool IsCanary { get; private set; }
@@ -98,6 +101,12 @@ public class School
     public void CompleteUpgrade(string version, DateTimeOffset now) { AppVersion = version; TargetVersion = null; UpdatedAt = now; }
     public void SetCanary(bool canary, DateTimeOffset now) { IsCanary = canary; UpdatedAt = now; }
     public void SetVersionPinned(bool pinned, DateTimeOffset now) { IsVersionPinned = pinned; UpdatedAt = now; }
+    public void SetCategories(IEnumerable<string> categories, DateTimeOffset now)
+    {
+        Categories = categories.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToList();
+        UpdatedAt = now;
+    }
+
     public void SetModules(IEnumerable<string> modules, DateTimeOffset now)
     {
         Modules = modules.Distinct().OrderBy(key => key, StringComparer.Ordinal).ToList();

@@ -49,11 +49,35 @@ export interface SchoolDay {
   end: string;
 }
 
+// Alt birim (branş) terimleri ve kategori kataloğu (backend Shared/Branches/BranchCatalog.cs).
+// Tek kategorili okulda kategorinin terimi ("Enstrüman", "Dans türü"), karışık okulda "Branş".
+export interface BranchTerms {
+  branch: string;
+  branchPlural: string;
+}
+
+// Cümle içi kullanım ("Ad veya enstrüman ara"): Türkçe küçük harf (İ -> i).
+export interface BranchWords extends BranchTerms {
+  branchLower: string;
+  branchPluralLower: string;
+}
+
+export interface BranchCategory {
+  key: string;
+  name: string;
+  unitLabel: string;
+  unitLabelPlural: string;
+  suggestions: string[];
+  inUse: boolean;
+}
+
 export interface InstanceConfig {
   profile: SchoolProfile;
   modules: InstanceModule[];
   schoolDay?: SchoolDay;
   demo?: boolean;
+  terms?: BranchTerms;
+  categories?: BranchCategory[];
 }
 
 // Yapılandırma okunamazsa (yükleniyor, ağ hatası, eski API) bugünkü kimlik ve "her şey açık"
@@ -73,6 +97,30 @@ export function useInstanceConfig() {
     staleTime: 5 * 60_000,
     retry: 1,
   });
+}
+
+// Yapılandırma gelmeden (ya da eski API'de) bugünkü müzik okulunun terimi kullanılır.
+export const DEFAULT_TERMS: BranchTerms = { branch: "Enstrüman", branchPlural: "Enstrümanlar" };
+
+export function useBranchTerms(): BranchWords {
+  const { data } = useInstanceConfig();
+  const terms = data?.terms ?? DEFAULT_TERMS;
+  return {
+    ...terms,
+    branchLower: terms.branch.toLocaleLowerCase("tr-TR"),
+    branchPluralLower: terms.branchPlural.toLocaleLowerCase("tr-TR"),
+  };
+}
+
+export function useBranchCategories(): BranchCategory[] {
+  const { data } = useInstanceConfig();
+  return data?.categories ?? [];
+}
+
+// Müziğe özel ekranlar (enstrüman bakımı, nota kütüphanesi dili) yalnızca müzik öğreten okulda.
+export function useTeachesMusic(): boolean {
+  const { data } = useInstanceConfig();
+  return !data?.categories || data.categories.some((category) => category.key === "music" && category.inUse);
 }
 
 export function useSchoolProfile(): SchoolProfile {

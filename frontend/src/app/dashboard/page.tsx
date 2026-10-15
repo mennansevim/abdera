@@ -17,7 +17,7 @@ import { meDisplayName, meInitials, useMe } from "@/lib/use-auth";
 import { Panel, StatStrip } from "@/components/ui";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 import { TeacherWeekCard } from "./teacher-week-card";
-import { useModuleQueryEnabled } from "@/lib/instance";
+import { useModuleQueryEnabled, useBranchTerms } from "@/lib/instance";
 
 function weekStartFor(date: Date) {
   const result = new Date(date);
@@ -181,6 +181,7 @@ function countBy(lessons: CalendarLesson[], key: (lesson: CalendarLesson) => str
 }
 
 function WeeklySummary({ weekStart, lessons: allLessons, loading, error, retrying, onRetry, onWeekChange }: { weekStart: Date; lessons: CalendarLesson[]; loading: boolean; error: boolean; retrying: boolean; onRetry: () => void; onWeekChange: (offset: number) => void }) {
+  const terms = useBranchTerms();
   // Ertelenen dersin eski satırı ve iptal edilen ders sayılmaz - takvim ızgarasıyla aynı kural.
   const lessons = useMemo(() => allLessons.filter((lesson) => lesson.status !== "Rescheduled" && lesson.status !== "Cancelled"), [allLessons]);
   const lessonColors = useMemo(() => buildInstrumentColorMap(lessons.map((lesson) => lesson.instrumentName)), [lessons]);
@@ -226,7 +227,7 @@ function WeeklySummary({ weekStart, lessons: allLessons, loading, error, retryin
                 <p className={`mt-0.5 tabular-nums ${day.lessons.length ? "text-base font-extrabold text-[var(--foreground)]" : "text-[.75rem] font-semibold text-[var(--muted)]"}`}>{day.lessons.length ? `${day.lessons.length} ders` : "Ders yok"}</p>
                 {day.lessons.length > 0 && (
                   <>
-                    <ul className="mt-2 flex flex-wrap gap-1" aria-label="Enstrümana göre ders sayısı">
+                    <ul className="mt-2 flex flex-wrap gap-1" aria-label={`${terms.branch} bazında ders sayısı`}>
                       {byInstrument.map(([name, count]) => {
                         const tone = lessonColors.get(name) ?? INSTRUMENT_TONES[0];
                         return <li key={name} className="rounded-md border px-1.5 py-0.5 text-[.72rem] font-bold tabular-nums" style={{ background: tone.bg, borderColor: tone.border, color: tone.text }}>{count} {name}</li>;
