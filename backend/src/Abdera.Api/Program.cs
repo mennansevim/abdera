@@ -7,6 +7,7 @@ using Abdera.Api.Modules.Banking.Infrastructure;
 using Abdera.Api.Modules.Billing;
 using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.Dashboard;
+using Abdera.Api.Modules.Instance;
 using Abdera.Api.Modules.Library;
 using Abdera.Api.Modules.Messaging;
 using Abdera.Api.Modules.Messaging.Domain;
@@ -25,6 +26,7 @@ using Abdera.Api.Modules.Progress.Infrastructure;
 using Abdera.Api.Modules.Scheduling;
 using Abdera.Api.Modules.Show;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using HealthChecks.NpgSql;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -109,6 +111,8 @@ static string ResolveConnectionString(IServiceProvider sp)
 builder.Services.AddDbContext<AbderaDbContext>((sp, options) => options.UseNpgsql(ResolveConnectionString(sp)));
 
 builder.Services.AddSingleton<IClock, Abdera.Api.Shared.SystemClock>();
+// Okulun açık modülleri (docs/multi-tenant/ARCHITECTURE.md §5.2). Modules:Enabled boşsa hepsi açık.
+builder.Services.AddSingleton<EnabledModules>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 // docs/10-decisions.md Karar F reversal - veli OTP girişi için ayrı bir hasher (GuardianAuth.cs).
 builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian>>();
@@ -438,6 +442,9 @@ static string GetClientIp(HttpContext httpContext) =>
 var app = builder.Build();
 
 ProductionSecretsGuard.EnsureConfigured(app);
+// Yanlış yazılmış ya da bağımlılığı eksik bir modül listesi açılışta durdurulur; yarım çalışan
+// bir modülle canlıya çıkılmaz. Build()'den sonra okunduğu için test overlay'ini de görür.
+_ = app.Services.GetRequiredService<EnabledModules>().Current;
 
 // --- Reverse proxy (Caddy) arkasında çalışırken istemcinin gerçek IP'si ve şeması ---
 // Bunlar olmadan: (1) rate limiting partition'ı Connection.RemoteIpAddress'e bakar, bu da
@@ -463,6 +470,8 @@ app.UseSerilogRequestLogging();
 // istisnalari handler tarafindan RFC 7807/4xx'e cevrildikten sonra Serilog gercek son
 // status'u gorur. Tersi sira istemci 400 alirken logda sahte 500 + stack trace uretiyordu.
 app.UseExceptionHandler();
+// Kapalı modülün uçları kimlik doğrulamadan önce 404 döner (Shared/Modules/EnabledModules.cs).
+app.UseMiddleware<ModuleGateMiddleware>();
 // API isteği boyunca tek bağlantı açık tutulur: birden fazla EF sorgusu yapan bir istek
 // (örn. veli aidat ekranı) her sorguda havuza gidip gelmez. Havuzsuz serverless dönemindeki
 // 7 sn'lik TLS el sıkışması için eklendi; havuzlu kurulumda zararsız olduğu için korunuyor.
@@ -521,6 +530,7 @@ app.MapLibraryModule();
 app.MapMessagingModule();
 app.MapBankingModule();
 app.MapOpsModule();
+app.MapInstanceModule();
 
 if (app.Environment.IsDevelopment())
 {

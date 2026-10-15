@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Banking.Features;
+using Abdera.Api.Shared.Modules;
 
 namespace Abdera.Api.Modules.Banking;
 
@@ -6,13 +7,14 @@ public static class BankingModule
 {
     public static void MapBankingModule(this WebApplication app)
     {
-        app.MapAssignVirtualIban();
-        app.MapBankTransactions();
-        app.MapWebhooks();
+        var module = app.MapModule(ModuleKeys.Banking);
+        module.MapAssignVirtualIban();
+        module.MapBankTransactions();
+        module.MapWebhooks();
 
         if (app.Environment.IsDevelopment())
         {
-            app.MapDevBankSimulator();
+            module.MapDevBankSimulator();
         }
     }
 }

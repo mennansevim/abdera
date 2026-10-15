@@ -349,3 +349,10 @@ kaçıran işi `Degraded` sayar (#31). Kişiye/derse/aidata referans yok, `Perso
 görünen ad (`PUT /api/auth/me/display-name`, değişiklik `audit_log`'a `user.display_name_changed` olarak yazılır).
 Yalnızca ekleme: mevcut satırlar null kalır, ön yüz öğretmende Teacher kaydındaki adı, yöneticide e-postadan türetilen
 adı gösterir. Yeni tablo yok, `PersonEraser` değişmez. `Down()` kolonu düşürür.
+
+**AddSchoolProfile** (Instance, yalnızca `arch/multi-tenant` branch'i): yeni `school_profile` tablosu - okulun adı,
+kısa adı, ana rengi ve logosu (`bytea`, ≤512 KB, PNG/JPEG/WebP; tür dosya baytlarından çıkarılır). Tek satır
+(`BillingSettings` deseni, sabit id), `xmin` concurrency, `created_at/updated_at`. `CHECK` logo üçlüsünün (logo,
+logo_content_type, logo_version) birlikte dolu ya da birlikte boş olmasını zorlar. Satır yoksa arayüz bugünkü Abdera
+kimliğini gösterir, yani migration tek başına hiçbir şeyi değiştirmez. Kişiye/derse/aidata referans yok, `PersonEraser`
+değişmez. `Down()` tabloyu düşürür.

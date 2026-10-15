@@ -409,3 +409,11 @@ flowchart LR
 - Güncelleme: kanaryada bilerek bozuk sürüm → sağlık düşüyor, otomatik geri dönüş, dalga 1 başlamıyor.
 - Yedek: rastgele bir okulun dünkü yedeğini test okuluna geri yükle, öğrenci sayısı telemetriyle tutuyor.
 - Yük: 30 okul aynı sunucuda, her birinde mevcut `loadtest/` profili; bellek rezervi aşılmıyor, p95 < 500 ms.
+
+## 15. Uygulama ilerlemesi (yalnızca bu branch'te)
+
+| Tarih | Faz | Yapılan | Doğrulama |
+|---|---|---|---|
+| 2026-10-15 | F1 (A1, A3) | Modül kataloğu (`Shared/Modules/ModuleCatalog.cs`), `Modules__Enabled` ayarı (boşsa hepsi açık), kimlik doğrulamadan önce 404 dönen modül kapısı. Kapıya bağlanan modüller: kütüphane, gösteri, banka, kârlılık, gelişim (ders notu çekirdekte kalır). Okul profili: `school_profile` tablosu + `GET /api/instance/config`, `GET/PUT/DELETE /api/instance/logo`, `PUT /api/instance/profile` (yalnızca yönetici, audit'li). | 19 yeni test; tüm paket 713/714 (düşen test `main`'de de düşüyor, saate bağlı); migration ileri/geri geçici Postgres'te denendi |
+
+**Sıradaki adımlar (F1 devamı):** ön yüzün `/api/instance/config`'i okuyup menüyü modüle göre süzmesi ve okul adı/logosunu göstermesi (A8, A9); göreli `/api` ve `NEXT_PUBLIC_*` değişkenlerinin çalışma zamanına taşınması (A10); kalan modüller (WhatsApp, e-posta, grup dersleri, gelir-gider, veli portalı, AI) ve modüller arası çağrıların korunması (A4, A5); CI'da GHCR imajı (B13).

@@ -1153,6 +1153,69 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Instance.Domain.SchoolProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<byte[]>("Logo")
+                        .HasColumnType("bytea")
+                        .HasColumnName("logo");
+
+                    b.Property<string>("LogoContentType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("logo_content_type");
+
+                    b.Property<Guid?>("LogoVersion")
+                        .HasColumnType("uuid")
+                        .HasColumnName("logo_version");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PrimaryColor")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("primary_color");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<string>("ShortName")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("short_name");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("school_profile", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_school_profile_logo_consistent", "(logo IS NULL AND logo_content_type IS NULL AND logo_version IS NULL) OR (logo IS NOT NULL AND logo_content_type IS NOT NULL AND logo_version IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Library.Domain.LibraryPiece", b =>
                 {
                     b.Property<Guid>("Id")

@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Profitability.Features;
+using Abdera.Api.Shared.Modules;
 
 namespace Abdera.Api.Modules.Profitability;
 
@@ -8,7 +9,8 @@ public static class ProfitabilityModule
 {
     public static void MapProfitabilityModule(this WebApplication app)
     {
-        app.MapProfitability();
-        app.MapProfitCommentaries();
+        var module = app.MapModule(ModuleKeys.Profitability);
+        module.MapProfitability();
+        module.MapProfitCommentaries();
     }
 }

@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Library.Domain;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Banking.Domain;
+using Abdera.Api.Modules.Instance.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Ops.Domain;
@@ -99,6 +100,8 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<SystemHealthStatus> SystemHealthStatuses => Set<SystemHealthStatus>();
     public DbSet<BugReport> BugReports => Set<BugReport>();
     public DbSet<JobHeartbeat> JobHeartbeats => Set<JobHeartbeat>();
+
+    public DbSet<SchoolProfile> SchoolProfiles => Set<SchoolProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
