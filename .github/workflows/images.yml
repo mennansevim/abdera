@@ -1,0 +1,98 @@
+name: Images
+
+# Okul başına kurulum için imajlar (docs/multi-tenant/ARCHITECTURE.md §5.5, B13). Okul sunucuları
+# derleme yapmaz; buradan GHCR'ye itilen imajları DIGEST ile çeker (§16.4).
+#
+# Yalnızca sürüm etiketi (v<YYYY.MM.DD.N>) ya da elle tetiklenir: main'e push'ta çalışmaz,
+# bugünkü CI/Deploy akışına dokunmaz.
+on:
+  push:
+    tags: ['v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Sürüm (YYYY.MM.DD.N)'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sürümü belirle
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          [ -n "$VERSION" ] || VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$ ]] || { echo "Geçersiz sürüm: $VERSION"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Modül kataloğu
+        run: |
+          # dotnet run "Building..." satırını stdout'a yazar; derlenmiş dll doğrudan çalıştırılır.
+          dotnet build backend/src/Abdera.Api -c Release -o "$RUNNER_TEMP/api" -v quiet
+          dotnet "$RUNNER_TEMP/api/Abdera.Api.dll" --print-module-catalog > module-catalog.json
+          python3 -c "import json; json.load(open('module-catalog.json'))"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: API imajı
+        id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          build-args: APP_VERSION=${{ steps.version.outputs.version }}
+          tags: ghcr.io/${{ steps.version.outputs.owner }}/abdera-api:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Web imajı
+        id: web
+        uses: docker/build-push-action@v6
+        with:
+          # NEXT_PUBLIC_API_BASE_URL verilmez: üretimde göreli /api (tek imaj her okulda çalışır, A10).
+          context: frontend
+          push: true
+          tags: ghcr.io/${{ steps.version.outputs.owner }}/abdera-web:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Sürüm kaydı
+        run: |
+          OWNER="${{ steps.version.outputs.owner }}"
+          python3 - <<PY
+          import json
+          release = {
+              "version": "${{ steps.version.outputs.version }}",
+              "revision": "${{ github.sha }}",
+              "apiImage": "ghcr.io/$OWNER/abdera-api@${{ steps.api.outputs.digest }}",
+              "webImage": "ghcr.io/$OWNER/abdera-web@${{ steps.web.outputs.digest }}",
+              "modules": json.load(open("module-catalog.json")),
+          }
+          json.dump(release, open("release.json", "w"), ensure_ascii=False, indent=2)
+          PY
+          cat release.json
+
+      # Platform yeni sürümü bu dosyadan kaydeder (releases tablosu, digest + katalog).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.version.outputs.version }}
+          path: release.json

@@ -50,6 +50,21 @@ using System.Text.Json.Serialization;
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
+// Sürümle birlikte yayımlanan modül kataloğu (docs/multi-tenant/ARCHITECTURE.md §16.8): CI imajı
+// derlerken bunu çalıştırıp JSON'u imaj etiketine ve sürüm dosyasına yazar; platform henüz kurulmamış
+// bir sürümün modüllerini oradan okur. Uygulamayı başlatmaz, veritabanına dokunmaz.
+if (args.Contains("--print-module-catalog"))
+{
+    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(ModuleCatalog.All.Select(module => new
+    {
+        key = module.Key,
+        name = module.Name,
+        isCore = module.IsCore,
+        requires = module.Requires,
+    })));
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Enum'lar JSON'da sayı değil isim olarak taşınır (örn. UserRole.Admin -> "Admin", 0 değil) -

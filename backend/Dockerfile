@@ -44,6 +44,9 @@ USER app
 COPY --from=build /app .
 
 ENV ASPNETCORE_URLS=http://+:8080
+# Telemetri ve alarm sürüm bilgisi (InstanceTelemetry); CI etiketiyle doldurur, yerelde "dev".
+ARG APP_VERSION=dev
+ENV App__Version=${APP_VERSION}
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "Abdera.Api.dll"]

@@ -1,0 +1,110 @@
+# Abdera - tek bir okul kurulumu (docs/multi-tenant/ARCHITECTURE.md §5.5, §6.2).
+#
+# Bu dosya şablondur: abdera-host `create` komutu onu /srv/abdera/<slug>/compose.yml olarak kopyalar
+# ve her komutu `docker compose -p abdera-<slug>` ile çalıştırır. Okula özel her değer .env'dedir
+# (deploy/instance/env.template). Kökteki docker-compose.yml (geliştirme ve bugünkü tek okul) değişmez.
+#
+# Farklar:
+# - İmajlar sunucuda derlenmez; CI'ın GHCR'ye ittiği imaj digest ile çekilir (ABDERA_*_IMAGE).
+# - Port publish yok. Caddy okulun KENDİ edge ağına bağlanır (abdera-edge-<slug>); okullar
+#   birbirinin api/web/db servislerine ağ düzeyinde ulaşamaz (§16.1).
+# - container_name yok; proje adı (abdera-<slug>) önek verir.
+# - Bellek sınırları ve küçük bağlantı havuzu: tek sunucuda onlarca okul (§10).
+name: abdera-${INSTANCE_SLUG:?INSTANCE_SLUG .env icinde tanimli olmali}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: abdera
+      POSTGRES_USER: abdera
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    command: postgres -c max_connections=40 -c shared_buffers=64MB
+    mem_limit: 256m
+    networks: [internal]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U abdera -d abdera"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    image: ${ABDERA_API_IMAGE:?}
+    restart: unless-stopped
+    # R2 anahtarları API konteynerine verilmez (ajan .env'den R2_* satırlarını ayıklayıp api.env yazar).
+    env_file: api.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=db;Port=5432;Database=abdera;Username=abdera;Password=${POSTGRES_PASSWORD:?};Maximum Pool Size=25;Connection Idle Lifetime=60
+      Auth__KeysDirectory: /app/keys
+      App__InstanceSlug: ${INSTANCE_SLUG}
+      DOTNET_gcServer: "0"
+      DOTNET_GCHeapHardLimit: "0x14000000"
+    mem_limit: 384m
+    networks:
+      internal: {}
+      edge:
+        aliases: ["${INSTANCE_SLUG}-api"]
+    volumes:
+      - dpkeys:/app/keys
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    image: ${ABDERA_WEB_IMAGE:?}
+    restart: unless-stopped
+    environment:
+      # Manifest okul profilini sunucu tarafında buradan okur (frontend/src/app/manifest.ts).
+      API_INTERNAL_URL: http://api:8080
+    mem_limit: 256m
+    networks:
+      internal: {}
+      edge:
+        aliases: ["${INSTANCE_SLUG}-web"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # SFTP -> R2 köprüsü: uygulamanın BackupService'i yalnızca SFTP'ye yazar (docs/19-hetzner-runbook.md §7).
+  # Okul başına ayrı R2 öneki (<slug>/) ve ayrı şifreleme anahtarı (Backup__EncryptionKey).
+  backup-gw:
+    image: rclone/rclone:1.75.1
+    restart: unless-stopped
+    command:
+      - serve
+      - sftp
+      - r2:${R2_BUCKET:-abdera-backups}/${INSTANCE_SLUG}
+      - --addr=:2022
+      - --user=abdera
+      - --pass=${BACKUP_GW_PASSWORD:?}
+      - --vfs-cache-mode=off
+    environment:
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-none}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+    mem_limit: 96m
+    networks: [internal]
+
+networks:
+  internal: {}
+  # Ajan `create` sırasında oluşturur ve Caddy'yi bağlar; burada yalnızca kullanılır.
+  edge:
+    name: abdera-edge-${INSTANCE_SLUG}
+    external: true
+
+volumes:
+  pgdata: {}
+  dpkeys: {}
