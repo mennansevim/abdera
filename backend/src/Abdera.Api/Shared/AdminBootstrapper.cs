@@ -31,7 +31,13 @@ public static class AdminBootstrapper
             var email = config["Bootstrap:AdminEmail"];
             var password = config["Bootstrap:AdminPassword"];
 
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            if ((string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) &&
+                !string.IsNullOrWhiteSpace(config["Provisioning:Token"]))
+            {
+                // Platformun kurduğu okul (docs/multi-tenant/ARCHITECTURE.md §5.4): ilk yönetici kurulum ucundan gelir.
+                logger.LogInformation("İlk yönetici platformun kurulum isteğiyle oluşturulacak (/api/instance/provision).");
+            }
+            else if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
             {
                 logger.LogWarning(
                     "Bootstrap__AdminEmail / Bootstrap__AdminPassword tanımlı değil - ilk yönetici oluşturulamadı. " +
