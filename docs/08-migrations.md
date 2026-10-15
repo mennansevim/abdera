@@ -339,3 +339,8 @@ aylık gelir payı ödemesi (`docs/10-decisions.md` AC). Para kolonları `numeri
 `share_percent numeric(5,2)`, `UNIQUE (teacher_id, period)` çift ödeme engeli, `CHECK amount > 0`,
 `CHECK revenue_base > 0`, `CHECK share_percent > 0 AND share_percent <= 100`. Satır silinmez (gider defterine bağlı);
 yalnızca kalıcı öğretmen silmede `PersonEraser` siler, `expenses` satırı kalır. `Down()` tabloyu düşürür.
+
+**AddJobHeartbeats** (Ops): yeni `job_heartbeats` tablosu - arka plan işi başına tek satır (`job_name` PK,
+`last_succeeded_at`, `last_failed_at`, `last_error varchar(500)`, `created_at/updated_at`). İşler tur sonunda
+`INSERT ... ON CONFLICT (job_name) DO UPDATE` ile yazar (`JobHeartbeatRecorder`); `SystemHealthMonitor` üç turunu
+kaçıran işi `Degraded` sayar (#31). Kişiye/derse/aidata referans yok, `PersonEraser` değişmez. `Down()` tabloyu düşürür.

@@ -20,6 +20,18 @@ export interface SystemHealthSummary {
     banking: ProviderConfigurationState;
     backup: ProviderConfigurationState;
   };
+  jobs: BackgroundJobStatus[];
+}
+
+// #31: arka plan işlerinin son başarılı/hatalı turu. Sağlık seviyesine etkisini sunucu
+// (SystemHealthMonitor) hesaplar; burada yalnızca gösterilir.
+export interface BackgroundJobStatus {
+  name: string;
+  label: string;
+  intervalMinutes: number;
+  lastSucceededAt: string | null;
+  lastFailedAt: string | null;
+  lastError: string | null;
 }
 
 export type ProviderConfigurationState = "Configured" | "DevelopmentOnly" | "ManualOnly" | "Disabled" | "Misconfigured";

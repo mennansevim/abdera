@@ -17,6 +17,8 @@ public static class OpsModule
         services.AddSingleton<BackupService>();
         // Aynı gerekçe: BackupService koşu bitince CheckNowAsync'i aynı örnek üzerinden çağırır.
         services.AddSingleton<SystemHealthMonitor>();
+        // Diğer modüllerin BackgroundService'leri tur sonunda buraya yazar (#31).
+        services.AddSingleton<JobHeartbeatRecorder>();
         if (enableHostedServices)
         {
             services.AddHostedService(sp => sp.GetRequiredService<BackupService>());

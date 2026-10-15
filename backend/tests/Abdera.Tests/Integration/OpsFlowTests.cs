@@ -151,6 +151,34 @@ public class OpsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(SystemHealth.ProviderConfigurationState.DevelopmentOnly, body.Providers.Backup);
     }
 
+    // #31: arka plan işi tur sonunda gerçek Postgres'e upsert eder (ON CONFLICT) ve sağlık
+    // ucu iş listesini döndürür - hata sonradan gelen başarıyı silmez, ikisi de kalır.
+    [Fact]
+    public async Task Job_heartbeats_are_upserted_and_listed_in_system_health()
+    {
+        var recorder = _factory.Services.GetRequiredService<Abdera.Api.Modules.Ops.Infrastructure.JobHeartbeatRecorder>();
+        var job = BackgroundJobs.MonthlyReceivables;
+
+        await recorder.FailedAsync(job, new InvalidOperationException(new string('y', 900)), CancellationToken.None);
+        await recorder.SucceededAsync(job, CancellationToken.None);
+        await recorder.SucceededAsync(job, CancellationToken.None);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var beat = await db.JobHeartbeats.AsNoTracking().SingleAsync(h => h.JobName == job.Name);
+        Assert.NotNull(beat.LastSucceededAt);
+        Assert.NotNull(beat.LastFailedAt);
+        Assert.True(beat.LastSucceededAt >= beat.LastFailedAt);
+        Assert.Equal(JobHeartbeat.MaxErrorLength, beat.LastError!.Length);
+
+        var admin = await CreateAdminClientAsync();
+        var health = await admin.GetFromJsonAsync<SystemHealth.SystemHealthResponse>("/api/system/health", TestJson.Options);
+        Assert.Equal(BackgroundJobs.All.Count, health!.Jobs.Count);
+        var listed = Assert.Single(health.Jobs, j => j.Name == job.Name);
+        Assert.Equal("Aylık aidat üretimi", listed.Label);
+        Assert.Equal(24 * 60, listed.IntervalMinutes);
+        Assert.NotNull(listed.LastSucceededAt);
+    }
+
     [Fact]
     public async Task Backup_endpoints_reject_non_admin_requests()
     {

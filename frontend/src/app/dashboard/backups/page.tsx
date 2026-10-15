@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { AdminGate, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useBackupRuns, useSystemHealth, useTriggerBackup, type BackupRunStatus } from "@/lib/ops";
+import { useBackupRuns, useSystemHealth, useTriggerBackup, type BackgroundJobStatus, type BackupRunStatus } from "@/lib/ops";
 
 const STATUS_LABELS: Record<BackupRunStatus, string> = { Running: "sürüyor", Succeeded: "başarılı", Failed: "başarısız" };
 const STATUS_CLASS: Record<BackupRunStatus, string> = {
@@ -81,6 +81,8 @@ function BackupsPageContent() {
       {error && <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-sm font-medium text-[var(--danger-strong)]">{error}</p>}
       {triggered && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-sm font-medium text-[var(--success-strong)]">Yedekleme başlatıldı, birkaç dakika içinde aşağıdaki listede görünecek.</p>}
 
+      {health && health.jobs.length > 0 && <BackgroundJobsCard jobs={health.jobs} />}
+
       <section className="app-card overflow-x-auto">
         <table className="w-full min-w-[46rem] text-sm">
           <thead>
@@ -122,5 +124,45 @@ function BackupsPageContent() {
         </div>
       )}
     </div>
+  );
+}
+
+function formatInterval(minutes: number) {
+  if (minutes >= 60 * 24) return "günde bir";
+  if (minutes >= 60) return minutes === 60 ? "saatte bir" : `${minutes / 60} saatte bir`;
+  return minutes === 1 ? "dakikada bir" : `${minutes} dakikada bir`;
+}
+
+// Aylık aidat üretimi gibi işler sessizce durursa burada görünür; eşik aşılınca sunucu ayrıca
+// sağlık durumunu "Dikkat gerekiyor"a çekip e-posta atar.
+function BackgroundJobsCard({ jobs }: { jobs: BackgroundJobStatus[] }) {
+  return (
+    <section className="app-card px-4 py-3">
+      <h2 className="text-title">Arka plan işleri</h2>
+      <p className="text-meta mt-1">Otomatik çalışan işlerin son turu. Bir iş üç turunu üst üste kaçırırsa uyarı e-postası gider.</p>
+      <ul className="mt-2 divide-y divide-[var(--line)]">
+        {jobs.map((job) => {
+          const failed = job.lastFailedAt !== null && (job.lastSucceededAt === null || job.lastFailedAt > job.lastSucceededAt);
+          return (
+            <li key={job.name} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 text-sm">
+              <span>
+                <strong>{job.label}</strong>
+                <span className="text-meta ml-1.5">{formatInterval(job.intervalMinutes)}</span>
+              </span>
+              {failed ? (
+                <span className="font-bold text-[var(--danger-strong)]" title={job.lastError ?? undefined}>
+                  Son tur hata verdi · {new Date(job.lastFailedAt!).toLocaleString("tr-TR")}
+                </span>
+              ) : (
+                <span className="text-meta">
+                  {job.lastSucceededAt ? `Son başarılı: ${new Date(job.lastSucceededAt).toLocaleString("tr-TR")}` : "Henüz çalışmadı"}
+                </span>
+              )}
+              {failed && job.lastError && <p className="text-meta w-full break-words">{job.lastError}</p>}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

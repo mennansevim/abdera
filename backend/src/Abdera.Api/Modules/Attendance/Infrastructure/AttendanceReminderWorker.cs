@@ -1,4 +1,6 @@
 using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
 
 namespace Abdera.Api.Modules.Attendance.Infrastructure;
@@ -11,7 +13,7 @@ namespace Abdera.Api.Modules.Attendance.Infrastructure;
 // Açılışta HEMEN çalışmaz, ilk tur bir aralık sonra: integration testleri aynı
 // WebApplicationFactory'yi paylaşıyor ve işi kendileri çağırıyor; açılışta çalışsaydı
 // testle aynı satırı açmaya yarışırdı.
-public class AttendanceReminderWorker(IServiceScopeFactory scopeFactory, ILogger<AttendanceReminderWorker> logger) : BackgroundService
+public class AttendanceReminderWorker(IServiceScopeFactory scopeFactory, ILogger<AttendanceReminderWorker> logger, JobHeartbeatRecorder heartbeat) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(10);
 
@@ -38,11 +40,14 @@ public class AttendanceReminderWorker(IServiceScopeFactory scopeFactory, ILogger
                 logger.LogInformation(
                     "Yoklama sorusu: {Asked} ders için soruldu, {Cleared} soru kapandı.",
                     result.AskedCount, result.ClearedCount);
+
+            await heartbeat.SucceededAsync(BackgroundJobs.AttendanceReminder, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Bir tur başarısız olursa uygulamayı düşürmez - bir sonraki tik'te tekrar dener.
             logger.LogError(ex, "Yoklama sorusu turu başarısız oldu.");
+            await heartbeat.FailedAsync(BackgroundJobs.AttendanceReminder, ex, cancellationToken);
         }
     }
 }

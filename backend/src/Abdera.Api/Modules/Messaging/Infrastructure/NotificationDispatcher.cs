@@ -1,5 +1,7 @@
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,7 +11,7 @@ namespace Abdera.Api.Modules.Messaging.Infrastructure;
 // jobs safely. Use a transaction and a locking strategy such as FOR UPDATE SKIP LOCKED."
 // docs/06-whatsapp.md sequence diagram'ının worker tarafı - CLAUDE.md'nin Spring Scheduler
 // karşılığı: BackgroundService + PeriodicTimer, ek kütüphane (Hangfire/Quartz) yok.
-public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<NotificationDispatcher> logger, IConfiguration config) : BackgroundService
+public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<NotificationDispatcher> logger, IConfiguration config, JobHeartbeatRecorder heartbeat) : BackgroundService
 {
     private const int BatchSize = 20;
 
@@ -92,11 +94,14 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
             {
                 await db.SaveChangesAsync(cancellationToken);
             }
+
+            await heartbeat.SucceededAsync(BackgroundJobs.NotificationDispatcher, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Bir tur başarısız olursa uygulamayı düşürmez - bir sonraki tik'te tekrar dener.
             logger.LogError(ex, "Bildirim dağıtım turu başarısız oldu.");
+            await heartbeat.FailedAsync(BackgroundJobs.NotificationDispatcher, ex, cancellationToken);
         }
     }
 

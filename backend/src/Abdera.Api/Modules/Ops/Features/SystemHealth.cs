@@ -27,11 +27,16 @@ public static class SystemHealth
         ProviderConfigurationState Banking,
         ProviderConfigurationState Backup);
 
+    public record BackgroundJobResponse(
+        string Name, string Label, int IntervalMinutes,
+        DateTimeOffset? LastSucceededAt, DateTimeOffset? LastFailedAt, string? LastError);
+
     public record SystemHealthResponse(
         SystemHealthLevel Level, string? Detail, DateTimeOffset LastCheckedAt,
         bool DatabaseReachable,
         DateTimeOffset? LastSuccessfulBackupAt, string? LastBackupStatus,
-        ProviderHealthResponse Providers);
+        ProviderHealthResponse Providers,
+        IReadOnlyList<BackgroundJobResponse> Jobs);
 
     public static void MapSystemHealth(this IEndpointRouteBuilder app)
     {
@@ -47,6 +52,16 @@ public static class SystemHealth
             .Where(r => r.Status == BackupRunStatus.Succeeded)
             .OrderByDescending(r => r.CompletedAt)
             .FirstOrDefaultAsync();
+        var heartbeats = await db.JobHeartbeats.AsNoTracking().ToDictionaryAsync(h => h.JobName);
+        var jobs = BackgroundJobs.All
+            .Select(job =>
+            {
+                var beat = heartbeats.GetValueOrDefault(job.Name);
+                return new BackgroundJobResponse(
+                    job.Name, job.Label, (int)job.Interval.TotalMinutes,
+                    beat?.LastSucceededAt, beat?.LastFailedAt, beat?.LastError);
+            })
+            .ToList();
 
         return Results.Ok(new SystemHealthResponse(
             status.Level, status.Detail, status.LastCheckedAt,
@@ -55,7 +70,8 @@ public static class SystemHealth
             new ProviderHealthResponse(
                 ProviderState(configuration["WhatsApp:Provider"], "Cloud", environment),
                 ProviderState(configuration["Banking:Provider"], "Fake", environment, fakeIsConfigured: false),
-                ProviderState(configuration["Backup:Provider"], "Sftp", environment))));
+                ProviderState(configuration["Backup:Provider"], "Sftp", environment)),
+            jobs));
     }
 
     private static ProviderConfigurationState ProviderState(

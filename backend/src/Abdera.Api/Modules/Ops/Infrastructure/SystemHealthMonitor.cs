@@ -22,6 +22,8 @@ public class SystemHealthMonitor(
 {
     // Tik ile yedek sonrası tazeleme aynı tek satırlık durumu yazar; sırayla çalışsınlar.
     private readonly SemaphoreSlim _checkLock = new(1, 1);
+    // Bu sürecin ilk kontrol anı: yeni açılmış süreçte ilk turunu henüz atmamış iş sorun sayılmaz.
+    private DateTimeOffset? _runningSince;
 
     public Task CheckNowAsync(CancellationToken cancellationToken = default) => CheckOnceAsync(cancellationToken);
 
@@ -63,7 +65,11 @@ public class SystemHealthMonitor(
                 ? (TimeSpan?)null
                 : now - (lastSuccess.CompletedAt ?? lastSuccess.StartedAt);
 
-            var (level, detail) = Evaluate(dbHealthy, latestBackup, lastSuccessAge, staleAfterHours, unhealthyAfterHours);
+            var (backupLevel, backupDetail) = Evaluate(dbHealthy, latestBackup, lastSuccessAge, staleAfterHours, unhealthyAfterHours);
+            _runningSince ??= now;
+            var heartbeats = await db.JobHeartbeats.AsNoTracking().ToListAsync(cancellationToken);
+            var (jobsLevel, jobsDetail) = BackgroundJobs.Evaluate(heartbeats, now, _runningSince.Value);
+            var (level, detail) = Combine((backupLevel, backupDetail), (jobsLevel, jobsDetail));
 
             var status = await db.SystemHealthStatuses.SingleOrDefaultAsync(s => s.Id == SystemHealthStatus.SingletonId, cancellationToken);
             var isNew = status is null;
@@ -137,6 +143,18 @@ public class SystemHealthMonitor(
         }
         // Süren bir koşu tek başına dikkat gerektirmez; takılı kalırsa yaş eşikleri yakalar.
         return (SystemHealthLevel.Healthy, "Sistem sağlıklı.");
+    }
+
+    // Yedek/veritabanı ve arka plan işleri ayrı değerlendirilir; kart ve e-posta ikisinden
+    // ağır olanın seviyesini, sağlıksız olanların açıklamalarını birlikte taşır.
+    public static (SystemHealthLevel Level, string Detail) Combine(
+        (SystemHealthLevel Level, string Detail) backup, (SystemHealthLevel Level, string? Detail) jobs)
+    {
+        if (jobs.Level == SystemHealthLevel.Healthy) return backup;
+        var level = backup.Level > jobs.Level ? backup.Level : jobs.Level;
+        return backup.Level == SystemHealthLevel.Healthy
+            ? (level, jobs.Detail!)
+            : (level, $"{backup.Detail} {jobs.Detail}");
     }
 
     private static async Task SendAlertAsync(

@@ -1749,6 +1749,39 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.ToTable("bug_reports", (string)null);
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Ops.Domain.JobHeartbeat", b =>
+                {
+                    b.Property<string>("JobName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("job_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset?>("LastFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_failed_at");
+
+                    b.Property<DateTimeOffset?>("LastSucceededAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_succeeded_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("JobName");
+
+                    b.ToTable("job_heartbeats", (string)null);
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Ops.Domain.SystemHealthStatus", b =>
                 {
                     b.Property<Guid>("Id")

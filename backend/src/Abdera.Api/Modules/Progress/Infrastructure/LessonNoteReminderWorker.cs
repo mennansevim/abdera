@@ -1,4 +1,6 @@
 using Abdera.Api.Modules.Messaging.Features;
+using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
 
 namespace Abdera.Api.Modules.Progress.Infrastructure;
@@ -12,7 +14,7 @@ namespace Abdera.Api.Modules.Progress.Infrastructure;
 // Integration testleri aynı WebApplicationFactory'yi paylaşıyor; açılışta çalışsaydı testin
 // cron çağrısıyla aynı anda aynı satırı açmaya yarışırdı. Hatırlatma için birkaç saatlik
 // gecikmenin bedeli yok.
-public class LessonNoteReminderWorker(IServiceScopeFactory scopeFactory, ILogger<LessonNoteReminderWorker> logger) : BackgroundService
+public class LessonNoteReminderWorker(IServiceScopeFactory scopeFactory, ILogger<LessonNoteReminderWorker> logger, JobHeartbeatRecorder heartbeat) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(3);
 
@@ -39,11 +41,14 @@ public class LessonNoteReminderWorker(IServiceScopeFactory scopeFactory, ILogger
                 logger.LogInformation(
                     "Ders yorumu hatırlatması: {Reminded} öğretmene hatırlatıldı ({Pending} ders), {Cleared} hatırlatma kapandı.",
                     result.RemindedCount, result.PendingLessonCount, result.ClearedCount);
+
+            await heartbeat.SucceededAsync(BackgroundJobs.LessonNoteReminder, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Bir tur başarısız olursa uygulamayı düşürmez - bir sonraki tik'te tekrar dener.
             logger.LogError(ex, "Ders yorumu hatırlatma turu başarısız oldu.");
+            await heartbeat.FailedAsync(BackgroundJobs.LessonNoteReminder, ex, cancellationToken);
         }
     }
 }

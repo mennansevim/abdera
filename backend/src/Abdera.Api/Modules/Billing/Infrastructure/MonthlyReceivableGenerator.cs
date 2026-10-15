@@ -1,5 +1,7 @@
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
 
 namespace Abdera.Api.Modules.Billing.Infrastructure;
@@ -18,7 +20,7 @@ namespace Abdera.Api.Modules.Billing.Infrastructure;
 // telafi edilmek istenirse bir kaçış kapısı olarak kalır, yalnızca rutin arayüz yüzeyi
 // (buton + önizleme modalı) kaldırıldı.
 public class MonthlyReceivableGenerator(
-    IServiceScopeFactory scopeFactory, ILogger<MonthlyReceivableGenerator> logger) : BackgroundService
+    IServiceScopeFactory scopeFactory, ILogger<MonthlyReceivableGenerator> logger, JobHeartbeatRecorder heartbeat) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
 
@@ -63,12 +65,15 @@ public class MonthlyReceivableGenerator(
                     "{Period} dönemi: {Count} kurs kaydı için geçerli ücret tarifesi yok, aidat açılamadı: {Students}",
                     period, result.Missing.Count, string.Join(", ", result.Missing.Select(row => row.StudentName)));
             }
+
+            await heartbeat.SucceededAsync(BackgroundJobs.MonthlyReceivables, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Bir çalışma başarısız olursa uygulamayı düşürmez - bir sonraki tik'te tekrar
             // dener (aynı gerekçe: OverdueReceivableSweeper).
             logger.LogError(ex, "Aylık aidat otomatik üretimi başarısız oldu.");
+            await heartbeat.FailedAsync(BackgroundJobs.MonthlyReceivables, ex, cancellationToken);
         }
     }
 }

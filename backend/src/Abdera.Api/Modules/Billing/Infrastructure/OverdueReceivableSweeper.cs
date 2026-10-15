@@ -1,4 +1,6 @@
 using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Ops.Domain;
+using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,7 +11,7 @@ namespace Abdera.Api.Modules.Billing.Infrastructure;
 // çevirir." CLAUDE.md'nin Spring Scheduler karşılığı: BackgroundService + PeriodicTimer.
 // Tarih granülerliğinde bir kontrol olduğu için saatlik çalışması yeterli - SKIP LOCKED
 // gerekmiyor çünkü işlem idempotent bir toplu UPDATE (iki kez çalışsa da zarar vermez).
-public class OverdueReceivableSweeper(IServiceScopeFactory scopeFactory, ILogger<OverdueReceivableSweeper> logger) : BackgroundService
+public class OverdueReceivableSweeper(IServiceScopeFactory scopeFactory, ILogger<OverdueReceivableSweeper> logger, JobHeartbeatRecorder heartbeat) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
 
@@ -37,11 +39,14 @@ public class OverdueReceivableSweeper(IServiceScopeFactory scopeFactory, ILogger
             var count = await BillingDailyJob.MarkOverdueAsync(db, clock, cancellationToken);
             if (count > 0)
                 logger.LogInformation("{Count} aidat OVERDUE olarak işaretlendi.", count);
+
+            await heartbeat.SucceededAsync(BackgroundJobs.OverdueReceivables, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Bir tarama başarısız olursa uygulamayı düşürmez - bir sonraki tik'te tekrar dener.
             logger.LogError(ex, "Vadesi geçmiş aidat taraması başarısız oldu.");
+            await heartbeat.FailedAsync(BackgroundJobs.OverdueReceivables, ex, cancellationToken);
         }
     }
 }
