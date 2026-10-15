@@ -1,0 +1,465 @@
+<title>Abdera Platform Mimarisi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: tek sütun teknik belge; her bölüm bir şekil + kısa açıklama, şekiller kendi kaydırma kutusunda */
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --ink: #171a2c;
+  --muted: #5a6077;
+  --line: #d6d9e8;
+  --accent: #3346d3;
+  --accent-soft: #e7eafc;
+  --ok: #1d8049;
+  --warn: #a86a12;
+  --bad: #c0352a;
+  --info: #2a67cf;
+  --font-display: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10131e; --surface: #181c2a; --ink: #e8eaf5; --muted: #9ba1b9; --line: #2d3348;
+    --accent: #8d9dff; --accent-soft: #232a4f; --ok: #4fc283; --warn: #e2ab47; --bad: #f06d61; --info: #6ea8ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10131e; --surface: #181c2a; --ink: #e8eaf5; --muted: #9ba1b9; --line: #2d3348;
+  --accent: #8d9dff; --accent-soft: #232a4f; --ok: #4fc283; --warn: #e2ab47; --bad: #f06d61; --info: #6ea8ff;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 56px; }
+header { display: flex; flex-direction: column; gap: 12px; }
+.draft { align-self: flex-start; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--warn); border: 1px solid currentColor; border-radius: 999px; padding: 3px 10px; }
+h1 { font-family: var(--font-display); font-size: clamp(28px, 4.4vw, 40px); line-height: 1.1; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-size: 22px; margin: 0; text-wrap: balance; }
+.lead { max-width: 68ch; color: var(--muted); margin: 0; }
+section { display: flex; flex-direction: column; gap: 16px; }
+.kicker { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); }
+p { margin: 0; max-width: 68ch; }
+code, .mono { font-family: var(--font-mono); font-size: .9em; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+.scroll svg { display: block; min-width: 860px; width: 100%; height: auto; }
+figcaption { font-size: 13px; color: var(--muted); max-width: 80ch; }
+
+/* SVG ortak sınıflar */
+svg text { font-family: var(--font-body); fill: var(--ink); font-size: 13px; }
+svg .t-sub { fill: var(--muted); font-size: 11.5px; }
+svg .t-group { fill: var(--muted); font-size: 11px; font-family: var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+svg .t-mono { font-family: var(--font-mono); font-size: 11.5px; }
+svg .t-label { fill: var(--muted); font-size: 11.5px; }
+svg .t-strong { font-weight: 600; }
+svg .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+svg .frame { fill: none; stroke: var(--line); stroke-width: 1.2; }
+svg .frame-dash { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 5 4; }
+svg .edge { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+svg .edge-accent { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+svg .edge-dash { fill: none; stroke: var(--muted); stroke-width: 1.3; stroke-dasharray: 5 4; }
+svg .edge-dot { fill: none; stroke: var(--info); stroke-width: 1.5; stroke-dasharray: 2 4; }
+svg .edge-bad { fill: none; stroke: var(--bad); stroke-width: 1.4; stroke-dasharray: 5 4; }
+svg .head { fill: var(--ink); }
+svg .head-accent { fill: var(--accent); }
+svg .head-muted { fill: var(--muted); }
+svg .head-info { fill: var(--info); }
+svg .head-bad { fill: var(--bad); }
+svg .ok { fill: var(--ok); }
+svg .bad-text { fill: var(--bad); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { display: inline-block; width: 28px; height: 0; border-top: 2px solid var(--ink); }
+.legend i.accent { border-color: var(--accent); }
+.legend i.dash { border-top: 2px dashed var(--muted); }
+.legend i.dot { border-top: 2px dotted var(--info); }
+
+/* Platform ana ekran maketi */
+.mock { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.mock-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.mock-brand { font-weight: 700; letter-spacing: -.01em; }
+.mock-nav { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
+.mock-nav b { color: var(--ink); font-weight: 600; }
+.mock-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.filter { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-variant-numeric: tabular-nums; }
+.filter.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-height: 178px; background: var(--bg); }
+.tile-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.logo { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; font-size: 15px; color: #fff; }
+.pill { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); } .pill.info { color: var(--info); } .pill.warn { color: var(--warn); }
+.tile-name { font-weight: 600; line-height: 1.25; }
+.tile-domain { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.tile-meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mods { display: flex; flex-wrap: wrap; gap: 4px; margin-top: auto; }
+.mod { font-size: 10.5px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); }
+.progress { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.progress span { display: block; height: 100%; width: 55%; background: var(--info); }
+.tile.add { border: 2px dashed var(--accent); background: transparent; align-items: center; justify-content: center; color: var(--accent); text-align: center; }
+.tile.add .plus { font-size: 40px; line-height: 1; font-weight: 300; }
+.tile.add .t { font-weight: 600; }
+.tile.add .s { font-size: 12px; color: var(--muted); }
+.note { font-size: 12.5px; color: var(--muted); }
+
+/* Sihirbaz adımları */
+.wizard { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; counter-reset: step; list-style: none; padding: 0; margin: 0; }
+.wizard li { counter-increment: step; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wizard li::before { content: counter(step); font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.wizard li.go { border-color: var(--accent); background: var(--accent-soft); }
+.wizard b { font-weight: 600; }
+.wizard span { font-size: 13px; color: var(--muted); }
+
+/* Kurulum adımları tablosu */
+.steps { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
+.steps th, .steps td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.steps th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.steps td:first-child { font-family: var(--font-mono); color: var(--accent); width: 2.5em; font-variant-numeric: tabular-nums; }
+.steps td:nth-child(2) { font-weight: 600; white-space: nowrap; }
+.steps td:last-child { color: var(--muted); }
+.table-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px 8px; }
+
+/* Modüller */
+.modgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
+.modcol { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.modcol h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.modlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.core .modlist { grid-template-columns: 1fr; }
+.mcard { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.core .mcard { background: var(--accent-soft); border-color: transparent; }
+.mcard b { font-weight: 600; font-size: 14px; }
+.mcard .off { font-size: 12.5px; color: var(--muted); }
+.deps { display: flex; flex-wrap: wrap; gap: 4px; }
+.dep { font-family: var(--font-mono); font-size: 10.5px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.lock { font-size: 11px; color: var(--accent); font-family: var(--font-mono); }
+
+@media (max-width: 720px) {
+  .modgrid { grid-template-columns: 1fr; }
+  .wrap { gap: 44px; padding-block: 28px 56px; padding-inline: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .progress span { animation: grow 2.4s ease-in-out infinite alternate; }
+  @keyframes grow { from { width: 45%; } to { width: 62%; } }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="draft">Taslak · geliştirilmeyecek · arch/multi-tenant</span>
+    <h1>Abdera Platform: okul başına bağımsız kurulum</h1>
+    <p class="lead">Her okul kendi sunucu alanında, kendi veritabanı ve kendi adresiyle çalışır. Ayrı bir yönetim paneli okulları kutucuklar halinde listeler; <b>+</b> ile açılan sihirbaz DNS kaydını, Docker kurulumunu, veritabanını ve uygulamayı tek seferde ayağa kaldırır. Modüller okul başına açılıp kapanır.</p>
+  </header>
+
+  <section id="genel">
+    <span class="kicker">Genel resim</span>
+    <h2>Kim neyle konuşuyor</h2>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 980 600" role="img" aria-label="Platform sunucusu SSH ajanı üzerinden okul sunucularını yönetir, DNS kaydı açar ve sürümleri okur; okullar imajı kendileri çeker, yedeklerini kendi anahtarlarıyla R2'ye yazar; veliler okula Caddy üzerinden ulaşır.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+            <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-accent"/></marker>
+            <marker id="ah-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-muted"/></marker>
+            <marker id="ah-info" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-info"/></marker>
+          </defs>
+
+          <!-- Üst sıra: yönetici + dış servisler -->
+          <rect class="box-accent" x="20" y="20" width="240" height="44" rx="8"/>
+          <text x="140" y="47" text-anchor="middle" class="t-strong">Platform yöneticisi (sen)</text>
+
+          <rect class="box" x="380" y="20" width="160" height="44" rx="8"/>
+          <text x="460" y="39" text-anchor="middle" class="t-strong">Cloudflare DNS</text>
+          <text x="460" y="55" text-anchor="middle" class="t-sub">okul adresleri</text>
+
+          <rect class="box" x="600" y="20" width="170" height="44" rx="8"/>
+          <text x="685" y="39" text-anchor="middle" class="t-strong">GHCR</text>
+          <text x="685" y="55" text-anchor="middle" class="t-sub">abdera-api / web :sürüm</text>
+
+          <!-- Platform sunucusu -->
+          <rect class="frame" x="20" y="110" width="240" height="320" rx="12"/>
+          <text x="36" y="132" class="t-group">Platform sunucusu</text>
+          <rect class="box" x="40" y="150" width="200" height="50" rx="8"/>
+          <text x="140" y="171" text-anchor="middle" class="t-strong">Platform web</text>
+          <text x="140" y="188" text-anchor="middle" class="t-sub">kutucuklar · sihirbaz</text>
+          <rect class="box-accent" x="40" y="240" width="200" height="60" rx="8"/>
+          <text x="140" y="265" text-anchor="middle" class="t-strong">Platform API</text>
+          <text x="140" y="283" text-anchor="middle" class="t-sub">kurulum · güncelleme · izleme</text>
+          <rect class="box" x="40" y="350" width="200" height="60" rx="8"/>
+          <text x="140" y="375" text-anchor="middle" class="t-strong">Platform DB</text>
+          <text x="140" y="393" text-anchor="middle" class="t-sub">okullar · sunucular · şifreli sırlar</text>
+
+          <line class="edge" x1="140" y1="64" x2="140" y2="148" marker-end="url(#ah)"/>
+          <text x="148" y="100" class="t-label">yönetir</text>
+          <line class="edge" x1="140" y1="200" x2="140" y2="238" marker-end="url(#ah)"/>
+          <line class="edge" x1="140" y1="300" x2="140" y2="348" marker-end="url(#ah)"/>
+
+          <!-- Platform API -> DNS ve GHCR -->
+          <polyline class="edge-accent" points="240,248 275,248 275,90 685,90"/>
+          <line class="edge-accent" x1="460" y1="90" x2="460" y2="66" marker-end="url(#ah-acc)"/>
+          <line class="edge-accent" x1="685" y1="90" x2="685" y2="66" marker-end="url(#ah-acc)"/>
+          <text x="368" y="84" text-anchor="middle" class="t-label">kayıt açar</text>
+          <text x="592" y="84" text-anchor="middle" class="t-label">sürümleri okur</text>
+
+          <!-- GHCR -> okul sunucusu (imaj çekme) -->
+          <line class="edge-dash" x1="730" y1="64" x2="730" y2="108" marker-end="url(#ah-mut)"/>
+          <text x="738" y="92" class="t-label">imaj çeker</text>
+
+          <!-- Okul sunucusu 1 -->
+          <rect class="frame" x="330" y="110" width="630" height="295" rx="12"/>
+          <text x="346" y="132" class="t-group">Okul sunucusu 1 · Hetzner</text>
+
+          <rect class="box" x="350" y="145" width="590" height="34" rx="8"/>
+          <text x="645" y="167" text-anchor="middle"><tspan class="t-strong">Caddy</tspan><tspan class="t-sub" dx="8">paylaşılan · TLS · adres → okul</tspan></text>
+          <line class="edge" x1="492" y1="179" x2="492" y2="198" marker-end="url(#ah)"/>
+          <line class="edge" x1="797" y1="179" x2="797" y2="198" marker-end="url(#ah)"/>
+
+          <!-- Okul A -->
+          <rect class="frame-dash" x="350" y="200" width="285" height="140" rx="10"/>
+          <text x="364" y="221" class="t-strong">abdera-okula</text>
+          <text x="364" y="238" class="t-mono t-sub">okula.abdera.app</text>
+          <rect class="box" x="364" y="250" width="125" height="32" rx="6"/><text x="426" y="271" text-anchor="middle">api</text>
+          <rect class="box" x="499" y="250" width="122" height="32" rx="6"/><text x="560" y="271" text-anchor="middle">web</text>
+          <rect class="box" x="364" y="292" width="125" height="32" rx="6"/><text x="426" y="313" text-anchor="middle">db (kendi)</text>
+          <rect class="box" x="499" y="292" width="122" height="32" rx="6"/><text x="560" y="313" text-anchor="middle">backup-gw</text>
+
+          <!-- Okul B -->
+          <rect class="frame-dash" x="655" y="200" width="285" height="140" rx="10"/>
+          <text x="669" y="221" class="t-strong">abdera-okulb</text>
+          <text x="669" y="238" class="t-mono t-sub">okulb.abdera.app</text>
+          <rect class="box" x="669" y="250" width="125" height="32" rx="6"/><text x="731" y="271" text-anchor="middle">api</text>
+          <rect class="box" x="804" y="250" width="122" height="32" rx="6"/><text x="865" y="271" text-anchor="middle">web</text>
+          <rect class="box" x="669" y="292" width="125" height="32" rx="6"/><text x="731" y="313" text-anchor="middle">db (kendi)</text>
+          <rect class="box" x="804" y="292" width="122" height="32" rx="6"/><text x="865" y="313" text-anchor="middle">backup-gw</text>
+
+          <!-- Ajan -->
+          <rect class="box-accent" x="350" y="358" width="590" height="32" rx="8"/>
+          <text x="645" y="379" text-anchor="middle"><tspan class="t-strong">abdera-host ajanı</tspan><tspan class="t-sub" dx="8">yalnızca izinli komutlar: create · up · upgrade · suspend · destroy</tspan></text>
+          <line class="edge-accent" x1="492" y1="358" x2="492" y2="342" marker-end="url(#ah-acc)"/>
+          <line class="edge-accent" x1="797" y1="358" x2="797" y2="342" marker-end="url(#ah-acc)"/>
+
+          <!-- Platform API -> ajan (SSH) -->
+          <polyline class="edge-accent" points="240,290 305,290 305,374 348,374" marker-end="url(#ah-acc)"/>
+          <text x="327" y="366" text-anchor="middle" class="t-label">SSH</text>
+
+          <!-- Telemetri -->
+          <polyline class="edge-dot" points="240,262 320,262 320,162 348,162" marker-end="url(#ah-info)"/>
+
+          <!-- Okul sunucusu 2 -->
+          <rect class="frame" x="330" y="425" width="630" height="95" rx="12"/>
+          <text x="346" y="447" class="t-group">Okul sunucusu 2</text>
+          <rect class="box" x="350" y="460" width="150" height="44" rx="8"/>
+          <text x="425" y="487" text-anchor="middle" class="t-strong">Caddy</text>
+          <line class="edge" x1="500" y1="482" x2="518" y2="482" marker-end="url(#ah)"/>
+          <rect class="frame-dash" x="520" y="460" width="200" height="44" rx="8"/>
+          <text x="620" y="487" text-anchor="middle" class="t-strong">abdera-okulc</text>
+          <text x="740" y="487" class="t-sub">… sunucu başına ~65 okul</text>
+
+          <!-- Kullanıcılar -->
+          <rect class="box" x="20" y="460" width="240" height="44" rx="8"/>
+          <text x="140" y="480" text-anchor="middle" class="t-strong">Veli · öğretmen · okul yöneticisi</text>
+          <text x="140" y="496" text-anchor="middle" class="t-mono t-sub">https://okulc.abdera.app</text>
+          <line class="edge" x1="260" y1="482" x2="348" y2="482" marker-end="url(#ah)"/>
+
+          <!-- Yedek -->
+          <rect class="box" x="740" y="545" width="200" height="40" rx="8"/>
+          <text x="840" y="570" text-anchor="middle" class="t-strong">Cloudflare R2</text>
+          <line class="edge-dash" x1="840" y1="520" x2="840" y2="543" marker-end="url(#ah-mut)"/>
+          <text x="832" y="537" text-anchor="end" class="t-label">şifreli yedek, okul başına anahtar</text>
+        </svg>
+      </div>
+      <div class="legend" aria-hidden="true">
+        <span><i class="accent"></i>platformun verdiği komutlar</span>
+        <span><i></i>kullanıcı trafiği</span>
+        <span><i class="dash"></i>imaj ve yedek akışı</span>
+        <span><i class="dot"></i>telemetri: yalnızca sayılar ve sağlık</span>
+      </div>
+      <figcaption>Platform okulların içine yalnızca ajan üzerinden, izinli komutlarla dokunur. Telemetri öğrenci sayısı, sürüm ve son yedek gibi sayıları okur; ad, telefon ve tutar platforma hiç gelmez. Okulların veritabanları kendi iç ağlarında kalır, birbirine ağ düzeyinde ulaşamaz.</figcaption>
+    </figure>
+  </section>
+
+  <section id="panel">
+    <span class="kicker">Platform ana ekranı</span>
+    <h2>Okul kutucukları ve en sağda +</h2>
+    <figure>
+      <div class="mock" role="img" aria-label="Platform ana ekranı maketi: dört okul kutucuğu ve son sırada yeni okul ekleme kutucuğu">
+        <div class="mock-bar">
+          <span class="mock-brand">Abdera Platform</span>
+          <span class="mock-nav"><b>Okullar</b><span>Sunucular</span><span>Sürümler</span><span>Denetim</span></span>
+        </div>
+        <div class="mock-body">
+          <div class="filters">
+            <span class="filter on">Tümü 4</span><span class="filter">Aktif 2</span><span class="filter">Sorunlu 1</span><span class="filter">Kuruluyor 1</span><span class="filter">Askıda 0</span>
+          </div>
+          <div class="tiles">
+            <div class="tile">
+              <div class="tile-top"><span class="logo" style="background:#5b3fa8">AS</span><span class="pill ok">Aktif</span></div>
+              <div class="tile-name">Abdera Sanat Akademi</div>
+              <div class="tile-domain">abdera.abdera.app</div>
+              <div class="tile-meta">148 öğrenci · 8 öğretmen<br>v2026.10.15.3 · yedek 6 sa önce</div>
+              <div class="mods"><span class="mod">banka</span><span class="mod">e-posta</span><span class="mod">kütüphane</span><span class="mod">gösteri</span><span class="mod">kârlılık</span></div>
+            </div>
+            <div class="tile">
+              <div class="tile-top"><span class="logo" style="background:#c0352a">DR</span><span class="pill bad">Sorunlu</span></div>
+              <div class="tile-name">Do Re Mi Müzik Evi</div>
+              <div class="tile-domain">doremi.abdera.app</div>
+              <div class="tile-meta">62 öğrenci · 4 öğretmen<br>Yedek 3 gün önce</div>
+              <div class="mods"><span class="mod">e-posta</span><span class="mod">kütüphane</span></div>
+            </div>
+            <div class="tile">
+              <div class="tile-top"><span class="logo" style="background:#1d7a8c">NM</span><span class="pill warn">Güncelleme</span></div>
+              <div class="tile-name">Nota Müzik Kursu</div>
+              <div class="tile-domain">panel.notamuzik.com</div>
+              <div class="tile-meta">91 öğrenci · 6 öğretmen<br>v2026.10.14.2 → yeni sürüm var</div>
+              <div class="mods"><span class="mod">whatsapp</span><span class="mod">veli portalı</span></div>
+            </div>
+            <div class="tile">
+              <div class="tile-top"><span class="logo" style="background:#a86a12">KS</span><span class="pill info">Kuruluyor</span></div>
+              <div class="tile-name">Kadıköy Sanat Atölyesi</div>
+              <div class="tile-domain">kadikoysanat.abdera.app</div>
+              <div class="tile-meta">Adım 7/12 · Başlat</div>
+              <div class="progress" aria-hidden="true"><span></span></div>
+            </div>
+            <div class="tile add">
+              <span class="plus">+</span>
+              <span class="t">Yeni okul</span>
+              <span class="s">Sihirbazı başlatır</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>Okullar örnek. Kutucuk orta boydadır ve renkli rozet durumu gösterir: Aktif, Sorunlu (sağlık kontrolü düştü ya da yedek 36 saatten eski), Güncelleme bekliyor, Kuruluyor, Askıda. + kutucuğu filtre ne olursa olsun her zaman son sıradadır. Kutucuğa tıklamak okul detayını açar: modüller, marka, entegrasyonlar, sürüm, yedekler.</figcaption>
+    </figure>
+  </section>
+
+  <section id="sihirbaz">
+    <span class="kicker">+ → yeni okul sihirbazı</span>
+    <h2>İleri, ileri, kur</h2>
+    <p>Her adım taslak olarak kaydedilir; sihirbaz kapatılırsa kaldığı yerden açılır. İleri düğmesi doğrulama geçmeden açılmaz.</p>
+    <ol class="wizard">
+      <li><b>Okul bilgileri</b><span>Ad, kısa ad, logo yükleme, ana renk, saat dilimi</span></li>
+      <li><b>Adres</b><span><span class="mono">okul.abdera.app</span> ya da okulun kendi alan adı (CNAME doğrulanır)</span></li>
+      <li><b>Yönetici hesabı</b><span>Ad ve e-posta; geçici parola e-postayla gider</span></li>
+      <li><b>Modüller</b><span>Çekirdek kilitli; opsiyoneller anahtarla, bağımlılıklar otomatik</span></li>
+      <li><b>Modül ayarları</b><span>Yalnızca seçilenler: WhatsApp, SMTP, banka; her biri için “Bağlantıyı dene”</span></li>
+      <li><b>Okul kuralları</b><span>Tarifeler, indirimler, grup payı, telafi süreleri; varsayılanlar hazır</span></li>
+      <li><b>Sunucu</b><span>Otomatik: en çok boş kapasitesi olan sunucu</span></li>
+      <li><b>Özet</b><span>Seçimlerin tamamı ve tahmini aylık maliyet</span></li>
+      <li class="go"><b>Kur</b><span>Canlı ilerleme ekranı: 12 adım, her birinin logu</span></li>
+    </ol>
+  </section>
+
+  <section id="kurulum">
+    <span class="kicker">Kur düğmesinden sonra</span>
+    <h2>12 adımda çalışan okul</h2>
+    <p>Adımlar sırayla çalışır ve her biri tekrar çalıştırılabilir. Bir adım düşerse kutucuk kırmızıya döner; “Yeniden dene” kaldığı yerden sürer, “İptal et ve temizle” geri alma sütununu tersten uygular.</p>
+    <div class="table-scroll">
+      <table class="steps">
+        <thead><tr><th>#</th><th>Adım</th><th>Ne yapar</th><th>Geri alma</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Ayır</td><td>Adresi kilitler, okul “Kuruluyor” olur</td><td>Adresi bırakır</td></tr>
+          <tr><td>2</td><td>Sunucu seç</td><td>Boş bellek yeten sunucuda yer ayırır</td><td>Yeri geri verir</td></tr>
+          <tr><td>3</td><td>Sırları üret</td><td>Veritabanı parolası, yedek anahtarı, imza anahtarı, jetonlar</td><td>Sırları siler</td></tr>
+          <tr><td>4</td><td>DNS</td><td>Cloudflare'de <span class="mono">okul.abdera.app</span> kaydı</td><td>Kaydı siler</td></tr>
+          <tr><td>5</td><td>Dosyaları yaz</td><td>Ajan: <span class="mono">/srv/abdera/&lt;okul&gt;/</span> altına compose ve .env</td><td>Dizini siler</td></tr>
+          <tr><td>6</td><td>İmajları çek</td><td>GHCR'den seçilen sürüm</td><td>—</td></tr>
+          <tr><td>7</td><td>Başlat</td><td>db → api (migration'lar) → web → backup-gw</td><td>Container ve veriyi siler</td></tr>
+          <tr><td>8</td><td>Sağlık</td><td><span class="mono">/health</span> 3 dakika içinde sağlıklı</td><td>—</td></tr>
+          <tr><td>9</td><td>Okulu hazırla</td><td>İlk yönetici, logo, ad, kurallar, tarifeler (tek kullanımlık uç)</td><td>7. adımla gider</td></tr>
+          <tr><td>10</td><td>Yayına al</td><td>Caddy'ye adres eklenir, TLS sertifikası alınır</td><td>Adresi kaldırır</td></tr>
+          <tr><td>11</td><td>Duman testi</td><td>Dışarıdan <span class="mono">/health</span> ve giriş ekranı, okul adı görünüyor</td><td>—</td></tr>
+          <tr><td>12</td><td>Bitir</td><td>İlk yedek, yöneticiye hoş geldin e-postası, okul “Aktif”</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="moduller">
+    <span class="kicker">Modül kataloğu</span>
+    <h2>Çekirdek her okulda, gerisi isteğe bağlı</h2>
+    <p>Veritabanı yapısı her okulda aynıdır. Bir modülü açmak bir ayarı değiştirmektir; kapatmak veriyi silmez, menüden ve uç noktalardan gizler.</p>
+    <div class="modgrid">
+      <div class="modcol core">
+        <h3>Çekirdek</h3>
+        <div class="modlist">
+          <div class="mcard"><b>Öğrenci, veli, öğretmen</b><span class="lock">her zaman açık</span></div>
+          <div class="mcard"><b>Takvim ve seri ders</b><span class="lock">her zaman açık</span></div>
+          <div class="mcard"><b>Yoklama ve telafi</b><span class="lock">her zaman açık</span></div>
+          <div class="mcard"><b>Aidat ve tahsilat</b><span class="lock">her zaman açık</span></div>
+          <div class="mcard"><b>Ekran içi bildirimler</b><span class="lock">her zaman açık</span></div>
+          <div class="mcard"><b>Sağlık ve yedek</b><span class="lock">her zaman açık</span></div>
+        </div>
+      </div>
+      <div class="modcol">
+        <h3>Opsiyonel</h3>
+        <div class="modlist">
+          <div class="mcard"><b>Banka entegrasyonu</b><div class="deps"><span class="dep">aidat</span></div><span class="off">Kapalıyken ödemeler elle girilir</span></div>
+          <div class="mcard"><b>E-posta hatırlatmaları</b><div class="deps"><span class="dep">—</span></div><span class="off">Kapalıyken yalnızca ekran içi bildirim</span></div>
+          <div class="mcard"><b>Kütüphane</b><div class="deps"><span class="dep">—</span></div><span class="off">Kapalıyken menüde yok</span></div>
+          <div class="mcard"><b>WhatsApp bildirimleri</b><div class="deps"><span class="dep">—</span></div><span class="off">Kapalıyken hatırlatma ve RSVP düğmeleri gizli</span></div>
+          <div class="mcard"><b>Veli portalı</b><div class="deps"><span class="dep">aidat</span></div><span class="off">Kapalıyken /parent kapalı</span></div>
+          <div class="mcard"><b>Gelişim ve karne</b><div class="deps"><span class="dep">takvim</span></div><span class="off">Kapalıyken ders notu hatırlatması durur</span></div>
+          <div class="mcard"><b>Grup dersleri</b><div class="deps"><span class="dep">takvim</span><span class="dep">aidat</span></div><span class="off">Kapalıyken grup kaydı açılamaz</span></div>
+          <div class="mcard"><b>Gelir-gider</b><div class="deps"><span class="dep">aidat</span></div><span class="off">Öğretmen ödemeleri bununla gelir</span></div>
+          <div class="mcard"><b>Kârlılık</b><div class="deps"><span class="dep">gelir-gider</span></div><span class="off">Açılınca gelir-gider de açılır</span></div>
+          <div class="mcard"><b>Yıl sonu gösterisi</b><div class="deps"><span class="dep">öğrenci</span></div><span class="off">Kapalıyken menüde yok</span></div>
+          <div class="mcard"><b>AI yorumları</b><div class="deps"><span class="dep">gelişim</span><span class="dep">veya kârlılık</span></div><span class="off">Kapalıyken yorum kutusu çıkmaz</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="guncelleme">
+    <span class="kicker">Sürüm dağıtımı</span>
+    <h2>Önce bir okul, sonra dalga dalga</h2>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 980 190" role="img" aria-label="CI yeşil olunca imaj GHCR'ye gider; önce kanarya okul güncellenir, 24 saat sorunsuz giderse yüzde 10'a, sonra kalan okullara dağıtılır; sağlık düşerse dağıtım durur ve okul önceki sürüme döner.">
+          <defs>
+            <marker id="bh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head"/></marker>
+            <marker id="bh-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="head-bad"/></marker>
+          </defs>
+          <rect class="box" x="20" y="30" width="150" height="56" rx="8"/>
+          <text x="95" y="54" text-anchor="middle" class="t-strong">main → CI yeşil</text>
+          <text x="95" y="72" text-anchor="middle" class="t-sub">testler geçti</text>
+
+          <rect class="box" x="220" y="30" width="150" height="56" rx="8"/>
+          <text x="295" y="54" text-anchor="middle" class="t-strong">GHCR</text>
+          <text x="295" y="72" text-anchor="middle" class="t-mono t-sub">:2026.10.16.1</text>
+
+          <rect class="box-accent" x="420" y="30" width="160" height="56" rx="8"/>
+          <text x="500" y="54" text-anchor="middle" class="t-strong">Kanarya</text>
+          <text x="500" y="72" text-anchor="middle" class="t-sub">bugünkü Abdera okulu</text>
+
+          <rect class="box" x="630" y="30" width="140" height="56" rx="8"/>
+          <text x="700" y="54" text-anchor="middle" class="t-strong">Dalga 1</text>
+          <text x="700" y="72" text-anchor="middle" class="t-sub">okulların %10'u</text>
+
+          <rect class="box" x="820" y="30" width="140" height="56" rx="8"/>
+          <text x="890" y="54" text-anchor="middle" class="t-strong">Dalga 2</text>
+          <text x="890" y="72" text-anchor="middle" class="t-sub">kalan okullar</text>
+
+          <line class="edge" x1="170" y1="58" x2="218" y2="58" marker-end="url(#bh)"/>
+          <text x="194" y="50" text-anchor="middle" class="t-label">iter</text>
+          <line class="edge" x1="370" y1="58" x2="418" y2="58" marker-end="url(#bh)"/>
+          <line class="edge" x1="580" y1="58" x2="628" y2="58" marker-end="url(#bh)"/>
+          <text x="604" y="50" text-anchor="middle" class="t-label">24 sa</text>
+          <line class="edge" x1="770" y1="58" x2="818" y2="58" marker-end="url(#bh)"/>
+          <text x="794" y="50" text-anchor="middle" class="t-label">sağlıklı</text>
+
+          <polyline class="edge-bad" points="500,86 500,140 560,140" marker-end="url(#bh-bad)"/>
+          <rect class="box" x="562" y="120" width="300" height="40" rx="8"/>
+          <text x="712" y="145" text-anchor="middle"><tspan class="bad-text t-strong">Sağlık düştü:</tspan><tspan dx="6">dağıtım durur, önceki sürüme dön</tspan></text>
+          <text x="20" y="145" class="t-sub">Her güncellemeden önce okulun dökümü alınır.</text>
+          <text x="20" y="163" class="t-sub">Migration'lar ileri uyumlu yazılır.</text>
+        </svg>
+      </div>
+      <figcaption>Bugün tek sunucuya giden otomatik deploy, imajı GHCR'ye iten ve platforma haber veren bir adıma dönüşür. Gece bakım turu yalnızca kanarya okulu günceller; diğer okullar platformdaki dağıtımla güncellenir. Sorunlu bir okulun sürümü sabitlenip dağıtımdan muaf tutulabilir.</figcaption>
+    </figure>
+  </section>
+</div>
