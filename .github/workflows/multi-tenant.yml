@@ -1,0 +1,60 @@
+name: Multi-tenant
+
+# Yalnızca arch/multi-tenant branch'i: platform API testleri, sunucu ajanı testleri ve platform paneli
+# derlemesi. main'in CI/Deploy akışına dokunmaz (docs/multi-tenant/ARCHITECTURE.md §15).
+on:
+  push:
+    branches: [arch/multi-tenant]
+  workflow_dispatch:
+
+jobs:
+  platform-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Platform API testleri (Testcontainers)
+        working-directory: platform/api
+        run: dotnet test Abdera.Platform.Tests
+
+  host-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -S warning deploy/host/abdera-host deploy/host/setup-host.sh
+      - name: Ajan testleri
+        run: bash deploy/host/test/abdera-host.test.sh
+      - name: Caddy şablonları
+        run: |
+          mkdir -p /tmp/caddy/sites /tmp/caddy/suspended
+          cp deploy/host/caddy/Caddyfile /tmp/caddy/
+          echo 'ornek.abdera.app {
+          	import abdera_headers
+          	reverse_proxy ornek-web:3000
+          }' > /tmp/caddy/sites/ornek.caddy
+          docker run --rm -e ACME_EMAIL=ops@abdera.app -v /tmp/caddy:/etc/caddy:ro caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+      - name: Okul compose şablonu
+        run: |
+          D=$(printf 'a%.0s' $(seq 1 64))
+          printf "INSTANCE_SLUG=ornek\nABDERA_API_IMAGE=ghcr.io/a/abdera-api@sha256:$D\nABDERA_WEB_IMAGE=ghcr.io/a/abdera-web@sha256:$D\nPOSTGRES_PASSWORD=x\nBACKUP_GW_PASSWORD=y\n" > deploy/instance/.env
+          cp deploy/instance/.env deploy/instance/api.env
+          docker compose -f deploy/instance/compose.yml --env-file deploy/instance/.env config >/dev/null
+
+  platform-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

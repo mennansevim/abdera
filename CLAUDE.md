@@ -145,6 +145,16 @@ Kod, tip adı, değişken adı, commit mesajı gövdesi: **İngilizce**. Kullan�
 
 `PersonEraser`'daki SQL betikleri ifade ifade çalıştırılır ve ayırmadan önce satır yorumları temizlenir: bir yorumun içindeki noktalı virgül daha önce ifade ayırıcı sanılıp betiği bozmuştu.
 
+## Modül anahtarları ve okul kuralları (yalnızca `arch/multi-tenant`)
+
+Okul başına kurulumda (`docs/multi-tenant/ARCHITECTURE.md`) her okul hangi opsiyonel modülleri kullanacağını seçer.
+
+- **Yeni bir özellik eklerken önce hangi modüle ait olduğuna karar ver** (`Shared/Modules/ModuleCatalog.cs`). Opsiyonel modülün uçları `MapModule(...)` / `.RequireModule(...)` ile bağlanır; kapalıyken 404 döner. Ön yüzde menü öğesine `module` alanı, sorgulara `useModuleQueryEnabled(...)` eklenir. Başka bir modülden kapalı modüle dokunan her yer açıkça korunur (örn. veli portalında IBAN, öğrenci kaydında Grup, bildirim zamanlayıcısında WhatsApp).
+- Modül kapatmak veri silmez; arka plan işi turu atlar ama sağlık kaydını başarılı yazar.
+- Sağlayıcı (Cloud/Smtp/OpenAi) açılışta yapısal seçilir; modülün açık/kapalı olması **istek anında** `EnabledModules` ile okunur.
+- **Okula özel sabit koda yazılmaz:** `school_policy` (`SchoolPolicy.GetCurrentAsync`). Hesabın tek yeri değişmez, sabiti oradan okur.
+- Okulun kimliği (`school_profile`) ve kuralları değişirse audit'e yazılır. Platform yalnızca kurulumda yazar, sonra okur.
+
 ## Yapılmayacaklar
 
 Mikroservis, Kafka/RabbitMQ/Redis/Kubernetes, Hangfire/Quartz gibi ek zamanlayıcı kütüphanesi, Repository pattern katmanı, sıfır implementasyonlu spekülatif arayüz (örn. AI özet arayüzü Phase 6'dan önce açılmaz), veli/öğrenci mobil uygulaması, online ödeme/e-fatura entegrasyonu — bunların hiçbiri MVP kapsamında değil ve eklenmesi `docs/10-decisions.md` üzerinden açıkça onaylanmadan yapılmaz.

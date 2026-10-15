@@ -98,6 +98,25 @@ public class ProvisioningEngine(
             new("Kapasiteyi bırak", ReleaseHostAsync),
             new("Bitir", context => FinishStatusAsync(context, school => school.MarkDestroyed(time.GetUtcNow()), "school.provisioning_cancelled")),
         ],
+        RunKind.Adopt =>
+        [
+            // Var olan okulu sahiplenme (F5, bakım penceresi): boş kurulum yerine eski okulun dökümü
+            // geri yüklenir; okulun yöneticisi ve verisi zaten var, kurulum ucu çağrılmaz. Döküm,
+            // operatör tarafından sunucuda /srv/abdera/<okul>/dumps/ altına konur (yoksa adım hata verir,
+            // döküm konunca "Yeniden dene").
+            new("Ayır", _ => Task.FromResult(StepOutcome.Ok())),
+            new("Sunucu seç", SelectHostAsync),
+            new("Sırları üret", GenerateSecretsAsync),
+            new("DNS", UpsertDnsAsync),
+            new("Dosyaları yaz", WriteFilesAsync),
+            new("İmajları çek", context => AgentStepAsync(context, "pull")),
+            new("Başlat", context => AgentStepAsync(context, "up")),
+            new("Dökümü geri yükle", AdoptRestoreAsync),
+            new("Sağlık", HealthAsync),
+            new("Yayına al", RouteAsync),
+            new("Duman testi", SmokeAsync),
+            new("Bitir", FinishCreateAsync),
+        ],
         RunKind.Reconfigure =>
         [
             // Modül veya entegrasyon değişikliği: yeni .env; sağlıksızsa ajan önceki yapılandırmaya döner.
@@ -219,6 +238,13 @@ public class ProvisioningEngine(
         if (string.IsNullOrWhiteSpace(dumpPath)) return StepOutcome.Fail("döküm adı bulunamadı");
         var dumpName = Path.GetFileName(dumpPath.Trim().Split('\n').Last());
         return await AgentStepAsync(context, "restore", [dumpName, "--drill"]);
+    }
+
+    private async Task<StepOutcome> AdoptRestoreAsync(StepContext context)
+    {
+        var dump = await vault.GetAsync(context.School.Id, SecretNames.AdoptDumpName)
+            ?? throw new InvalidOperationException("Sahiplenilecek döküm adı yok.");
+        return await AgentStepAsync(context, "restore", [dump]);
     }
 
     private async Task<StepOutcome> HealthAsync(StepContext context)

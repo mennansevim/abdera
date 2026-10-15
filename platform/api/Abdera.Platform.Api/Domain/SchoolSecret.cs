@@ -40,4 +40,6 @@ public static class SecretNames
     public const string ProvisionRequest = "provision_request";
     // Sihirbazda girilen entegrasyon sırları: "integration:WhatsApp__AccessToken" gibi .env anahtarıyla.
     public const string IntegrationPrefix = "integration:";
+    // Sahiplenmede sunucuya konan döküm dosyasının adı (sır değil ama okulla birlikte saklanır).
+    public const string AdoptDumpName = "adopt_dump_name";
 }

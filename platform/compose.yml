@@ -1,0 +1,74 @@
+# Abdera Platform - ayrı, küçük bir sunucuda (docs/multi-tenant/ARCHITECTURE.md §3.1, docs/multi-tenant/PLATFORM.md).
+# Okul sunucularında ÇALIŞMAZ: tüm okulların sırlarını tutar, en değerli hedeftir.
+#   docker compose -f platform/compose.yml --env-file platform/.env up -d
+name: abdera-platform
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: abdera_platform
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: ${PLATFORM_DB_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform -d abdera_platform"]
+      interval: 5s
+      retries: 12
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Platform: Host=db;Database=abdera_platform;Username=platform;Password=${PLATFORM_DB_PASSWORD:?}
+      Platform__KeysDirectory: /app/keys
+      Platform__PublicUrl: https://${PLATFORM_DOMAIN:?}
+      Platform__BootstrapEmail: ${PLATFORM_BOOTSTRAP_EMAIL:-}
+      Platform__BootstrapPassword: ${PLATFORM_BOOTSTRAP_PASSWORD:-}
+      HostAgent__Provider: Ssh
+      HostAgent__PrivateKeyPath: /run/secrets/platform_ssh_key
+      Dns__Provider: Cloudflare
+      Dns__BaseDomain: ${SCHOOLS_BASE_DOMAIN:-abdera.app}
+      Dns__Cloudflare__ZoneId: ${CLOUDFLARE_ZONE_ID:?}
+      Dns__Cloudflare__ApiToken: ${CLOUDFLARE_API_TOKEN:?}
+      SchoolClient__Provider: Http
+      Backup__R2__AccountId: ${R2_ACCOUNT_ID:?}
+      Backup__R2__Bucket: ${R2_BUCKET:-abdera-backups}
+      # Okullara dağıtılan anahtar: okuma + yazma, SİLME YOK (§16.9).
+      Backup__R2__AccessKeyId: ${R2_SCHOOL_ACCESS_KEY_ID:?}
+      Backup__R2__SecretAccessKey: ${R2_SCHOOL_SECRET_ACCESS_KEY:?}
+    volumes:
+      # Kaybolursa tüm okulların sırları okunamaz: bu volume ayrıca şifreli yedeklenir (PLATFORM.md).
+      - keys:/app/keys
+      - ${PLATFORM_SSH_KEY_PATH:?}:/run/secrets/platform_ssh_key:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on: [api]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:?}
+      ACME_EMAIL: ${ACME_EMAIL:?}
+      # Yalnızca bu adreslerden erişim (operatör IP'leri / VPN), boşluklu liste.
+      PLATFORM_ALLOWED_IPS: ${PLATFORM_ALLOWED_IPS:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata: {}
+  keys: {}
+  caddy_data: {}
+  caddy_config: {}

@@ -44,6 +44,9 @@ public static class Schools
     public record FlagsRequest(bool IsCanary, bool IsVersionPinned);
     public record ModulesRequest(IReadOnlyList<string> Modules, IReadOnlyDictionary<string, string>? Integrations);
     public record SlugCheckResponse(bool Available, string? Reason, string Domain);
+    public record AdoptRequest(
+        string Slug, string DisplayName, string ShortName, string? PrimaryColor, string? CustomDomain, string Version,
+        IReadOnlyList<string> Modules, string DumpName, IReadOnlyDictionary<string, string>? Integrations, bool IsCanary);
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -53,6 +56,7 @@ public static class Schools
         group.MapGet("", ListAsync);
         group.MapGet("/check-slug", CheckSlugAsync);
         group.MapPost("", CreateAsync);
+        group.MapPost("/adopt", AdoptAsync);
         group.MapGet("/{id:guid}", DetailAsync);
         group.MapPost("/{id:guid}/reveal-admin-password", RevealAdminPasswordAsync);
         group.MapPost("/{id:guid}/retry", RetryAsync);
@@ -138,6 +142,34 @@ public static class Schools
                 school.Slug, school.DisplayName, school.PrimaryDomain, release.Version, modules, adminEmail = email,
                 integrations = (request.Integrations ?? new Dictionary<string, string>()).Keys.Order().ToList(),
             })));
+        await db.SaveChangesAsync();
+        return Results.Created($"/api/schools/{school.Id}", new { school.Id });
+    }
+
+    // Var olan okulu platforma taşır (PLATFORM.md §9): yeni sunucuda eski okulun dökümü geri yüklenir.
+    private static async Task<IResult> AdoptAsync(
+        AdoptRequest request, ClaimsPrincipal principal, PlatformDbContext db, SecretVault vault, IConfiguration config, TimeProvider time)
+    {
+        var now = time.GetUtcNow();
+        var release = await db.Releases.SingleOrDefaultAsync(r => r.Version == request.Version && !r.IsWithdrawn)
+            ?? throw ValidationFailedException.For("version", "Sürüm bulunamadı ya da geri çekilmiş.");
+        var modules = ValidateModules(request.Modules ?? [], Releases.Catalog(release));
+        ValidateIntegrations(request.Integrations);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(request.DumpName ?? "", @"^[A-Za-z0-9._-]{1,120}\.sql\.gz(\.enc)?$"))
+            throw ValidationFailedException.For("dumpName", "Döküm adı '<ad>.sql.gz' biçiminde olmalı.");
+        var domain = DomainFor(config, request.Slug, request.CustomDomain);
+        if (await db.Schools.AnyAsync(s => s.Slug == request.Slug)) throw new ConflictException("Bu kısaltma kullanılıyor.");
+        if (await db.Schools.AnyAsync(s => s.PrimaryDomain == domain)) throw new ConflictException("Bu alan adı başka bir okulda.");
+
+        var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
+        if (request.IsCanary) school.SetCanary(true, now);
+        db.Schools.Add(school);
+        await vault.SetAsync(school.Id, SecretNames.AdoptDumpName, request.DumpName!);
+        foreach (var (key, value) in request.Integrations ?? new Dictionary<string, string>())
+            if (!string.IsNullOrWhiteSpace(value)) await vault.SetAsync(school.Id, SecretNames.IntegrationPrefix + key, value.Trim());
+        db.Runs.Add(ProvisioningRun.Create(school.Id, RunKind.Adopt, now, release.Version));
+        db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.adopt_requested", school.Id, now,
+            afterJson: JsonSerializer.Serialize(new { school.Slug, school.PrimaryDomain, release.Version, modules, request.DumpName })));
         await db.SaveChangesAsync();
         return Results.Created($"/api/schools/{school.Id}", new { school.Id });
     }

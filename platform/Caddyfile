@@ -1,0 +1,35 @@
+# Abdera Platform reverse proxy. Okullardan gelen alarm ucu (/api/alerts) herkese açıktır (imzalı);
+# geri kalan her şey yalnızca izinli IP'lerden (§3.1, §11).
+{
+	email {$ACME_EMAIL}
+}
+
+{$PLATFORM_DOMAIN} {
+	encode zstd gzip
+
+	@alerts path /api/alerts
+	handle @alerts {
+		reverse_proxy api:8090
+	}
+
+	@blocked not remote_ip {$PLATFORM_ALLOWED_IPS}
+	respond @blocked 403
+
+	handle /api/* {
+		reverse_proxy api:8090
+	}
+	handle /health {
+		reverse_proxy api:8090
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

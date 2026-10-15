@@ -416,6 +416,21 @@ Kullanıcı kuralı: "aylık gelirin %40'ı olarak hesaplanıyor". İki seçenek
 | AC4 | Kârlılık | Ders başı maliyet grup satırlarını saymaz; dönemin grup payı (gelir × %40) öğretmen maliyetine eklenir. Aylık grup ödemesinin Maaş satırı da haftalıkta olduğu gibi sabit gidere tekrar sayılmaz. Fikir değerlendirmesinde grup öğrencisi başı kalan = aidat × (1 − %40). |
 | AC5 | Kapsam dışı | Yüzde şimdilik sabit (40); öğretmen başına farklı yüzde gerekirse `teacher_pay_rates`'e kolon olarak eklenir. Satırda yüzde donduğu için değişiklik geçmiş ödemeleri etkilemez. |
 
+## AD - Okul başına bağımsız kurulum ve Abdera Platform (2026-10-15, yalnızca `arch/multi-tenant`)
+
+Kullanıcı kararı: okul başına tamamen bağımsız kurulum (ayrı api/web/db, ayrı alan adı) ve bunları kuran/güncelleyen/izleyen ayrı bir yönetim uygulaması. Tasarım `docs/multi-tenant/ARCHITECTURE.md`, inceleme `CHATGPT-REVIEW.md` + `CLAUDE-RESPONSE.md`. **`main`'e merge edilmez; canlı okulu etkilemez.**
+
+| # | Konu | Karar |
+|---|---|---|
+| AD1 | Platform bir mikroservis değil | `platform/api` + `platform/web` ayrı bir yönetim uygulamasıdır ("Yapılmayacaklar"daki mikroservis yasağına girmez); kendi PostgreSQL'i, okulların kişisel verisine erişmez, yalnızca sayısal telemetri okur. Kubernetes yok: docker compose + SSH ajanı (`deploy/host/abdera-host`). |
+| AD2 | Modül kataloğu | `Shared/Modules/ModuleCatalog.cs` tek kaynak; her sürümle `release.json` içinde yayımlanır (§16.8). `Modules__Enabled`: boş = hepsi açık (yalnızca eski kurulum), `none` = yalnızca çekirdek. Kapalı modülün uçları kimlik doğrulamadan önce 404, verisi silinmez. |
+| AD3 | Okul kuralları | Okula özel sabitler `school_policy` tablosunda (grup payı, haftalık sınır, telafi süreleri, okul günü). Hesabın tek yeri değişmez; yalnızca sabit buradan okunur. Satır yoksa bugünkü değerler. |
+| AD4 | İmajlar | CI sürüm etiketinde GHCR'ye iter; okullar **digest** ile çeker, sunucuda derleme yok (`.github/workflows/images.yml`). |
+| AD5 | DNS | Okul alt alan adları Cloudflare API ile (tek A kaydı, wildcard yok). |
+| AD6 | Sunucu çökmesi | Platform otomatik bir şey yapmaz; yedek kapasite yok, okullar sunucu dönene kadar kapalı, disk kaybında elle geri yükleme (§16.6). |
+| AD7 | Silme | İki aşamalı; 30 günlük bekleyişi platform değil ajan zorlar. Okul R2 anahtarlarında silme yetkisi yok (§16.9). |
+| AD8 | Yeni bağımlılık yok | Platform okul uygulamasıyla aynı paketleri kullanır (EF Core, Npgsql, SSH.NET); TOTP elle (RFC 6238), QR kütüphanesi yok. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

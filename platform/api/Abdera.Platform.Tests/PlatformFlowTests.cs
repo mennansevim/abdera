@@ -290,4 +290,36 @@ public class PlatformFlowTests(PlatformFactory factory) : IClassFixture<Platform
         var alerts = await client.GetFromJsonAsync<JsonElement>("/api/alerts?open=true");
         Assert.Contains(alerts.EnumerateArray(), a => a.GetProperty("slug").GetString() == "alarm" && a.GetProperty("detail").GetString() == "SFTP kapalı");
     }
+
+    // F5: var olan okul (bugünkü canlı okul) yeni sunucuya dökümüyle taşınır; kurulum ucu çağrılmaz.
+    [Fact]
+    public async Task Existing_school_is_adopted_from_its_dump_without_provisioning()
+    {
+        var client = await ReadyAsync();
+        var bad = await client.PostAsJsonAsync("/api/schools/adopt", new
+        {
+            slug = "eski", displayName = "Eski Okul", shortName = "Eski", primaryColor = (string?)null, customDomain = "panel.eskiokul.com",
+            version = "2026.10.15.1", modules = new[] { "progress" }, dumpName = "../../etc/passwd", integrations = (object?)null, isCanary = true,
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, bad.StatusCode);
+
+        var response = await client.PostAsJsonAsync("/api/schools/adopt", new
+        {
+            slug = "eski", displayName = "Eski Okul", shortName = "Eski", primaryColor = (string?)null, customDomain = "panel.eskiokul.com",
+            version = "2026.10.15.1", modules = new[] { "progress" }, dumpName = "eski-2026-10-15.sql.gz", integrations = (object?)null, isCanary = true,
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var id = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        await factory.RunAllAsync();
+
+        var school = await SchoolAsync(id);
+        Assert.Equal(SchoolStatus.Active, school.Status);
+        Assert.True(school.IsCanary);
+        Assert.Contains(factory.Agent.Calls, c => c.Contains("restore eski eski-2026-10-15.sql.gz"));
+        Assert.DoesNotContain(factory.Agent.Calls, c => c.Contains("provision eski"));
+        // Özel alan adı: DNS'e dokunulmaz, okul kendi kaydını yönlendirir.
+        Assert.False(factory.Dns.Records.ContainsKey("panel.eskiokul.com"));
+        Assert.Contains(factory.Agent.Calls, c => c.Contains("route add eski panel.eskiokul.com"));
+    }
 }
