@@ -37,6 +37,10 @@ healthy() {
 deploy "$SHA"
 if healthy; then
   docker image prune -f >/dev/null
+  # Her `up --build` derleme önbelleğine yeni katman ekliyor; image prune bunlara dokunmuyor.
+  # İki haftada 23 GB'a çıkıp diski %84'e doldurmuştu (disk dolarsa Postgres durur).
+  # 3 GB tavan: bir sonraki derlemenin restore/npm ci katmanları önbellekte kalır.
+  docker builder prune -f --keep-storage 3gb >/dev/null
   echo "OK: ${PREV:0:7} -> ${SHA:0:7}"
 else
   echo "Sağlık kontrolü geçmedi, ${PREV:0:7}'e geri dönülüyor." >&2

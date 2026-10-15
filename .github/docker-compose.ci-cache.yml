@@ -1,0 +1,15 @@
+# Yalnizca CI (ci.yml e2e-smoke) icin: Compose imaj katmanlarini GitHub Actions cache'ine
+# yazar/okur. Uretim (Hetzner) bu dosyayi kullanmaz.
+services:
+  api:
+    build:
+      cache_from:
+        - type=gha,scope=compose-api
+      cache_to:
+        - type=gha,scope=compose-api,mode=max
+  web:
+    build:
+      cache_from:
+        - type=gha,scope=compose-web
+      cache_to:
+        - type=gha,scope=compose-web,mode=max
