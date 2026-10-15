@@ -146,7 +146,7 @@ export interface PaymentRecord {
   dateCorrectionReason?: string | null;
 }
 
-export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other";
+export type ExpenseCategory = "Salary" | "Utilities" | "Rent" | "Other" | "Marketing" | "Maintenance" | "TaxAndInsurance" | "Supplies" | "Equipment";
 export interface Expense {
   id: string;
   category: ExpenseCategory;

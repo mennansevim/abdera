@@ -6,6 +6,12 @@ public enum ExpenseCategory
     Utilities,
     Rent,
     Other,
+    // Metin olarak saklanır (ExpenseConfiguration, max 20) - yeni değer migration gerektirmez.
+    Marketing,
+    Maintenance,
+    TaxAndInsurance,
+    Supplies,
+    Equipment,
 }
 
 // Gider kayıtları silinmez; düzeltme gerekiyorsa yeni bir karşı kayıt/audit olayı eklenir.

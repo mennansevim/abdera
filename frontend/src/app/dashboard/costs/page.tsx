@@ -38,8 +38,12 @@ export default function CostsPage() {
 const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
 const MONTHS_SHORT = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 const WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
-const CATEGORIES: ExpenseCategory[] = ["Salary", "Rent", "Utilities", "Other"];
-const CATEGORY_LABEL: Record<ExpenseCategory, string> = { Salary: "Maaş", Utilities: "Elektrik / su", Rent: "Kira", Other: "Diğer" };
+// "Diğer" bilerek sonda: seçim listesinde ve dökümde en son bakılan kategori.
+const CATEGORIES: ExpenseCategory[] = ["Salary", "Rent", "Utilities", "Marketing", "Maintenance", "TaxAndInsurance", "Supplies", "Equipment", "Other"];
+const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+  Salary: "Maaş", Utilities: "Elektrik / su", Rent: "Kira", Marketing: "Reklam", Maintenance: "Bakım / akort",
+  TaxAndInsurance: "Vergi / SGK", Supplies: "Malzeme / kırtasiye", Equipment: "Enstrüman / ekipman", Other: "Diğer",
+};
 const COURSE_KINDS: CourseKind[] = ["Individual", "Group"];
 // İki seri, dataviz doğrulayıcısından geçti (beyaz zemin, CVD ΔE ≥ 15). Sabit = marka turuncusu.
 const SERIES = { recurring: "#d9662a", oneOff: "#9b3f6b" };
@@ -239,13 +243,15 @@ function CostDashboard() {
         </div>
         <button type="button" disabled={isCurrent} onClick={() => setPeriod((current) => ({ ...current, year: today.getFullYear(), month: today.getMonth(), day: null }))} className="btn btn-quiet px-3 text-[.75rem] font-semibold disabled:cursor-default disabled:opacity-50">{period.scope === "year" ? "Bu yıl" : "Bu ay"}</button>
         {view === "expenses" && (
-          <Segmented
-            label="Kategoriye göre filtrele"
-            className="md:ml-auto"
-            options={(["all", ...CATEGORIES] as const).map((value) => ({ value, label: value === "all" ? "Tümü" : CATEGORY_LABEL[value] }))}
+          <select
+            aria-label="Kategoriye göre filtrele"
             value={category}
-            onChange={setCategory}
-          />
+            onChange={(event) => setCategory(event.target.value as CategoryFilter)}
+            className="field w-auto text-sm md:ml-auto"
+          >
+            <option value="all">Tüm kategoriler</option>
+            {CATEGORIES.map((value) => <option key={value} value={value}>{CATEGORY_LABEL[value]}</option>)}
+          </select>
         )}
       </section>}
 
@@ -351,7 +357,7 @@ function CostDashboard() {
                 category: value,
                 amount: allExpenses.filter((expense) => expense.category === value && inPeriod(expense.expenseDate, period)).reduce((sum, expense) => sum + expense.amount, 0)
                   + allRecurring.filter((item) => item.category === value).reduce((sum, item) => sum + periodMonths(period).reduce((total, key) => total + recurringAmountFor(item, key), 0), 0),
-              }))}
+              })).filter((row) => row.amount > 0 || row.category === category)}
               active={category}
               onSelect={setCategory}
             />
@@ -506,7 +512,7 @@ function CashFlowTable({ columns, showTotal, selected, onDrill, onIncome, loadin
               <Fragment key={kind}>{dataRow(`${COURSE_KIND_LABEL[kind]} aidat`, (column) => column.income[kind], (key) => onIncome(key, kind), "bg-[var(--success)]")}</Fragment>
             ))}
             {totalRow("Toplam gelir", incomeOf, "text-[var(--success-strong)]", (key) => onIncome(key, null))}
-            {CATEGORIES.map((value) => (
+            {CATEGORIES.filter((value) => columns.some((column) => column.expense[value] !== 0)).map((value) => (
               <Fragment key={value}>{dataRow(CATEGORY_LABEL[value], (column) => column.expense[value], (key) => onDrill("expenses", key, value), "bg-[var(--danger)]")}</Fragment>
             ))}
             {totalRow("Toplam gider", expenseOf, "text-[var(--danger-strong)]")}
