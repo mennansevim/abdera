@@ -8,6 +8,7 @@ import { applyFontSizePreference, FONT_SIZE_CHANGE_EVENT, readFontSizePreference
 import { useInstruments, useInstrumentMaintenanceSettings, useRunDueMaintenanceReminders, useSaveInstrumentMaintenanceSetting } from "@/lib/people";
 import { useMe } from "@/lib/use-auth";
 import { ChangePasswordForm } from "../change-password-form";
+import { DisplayNameForm } from "../display-name-form";
 
 const FONT_SIZE_OPTIONS: Array<{ value: FontSizePreference; label: string; detail: string }> = [
   { value: "small", label: "Küçük", detail: "Daha kompakt" },
@@ -36,6 +37,17 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-3">
       <PageHeader title="Ayarlar" description="Hesap güvenliği, görünüm ve bildirim tercihleri." />
+
+      {me && (
+        <section className="app-card overflow-hidden">
+          <div className="border-b border-[var(--line)] px-4 py-2.5">
+            <SectionHeader title="Görünen ad" description="Menüde ve karşılama ekranında sana bu adla seslenilir. Yalnızca senin hesabını etkiler." />
+          </div>
+          <div className="p-4">
+            <DisplayNameForm me={me} />
+          </div>
+        </section>
+      )}
 
       <section className="app-card overflow-hidden">
         <div className="border-b border-[var(--line)] px-4 py-2.5">

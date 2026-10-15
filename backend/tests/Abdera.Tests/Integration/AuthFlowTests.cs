@@ -6,6 +6,7 @@ using Abdera.Api.Modules.People.Features;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 namespace Abdera.Tests.Integration;
@@ -274,6 +275,83 @@ public class AuthFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.OK, matched.StatusCode);
         var me = await (await client.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
         Assert.Equal(UserRole.Teacher, me!.Role);
+    }
+
+    // Görünen ad: kullanıcı yalnızca kendi adını değiştirir (uçta hedef id yok), /me'de
+    // görünür ve audit_log'a yazılır. Öğretmen ad seçmediyse kendi Teacher kaydındaki adı alır;
+    // yöneticinin ad değişikliği öğretmen hesabına sızmaz.
+    [Fact]
+    public async Task Display_name_change_shows_up_in_me_and_only_affects_own_account()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var admin = _factory.CreateClient();
+        (await admin.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "Test1234!"))).EnsureSuccessStatusCode();
+
+        var instruments = await (await admin.GetAsync("/api/instruments")).Content
+            .ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
+        var email = $"displayname.{Guid.NewGuid():N}@test.local";
+        var created = await (await admin.PostAsJsonAsync("/api/teachers",
+            new Teachers.CreateRequest("Ayşe", "Kaya", [instruments!.First().Id], email))).Content
+            .ReadFromJsonAsync<Teachers.CreateResponse>(TestJson.Options);
+        using var teacher = _factory.CreateClient();
+        (await teacher.PostAsJsonAsync("/api/auth/login", new Login.Request(email, created!.TemporaryPassword!))).EnsureSuccessStatusCode();
+
+        var adminBefore = await (await admin.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+        Assert.Null(adminBefore!.DisplayName);
+        Assert.Null(adminBefore.Name);
+
+        var update = await admin.PutAsJsonAsync("/api/auth/me/display-name", new UpdateDisplayName.Request("  Mennan Sevim "));
+        Assert.Equal(HttpStatusCode.NoContent, update.StatusCode);
+
+        var adminAfter = await (await admin.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+        Assert.Equal("Mennan Sevim", adminAfter!.DisplayName);
+        Assert.Equal("Mennan Sevim", adminAfter.Name);
+        var audit = await db.AuditLogs.AsNoTracking()
+            .Where(a => a.Action == "user.display_name_changed" && a.EntityId == adminAfter.Id)
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstAsync();
+        Assert.Contains("Mennan Sevim", audit.AfterJson);
+
+        var teacherMe = await (await teacher.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+        Assert.Null(teacherMe!.DisplayName);
+        Assert.Equal("Ayşe Kaya", teacherMe.Name);
+
+        // Boş gönderim yanlışlıkla adı silmez; temizlemek açıkça null ister.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await admin.PutAsJsonAsync("/api/auth/me/display-name", new UpdateDisplayName.Request(null))).StatusCode);
+        var cleared = await (await admin.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+        Assert.Null(cleared!.DisplayName);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public async Task Display_name_rejects_blank_or_too_long_value(string? value)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        using var client = _factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/auth/login", new Login.Request("admin@test.local", "Test1234!"))).EnsureSuccessStatusCode();
+
+        // null -> sınırın bir fazlası (InlineData'da hesaplanmış ifade kullanılamıyor).
+        value ??= new string('a', User.MaxDisplayNameLength + 1);
+        var response = await client.PutAsJsonAsync("/api/auth/me/display-name", new UpdateDisplayName.Request(value));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>(TestJson.Options);
+        Assert.True(problem!.Errors.ContainsKey("displayName"));
+        var me = await (await client.GetAsync("/api/auth/me")).Content.ReadFromJsonAsync<Me.Response>(TestJson.Options);
+        Assert.Null(me!.DisplayName);
+    }
+
+    [Fact]
+    public async Task Display_name_cannot_be_changed_without_a_session()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.PutAsJsonAsync("/api/auth/me/display-name", new UpdateDisplayName.Request("Biri"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     // Yanlış şifre + yanlış rol: rol denetimi şifre doğrulamasının ARDINDAN çalışmalı,

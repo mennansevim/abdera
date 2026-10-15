@@ -63,6 +63,7 @@ users
   email             text unique          -- öğretmen için opsiyonel (telefon/kullanıcı adıyla da girilebilir)
   password_hash     text
   role              text                 -- ADMIN | TEACHER
+  display_name      varchar(100) null    -- kullanıcının Ayarlar'dan seçtiği görünen ad; boşsa öğretmen kaydındaki ad / e-posta
   must_change_password boolean default false   -- B4: yönetici geçici şifre atadıysa true
   is_active         boolean default true
   created_at        timestamptz

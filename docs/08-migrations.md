@@ -344,3 +344,8 @@ yalnızca kalıcı öğretmen silmede `PersonEraser` siler, `expenses` satırı 
 `last_succeeded_at`, `last_failed_at`, `last_error varchar(500)`, `created_at/updated_at`). İşler tur sonunda
 `INSERT ... ON CONFLICT (job_name) DO UPDATE` ile yazar (`JobHeartbeatRecorder`); `SystemHealthMonitor` üç turunu
 kaçıran işi `Degraded` sayar (#31). Kişiye/derse/aidata referans yok, `PersonEraser` değişmez. `Down()` tabloyu düşürür.
+
+**AddUserDisplayName** (Auth): `users.display_name varchar(100) NULL` - giriş yapan kullanıcının kendine seçtiği
+görünen ad (`PUT /api/auth/me/display-name`, değişiklik `audit_log`'a `user.display_name_changed` olarak yazılır).
+Yalnızca ekleme: mevcut satırlar null kalır, ön yüz öğretmende Teacher kaydındaki adı, yöneticide e-postadan türetilen
+adı gösterir. Yeni tablo yok, `PersonEraser` değişmez. `Down()` kolonu düşürür.

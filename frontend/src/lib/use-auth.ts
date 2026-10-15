@@ -72,6 +72,32 @@ export function useLogout() {
   });
 }
 
+// Giriş yapan kullanıcının ekranda görünen adı. Sunucu ad bilmiyorsa (görünen ad seçmemiş
+// yönetici) e-postanın kullanıcı adı kısmından türetilir: "ayse.kaya@..." -> "Ayse Kaya".
+export function meDisplayName(me: Pick<Me, "email" | "name">) {
+  if (me.name?.trim()) return me.name.trim();
+  return me.email
+    .split("@")[0]
+    .split(/[._-]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR") + part.slice(1))
+    .join(" ") || me.email;
+}
+
+export function meInitials(me: Pick<Me, "email" | "name">) {
+  const words = meDisplayName(me).split(/\s+/).filter(Boolean);
+  const initials = words.length > 1 ? words[0].charAt(0) + words[words.length - 1].charAt(0) : (words[0] ?? "").slice(0, 2);
+  return initials.toLocaleUpperCase("tr-TR");
+}
+
+export function useUpdateDisplayName() {
+  const queryClient = useQueryClient();
+  return useMutation<void, ApiError, { displayName: string | null }>({
+    mutationFn: (payload) => api.put("/api/auth/me/display-name", payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY }),
+  });
+}
+
 export function useChangePassword() {
   return useMutation<void, ApiError, { currentPassword: string; newPassword: string }>({
     mutationFn: (payload) => api.post("/api/auth/change-password", payload),

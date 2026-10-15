@@ -12,7 +12,8 @@ import { useSystemHealth } from "@/lib/ops";
 import { useAttentionNeededStudents, useStudents, useTeachers } from "@/lib/people";
 import { dailyQuote } from "@/lib/daily-quote";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
-import { useMe } from "@/lib/use-auth";
+import type { Me } from "@/lib/api";
+import { meDisplayName, meInitials, useMe } from "@/lib/use-auth";
 import { Panel, StatStrip } from "@/components/ui";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 import { TeacherWeekCard } from "./teacher-week-card";
@@ -31,11 +32,6 @@ function addDays(date: Date, days: number) {
   return result;
 }
 
-function userName(email: string) {
-  const first = email.split("@")[0].split(/[._-]/)[0];
-  return first ? first.charAt(0).toLocaleUpperCase("tr-TR") + first.slice(1) : "";
-}
-
 function formatMoney(value: number) {
   return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(value);
 }
@@ -46,12 +42,12 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-3">
-      {me.role === "Teacher" ? <TeacherDashboard email={me.email} /> : <AdminDashboard email={me.email} />}
+      {me.role === "Teacher" ? <TeacherDashboard me={me} /> : <AdminDashboard me={me} />}
     </div>
   );
 }
 
-function AdminDashboard({ email }: { email: string }) {
+function AdminDashboard({ me }: { me: Me }) {
   const [weekStart, setWeekStart] = useState(() => weekStartFor(new Date()));
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: lessons, isLoading: lessonsLoading, isError: lessonsError, isFetching: lessonsFetching, refetch: refetchLessons } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
@@ -64,7 +60,7 @@ function AdminDashboard({ email }: { email: string }) {
 
   return (
     <>
-      <DashboardTopbar email={email} />
+      <DashboardTopbar me={me} />
       <SystemHealthBanner />
 
       <StatStrip
@@ -84,7 +80,9 @@ function AdminDashboard({ email }: { email: string }) {
   );
 }
 
-function DashboardTopbar({ email }: { email: string }) {
+function DashboardTopbar({ me }: { me: Me }) {
+  // Karşılamada yalnızca ilk ad: "Merhaba, Mennan".
+  const firstName = meDisplayName(me).split(/\s+/)[0];
   const [query, setQuery] = useState("");
   const { data: students } = useStudents();
   const { data: teachers } = useTeachers();
@@ -100,7 +98,7 @@ function DashboardTopbar({ email }: { email: string }) {
   return (
     <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
       <div>
-        <h1 className="text-display font-serif leading-tight">Merhaba{userName(email) ? `, ${userName(email)}` : ""}</h1>
+        <h1 className="text-display font-serif leading-tight">Merhaba{firstName ? `, ${firstName}` : ""}</h1>
         <p className="text-meta mt-0.5">
           {new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long", weekday: "long" }).format(new Date())}
         </p>
@@ -409,7 +407,7 @@ function UpcomingBirthdaysRail({ birthdays }: { birthdays?: UpcomingBirthday[] }
   );
 }
 
-function TeacherDashboard({ email }: { email: string }) {
+function TeacherDashboard({ me }: { me: Me }) {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const weekStart = weekStartFor(new Date());
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -418,7 +416,7 @@ function TeacherDashboard({ email }: { email: string }) {
     <div className="mx-auto max-w-[32rem] xl:max-w-5xl">
       <header className="mb-3 flex items-start justify-between gap-3">
         <div><h1 className="text-[1.35rem] font-bold tracking-[-0.035em]">{selectedIsToday ? "Bugün" : selectedDate.toLocaleDateString("tr-TR", { weekday: "long" })}</h1><p className="mt-0.5 text-[.75rem] text-[var(--muted)]">{new Intl.DateTimeFormat("tr-TR", { day:"numeric", month:"long", weekday:"long" }).format(selectedDate)}</p><DailyQuoteLine /></div>
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand)]">{userName(email).slice(0,2).toLocaleUpperCase("tr-TR")}</span>
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-[var(--brand-soft)] text-[.75rem] font-bold text-[var(--brand)]">{meInitials(me)}</span>
       </header>
       <TeacherWeekCard />
       {/* Gün şeridi: gizli kaydırma çubuklu yatay şerit 360/390px'te son günleri ekran dışına

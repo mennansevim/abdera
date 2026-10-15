@@ -149,6 +149,11 @@ export interface Me {
   // Teacher oturumunda kendi çaldığı enstrümanlar (Admin'de her zaman boş dizi) - Takvim
   // ekranındaki enstrüman filtresini yalnızca kendi branşıyla sınırlamak için.
   instrumentIds: string[];
+  // Kullanıcının Ayarlar'dan kendine seçtiği görünen ad (seçmediyse null).
+  displayName: string | null;
+  // Ekranda gösterilecek ad: displayName, yoksa öğretmende kendi kaydındaki ad; yöneticide
+  // null ve meDisplayName() e-postadan türetir.
+  name: string | null;
 }
 
 export interface LoginResponse {

@@ -10,7 +10,7 @@ import type { Me } from "@/lib/api";
 import { useBankTransactions } from "@/lib/banking";
 import { useNotifications } from "@/lib/messaging";
 import { CURRENT_VERSION } from "@/lib/releases";
-import { useLogout } from "@/lib/use-auth";
+import { meDisplayName, meInitials, useLogout } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 
 type NavItem = { href: string; label: string; icon: IconName; alert?: boolean; section: "Genel" | "Eğitim" | "Planlama" | "Finans" | "İletişim" | "Sistem" };
@@ -69,15 +69,6 @@ const sidebarStorageOptions = { decode: (value: string) => value === "true" };
 
 function isActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname.startsWith(href);
-}
-
-function displayName(email: string) {
-  return email
-    .split("@")[0]
-    .split(/[._-]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toLocaleUpperCase("tr-TR") + part.slice(1))
-    .join(" ");
 }
 
 export function AppShell({ me, children }: { me: Me; children: React.ReactNode }) {
@@ -181,11 +172,11 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         </nav>
         <div className="mt-4 shrink-0 border-t border-white/25 pt-4">
           <div className={`flex items-center rounded-xl py-2 ${sidebarCollapsed ? "flex-col gap-1.5 px-0" : "gap-2.5 px-2"}`}>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold" title={sidebarCollapsed ? displayName(me.email) || me.email : undefined}>
-              {displayName(me.email).slice(0, 2).toLocaleUpperCase("tr-TR")}
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/25 text-xs font-bold" title={sidebarCollapsed ? meDisplayName(me) : undefined}>
+              {meInitials(me)}
             </span>
             {!sidebarCollapsed && <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-bold">{displayName(me.email) || me.email}</span>
+              <span className="block truncate text-xs font-bold">{meDisplayName(me)}</span>
               <span className="block text-[.75rem] text-white/70">{me.role === "Admin" ? "Yönetici" : "Öğretmen"}</span>
             </span>}
             <NotificationBell />
@@ -259,7 +250,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
               ))}
             </nav>
             <div className="border-t border-[var(--line)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <p className="truncate text-sm font-semibold">{displayName(me.email) || me.email}</p>
+              <p className="truncate text-sm font-semibold">{meDisplayName(me)}</p>
               <p className="mt-0.5 text-xs text-[var(--muted)]">{me.email} · {me.role === "Admin" ? "Yönetici" : "Öğretmen"}</p>
               <button onClick={handleLogout} className="pressable mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-white text-sm font-semibold text-[#5c4d3f] hover:border-[#e0c39d]">
                 <Icon name="logout" className="h-4 w-4" /> Çıkış yap

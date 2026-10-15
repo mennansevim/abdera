@@ -12,6 +12,9 @@ public class User
     public string Email { get; private set; } = null!;
     public string PasswordHash { get; private set; } = null!;
     public UserRole Role { get; private set; }
+    // Kullanıcının kendine seçtiği görünen ad (kenar çubuğu, karşılama). Boşsa ön yüz
+    // öğretmende Teacher kaydındaki adı, yöneticide e-postadan türetilen adı gösterir.
+    public string? DisplayName { get; private set; }
     public bool MustChangePassword { get; private set; }
     public bool IsActive { get; private set; } = true;
     // Cookie oturumu doğrulanırken (Program.cs OnValidatePrincipal) bu değerle
@@ -28,6 +31,8 @@ public class User
 
     // UserConfiguration.cs'teki HasMaxLength(320) ile birebir.
     private const int MaxEmailLength = 320;
+    // UserConfiguration.cs'teki HasMaxLength(100) ile birebir.
+    public const int MaxDisplayNameLength = 100;
 
     public static User Create(string email, string passwordHash, UserRole role, DateTimeOffset now, bool mustChangePassword = false)
     {
@@ -53,6 +58,23 @@ public class User
         MustChangePassword = mustChangePassword;
         // Şifre değişince (kendi isteğiyle veya admin resetiyle) eski oturumlar da düşer.
         SecurityStamp = Guid.NewGuid();
+        UpdatedAt = now;
+    }
+
+    // null: kaydı temizler, yedek ada dönülür. Boş/yalnızca boşluk değer ise reddedilir -
+    // "adı sil" isteği açıkça null ile gelmeli, yanlışlıkla boş bırakılan alan ad silmesin.
+    public void SetDisplayName(string? displayName, DateTimeOffset now)
+    {
+        if (displayName is not null)
+        {
+            displayName = displayName.Trim();
+            if (displayName.Length == 0)
+                throw new ArgumentException("Görünen ad boş olamaz.", nameof(displayName));
+            if (displayName.Length > MaxDisplayNameLength)
+                throw new ArgumentException($"Görünen ad en fazla {MaxDisplayNameLength} karakter olabilir.", nameof(displayName));
+        }
+
+        DisplayName = displayName;
         UpdatedAt = now;
     }
 

@@ -12,6 +12,7 @@ public static class AuthModule
         app.MapLogout();
         app.MapMe();
         app.MapChangePassword();
+        app.MapUpdateDisplayName();
         app.MapResetPassword();
 
         // Build() sonrası okunduğu için WebApplicationFactory override'ları da görülür.

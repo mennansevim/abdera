@@ -75,4 +75,39 @@ public class UserTests
         Assert.False(user.IsActive);
         Assert.Equal(later, user.UpdatedAt);
     }
+
+    [Fact]
+    public void SetDisplayName_trims_and_clears_with_null()
+    {
+        var user = User.Create("admin@abdera.test", "hash", UserRole.Admin, Now);
+        var later = Now.AddDays(1);
+
+        user.SetDisplayName("  Mennan Sevim ", later);
+        Assert.Equal("Mennan Sevim", user.DisplayName);
+        Assert.Equal(later, user.UpdatedAt);
+
+        user.SetDisplayName(null, later);
+        Assert.Null(user.DisplayName);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void SetDisplayName_rejects_blank_value(string value)
+    {
+        var user = User.Create("admin@abdera.test", "hash", UserRole.Admin, Now);
+        user.SetDisplayName("Mennan", Now);
+
+        Assert.Throws<ArgumentException>(() => user.SetDisplayName(value, Now));
+        Assert.Equal("Mennan", user.DisplayName);
+    }
+
+    [Fact]
+    public void SetDisplayName_rejects_value_longer_than_limit()
+    {
+        var user = User.Create("admin@abdera.test", "hash", UserRole.Admin, Now);
+
+        Assert.Throws<ArgumentException>(() => user.SetDisplayName(new string('a', User.MaxDisplayNameLength + 1), Now));
+        Assert.Null(user.DisplayName);
+    }
 }

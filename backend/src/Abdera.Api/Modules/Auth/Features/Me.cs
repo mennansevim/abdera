@@ -15,9 +15,12 @@ public static class Me
     // TeacherId: öğretmen artık kendi öğrencisini ekleyebildiği için istemcinin kendi
     // teacher kaydının id'sine ihtiyacı var (POST /api/teachers/{teacherId}/students).
     // Admin'de null.
+    // DisplayName: kullanıcının Ayarlar'dan kendine seçtiği ad (yoksa null - form bunu
+    // boş gösterir). Name: ekranda gösterilecek ad - DisplayName, yoksa öğretmende Teacher
+    // kaydındaki ad; yöneticide null kalır ve ön yüz e-postadan türetir.
     public record Response(
         Guid Id, string Email, UserRole Role, bool MustChangePassword,
-        Guid[] InstrumentIds, Guid? TeacherId);
+        Guid[] InstrumentIds, Guid? TeacherId, string? DisplayName, string? Name);
 
     public static void MapMe(this IEndpointRouteBuilder app)
     {
@@ -33,12 +36,13 @@ public static class Me
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Id == id && u.IsActive)
             ?? throw new ForbiddenException("Hesap artık aktif değil.");
 
-        var teacherId = user.Role == UserRole.Teacher
+        var teacher = user.Role == UserRole.Teacher
             ? await db.Teachers.AsNoTracking()
                 .Where(teacher => teacher.UserId == user.Id)
-                .Select(teacher => (Guid?)teacher.Id)
+                .Select(teacher => new { teacher.Id, teacher.FirstName, teacher.LastName })
                 .SingleOrDefaultAsync()
             : null;
+        var teacherId = teacher?.Id;
 
         var instrumentIds = teacherId is { } scopedTeacherId
             ? await db.TeacherInstruments.AsNoTracking()
@@ -49,6 +53,8 @@ public static class Me
 
         return Results.Ok(new Response(
             user.Id, user.Email, user.Role, user.MustChangePassword,
-            instrumentIds, teacherId));
+            instrumentIds, teacherId,
+            user.DisplayName,
+            user.DisplayName ?? (teacher is null ? null : $"{teacher.FirstName} {teacher.LastName}")));
     }
 }
