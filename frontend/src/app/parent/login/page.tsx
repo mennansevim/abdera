@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import { BrandMark, Icon } from "@/components/icons";
+import { Icon } from "@/components/icons";
+import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
 import { ApiError } from "@/lib/api";
 import {
   useDebugGuardianLogin,

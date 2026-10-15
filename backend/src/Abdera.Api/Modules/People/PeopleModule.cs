@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.People.Features;
+using Abdera.Api.Shared.Modules;
 
 namespace Abdera.Api.Modules.People;
 
@@ -14,9 +15,13 @@ public static class PeopleModule
         app.MapDeletePerson();
         app.MapStudentDeletionRequests();
         app.MapEnrollments();
-        app.MapGuardianAuth();
-        app.MapGuardianPortal();
-        app.MapGuardianPortalData();
+
+        // Veli girişi ve /parent portalının uçları "parent-portal" modülüdür. Velinin kendisi
+        // (iletişim bilgisi, öğrenci bağı) çekirdekte kalır: WhatsApp bildirimleri ona gider.
+        var parentPortal = app.MapModule(ModuleKeys.ParentPortal);
+        parentPortal.MapGuardianAuth();
+        parentPortal.MapGuardianPortal();
+        parentPortal.MapGuardianPortalData();
         app.MapAttentionNeededStudents();
         app.MapInstrumentMaintenance();
     }

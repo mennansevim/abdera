@@ -5,6 +5,7 @@ using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Progress.Features;
@@ -51,7 +52,8 @@ public static class TermReports
         single.MapPost("/publish", PublishAsync);
         single.MapPost("/unpublish", UnpublishAsync);
         app.MapGet("/api/guardian/me/students/{studentId:guid}/term-reports", GuardianListAsync)
-            .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+            .RequireAuthorization(AuthorizationPolicies.GuardianOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
     }
 
     private static async Task<IResult> ListAsync(string? term, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)

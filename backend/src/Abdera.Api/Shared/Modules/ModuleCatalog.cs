@@ -20,6 +20,7 @@ public static class ModuleKeys
     public const string Show = "show";
     public const string Banking = "banking";
     public const string Profitability = "profitability";
+    public const string ParentPortal = "parent-portal";
 }
 
 public sealed record ModuleDefinition(string Key, string Name, bool IsCore, IReadOnlyList<string> Requires);
@@ -40,6 +41,7 @@ public static class ModuleCatalog
         new(ModuleKeys.Show, "Yıl sonu gösterisi", false, [ModuleKeys.People]),
         new(ModuleKeys.Banking, "Banka entegrasyonu", false, [ModuleKeys.Billing]),
         new(ModuleKeys.Profitability, "Kârlılık", false, [ModuleKeys.Billing]),
+        new(ModuleKeys.ParentPortal, "Veli portalı", false, [ModuleKeys.People, ModuleKeys.Billing]),
     ];
 
     public static ModuleDefinition? Find(string key) =>

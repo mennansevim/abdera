@@ -2,8 +2,8 @@
 // Backend: GET /api/instance/config (anonim; giriş ekranı da okul adını gösterir).
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { api, apiBaseUrl } from "./api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, ApiError, apiBaseUrl } from "./api";
 
 // Backend Shared/Modules/ModuleCatalog.cs ModuleKeys ile birebir.
 export type ModuleKey =
@@ -17,7 +17,8 @@ export type ModuleKey =
   | "library"
   | "show"
   | "banking"
-  | "profitability";
+  | "profitability"
+  | "parent-portal";
 
 export interface InstanceModule {
   key: ModuleKey;
@@ -76,4 +77,54 @@ export function useModuleEnabled(key: ModuleKey): boolean {
 
 export function schoolLogoSrc(profile: SchoolProfile): string {
   return profile.logoUrl ? `${apiBaseUrl()}${profile.logoUrl}` : "/abdera-logo.webp";
+}
+
+// Backend SchoolProfile.MaxLogoBytes ile aynı; sunucu yine kendisi denetler (tür dosya içeriğinden).
+export const SCHOOL_LOGO_MAX_BYTES = 512 * 1024;
+
+export interface UpdateSchoolProfileRequest {
+  name: string;
+  shortName: string;
+  primaryColor: string | null;
+}
+
+// Profil/logo değişince menü, giriş ekranı ve diğer sekmeler bir sonraki config okumasında yenilenir.
+function useInvalidateInstanceConfig() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: ["instance-config"] });
+}
+
+export function useUpdateSchoolProfile() {
+  const invalidate = useInvalidateInstanceConfig();
+  return useMutation<SchoolProfile, ApiError, UpdateSchoolProfileRequest>({
+    mutationFn: (request) => api.put<SchoolProfile>("/api/instance/profile", request),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUploadSchoolLogo() {
+  const invalidate = useInvalidateInstanceConfig();
+  return useMutation<SchoolProfile, ApiError, File>({
+    mutationFn: async (file) => {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch(`${apiBaseUrl()}/api/instance/logo`, { method: "PUT", credentials: "include", body });
+      if (!response.ok) {
+        // FormData yüklemesi api.ts'teki JSON istemcisini kullanamaz; hata gövdesi aynı biçime çevrilir.
+        const problem = await response.json().catch(() => null);
+        const fieldError = problem?.errors ? Object.values(problem.errors as Record<string, string[]>)[0]?.[0] : undefined;
+        throw new ApiError(response.status, problem?.title ?? "Logo yüklenemedi.", fieldError ?? problem?.detail ?? "Logo yüklenemedi.");
+      }
+      return (await response.json()) as SchoolProfile;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useRemoveSchoolLogo() {
+  const invalidate = useInvalidateInstanceConfig();
+  return useMutation<void, ApiError, void>({
+    mutationFn: () => api.delete<void>("/api/instance/logo"),
+    onSuccess: invalidate,
+  });
 }

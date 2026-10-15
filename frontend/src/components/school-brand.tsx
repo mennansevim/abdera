@@ -8,11 +8,19 @@ import { DEFAULT_PROFILE, schoolLogoSrc, useSchoolProfile, type SchoolProfile } 
 export function SchoolBrandMark({ compact = false }: { compact?: boolean }) {
   const profile = useSchoolProfile();
   const { title, subtitle } = brandLines(profile);
-  const isDefaultIdentity = profile.name === DEFAULT_PROFILE.name && profile.shortName === DEFAULT_PROFILE.shortName;
-  // Logosu yüklenmemiş başka bir okul Abdera logosunu taşımamalı: baş harfleri gösterilir.
-  const logoSrc = profile.logoUrl || isDefaultIdentity ? schoolLogoSrc(profile) : null;
 
-  return <BrandMark compact={compact} title={title} subtitle={subtitle} logoSrc={logoSrc} initials={initialsOf(profile.shortName)} />;
+  return <BrandMark compact={compact} title={title} subtitle={subtitle} logoSrc={useSchoolLogo().src} initials={initialsOf(profile.shortName)} />;
+}
+
+// Logosu yüklenmemiş başka bir okul Abdera logosunu taşımamalı: src null döner, çağıran baş
+// harfleri gösterir. Varsayılan kimlikte (bugünkü okul) Abdera logosu kalır.
+export function useSchoolLogo(): { src: string | null; initials: string } {
+  const profile = useSchoolProfile();
+  const isDefaultIdentity = profile.name === DEFAULT_PROFILE.name && profile.shortName === DEFAULT_PROFILE.shortName;
+  return {
+    src: profile.logoUrl || isDefaultIdentity ? schoolLogoSrc(profile) : null,
+    initials: initialsOf(profile.shortName),
+  };
 }
 
 // "Abdera Sanat Akademi" + kısa ad "Abdera" → başlık "Abdera", alt satır "SANAT AKADEMİ".

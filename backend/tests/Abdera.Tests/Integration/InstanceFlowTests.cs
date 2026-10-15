@@ -127,6 +127,27 @@ public class InstanceFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.True(config.Modules.Single(module => module.Key == ModuleKeys.Billing).Enabled);
     }
 
+    // Veli portalı kapalı okulda veli girişi ve "Veli girişleri" ekranı yoktur; veli kaydının
+    // kendisi (iletişim, WhatsApp bildirimi) çekirdekte kalır.
+    [Fact]
+    public async Task Disabled_parent_portal_closes_guardian_login_but_keeps_guardian_records()
+    {
+        using var schoolWithoutPortal = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [EnabledModules.ConfigurationKey] = ModuleCatalog.NoneSentinel,
+            })));
+
+        using var anonymous = schoolWithoutPortal.CreateClient();
+        var otp = await anonymous.PostAsJsonAsync("/api/guardian/otp/request", new { phoneNumber = "05551234567" });
+        Assert.Equal(HttpStatusCode.NotFound, otp.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.GetAsync("/api/guardian/me")).StatusCode);
+
+        var admin = await LoginAsync(schoolWithoutPortal, "admin@test.local", "Test1234!");
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/guardians/logins")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/guardians")).StatusCode);
+    }
+
     private static MultipartFormDataContent LogoForm(byte[] content, string claimedType)
     {
         var file = new ByteArrayContent(content);

@@ -1,6 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import type { CSSProperties } from "react";
 import { Icon, type IconName } from "./icons";
+import { useSchoolLogo } from "./school-brand";
 
 // Tam sayfa yükleme ekranı: ortada "ritim tutan" logo, logodan yayılan ses halkaları,
 // çevresinde dönen enstrüman rozetleri ve yükselen notalar. Yalnızca oturum/uygulama açılışı
@@ -12,6 +15,7 @@ const ORBIT: IconName[] = ["piano", "violin", "drums", "guitar", "music"];
 const NOTES = ["♪", "♫", "♩", "♬"].map((note) => `${note}\uFE0E`);
 
 export function AppLoader({ message, background = "var(--background)" }: { message: string; background?: string }) {
+  const logo = useSchoolLogo();
   return (
     <main className="grid min-h-dvh place-items-center" style={{ background }}>
       <div role="status" aria-live="polite" className="flex flex-col items-center gap-6">
@@ -36,7 +40,9 @@ export function AppLoader({ message, background = "var(--background)" }: { messa
               {note}
             </span>
           ))}
-          <Image src="/abdera-logo.webp" alt="" width={96} height={96} sizes="96px" loading="eager" unoptimized className="app-loader-logo" />
+          {logo.src
+            ? <Image src={logo.src} alt="" width={96} height={96} sizes="96px" loading="eager" unoptimized className="app-loader-logo" />
+            : <span className="app-loader-logo grid place-items-center bg-white font-serif text-2xl font-bold italic text-[var(--brand-strong)]">{logo.initials}</span>}
         </div>
         <p className="text-sm font-semibold text-[var(--muted)]">{message}</p>
       </div>

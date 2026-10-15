@@ -9,6 +9,7 @@ import { useInstruments, useInstrumentMaintenanceSettings, useRunDueMaintenanceR
 import { useMe } from "@/lib/use-auth";
 import { ChangePasswordForm } from "../change-password-form";
 import { DisplayNameForm } from "../display-name-form";
+import { SchoolProfilePanel } from "./school-profile-panel";
 
 const FONT_SIZE_OPTIONS: Array<{ value: FontSizePreference; label: string; detail: string }> = [
   { value: "small", label: "Küçük", detail: "Daha kompakt" },
@@ -37,6 +38,8 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-3">
       <PageHeader title="Ayarlar" description="Hesap güvenliği, görünüm ve bildirim tercihleri." />
+
+      {me?.role === "Admin" && <SchoolProfilePanel />}
 
       {me && (
         <section className="app-card overflow-hidden">

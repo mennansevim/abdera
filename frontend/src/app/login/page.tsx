@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormE
 import { AppLoader } from "@/components/app-loader";
 import { Icon, type IconName } from "@/components/icons";
 import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
+import { useModuleEnabled } from "@/lib/instance";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
 import { readLastRole, readSavedEmail, rememberLastRole, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
@@ -83,6 +84,8 @@ function LoginPageContent() {
   const [usePassword, setUsePassword] = useState(false);
   const [devEmail, setDevEmail] = useState("");
   const { destination, isResolving } = useSessionDestination();
+  // Veli portalı opsiyonel modül: kapalı okulda "Veliyim" seçeneği hiç görünmez.
+  const parentPortalEnabled = useModuleEnabled("parent-portal");
   const shouldChooseRole = searchParams.get("chooseRole") === "1";
   // Panel açıkken oturum düştüyse kullanıcı buraya atılır (bkz. use-require-auth.ts); neden
   // atıldığını bilmezse "uygulama beni çıkardı" diye bir hata sanıyor.
@@ -246,7 +249,7 @@ function LoginPageContent() {
               );
             })}
           </div>
-          {GUARDIAN_OPTION && (
+          {GUARDIAN_OPTION && parentPortalEnabled && (
             <button type="button" onClick={() => chooseRole("Guardian")} className={`mt-2.5 ${roleCardClass(false)}`}>
               <RoleCardContent option={GUARDIAN_OPTION} />
             </button>

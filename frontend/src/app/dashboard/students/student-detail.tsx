@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem, RowMenuSeparator } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { useModuleEnabled } from "@/lib/instance";
 import {
   formatWeeklySchedule,
   useCreateLessonSeries,
@@ -56,6 +57,8 @@ export function StudentDetail({
   const [editingStudent, setEditingStudent] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
   const resetGuardianPassword = useResetGuardianPassword();
+  // Veli giriş şifresi yalnızca veli portalı açık okulda vardır (parent-portal modülü).
+  const parentPortalEnabled = useModuleEnabled("parent-portal");
   const [guardianCredential, setGuardianCredential] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function resetGuardianLogin(guardian: StudentGuardianLink) {
@@ -165,7 +168,7 @@ export function StudentDetail({
                         <RowMenuItem icon="pencil" onClick={() => { close(); setEditingGuardian(guardian); }}>Veliyi düzenle</RowMenuItem>
                         <RowMenuItem icon="phone" onClick={() => { close(); window.location.href = `tel:${guardian.phoneNumber}`; }}>Ara</RowMenuItem>
                         <RowMenuItem icon="whatsapp" onClick={() => { close(); window.open(whatsAppChatUrl(guardian.phoneNumber), "_blank", "noopener,noreferrer"); }}>WhatsApp&apos;tan yaz</RowMenuItem>
-                        {isAdmin && <RowMenuItem icon="shield" onClick={() => { close(); void resetGuardianLogin(guardian); }}>Giriş şifresini sıfırla</RowMenuItem>}
+                        {isAdmin && parentPortalEnabled && <RowMenuItem icon="shield" onClick={() => { close(); void resetGuardianLogin(guardian); }}>Giriş şifresini sıfırla</RowMenuItem>}
                       </>
                     )}
                   </RowMenu>

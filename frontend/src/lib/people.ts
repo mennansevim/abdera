@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
 import type { CourseKind } from "./billing";
+import { useModuleEnabled } from "./instance";
 
 export type StudentStatus = "Active" | "Inactive";
 export type TeacherStatus = "Active" | "Inactive";
@@ -492,6 +493,9 @@ export interface RegisterStudentResult {
 // çakışırsa kayıt yine başarılıdır; uyarı döner (öğrenci/veli zaten oluşmuştur).
 export function useRegisterStudent() {
   const queryClient = useQueryClient();
+  // Veli portalı kapalı okulda velinin giriş şifresi yoktur: şifre üretme ucu 404 döner ve
+  // kaydı yarıda bırakırdı. Şifre adımı atlanır, sonuç `guardian: null` olur.
+  const parentPortalEnabled = useModuleEnabled("parent-portal");
   return useMutation<RegisterStudentResult, unknown, RegisterStudentInput>({
     mutationFn: async (input) => {
       // Veli ÖNCE çözülür: numara çakışırsa (409) hiçbir şey oluşmadan durur. Eskiden önce
@@ -516,7 +520,7 @@ export function useRegisterStudent() {
         relationship: input.guardian.relationship,
         isPrimary: true,
       });
-      const cred = input.existingGuardianId
+      const cred = input.existingGuardianId || !parentPortalEnabled
         ? null
         : await api.post<{ id: string; phoneNumber: string; password: string; message: string }>(
             `/api/guardians/${guardianId}/reset-password`,

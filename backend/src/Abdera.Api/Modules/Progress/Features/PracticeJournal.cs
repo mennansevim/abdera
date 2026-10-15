@@ -3,6 +3,7 @@ using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Progress.Features;
@@ -21,12 +22,16 @@ public static class PracticeJournal
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         app.MapPost("/api/students/{studentId:guid}/practice-journal", StaffCreateAsync)
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+        // Veli uçları ayrıca veli portalı modülüne bağlı (ikisinden biri kapalıysa 404).
         app.MapGet("/api/guardian/me/students/{studentId:guid}/practice-journal", GuardianListAsync)
-            .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+            .RequireAuthorization(AuthorizationPolicies.GuardianOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
         app.MapPost("/api/guardian/me/students/{studentId:guid}/practice-journal", GuardianCreateAsync)
-            .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+            .RequireAuthorization(AuthorizationPolicies.GuardianOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
         app.MapPost("/api/guardian/me/practice-journal/{entryId:guid}/approve", GuardianApproveAsync)
-            .RequireAuthorization(AuthorizationPolicies.GuardianOnly);
+            .RequireAuthorization(AuthorizationPolicies.GuardianOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
     }
 
     private static async Task<IResult> StaffListAsync(

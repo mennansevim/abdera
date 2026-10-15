@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -67,12 +68,16 @@ public static class Guardians
         // Veli şifresi sıfırlama hesap devralmaya yol açabilecek bir yönetim işlemidir.
         // Öğretmen kendi öğrencisinin iletişim bilgisini güncelleyebilir ama oturum
         // bilgisini değiştiremez; bu sınır yalnızca arayüzde değil API'de zorlanır.
+        // Veli giriş bilgileri yalnızca veli portalı açıkken anlamlı (parent-portal modülü).
         group.MapPost("/{guardianId:guid}/reset-password", ResetPasswordAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
         // AA: veli giriş bilgilerini okul yönetir - liste ve "Şifreyi göster" yalnızca Admin.
-        group.MapGet("/logins", ListLoginsAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        group.MapGet("/logins", ListLoginsAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
         group.MapPost("/{guardianId:guid}/reveal-password", RevealPasswordAsync)
-            .RequireAuthorization(AuthorizationPolicies.AdminOnly);
+            .RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.ParentPortal);
     }
 
     private static async Task<IResult> ListLoginsAsync(AbderaDbContext db)
