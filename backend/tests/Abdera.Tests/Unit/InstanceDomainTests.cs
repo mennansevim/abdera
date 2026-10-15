@@ -1,6 +1,7 @@
 using Abdera.Api.Modules.Instance.Domain;
 using Abdera.Api.Shared;
 using Abdera.Api.Shared.Modules;
+using Microsoft.Extensions.Configuration;
 
 namespace Abdera.Tests.Unit;
 
@@ -126,5 +127,40 @@ public class InstanceDomainTests
         Assert.False(profile.HasLogo);
         Assert.Null(profile.LogoContentType);
         Assert.Null(profile.LogoVersion);
+    }
+
+    [Fact]
+    public void Missing_policy_row_reads_as_todays_rules()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Policy:MakeupCreditValidDays"] = "45",
+        }).Build();
+
+        var policy = SchoolPolicy.CreateDefault(config, Now);
+
+        Assert.Equal(40m, policy.GroupLessonSharePercent);
+        Assert.Equal(4, policy.MaxWeeklyLessons);
+        Assert.Equal(24, policy.MakeupNoticeHours);
+        Assert.Equal(45, policy.MakeupCreditValidDays);
+        Assert.Equal(21, policy.ExcusedMakeupWindowDays);
+        Assert.Equal(new TimeOnly(9, 0), policy.SchoolDayStart);
+        Assert.Equal(new TimeOnly(21, 0), policy.SchoolDayEnd);
+    }
+
+    [Theory]
+    [InlineData(101, 4, "09:00", "21:00", "groupLessonSharePercent")]
+    [InlineData(40.123, 4, "09:00", "21:00", "groupLessonSharePercent")]
+    [InlineData(40, 0, "09:00", "21:00", "maxWeeklyLessons")]
+    [InlineData(40, 4, "21:00", "09:00", "schoolDayEnd")]
+    [InlineData(40, 4, "09:10", "21:00", "schoolDayStart")]
+    public void Invalid_policy_is_rejected(double share, int maxWeekly, string start, string end, string field)
+    {
+        var policy = SchoolPolicy.CreateDefault(null, Now);
+
+        var error = Assert.Throws<ValidationFailedException>(() => policy.Update(
+            (decimal)share, maxWeekly, 24, 60, 21, TimeOnly.Parse(start), TimeOnly.Parse(end), null, Now));
+
+        Assert.Contains(field, error.Errors.Keys);
     }
 }

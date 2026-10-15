@@ -1153,6 +1153,71 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Instance.Domain.SchoolPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("ExcusedMakeupWindowDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("excused_makeup_window_days");
+
+                    b.Property<decimal>("GroupLessonSharePercent")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("group_lesson_share_percent");
+
+                    b.Property<int>("MakeupCreditValidDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("makeup_credit_valid_days");
+
+                    b.Property<int>("MakeupNoticeHours")
+                        .HasColumnType("integer")
+                        .HasColumnName("makeup_notice_hours");
+
+                    b.Property<int>("MaxWeeklyLessons")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_weekly_lessons");
+
+                    b.Property<uint>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.Property<TimeOnly>("SchoolDayEnd")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("school_day_end");
+
+                    b.Property<TimeOnly>("SchoolDayStart")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("school_day_start");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("school_policy", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_school_policy_day", "school_day_end > school_day_start");
+
+                            t.HasCheckConstraint("CK_school_policy_positive", "max_weekly_lessons > 0 AND makeup_notice_hours >= 0 AND makeup_credit_valid_days > 0 AND excused_makeup_window_days > 0");
+
+                            t.HasCheckConstraint("CK_school_policy_share", "group_lesson_share_percent >= 0 AND group_lesson_share_percent <= 100");
+                        });
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Instance.Domain.SchoolProfile", b =>
                 {
                     b.Property<Guid>("Id")

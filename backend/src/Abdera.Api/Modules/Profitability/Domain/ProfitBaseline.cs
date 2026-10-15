@@ -23,7 +23,9 @@ public record ProfitBaseline(
     int ActiveEnrollments,
     decimal AverageTenureMonths,
     bool TenureIsDefault,
-    IReadOnlyList<InstrumentStats> Instruments)
+    IReadOnlyList<InstrumentStats> Instruments,
+    // Okulun grup dersi pay yüzdesi (school_policy); verilmezse varsayılan %40.
+    decimal GroupSharePercent = Billing.Domain.GroupLessonPay.SharePercent)
 {
     public const decimal DefaultTenureMonths = 9m;
     public const int MinimumEndedForTenure = 5;
@@ -34,7 +36,7 @@ public record ProfitBaseline(
     // Grup dersinde öğretmen ders başı değil, aylık gelirin payını alır (docs/10-decisions.md AC):
     // öğrenci başı kalan = aidat × (1 - pay). Birebirde ders başı ücret düşülür.
     public decimal MarginPerStudent(CourseKind kind, decimal teacherRate) => kind == CourseKind.Group
-        ? PriceOf(kind) * (1 - AverageDiscountRate) * (1 - Billing.Domain.GroupLessonPay.SharePercent / 100m)
+        ? PriceOf(kind) * (1 - AverageDiscountRate) * (1 - GroupSharePercent / 100m)
         : PriceOf(kind) * (1 - AverageDiscountRate) - LessonsPerMonth * teacherRate;
 
     public decimal RateFor(Guid? instrumentId) =>

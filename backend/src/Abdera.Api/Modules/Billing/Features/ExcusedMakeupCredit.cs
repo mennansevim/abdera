@@ -4,11 +4,12 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Instance.Domain;
 
 namespace Abdera.Api.Modules.Billing.Features;
 
 // docs/10-decisions.md A2 (mazeretli satırı): yoklamada "Mazeretli" işaretlenen ders öğrenciye
-// bir telafi hakkı doğurur. Hak, dersin gününden sonraki `Policy:ExcusedMakeupWindowDays`
+// bir telafi hakkı doğurur. Hak, dersin gününden sonraki `SchoolPolicy.ExcusedMakeupWindowDays` (varsayılanı `Policy:ExcusedMakeupWindowDays`)
 // (varsayılan 21) gün boyunca geçerlidir - telafi dersi de bu pencerenin içine planlanır
 // (MakeupCredits.UseAsync). Habersiz gelmeme (Absent) yine kredi doğurmaz.
 //
@@ -32,7 +33,7 @@ public static class ExcusedMakeupCredit
             if (existing.Any(credit => credit.Status is MakeupCreditStatus.Available or MakeupCreditStatus.Used))
                 return;
 
-            var windowDays = config.GetValue("Policy:ExcusedMakeupWindowDays", 21);
+            var windowDays = (await SchoolPolicy.GetCurrentAsync(db, config)).ExcusedMakeupWindowDays;
             var lessonDate = DateOnly.FromDateTime(clock.ToSchoolLocal(lesson.StartAt).Date);
             // Pencerenin son günü dahil: o günün bitişine kadar planlanabilir.
             var expiresAt = LessonGenerator.ToUtcInstant(lessonDate.AddDays(windowDays + 1), TimeOnly.MinValue, clock.SchoolTimeZone);

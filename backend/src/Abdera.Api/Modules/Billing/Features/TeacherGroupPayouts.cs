@@ -4,6 +4,7 @@ using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.People.Domain;
+using Abdera.Api.Modules.Instance.Domain;
 using Abdera.Api.Shared;
 using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +56,8 @@ public static class TeacherGroupPayouts
         var resolved = period ?? currentPeriod;
         BillingPeriod.Parse(resolved);
 
+        // Pay yüzdesi okulun kuralıdır (school_policy); hesabın kendisi GroupLessonPay'de kalır.
+        var sharePercent = (await SchoolPolicy.GetCurrentAsync(db)).GroupLessonSharePercent;
         var revenue = await GroupLessonPay.RevenueByTeacherAsync(db, [resolved]);
         var payouts = await db.TeacherMonthlyGroupPayouts.AsNoTracking().Where(p => p.Period == resolved).ToListAsync();
         // Grup geliri ya da ödemesi olan öğretmenler; ayrıca aktif bir grubu olan (henüz aidatı
@@ -73,15 +76,15 @@ public static class TeacherGroupPayouts
                 var revenueBase = income?.RevenueBase ?? 0m;
                 return new TeacherMonthRow(
                     teacher.Id, teacher.FirstName, teacher.LastName, teacher.Status,
-                    revenueBase, income?.ReceivableCount ?? 0, GroupLessonPay.SharePercent,
-                    GroupLessonPay.ComputeAmount(revenueBase), payout?.Currency ?? income?.Currency ?? "TRY",
+                    revenueBase, income?.ReceivableCount ?? 0, sharePercent,
+                    GroupLessonPay.ComputeAmount(revenueBase, sharePercent), payout?.Currency ?? income?.Currency ?? "TRY",
                     payout is null ? null : ToResponse(payout));
             })
             .OrderBy(row => $"{row.FirstName} {row.LastName}", StringComparer.Create(TurkishCulture, ignoreCase: true))
             .ToList();
 
         return Results.Ok(new MonthResponse(
-            resolved, resolved == currentPeriod, GroupLessonPay.SharePercent,
+            resolved, resolved == currentPeriod, sharePercent,
             rows.Sum(row => row.Payout?.Amount ?? 0m),
             rows.Where(row => row.Payout is null).Sum(row => row.ComputedAmount),
             rows.Select(row => row.Currency).FirstOrDefault() ?? "TRY",
@@ -107,7 +110,8 @@ public static class TeacherGroupPayouts
         if (income is null || income.RevenueBase <= 0)
             throw Invalid("period", "Bu ay bu öğretmenin grup dersi geliri yok; ödenecek bir tutar çıkmıyor.");
 
-        var computedAmount = GroupLessonPay.ComputeAmount(income.RevenueBase);
+        var sharePercent = (await SchoolPolicy.GetCurrentAsync(db)).GroupLessonSharePercent;
+        var computedAmount = GroupLessonPay.ComputeAmount(income.RevenueBase, sharePercent);
         if (request.ExpectedRevenueBase != income.RevenueBase || request.ExpectedAmount != computedAmount)
             throw new ConflictException(
                 $"Bu ay grup geliri {Money(income.RevenueBase, income.Currency)}, pay {Money(computedAmount, income.Currency)} görünüyor " +
@@ -125,7 +129,7 @@ public static class TeacherGroupPayouts
         var description = $"Aylık grup dersi payı — {teacher.FirstName} {teacher.LastName} ({firstDay.ToString("MMMM yyyy", TurkishCulture)})";
         var expense = Expense.Create(ExpenseCategory.Salary, description, amount, income.Currency, paidOn, request.Note, actorId, now);
         var payout = TeacherMonthlyGroupPayout.Create(
-            teacher.Id, request.Period, income.RevenueBase, income.ReceivableCount, GroupLessonPay.SharePercent,
+            teacher.Id, request.Period, income.RevenueBase, income.ReceivableCount, sharePercent,
             computedAmount, amount, income.Currency, paidOn, request.Note, expense.Id, actorId, now);
 
         db.Expenses.Add(expense);

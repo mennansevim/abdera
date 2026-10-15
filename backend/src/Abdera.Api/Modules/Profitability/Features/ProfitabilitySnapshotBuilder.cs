@@ -4,6 +4,7 @@ using Abdera.Api.Modules.Profitability.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Instance.Domain;
 
 namespace Abdera.Api.Modules.Profitability.Features;
 
@@ -62,6 +63,8 @@ public static class ProfitabilitySnapshotBuilder
         var payoutExpenseIds = await db.TeacherWeeklyPayouts.AsNoTracking().Select(payout => payout.ExpenseId).ToListAsync(cancellationToken);
         payoutExpenseIds.AddRange(await db.TeacherMonthlyGroupPayouts.AsNoTracking().Select(payout => payout.ExpenseId).ToListAsync(cancellationToken));
         var groupRevenue = await GroupLessonPay.RevenueByTeacherAsync(db, periods, cancellationToken: cancellationToken);
+        // Okulun grup dersi payı (school_policy); ödeme ekranı (TeacherGroupPayouts) ile aynı değer.
+        var groupSharePercent = (await SchoolPolicy.GetCurrentAsync(db)).GroupLessonSharePercent;
         var oneOffs = await db.Expenses.AsNoTracking()
             .Where(expense => expense.ExpenseDate >= months[0] && expense.ExpenseDate < currentMonth.AddMonths(1)
                 && !payoutExpenseIds.Contains(expense.Id))
@@ -85,7 +88,7 @@ public static class ProfitabilitySnapshotBuilder
                 if (rates.TryGetValue(lesson.TeacherId, out var rate)) teacherCost += rate;
                 else { teacherCost += averageRate ?? 0; estimated = true; }
             }
-            teacherCost += groupRevenue.Where(row => row.Period == periods[index]).Sum(row => GroupLessonPay.ComputeAmount(row.RevenueBase));
+            teacherCost += groupRevenue.Where(row => row.Period == periods[index]).Sum(row => GroupLessonPay.ComputeAmount(row.RevenueBase, groupSharePercent));
             var fixedCost = recurring.Sum(item => item.AmountFor(month))
                 + oneOffs.Where(expense => expense.ExpenseDate >= month && expense.ExpenseDate < month.AddMonths(1)).Sum(expense => expense.Amount);
             monthRows.Add(new MonthProfit(
@@ -184,7 +187,8 @@ public static class ProfitabilitySnapshotBuilder
             active.Count,
             decimal.Round(tenure, 1),
             tenureIsDefault,
-            instrumentRows);
+            instrumentRows,
+            groupSharePercent);
 
         // --- İşleyiş eksikleri ---
         var gaps = new List<OperationGap>();

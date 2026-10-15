@@ -10,6 +10,7 @@ using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Instance.Domain;
 
 namespace Abdera.Api.Modules.Scheduling.Features;
 
@@ -116,7 +117,7 @@ public static class UpdateLesson
 
             if (!await db.MakeupCredits.AnyAsync(credit => credit.SourceLessonId == lesson.Id))
             {
-                var validDays = config.GetValue("Policy:MakeupCreditValidDays", 60);
+                var validDays = (await SchoolPolicy.GetCurrentAsync(db, config)).MakeupCreditValidDays;
                 db.MakeupCredits.Add(MakeupCredit.Earn(
                     lesson.StudentId,
                     lesson.Id,

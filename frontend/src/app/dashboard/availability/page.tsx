@@ -10,7 +10,8 @@ import Link from "next/link";
 import { AdminGate, EmptyState, PageHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
 import { useInstruments, useTeachers } from "@/lib/people";
-import { DAY_NAMES_TR, SCHOOL_DAY_END, SCHOOL_DAY_START, useOpenSlots, type OpenSlot, type TeacherOpenSlots } from "@/lib/scheduling";
+import { DAY_NAMES_TR, useOpenSlots, type OpenSlot, type TeacherOpenSlots } from "@/lib/scheduling";
+import { useSchoolDay } from "@/lib/instance";
 
 const WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DAY_SHORT: Record<string, string> = { Monday: "Pzt", Tuesday: "Sal", Wednesday: "Çar", Thursday: "Per", Friday: "Cum", Saturday: "Cmt", Sunday: "Paz" };
@@ -105,6 +106,7 @@ function AvailabilityBoard() {
   const instrumentName = instruments.find((i) => i.id === instrumentId)?.name;
 
   const teachers = useMemo(() => openSlots.data?.teachers ?? [], [openSlots.data]);
+  const schoolDay = useSchoolDay();
 
   // Pazar sütunu yalnızca bir öğretmen pazar günü açıksa görünür; okulun haftası Pzt-Cmt.
   const days = useMemo(
@@ -114,12 +116,12 @@ function AvailabilityBoard() {
 
   const rows = useMemo(() => {
     const starts = teachers.flatMap((t) => t.slots.map((s) => toMinutes(s.startTime)));
-    const first = starts.length ? Math.floor(Math.min(...starts) / ROW_MINUTES) * ROW_MINUTES : toMinutes(SCHOOL_DAY_START);
-    const last = starts.length ? Math.max(...starts) : toMinutes(SCHOOL_DAY_END) - ROW_MINUTES;
+    const first = starts.length ? Math.floor(Math.min(...starts) / ROW_MINUTES) * ROW_MINUTES : toMinutes(schoolDay.start);
+    const last = starts.length ? Math.max(...starts) : toMinutes(schoolDay.end) - ROW_MINUTES;
     const result: number[] = [];
     for (let row = first; row <= last; row += ROW_MINUTES) result.push(row);
     return result;
-  }, [teachers]);
+  }, [teachers, schoolDay.start, schoolDay.end]);
 
   const cells = useMemo(() => {
     const map = new Map<string, CellTeacher[]>();

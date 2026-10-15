@@ -12,6 +12,7 @@ namespace Abdera.Api.Modules.Billing.Domain;
 // yoksa öğretmen aynı dersi iki kez almış olurdu. Hesabın tek yeri burası.
 public static class GroupLessonPay
 {
+    // Varsayılan pay; okulun geçerli değeri school_policy'dedir (SchoolPolicy.GroupLessonSharePercent).
     public const decimal SharePercent = 40m;
 
     public static decimal ComputeAmount(decimal revenueBase, decimal sharePercent = SharePercent)

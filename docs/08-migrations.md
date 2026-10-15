@@ -356,3 +356,11 @@ kısa adı, ana rengi ve logosu (`bytea`, ≤512 KB, PNG/JPEG/WebP; tür dosya b
 logo_content_type, logo_version) birlikte dolu ya da birlikte boş olmasını zorlar. Satır yoksa arayüz bugünkü Abdera
 kimliğini gösterir, yani migration tek başına hiçbir şeyi değiştirmez. Kişiye/derse/aidata referans yok, `PersonEraser`
 değişmez. `Down()` tabloyu düşürür.
+
+**AddSchoolPolicy** (Instance, yalnızca `arch/multi-tenant` branch'i): yeni `school_policy` tablosu - okula özel
+kurallar (`docs/multi-tenant/ARCHITECTURE.md` §5.3): grup dersi öğretmen payı `numeric(5,2)`, haftalık ders sınırı,
+telafi bildirim süresi (saat), telafi hakkı geçerliliği ve mazeretli telafi penceresi (gün), okul günü başlangıç/bitiş
+(`time`). Tek satır (sabit id), `xmin` concurrency, `created_at/updated_at`. `CHECK`'ler: pay 0-100, okul günü bitişi
+başlangıçtan sonra, sayılar pozitif. Satır yoksa bugünkü değerler geçerlidir (koddaki sabitler ve `Policy:*`
+yapılandırması), yani migration tek başına hiçbir davranışı değiştirmez. Kişiye/derse/aidata referans yok,
+`PersonEraser` değişmez. `Down()` tabloyu düşürür.

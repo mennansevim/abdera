@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
-import { SCHOOL_DAY_END, SCHOOL_DAY_START, useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
+import { useCreateTeacherAvailability, useDeleteTeacherAvailability, useTeacherAvailability, type TeacherAvailability } from "@/lib/scheduling";
+import { useSchoolDay } from "@/lib/instance";
 
 // Takvimin/telafi asistanının kullandığı gün sırası ve TR etiketleri (calendar/page.tsx ile
 // aynı) - Pazartesi'den başlar, backend'in DayOfWeek string'leriyle (Sunday/Monday/...) eşleşir.
@@ -26,6 +27,8 @@ const AVAILABILITY_DAYS: Array<{ key: string; label: string }> = [
 // ekranı (öğretmen, yalnızca kendisi için - docs/10-decisions.md K1). Yetki sınırını backend
 // zorlar (SchedulingAuthorization), buradaki `self` yalnızca metni doğru kişiye göre yazar.
 export function TeacherAvailabilityDays({ teacherId, enabled = true, self = false, embedded = false }: { teacherId: string; enabled?: boolean; self?: boolean; embedded?: boolean }) {
+  // Uygunluk penceresi okulun günü (school_policy); varsayılan 09:00–21:00.
+  const schoolDay = useSchoolDay();
   const { data: availability, isLoading } = useTeacherAvailability(teacherId, { enabled });
   const createAvailability = useCreateTeacherAvailability(teacherId);
   const deleteAvailability = useDeleteTeacherAvailability(teacherId);
@@ -47,7 +50,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
         // kaldır - arayüz bir günü "açık/kapalı" olarak modelliyor, birden fazla aralık değil.
         await Promise.all(existing.map((row) => deleteAvailability.mutateAsync(row.id)));
       } else {
-        await createAvailability.mutateAsync({ dayOfWeek: day, startTime: SCHOOL_DAY_START, endTime: SCHOOL_DAY_END });
+        await createAvailability.mutateAsync({ dayOfWeek: day, startTime: schoolDay.start, endTime: schoolDay.end });
       }
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Uygunluk güncellenemedi.");
@@ -73,7 +76,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
                 onClick={() => void toggleDay(day.key)}
                 disabled={busy}
                 aria-pressed={active}
-                title={active ? `${day.label}: uygun (${SCHOOL_DAY_START}–${SCHOOL_DAY_END}) - kapatmak için tıkla` : `${day.label}: uygun değil - açmak için tıkla`}
+                title={active ? `${day.label}: uygun (${schoolDay.start}–${schoolDay.end}) - kapatmak için tıkla` : `${day.label}: uygun değil - açmak için tıkla`}
                 className={`pressable min-h-11 w-14 rounded-lg border text-xs font-bold disabled:opacity-50 ${active ? "border-[var(--success-strong)] bg-[var(--success-soft)] text-[var(--success-strong)]" : "border-[var(--line)] bg-white text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"}`}
               >
                 {day.label}
@@ -82,7 +85,7 @@ export function TeacherAvailabilityDays({ teacherId, enabled = true, self = fals
           })}
         </div>
       )}
-      <p className="text-meta mt-2">Seçilen günlerde uygunluk saati: {SCHOOL_DAY_START}–{SCHOOL_DAY_END}</p>
+      <p className="text-meta mt-2">Seçilen günlerde uygunluk saati: {schoolDay.start}–{schoolDay.end}</p>
       <p className="text-meta mt-1">
         {!isLoading && !rowsByDay.size
           ? self

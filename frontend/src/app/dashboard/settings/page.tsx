@@ -9,6 +9,7 @@ import { useInstruments, useInstrumentMaintenanceSettings, useRunDueMaintenanceR
 import { useMe } from "@/lib/use-auth";
 import { ChangePasswordForm } from "../change-password-form";
 import { DisplayNameForm } from "../display-name-form";
+import { SchoolPolicyPanel } from "./school-policy-panel";
 import { SchoolProfilePanel } from "./school-profile-panel";
 import { useModuleEnabled } from "@/lib/instance";
 
@@ -42,6 +43,7 @@ export default function SettingsPage() {
       <PageHeader title="Ayarlar" description="Hesap güvenliği, görünüm ve bildirim tercihleri." />
 
       {me?.role === "Admin" && <SchoolProfilePanel />}
+      {me?.role === "Admin" && <SchoolPolicyPanel />}
 
       {me && (
         <section className="app-card overflow-hidden">

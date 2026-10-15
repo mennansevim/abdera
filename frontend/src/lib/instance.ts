@@ -40,9 +40,16 @@ export interface SchoolProfile {
   logoUrl: string | null;
 }
 
+// Backend TimeOnly "HH:mm:ss" olarak gelir.
+export interface SchoolDay {
+  start: string;
+  end: string;
+}
+
 export interface InstanceConfig {
   profile: SchoolProfile;
   modules: InstanceModule[];
+  schoolDay?: SchoolDay;
 }
 
 // Yapılandırma okunamazsa (yükleniyor, ağ hatası, eski API) bugünkü kimlik ve "her şey açık"
@@ -140,4 +147,44 @@ export function useRemoveSchoolLogo() {
     mutationFn: () => api.delete<void>("/api/instance/logo"),
     onSuccess: invalidate,
   });
+}
+
+// Okul günü saatleri (school_policy). Yapılandırma gelmeden bugünkü 09:00–21:00 geçerlidir.
+export const DEFAULT_SCHOOL_DAY: SchoolDay = { start: "09:00", end: "21:00" };
+
+export function useSchoolDay(): SchoolDay {
+  const { data } = useInstanceConfig();
+  return data?.schoolDay ? { start: data.schoolDay.start.slice(0, 5), end: data.schoolDay.end.slice(0, 5) } : DEFAULT_SCHOOL_DAY;
+}
+
+export interface SchoolPolicy {
+  groupLessonSharePercent: number;
+  maxWeeklyLessons: number;
+  makeupNoticeHours: number;
+  makeupCreditValidDays: number;
+  excusedMakeupWindowDays: number;
+  schoolDayStart: string;
+  schoolDayEnd: string;
+}
+
+export function useSchoolPolicy(enabled = true) {
+  return useQuery({ queryKey: ["school-policy"], queryFn: () => api.get<SchoolPolicy>("/api/instance/policy"), enabled });
+}
+
+export function useUpdateSchoolPolicy() {
+  const queryClient = useQueryClient();
+  return useMutation<SchoolPolicy, ApiError, SchoolPolicy>({
+    mutationFn: (policy) => api.put<SchoolPolicy>("/api/instance/policy", policy),
+    onSuccess: (policy) => {
+      queryClient.setQueryData(["school-policy"], policy);
+      return queryClient.invalidateQueries({ queryKey: ["instance-config"] });
+    },
+  });
+}
+
+// Akıllı zamanlama önerilerinin uyacağı okul kuralları (lib/smart-scheduling.ts SchedulingRules).
+export function useSchedulingRules(): { schoolDay: SchoolDay; maxWeeklyLessons?: number } {
+  const schoolDay = useSchoolDay();
+  const { data: policy } = useSchoolPolicy();
+  return { schoolDay, maxWeeklyLessons: policy?.maxWeeklyLessons };
 }

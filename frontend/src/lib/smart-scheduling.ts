@@ -15,11 +15,19 @@ function timeParts(value: string) {
   return { hour: Number(hour), minute: Number(minute) };
 }
 
+// Okulun kuralları (school_policy, docs/multi-tenant/ARCHITECTURE.md §5.3). Verilmezse bugünkü
+// varsayılanlar: 09:00–21:00 ve haftada en fazla MAXIMUM_STUDENT_LESSONS_PER_WEEK ders. Sunucu aynı
+// kuralları kendisi de uygular; buradaki yalnızca öneri listesini doğru süzer.
+export interface SchedulingRules {
+  schoolDay?: { start: string; end: string };
+  maxWeeklyLessons?: number;
+}
+
 function overlaps(start: Date, end: Date, lesson: CalendarLesson) {
   return start < new Date(lesson.endAt) && new Date(lesson.startAt) < end && lesson.status !== "Cancelled" && lesson.status !== "Rescheduled";
 }
 
-function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: CalendarLesson[]) {
+function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: CalendarLesson[], rules: SchedulingRules = {}) {
   const weekStart = new Date(start);
   const daysSinceMonday = (weekStart.getDay() + 6) % 7;
   weekStart.setDate(weekStart.getDate() - daysSinceMonday);
@@ -33,7 +41,7 @@ function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: Calen
     return lessonStart >= weekStart && lessonStart < weekEnd;
   }).length;
 
-  return lessonCount < MAXIMUM_STUDENT_LESSONS_PER_WEEK;
+  return lessonCount < (rules.maxWeeklyLessons ?? MAXIMUM_STUDENT_LESSONS_PER_WEEK);
 }
 
 // Gerçek bir davranış hatasının düzeltmesi: bu fonksiyon HER GÜN için AYRI AYRI "bu günde
@@ -47,10 +55,11 @@ function studentHasWeeklyCapacity(start: Date, studentId: string, lessons: Calen
 // Ama en az bir kayıt varsa, yalnızca o günler açıktır; eşleşmeyen günler artık BOŞ dizi
 // döner (uygun slot yok) - "bu telafi/akıllı zamanlama önerilerinde kullanılacak" ihtiyacı
 // tam olarak bunu gerektiriyor.
-function windowsForDay(day: Date, availability: TeacherAvailability[]) {
+function windowsForDay(day: Date, availability: TeacherAvailability[], rules: SchedulingRules = {}) {
+  const schoolDay = rules.schoolDay ?? { start: SCHOOL_DAY_START, end: SCHOOL_DAY_END };
   const windows = availability.filter((item) => DAY_INDEX[item.dayOfWeek] === day.getDay());
   if (windows.length) return windows;
-  return availability.length ? [] : [{ id: "default", dayOfWeek: "", startTime: SCHOOL_DAY_START, endTime: SCHOOL_DAY_END }];
+  return availability.length ? [] : [{ id: "default", dayOfWeek: "", startTime: schoolDay.start, endTime: schoolDay.end }];
 }
 
 // Öneriler tek bir güne yığılmasın diye. Önceki sürümde puan yalnızca "en yakın gün +
@@ -98,7 +107,9 @@ export function findOpenSlots({
   availability,
   lessons,
   limit = 8,
+  rules = {},
 }: {
+  rules?: SchedulingRules;
   from: Date;
   days: number;
   durationMinutes: number;
@@ -114,7 +125,7 @@ export function findOpenSlots({
     const day = new Date(from);
     day.setHours(0, 0, 0, 0);
     day.setDate(day.getDate() + offset);
-    for (const window of windowsForDay(day, availability)) {
+    for (const window of windowsForDay(day, availability, rules)) {
       const startParts = timeParts(window.startTime);
       const endParts = timeParts(window.endTime);
       const cursor = new Date(day);
@@ -125,7 +136,7 @@ export function findOpenSlots({
         const start = new Date(cursor);
         const end = new Date(start.getTime() + durationMinutes * 60000);
         const busy = lessons.some((lesson) => (lesson.teacherId === teacherId || lesson.studentId === studentId) && overlaps(start, end, lesson));
-        if (start > now && !busy && studentHasWeeklyCapacity(start, studentId, lessons)) {
+        if (start > now && !busy && studentHasWeeklyCapacity(start, studentId, lessons, rules)) {
           const preferredHour = start.getHours() >= 16 && start.getHours() <= 19;
           const soonness = Math.max(0, 30 - offset);
           results.push({ start, end, score: soonness + (preferredHour ? 12 : 0), reason: preferredHour ? "Tercih edilen saat" : "Öğretmen müsait" });
@@ -150,7 +161,9 @@ export function checkManualSlot({
   studentId,
   availability,
   lessons,
+  rules = {},
 }: {
+  rules?: SchedulingRules;
   start: Date;
   durationMinutes: number;
   teacherId: string;
@@ -165,7 +178,7 @@ export function checkManualSlot({
   const minutesOf = (value: Date) => value.getHours() * 60 + value.getMinutes();
   const startMinutes = minutesOf(start);
   const endMinutes = startMinutes + durationMinutes;
-  const windows = windowsForDay(day, availability);
+  const windows = windowsForDay(day, availability, rules);
   const fits = windows.some((window) => {
     const from = timeParts(window.startTime);
     const to = timeParts(window.endTime);
@@ -181,14 +194,14 @@ export function checkManualSlot({
   return null;
 }
 
-export function findRecurringSlots({ effectiveFrom, durationMinutes, teacherId, studentId, availability, lessons, limit = 6 }: { effectiveFrom: string; durationMinutes: number; teacherId: string; studentId: string; availability: TeacherAvailability[]; lessons: CalendarLesson[]; limit?: number }) {
-  const oneOff = findOpenSlots({ from: new Date(`${effectiveFrom}T00:00:00`), days: 14, durationMinutes, teacherId, studentId, availability, lessons, limit: 80 });
+export function findRecurringSlots({ effectiveFrom, durationMinutes, teacherId, studentId, availability, lessons, limit = 6, rules = {} }: { effectiveFrom: string; durationMinutes: number; teacherId: string; studentId: string; availability: TeacherAvailability[]; lessons: CalendarLesson[]; limit?: number; rules?: SchedulingRules }) {
+  const oneOff = findOpenSlots({ from: new Date(`${effectiveFrom}T00:00:00`), days: 14, durationMinutes, teacherId, studentId, availability, lessons, limit: 80, rules });
   const candidates = oneOff.filter((candidate) => {
     for (let week = 1; week < 8; week += 1) {
       const start = new Date(candidate.start);
       start.setDate(start.getDate() + week * 7);
       const end = new Date(start.getTime() + durationMinutes * 60000);
-      if (!studentHasWeeklyCapacity(start, studentId, lessons)) return false;
+      if (!studentHasWeeklyCapacity(start, studentId, lessons, rules)) return false;
       if (lessons.some((lesson) => (lesson.teacherId === teacherId || lesson.studentId === studentId) && overlaps(start, end, lesson))) return false;
     }
     return true;

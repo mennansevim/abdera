@@ -102,6 +102,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<JobHeartbeat> JobHeartbeats => Set<JobHeartbeat>();
 
     public DbSet<SchoolProfile> SchoolProfiles => Set<SchoolProfile>();
+    public DbSet<SchoolPolicy> SchoolPolicies => Set<SchoolPolicy>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

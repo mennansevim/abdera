@@ -10,5 +10,6 @@ public static class InstanceModule
     {
         app.MapInstanceConfig();
         app.MapSchoolProfile();
+        app.MapSchoolPolicy();
     }
 }

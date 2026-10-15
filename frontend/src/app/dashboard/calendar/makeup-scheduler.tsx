@@ -7,6 +7,7 @@ import { useUseMakeupCredit, type MakeupCredit } from "@/lib/billing";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { checkManualSlot, findOpenSlots, type SuggestedSlot } from "@/lib/smart-scheduling";
 import { useCalendar, useTeacherAvailability } from "@/lib/scheduling";
+import { useSchedulingRules } from "@/lib/instance";
 
 export interface MakeupSchedulerContext {
   studentId: string;
@@ -110,6 +111,7 @@ export function MakeupScheduler({
   const range = makeupSearchRange(sourceLessonStartAt);
   const { data: lessons, isLoading: lessonsLoading } = useCalendar(range.from, range.to);
   const useCredit = useUseMakeupCredit(activeStudentId);
+  const schedulingRules = useSchedulingRules();
   const suggestions = enrollment
     ? findOpenSlots({
         from: range.start,
@@ -120,6 +122,7 @@ export function MakeupScheduler({
         availability: availability ?? [],
         lessons: lessons ?? [],
         limit: 9,
+        rules: schedulingRules,
       // Hak son geçerlilik anından sonraya ders açmaz (mazeretli derste ders gününden
       // itibaren 21 gün) - sunucu da aynı sınırı uygular (MakeupCredits.UseAsync).
       }).filter((slot) => !activeCredit || slot.start.getTime() < new Date(activeCredit.expiresAt).getTime())
@@ -144,6 +147,7 @@ export function MakeupScheduler({
             studentId: activeStudentId,
             availability: availability ?? [],
             lessons: lessons ?? [],
+            rules: schedulingRules,
           });
   const chosenSlot = manualSlot ?? selectedSlot ?? suggestions[0];
 

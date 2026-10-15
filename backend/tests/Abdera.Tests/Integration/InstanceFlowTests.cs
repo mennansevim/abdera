@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Instance.Features;
 using Abdera.Api.Modules.People.Features;
@@ -218,6 +219,42 @@ public class InstanceFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/notifications")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/notification-automation-settings")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/me/notifications")).StatusCode);
+    }
+
+    // Okul kuralı yöneticiyle değişir, audit'e yazılır ve hesabın tek yerine (grup dersi payı) yansır.
+    [Fact]
+    public async Task Admin_changes_school_policy_and_group_share_follows_it()
+    {
+        var admin = await LoginAsync(_factory, "admin@test.local", "Test1234!");
+        var teacher = await CreateTeacherClientAsync(admin);
+
+        var current = await admin.GetFromJsonAsync<SchoolPolicyEndpoints.PolicyResponse>("/api/instance/policy", TestJson.Options);
+        Assert.NotNull(current);
+
+        var update = new SchoolPolicyEndpoints.UpdateRequest(35m, 3, 12, 30, 14, new TimeOnly(10, 0), new TimeOnly(20, 0));
+        Assert.Equal(HttpStatusCode.Forbidden, (await teacher.PutAsJsonAsync("/api/instance/policy", update)).StatusCode);
+
+        try
+        {
+            var saved = await admin.PutAsJsonAsync("/api/instance/policy", update);
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+
+            var month = await admin.GetFromJsonAsync<JsonElement>("/api/teacher-payouts/group-month", TestJson.Options);
+            Assert.Equal(35m, month.GetProperty("sharePercent").GetDecimal());
+
+            var config = await admin.GetFromJsonAsync<InstanceConfig.ConfigResponse>("/api/instance/config", TestJson.Options);
+            Assert.Equal(new TimeOnly(10, 0), config!.SchoolDay.Start);
+
+            await using var db = await _factory.CreateDbContextAsync();
+            Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "school_policy.updated"));
+        }
+        finally
+        {
+            // Paylaşılan test veritabanında diğer testler varsayılan kurallarla çalışsın.
+            await admin.PutAsJsonAsync("/api/instance/policy", new SchoolPolicyEndpoints.UpdateRequest(
+                current!.GroupLessonSharePercent, current.MaxWeeklyLessons, current.MakeupNoticeHours,
+                current.MakeupCreditValidDays, current.ExcusedMakeupWindowDays, current.SchoolDayStart, current.SchoolDayEnd));
+        }
     }
 
     private static MultipartFormDataContent LogoForm(byte[] content, string claimedType)

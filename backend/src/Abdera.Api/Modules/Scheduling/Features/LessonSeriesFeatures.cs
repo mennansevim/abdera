@@ -8,6 +8,7 @@ using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Instance.Domain;
 
 namespace Abdera.Api.Modules.Scheduling.Features;
 
@@ -509,6 +510,7 @@ public static class LessonSeriesFeatures
     internal static async Task EnsureStudentWeeklyLimitAsync(
         Guid studentId, DateOnly effectiveFrom, DateOnly? effectiveUntil, AbderaDbContext db)
     {
+        var maximumLessons = (await SchoolPolicy.GetCurrentAsync(db)).MaxWeeklyLessons;
         var existingSeries = await db.LessonSeries
             .Where(s => s.Status == LessonSeriesStatus.Active)
             .Join(db.Enrollments, s => s.EnrollmentId, e => e.Id, (series, enrollment) => new { Series = series, Enrollment = enrollment })
@@ -519,11 +521,11 @@ public static class LessonSeriesFeatures
         var overlappingSeriesCount = existingSeries.Count(series => DateRangesOverlap(
             effectiveFrom, effectiveUntil, series.EffectiveFrom, series.EffectiveUntil));
 
-        if (overlappingSeriesCount >= StudentWeeklyLessonPolicy.MaximumLessons)
+        if (overlappingSeriesCount >= maximumLessons)
         {
             throw new ValidationFailedException(new Dictionary<string, string[]>
             {
-                ["enrollmentId"] = [$"Bir öğrenci haftada en fazla {StudentWeeklyLessonPolicy.MaximumLessons} düzenli ders alabilir."],
+                ["enrollmentId"] = [$"Bir öğrenci haftada en fazla {maximumLessons} düzenli ders alabilir."],
             });
         }
     }

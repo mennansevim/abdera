@@ -10,16 +10,19 @@ public static class InstanceConfig
 {
     public record ModuleResponse(string Key, string Name, bool IsCore, bool Enabled, IReadOnlyList<string> Requires);
     public record ProfileResponse(string Name, string ShortName, string? PrimaryColor, string? LogoUrl);
-    public record ConfigResponse(ProfileResponse Profile, IReadOnlyList<ModuleResponse> Modules);
+    // Okul günü saatleri gizli değil ve takvim ekranları açılışta ihtiyaç duyuyor (school_policy).
+    public record SchoolDayResponse(TimeOnly Start, TimeOnly End);
+    public record ConfigResponse(ProfileResponse Profile, IReadOnlyList<ModuleResponse> Modules, SchoolDayResponse SchoolDay);
 
     public static void MapInstanceConfig(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/instance/config", GetAsync).AllowAnonymous();
     }
 
-    private static async Task<IResult> GetAsync(HttpContext http, AbderaDbContext db, EnabledModules modules)
+    private static async Task<IResult> GetAsync(HttpContext http, AbderaDbContext db, IConfiguration config, EnabledModules modules)
     {
         var profile = await SchoolProfile.GetCurrentAsync(db);
+        var policy = await SchoolPolicy.GetCurrentAsync(db, config);
         var enabled = modules.Current;
 
         // Okul adı/renk/modül değişikliği bir sonraki sayfa açılışında hemen yansısın.
@@ -29,7 +32,8 @@ public static class InstanceConfig
             ModuleCatalog.All
                 .Select(module => new ModuleResponse(
                     module.Key, module.Name, module.IsCore, enabled.Contains(module.Key), module.Requires))
-                .ToList()));
+                .ToList(),
+            new SchoolDayResponse(policy.SchoolDayStart, policy.SchoolDayEnd)));
     }
 
     public static ProfileResponse ToProfileResponse(SchoolProfile profile) => new(

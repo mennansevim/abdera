@@ -6,6 +6,7 @@ using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Instance.Domain;
 
 namespace Abdera.Api.Modules.Scheduling.Features;
 
@@ -50,7 +51,8 @@ public static class CancelLesson
 
         // docs/10-decisions.md A2: okul kaynaklı iptal her zaman kredi doğurur (velinin
         // hatası değil); veli kaynaklı iptal yalnızca yeterli bildirim süresiyle doğurur.
-        var noticeHours = config.GetValue("Policy:MakeupNoticeHours", 24);
+        var policy = await SchoolPolicy.GetCurrentAsync(db, config);
+        var noticeHours = policy.MakeupNoticeHours;
         var hoursNotice = (lesson.StartAt - now).TotalHours;
 
         var policyCredit = request.CancelledBy switch
@@ -66,7 +68,7 @@ public static class CancelLesson
 
         if (earnsCredit)
         {
-            var validDays = config.GetValue("Policy:MakeupCreditValidDays", 60);
+            var validDays = policy.MakeupCreditValidDays;
             var reason = request.CancelledBy == CancelledBy.School
                 ? MakeupCreditEarnedReason.SchoolCancelled
                 : MakeupCreditEarnedReason.GuardianCancelled24H;

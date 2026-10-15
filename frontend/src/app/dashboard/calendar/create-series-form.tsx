@@ -6,6 +6,7 @@ import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/
 import { findRecurringSlots, type SuggestedSlot } from "@/lib/smart-scheduling";
 import { DAY_NAMES_TR, useCalendar, useCreateLessonSeries, useTeacherAvailability } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
+import { useSchedulingRules } from "@/lib/instance";
 
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -55,7 +56,8 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
   // Takvim henüz yüklenmemişken boş ders listesiyle öneri üretmek, dolu saatleri boş gibi
   // gösterirdi; tarama bitene kadar öneri listesi boş kalır.
   const scanning = availabilityLoading || lessonsLoading;
-  const suggestions = enrollment && !scanning ? findRecurringSlots({ effectiveFrom, durationMinutes, teacherId: enrollment.teacherId, studentId, availability: availability ?? [], lessons: lessons ?? [] }) : [];
+  const schedulingRules = useSchedulingRules();
+  const suggestions = enrollment && !scanning ? findRecurringSlots({ effectiveFrom, durationMinutes, teacherId: enrollment.teacherId, studentId, availability: availability ?? [], lessons: lessons ?? [], rules: schedulingRules }) : [];
   const manualMode = isTeacher || showManual;
 
   async function handleSubmit(event: FormEvent) {

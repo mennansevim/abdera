@@ -8,6 +8,7 @@ using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Modules.Scheduling.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
+using Abdera.Api.Modules.Instance.Domain;
 
 namespace Abdera.Api.Modules.Billing.Features;
 
@@ -135,11 +136,12 @@ public static class MakeupCredits
             lesson.StudentId == credit.StudentId &&
             lesson.StartAt >= weekStartAt && lesson.StartAt < weekEndAt &&
             lesson.Status != LessonStatus.Cancelled && lesson.Status != LessonStatus.Rescheduled);
-        if (weeklyLessonCount >= StudentWeeklyLessonPolicy.MaximumLessons)
+        var maximumLessons = (await SchoolPolicy.GetCurrentAsync(db)).MaxWeeklyLessons;
+        if (weeklyLessonCount >= maximumLessons)
         {
             throw new ValidationFailedException(new Dictionary<string, string[]>
             {
-                ["startAt"] = [$"Öğrencinin bu haftada zaten {StudentWeeklyLessonPolicy.MaximumLessons} dersi var. Başka bir hafta seçin."],
+                ["startAt"] = [$"Öğrencinin bu haftada zaten {maximumLessons} dersi var. Başka bir hafta seçin."],
             });
         }
 
