@@ -8,6 +8,8 @@
 #
 # Komutlar:
 #   create <slug>                    .env stdin'den (0600); dizin, api.env, edge ağı
+#   reconfigure <slug>               yeni .env stdin'den (modül/sır değişikliği); imajlar ve kısaltma
+#                                    değişemez (sürüm değişikliği upgrade ile), sonra yeniden başlat
 #   pull <slug>                      .env'deki imajları çek
 #   up <slug> | down <slug>          başlat / durdur (veri kalır)
 #   upgrade <slug> <api-ref> <web-ref>  önce döküm, yeni imaj, sağlık; olmazsa eski imaja dön
@@ -15,12 +17,14 @@
 #   route add <slug> <domain>        Caddy site bloğu (sunucu kilidi + validate + atomik)
 #   route remove <slug>
 #   suspend <slug> | resume <slug>   askı: önce son yedek (saklama kuralı dışı), sonra askı sayfası
+#   provision <slug>                 kurulum isteği (JSON) stdin'den; okulun iç ağından /api/instance/provision
 #   backup-now <slug>                uygulamanın yedeğini tetikle
 #   dump <slug>                      uygulamadan bağımsız şifreli döküm (+R2 suspended/ öneki)
 #   restore <slug> <döküm> [--drill] dökümden geri yükle; --drill: dış bağlantılar kapalı prova
 #   destroy <slug>                   1. aşama: durdur, 30 gün bekleme (ajan zorlar, §16.9)
 #   undestroy <slug>                 bekleyen silmeyi geri al
-#   purge <slug>                     2. aşama: yalnızca 30 gün dolduysa kalıcı sil
+#   purge <slug>                     2. aşama: yalnızca 30 gün dolduysa kalıcı sil. Kurulumu hiç
+#                                    tamamlanmamış (verisi olmayan) okul beklemeden silinebilir.
 #   status <slug> | host-info | version
 #
 # --op <id>: platformun işlem kimliği. Aynı id ile tekrar çağrılırsa komut yeniden çalışmaz,
@@ -200,6 +204,29 @@ cmd_create() {
   log "oluşturuldu: $slug"
 }
 
+cmd_reconfigure() {
+  local slug="$1" dir key
+  dir="$(school_dir "$slug")"
+  umask 077
+  cat > "$dir/.env.new"
+  [ -s "$dir/.env.new" ] || { rm -f "$dir/.env.new"; die 2 ".env boş"; }
+  # Sürüm ve kimlik bu yoldan değişmez: imaj değişikliği döküm + geri dönüş içeren upgrade'dedir.
+  for key in INSTANCE_SLUG ABDERA_API_IMAGE ABDERA_WEB_IMAGE POSTGRES_PASSWORD; do
+    [ "$(env_value "$dir/.env.new" "$key")" = "$(env_value "$dir/.env" "$key")" ] \
+      || { rm -f "$dir/.env.new"; die 2 "$key reconfigure ile değiştirilemez"; }
+  done
+  cp "$dir/.env" "$dir/.env.previous"
+  mv -f "$dir/.env.new" "$dir/.env"
+  write_api_env "$dir"
+  compose "$slug" up -d --remove-orphans
+  if ! wait_healthy "$slug"; then
+    mv -f "$dir/.env.previous" "$dir/.env"
+    write_api_env "$dir"
+    compose "$slug" up -d --remove-orphans
+    die 7 "yeni yapılandırmayla sağlıksız; önceki yapılandırmaya dönüldü"
+  fi
+}
+
 cmd_pull() { compose "$1" pull --quiet; }
 cmd_up() { compose "$1" up -d --remove-orphans; wait_healthy "$1" || die 7 "sağlık kontrolü geçmedi: $1"; }
 cmd_down() { compose "$1" stop; }
@@ -255,6 +282,23 @@ cmd_route_add() {
 cmd_route_remove() { caddy_apply "$1" ""; }
 
 telemetry_token() { env_value "$(school_dir "$1")/.env" Telemetry__Token; }
+
+# Platformun kurulum isteği (§6 adım 9). Jeton .env'den okunur, komut satırına yazılmaz; istek
+# okulun iç ağından gider (henüz DNS/Caddy yokken de çalışır). Başarıda .provisioned işareti yazılır:
+# bu işaret varsa okul artık veri taşır ve silme 30 günlük beklemeye tabidir.
+cmd_provision() {
+  local slug="$1" dir body
+  dir="$(school_dir "$slug")"
+  # Jeton API konteynerinin kendi ortamındadır (api.env); burada yalnızca var olduğu denetlenir.
+  [ -n "$(env_value "$dir/.env" Provisioning__Token)" ] || die 2 "Provisioning__Token yok"
+  body="$(head -c 1048576)"
+  [ -n "$body" ] || die 2 "kurulum isteği boş"
+  printf '%s' "$body" | compose "$slug" exec -T api sh -c \
+    'cat > /tmp/provision.json && wget -q -O- --header="Content-Type: application/json" --header="Authorization: Bearer $Provisioning__Token" --post-file=/tmp/provision.json http://localhost:8080/api/instance/provision; code=$?; rm -f /tmp/provision.json; exit $code' \
+    || die 11 "okul kurulum isteğini reddetti"
+  echo
+  touch "$dir/.provisioned"
+}
 
 cmd_backup_now() {
   local slug="$1"
@@ -375,7 +419,8 @@ cmd_purge() { # 2. aşama: süreyi platform değil ajan denetler
   dir="$(school_dir "$slug")"
   [ -f "$dir/.pending-destroy" ] || die 10 "önce destroy gerekli"
   since="$(cat "$dir/.pending-destroy")"; now="$(date -u +%s)"
-  [ $(( (now - since) / 86400 )) -ge "$DESTROY_GRACE_DAYS" ] \
+  # Kurulumu tamamlanmamış okulda korunacak veri yok: yarıda kalan kurulumun temizliği beklemez.
+  [ ! -f "$dir/.provisioned" ] || [ $(( (now - since) / 86400 )) -ge "$DESTROY_GRACE_DAYS" ] \
     || die 10 "bekleme süresi dolmadı ($DESTROY_GRACE_DAYS gün): $(( (now - since) / 86400 )) gün geçti"
   compose "$slug" down --volumes --remove-orphans
   docker network disconnect "abdera-edge-$slug" "$CADDY_CONTAINER" >/dev/null 2>&1 || true
@@ -446,6 +491,7 @@ set +e
   set -e
   case "$COMMAND" in
     create) cmd_create "$SLUG" ;;
+    reconfigure) require_school "$SLUG"; cmd_reconfigure "$SLUG" ;;
     pull) require_school "$SLUG"; cmd_pull "$SLUG" ;;
     up) require_school "$SLUG"; cmd_up "$SLUG" ;;
     down) require_school "$SLUG"; cmd_down "$SLUG" ;;
@@ -455,6 +501,7 @@ set +e
     route-remove) require_school "$SLUG"; cmd_route_remove "$SLUG" ;;
     suspend) require_school "$SLUG"; cmd_suspend "$SLUG" ;;
     resume) require_school "$SLUG"; cmd_resume "$SLUG" ;;
+    provision) require_school "$SLUG"; cmd_provision "$SLUG" ;;
     backup-now) require_school "$SLUG"; cmd_backup_now "$SLUG" ;;
     dump) require_school "$SLUG"; cmd_dump "$SLUG" ;;
     restore) require_school "$SLUG"; [ $# -eq 2 ] || die 2 "restore <slug> <döküm> [--drill]"; cmd_restore "$SLUG" "$2" "$DRILL" ;;

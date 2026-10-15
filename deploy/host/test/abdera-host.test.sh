@@ -45,6 +45,7 @@ case "$args" in
     fi
     exit 0 ;;
   *"exec -T db pg_dump"*) echo "-- SQL DUMP"; exit 0 ;;
+  *"exec -T api sh -c"*) cat > "$STUB_STATE/provision-body"; [ -f "$STUB_STATE/provision-fails" ] && exit 1; echo '{"alreadyProvisioned":false}'; exit 0 ;;
   *"exec -T db pg_isready"*) exit 0 ;;
   *"exec -T db psql"*) cat > /dev/null; exit 0 ;;
   run*) exit 0 ;;
@@ -77,6 +78,7 @@ ABDERA_API_IMAGE=$API
 ABDERA_WEB_IMAGE=$WEB
 POSTGRES_PASSWORD=pg-secret
 Telemetry__Token=telemetry-0123456789abcdef0123456789abcdef
+Provisioning__Token=provisioning-0123456789abcdef0123456789ab
 Backup__EncryptionKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 WhatsApp__Provider=Cloud
 Email__Provider=Smtp
@@ -104,6 +106,15 @@ assert "api.env R2 anahtarı taşımaz" bash -c "! grep -q '^R2_' '$ABDERA_ROOT/
 assert "edge ağı oluşturuldu" grep -q "network create abdera-edge-deniz" "$STUB_LOG"
 check "aynı .env ile tekrar create değişiklik yapmaz" 0 bash -c "$(declare -f env_for); API='$API'; WEB='$WEB'; env_for deniz | '$AGENT' create deniz"
 check "farklı .env ile create reddedilir" 6 bash -c "$(declare -f env_for); API='$API'; WEB='$WEB'; { env_for deniz; echo X=1; } | '$AGENT' create deniz"
+
+# --- reconfigure ---
+check "imaj reconfigure ile değişmez" 2 bash -c "$(declare -f env_for); API='$API2'; WEB='$WEB'; env_for deniz | '$AGENT' reconfigure deniz"
+check "modül değişikliği uygulanır" 0 bash -c "$(declare -f env_for); API='$API'; WEB='$WEB'; { env_for deniz; echo Modules__Enabled=none; } | '$AGENT' reconfigure deniz"
+assert "yeni modül değeri api.env'de" grep -qx "Modules__Enabled=none" "$ABDERA_ROOT/deniz/api.env"
+echo 2 > "$STUB_STATE/unhealthy"
+check "sağlıksız yapılandırma geri alınır" 7 bash -c "$(declare -f env_for); API='$API'; WEB='$WEB'; { env_for deniz; echo Modules__Enabled=progress; } | '$AGENT' reconfigure deniz"
+assert "önceki yapılandırmaya dönüldü" grep -qx "Modules__Enabled=none" "$ABDERA_ROOT/deniz/.env"
+rm -f "$STUB_STATE/unhealthy"
 
 # --- route (Caddy) ---
 check "geçersiz alan adı" 2 "$AGENT" route add deniz "deniz.abdera.app;rm"
@@ -156,6 +167,13 @@ assert "provada alarm kapalı" grep -qx "Alerts__WebhookUrl=" "$ABDERA_ROOT/deni
 assert "provada R2 anahtarı yok" bash -c "! grep -q '^R2_ACCESS_KEY_ID=' '$ABDERA_ROOT/deniz-drill/.env'"
 assert "prova Caddy'ye eklenmedi" [ ! -f "$ABDERA_ROOT/caddy/sites/deniz-drill.caddy" ]
 
+# --- kurulum isteği ---
+check "boş kurulum isteği reddedilir" 2 bash -c "printf '' | '$AGENT' provision deniz"
+check "kurulum isteği iletilir" 0 bash -c "printf '{\"admin\":{}}' | '$AGENT' provision deniz"
+assert "istek gövdesi iç ağa gitti" grep -q '"admin"' "$STUB_STATE/provision-body"
+assert "jeton komut satırında değil" bash -c "! grep -q 'provisioning-0123' '$STUB_LOG'"
+assert "kurulum işareti yazıldı" [ -f "$ABDERA_ROOT/deniz/.provisioned" ]
+
 # --- iki aşamalı silme ---
 check "silme 1. aşama" 0 "$AGENT" destroy deniz
 assert "okul dizini duruyor" [ -f "$ABDERA_ROOT/deniz/.env" ]
@@ -167,6 +185,15 @@ check "tekrar silme 1. aşama" 0 "$AGENT" destroy deniz
 check "süre dolunca kalıcı silme" 0 env ABDERA_DESTROY_GRACE_DAYS=0 "$AGENT" purge deniz
 assert "okul dizini silindi" [ ! -d "$ABDERA_ROOT/deniz" ]
 check "destroy olmadan purge reddedilir" 10 "$AGENT" purge deniz-drill
+
+# Kurulumu hiç tamamlanmamış okul (veri yok) beklemeden temizlenebilir; yarıda kalan kurulumun geri alınması.
+check "yarım okul oluşturulur" 0 bash -c "$(declare -f env_for); API='$API'; WEB='$WEB'; env_for yarim | '$AGENT' create yarim"
+touch "$STUB_STATE/provision-fails"
+check "okul kurulumu reddederse hata" 11 bash -c "printf '{}' | '$AGENT' provision yarim"
+rm -f "$STUB_STATE/provision-fails"
+check "yarım okul silme 1. aşama" 0 "$AGENT" destroy yarim
+check "yarım okul beklemeden silinir" 0 "$AGENT" purge yarim
+assert "yarım okul dizini silindi" [ ! -d "$ABDERA_ROOT/yarim" ]
 
 echo
 echo "geçen: $PASS, kalan: $FAIL"
