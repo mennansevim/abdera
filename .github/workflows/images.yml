@@ -75,6 +75,36 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
 
+      # §16.4: geri dönüş, migration'ları uygulanmış şema üzerinde bir önceki imajın çalışmasına dayanır.
+      # Yeni imaj boş bir veritabanına migration'ları uygular; ardından önceki sürümün imajı AYNI
+      # veritabanında açılıp /health'e cevap vermeli. Vermezse sürüm kaydı üretilmez (geri dönüşü bozan
+      # bir migration - örn. kolon silme - aynı sürümde yapılmış demektir).
+      - name: Geri dönüş uyumluluğu (yeni şemada önceki imaj)
+        run: |
+          OWNER="${{ steps.version.outputs.owner }}"
+          PREVIOUS="$(git ls-remote --tags origin 'refs/tags/v*' | sed 's|.*refs/tags/v||' | grep -E '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}\.[0-9]+$' \
+            | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | grep -vx "${{ steps.version.outputs.version }}" | tail -n1 || true)"
+          if [ -z "$PREVIOUS" ]; then echo "Önceki sürüm yok; atlandı."; exit 0; fi
+          docker network create compat
+          docker run -d --name compat-db --network compat -e POSTGRES_DB=abdera -e POSTGRES_USER=abdera -e POSTGRES_PASSWORD=compat postgres:16-alpine
+          for i in $(seq 1 30); do docker exec compat-db pg_isready -U abdera -d abdera && break; sleep 2; done
+          run_api() {
+            docker run -d --name "$1" --network compat -e ASPNETCORE_ENVIRONMENT=Development \
+              -e "ConnectionStrings__Default=Host=compat-db;Database=abdera;Username=abdera;Password=compat" \
+              -e Bootstrap__AdminEmail=compat@abdera.test -e Bootstrap__AdminPassword=Compat-Parola-2026 "$2"
+            for i in $(seq 1 40); do
+              docker exec "$1" wget -q --spider http://localhost:8080/health && return 0
+              sleep 3
+            done
+            docker logs "$1" | tail -50
+            return 1
+          }
+          run_api compat-new "ghcr.io/$OWNER/abdera-api@${{ steps.api.outputs.digest }}"
+          docker rm -f compat-new
+          docker pull "ghcr.io/$OWNER/abdera-api:$PREVIOUS"
+          run_api compat-old "ghcr.io/$OWNER/abdera-api:$PREVIOUS"
+          echo "OK: $PREVIOUS imajı ${{ steps.version.outputs.version }} şemasında açıldı."
+
       - name: Sürüm kaydı
         run: |
           OWNER="${{ steps.version.outputs.owner }}"
