@@ -46,7 +46,6 @@ public class MonthlyReceivableGenerator(
             var db = scope.ServiceProvider.GetRequiredService<AbderaDbContext>();
             var clock = scope.ServiceProvider.GetRequiredService<IClock>();
 
-            // Serverless ortamdaki cron ucu ile aynı kod yolu (BillingDailyJob).
             var result = await BillingDailyJob.OpenCurrentPeriodAsync(db, clock);
             var period = result.Period;
 

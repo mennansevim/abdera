@@ -7,12 +7,8 @@ using Npgsql;
 namespace Abdera.Api.Modules.Billing.Infrastructure;
 
 // Aidatın günlük bakımı: bu ayın aidatlarını açmak (MonthlyReceivableGenerator) ve vadesi
-// geçenleri Overdue'ya çevirmek (OverdueReceivableSweeper). Kalıcı bir container'da bunları
-// BackgroundService'ler yapar; Vercel gibi istek geldikçe açılıp kapanan bir ortamda
-// (Runtime:Serverless=true) hosted service'ler hiç kayıt edilmez ve bu iş HİÇ çalışmıyordu -
-// canlıda aktif kurs kaydı olan öğrenciler "Aidat açılmadı" görünüyordu (gerçek bir prod
-// hatası). Aynı mantık burada tek yerde durur; hem arka plan servisleri hem de günlük cron ucu
-// (DailyBillingCron) ve aidat ekranının yedek güvencesi buradan çağırır.
+// geçenleri Overdue'ya çevirmek (OverdueReceivableSweeper). Mantık tek yerde durur; iki arka
+// plan servisi de buradan çağırır, testler de doğrudan bunu çalıştırır.
 public static class BillingDailyJob
 {
     public record Result(string Period, int CreatedCount, int MissingTariffCount, int MarkedOverdueCount);

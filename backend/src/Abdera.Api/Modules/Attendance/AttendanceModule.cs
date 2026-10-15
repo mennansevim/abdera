@@ -5,12 +5,9 @@ namespace Abdera.Api.Modules.Attendance;
 
 public static class AttendanceModule
 {
-    public static void AddAttendanceModule(this IServiceCollection services, bool enableHostedServices = true)
+    public static void AddAttendanceModule(this IServiceCollection services)
     {
-        if (enableHostedServices)
-        {
-            services.AddHostedService<AttendanceReminderWorker>();
-        }
+        services.AddHostedService<AttendanceReminderWorker>();
     }
 
     public static void MapAttendanceModule(this WebApplication app)

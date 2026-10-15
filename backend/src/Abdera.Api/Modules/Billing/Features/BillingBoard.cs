@@ -28,13 +28,8 @@ public static class BillingBoard
         app.MapGet("/api/billing/board", HandleAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
-    private static async Task<IResult> HandleAsync(int? year, AbderaDbContext db, IClock clock, IConfiguration configuration)
+    private static async Task<IResult> HandleAsync(int? year, AbderaDbContext db, IClock clock)
     {
-        // StudentBilling.ListDuesAsync ile aynı yedek güvence: serverless yayında bu ayın
-        // eksik aidatları ekran açılırken açılır.
-        if (configuration.GetValue("Runtime:Serverless", false))
-            await BillingDailyJob.OpenCurrentPeriodAsync(db, clock);
-
         var today = clock.ToSchoolLocal(clock.UtcNow);
         var y = year ?? today.Year;
         if (y is < 2000 or > 2100)

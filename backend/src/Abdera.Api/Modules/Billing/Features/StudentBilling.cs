@@ -1,5 +1,4 @@
 using Abdera.Api.Modules.Billing.Domain;
-using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -53,16 +52,8 @@ public static class StudentBilling
         return Results.Ok(result);
     }
 
-    private static async Task<IResult> ListDuesAsync(AbderaDbContext db, IClock clock, IConfiguration configuration)
+    private static async Task<IResult> ListDuesAsync(AbderaDbContext db)
     {
-        // Yedek güvence: serverless yayında arka plan servisi yok ve günlük cron bir gün
-        // aksayabilir (yapılandırılmamış CRON_SECRET, Vercel gecikmesi). Yönetici aidat ekranını
-        // açtığında bu ayın eksik aidatları burada açılır - ekran "Aidat açılmadı" göstermez.
-        // Kalıcı container'da MonthlyReceivableGenerator bu işi zaten yaptığı için yalnızca
-        // serverless'ta çalışır (idempotent; UNIQUE yarışı BillingDailyJob içinde ele alınır).
-        if (configuration.GetValue("Runtime:Serverless", false))
-            await BillingDailyJob.OpenCurrentPeriodAsync(db, clock);
-
         var receivables = await db.Receivables.OrderByDescending(receivable => receivable.DueDate).ToListAsync();
         var enrollmentIds = receivables.Select(receivable => receivable.EnrollmentId).Distinct().ToList();
         var enrollments = await db.Enrollments.Where(enrollment => enrollmentIds.Contains(enrollment.Id)).ToDictionaryAsync(enrollment => enrollment.Id);

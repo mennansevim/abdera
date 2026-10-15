@@ -2,7 +2,7 @@
 
 Durum: **Uygulandı (2026-09-29)**: `panel.abderasanat.com`, veri taşındı. Yedek (R2), e-posta, WhatsApp ve otomatik deploy açık iş (§ Genel sıra, `docs/11-progress-log.md`). Abdera'yı tek bir Hetzner Cloud sunucusunda, repodaki
 hazır `docker compose --profile prod` kurulumuyla (db + api + web + Caddy) yayına alır ve bugünkü
-Vercel + Supabase yayınından veriyi taşır. Railway alternatifi: `docs/18-railway-migration.md`.
+Vercel + Supabase yayınından veriyi taşır. Railway alternatifi değerlendirilip seçilmedi (`docs/10-decisions.md` P1).
 
 Uygulama kodunda değişiklik gerekmez. Altyapı dosyaları (deploy betiği, deploy workflow'u,
 `backup-gw` servisi) tek bir PR ile eklenir (§13.2, §7.2). Tüm komutlar sırayla,
@@ -161,7 +161,6 @@ POSTGRES_HOST=db
 Auth__KeysDirectory=/app/keys          # compose kalıcı abdera_dpkeys volume'üne bağlar
 Auth__PersistKeysToDatabase=false
 Auth__DevLogin__Enabled=false
-Runtime__Serverless=false
 Demo__Enabled=false
 Database__AutoMigrate=true
 

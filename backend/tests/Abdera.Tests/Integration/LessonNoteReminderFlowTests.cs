@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Attendance.Features;
@@ -10,9 +9,9 @@ using Abdera.Api.Modules.People.Features;
 using Abdera.Api.Modules.Progress.Features;
 using Abdera.Api.Modules.Progress.Infrastructure;
 using Abdera.Api.Modules.Scheduling.Features;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Abdera.Api.Shared;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -23,8 +22,6 @@ namespace Abdera.Tests.Integration;
 // not yazılınca hatırlatma kapanır.
 public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFactory>
 {
-    private const string CronPath = "/api/internal/cron/lesson-note-reminders";
-    private const string Secret = "test-cron-secret";
     private readonly AbderaWebApplicationFactory _factory;
 
     public LessonNoteReminderFlowTests(AbderaWebApplicationFactory factory)
@@ -32,9 +29,15 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
         _factory = factory;
     }
 
-    private WebApplicationFactory<Program> WithCronSecret() =>
-        _factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
-            config.AddInMemoryCollection(new Dictionary<string, string?> { ["CRON_SECRET"] = Secret })));
+    // LessonNoteReminderWorker'ın her turda çağırdığı işin aynısı (worker 3 saatte bir çalışır).
+    private async Task RunReminderTurnAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var services = scope.ServiceProvider;
+        await LessonNoteReminderJob.RunAsync(
+            services.GetRequiredService<AbderaDbContext>(), services.GetRequiredService<IClock>(),
+            services.GetRequiredService<IStaffNotifier>());
+    }
 
     private record SeededLessons(Guid TeacherId, string TeacherEmail, string TeacherPassword, Guid PresentLessonId, Guid AbsentLessonId);
 
@@ -100,12 +103,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
         // Liste öğretmenin kendi çalışma listesi - yöneticide karşılığı yok.
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.GetAsync("/api/me/pending-lesson-notes")).StatusCode);
 
-        using var cronFactory = WithCronSecret();
-        using var cron = cronFactory.CreateClient();
-        Assert.Equal(HttpStatusCode.Unauthorized, (await cron.GetAsync(CronPath)).StatusCode);
-        cron.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Secret);
-
-        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        await RunReminderTurnAsync();
         var reminder = await SingleReminderAsync(teacher);
         Assert.Null(reminder.ReadAt);
         Assert.Equal("1 dersin yorumu bekliyor", reminder.Title);
@@ -113,7 +111,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
 
         // Aynı gün ikinci tur: yeni satır açılmaz, okunmuş hatırlatma tekrar açılmaz.
         Assert.Equal(HttpStatusCode.OK, (await teacher.PostAsync($"/api/me/notifications/{reminder.Id}/read", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        await RunReminderTurnAsync();
         var sameDay = await SingleReminderAsync(teacher);
         Assert.Equal(reminder.Id, sameDay.Id);
         Assert.NotNull(sameDay.ReadAt);
@@ -126,7 +124,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
                 .SetProperty(n => n.UpdatedAt, DateTimeOffset.UtcNow.AddDays(-1))
                 .SetProperty(n => n.CreatedAt, DateTimeOffset.UtcNow.AddDays(-1)));
         }
-        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        await RunReminderTurnAsync();
         var nextDay = await SingleReminderAsync(teacher);
         Assert.Equal(reminder.Id, nextDay.Id);
         Assert.NotNull(nextDay.ReadAt);
@@ -137,7 +135,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
             await db.StaffNotifications.Where(n => n.Id == reminder.Id).ExecuteUpdateAsync(set => set
                 .SetProperty(n => n.CreatedAt, DateTimeOffset.UtcNow.AddDays(-LessonNoteReminderJob.ResurfaceEveryDays)));
         }
-        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        await RunReminderTurnAsync();
         var threeDaysLater = await SingleReminderAsync(teacher);
         Assert.Equal(reminder.Id, threeDaysLater.Id);
         Assert.Null(threeDaysLater.ReadAt);
@@ -155,7 +153,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
             await db.StaffNotifications.Where(n => n.Id == reminder.Id).ExecuteUpdateAsync(set => set
                 .SetProperty(n => n.CreatedAt, DateTimeOffset.UtcNow.AddDays(-LessonNoteReminderJob.ResurfaceEveryDays)));
         }
-        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        await RunReminderTurnAsync();
         Assert.NotNull((await SingleReminderAsync(teacher)).ReadAt);
     }
 
@@ -175,10 +173,7 @@ public class LessonNoteReminderFlowTests : IClassFixture<AbderaWebApplicationFac
             Assert.Equal(HttpStatusCode.Created, (await teacher.PostAsJsonAsync($"/api/lessons/{lessonId}/attendance",
                 new MarkAttendance.MarkRequest(AttendanceStatus.Present, null))).StatusCode);
 
-        using var cronFactory = WithCronSecret();
-        using var cron = cronFactory.CreateClient();
-        cron.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Secret);
-        Assert.Equal(HttpStatusCode.OK, (await cron.GetAsync(CronPath)).StatusCode);
+        await RunReminderTurnAsync();
         var reminder = await SingleReminderAsync(teacher);
         Assert.Equal("2 dersin yorumu bekliyor", reminder.Title);
         Assert.Contains("Gelişim ekranındaki", reminder.Body);

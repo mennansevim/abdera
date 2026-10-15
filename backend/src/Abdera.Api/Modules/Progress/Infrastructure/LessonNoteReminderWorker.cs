@@ -5,9 +5,7 @@ using Abdera.Api.Shared;
 
 namespace Abdera.Api.Modules.Progress.Infrastructure;
 
-// Kalıcı container kurulumunda (docker compose) yorum hatırlatmasını tazeler; serverless
-// yayında bunun yerine Vercel Cron -> LessonNoteReminderCron çalışır (Runtime:Serverless=true
-// iken bu servis hiç kayıt edilmez). İş idempotent ve "üç günde bir okunmamışa döndür"
+// Yorum hatırlatmasını periyodik olarak tazeler. İş idempotent ve "üç günde bir okunmamışa döndür"
 // sınırını kendisi tuttuğu için sıklık yalnızca bir listenin ne kadar taze kalacağını belirler.
 //
 // OverdueReceivableSweeper'dan farkı: açılışta HEMEN çalışmaz, ilk tur bir aralık sonra.

@@ -75,9 +75,8 @@ static string ResolveConnectionString(IServiceProvider sp)
     var raw = configuration.GetConnectionString("Default")
         ?? throw new InvalidOperationException("ConnectionStrings:Default tanımlı değil - .env dosyanı kontrol et.");
 
-    // Supabase connection details are commonly copied as a postgresql:// URI,
-    // while Npgsql expects keyword/value pairs. Accept both forms so deployment
-    // providers can store the secret without requiring a local-only conversion.
+    // Barındırma sağlayıcıları bağlantıyı çoğu zaman postgresql:// URI olarak verir, Npgsql
+    // ise anahtar=değer biçimi bekler; iki biçim de kabul edilir.
     raw = raw.Trim();
     if (raw.Length >= 2 && ((raw[0] == '"' && raw[^1] == '"') || (raw[0] == '\'' && raw[^1] == '\'')))
     {
@@ -104,14 +103,6 @@ static string ResolveConnectionString(IServiceProvider sp)
     {
         connection = new NpgsqlConnectionStringBuilder(raw);
     }
-
-    // Supabase'in session pooler'ı sınırlı sayıda istemci kabul eder. İstek üzerine
-    // çoğalabilen Vercel container'larının her biri ayrı bir Npgsql havuzu açık tutarsa
-    // bu sınır hızla dolar ve EMAXCONNSESSION oluşur. Serverless yayında bağlantıyı istek
-    // sonunda gerçekten kapat; kalıcı Docker/Raspberry Pi kurulumunda normal havuzu koru.
-    // Vercel tarafındaki transaction-pooler ayarı ayrıca kararlı hale getirildiğinde,
-    // burada küçük bir havuz yeniden açılabilir.
-    connection.Pooling = !configuration.GetValue("Runtime:Serverless", false);
     return connection.ConnectionString;
 }
 
@@ -121,15 +112,13 @@ builder.Services.AddSingleton<IClock, Abdera.Api.Shared.SystemClock>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 // docs/10-decisions.md Karar F reversal - veli OTP girişi için ayrı bir hasher (GuardianAuth.cs).
 builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian>>();
-// Vercel Services gibi istek geldikçe açılıp kapanan ortamlarda BackgroundService'ler
-// güvenilir değildir ve aynı anda birden fazla örnek çalışabilir. Runtime:Serverless=true
-// iken HTTP uçları kayıtlı kalır, yalnızca periyodik işleyiciler devre dışı bırakılır.
-var enableHostedServices = !builder.Configuration.GetValue("Runtime:Serverless", false);
-builder.Services.AddBillingModule(enableHostedServices);
-builder.Services.AddMessagingModule(enableHostedServices);
-builder.Services.AddOpsModule(enableHostedServices);
-builder.Services.AddProgressModule(enableHostedServices);
-builder.Services.AddAttendanceModule(enableHostedServices);
+// Periyodik işler (aidat, bildirim, hatırlatma, yedek) tek, uzun ömürlü container'da
+// BackgroundService olarak çalışır (Hetzner, docs/19-hetzner-runbook.md).
+builder.Services.AddBillingModule();
+builder.Services.AddMessagingModule();
+builder.Services.AddOpsModule();
+builder.Services.AddProgressModule();
+builder.Services.AddAttendanceModule();
 
 // --- Data Protection anahtarları kalıcı bir dizine yazılır ---
 // Aksi halde anahtarlar yalnızca bellekte tutulur ve her container yeniden başlatmasında
@@ -139,8 +128,7 @@ var dataProtection = builder.Services.AddDataProtection()
     .SetApplicationName("Abdera");
 if (builder.Configuration.GetValue("Auth:PersistKeysToDatabase", false))
 {
-    // Serverless örneklerin ortak imzalama anahtarını Supabase/PostgreSQL'de paylaşmasını
-    // sağlar. Böylece ölçekleme veya soğuk başlangıç kullanıcı oturumunu düşürmez.
+    // Birden fazla API örneğinin ortak imzalama anahtarını PostgreSQL'de paylaşmasını sağlar.
     dataProtection.PersistKeysToDbContext<AbderaDbContext>();
 }
 else
@@ -475,11 +463,9 @@ app.UseSerilogRequestLogging();
 // istisnalari handler tarafindan RFC 7807/4xx'e cevrildikten sonra Serilog gercek son
 // status'u gorur. Tersi sira istemci 400 alirken logda sahte 500 + stack trace uretiyordu.
 app.UseExceptionHandler();
-// Serverless'ta Npgsql havuzu kapalı tutuluyor (Supabase session havuzunda istemci
-// sınırını aşmamak için). Bir veli isteği aidat gibi birden fazla EF sorgusu yaptığında
-// her sorgunun ayrı TCP/TLS bağlantısı açması 7 saniyeye kadar çıkıyordu. API isteği
-// boyunca tek bağlantıyı açık tutarak aynı güvenli bağlantı politikasını korurken
-// handshake maliyetini bir kezle sınırlıyoruz.
+// API isteği boyunca tek bağlantı açık tutulur: birden fazla EF sorgusu yapan bir istek
+// (örn. veli aidat ekranı) her sorguda havuza gidip gelmez. Havuzsuz serverless dönemindeki
+// 7 sn'lik TLS el sıkışması için eklendi; havuzlu kurulumda zararsız olduğu için korunuyor.
 app.Use(async (httpContext, next) =>
 {
     if (!httpContext.Request.Path.StartsWithSegments("/api"))
@@ -542,35 +528,9 @@ if (app.Environment.IsDevelopment())
     app.MapLoadTestFixtures();
 }
 
-var runStartupTasksInBackground = builder.Configuration.GetValue("Runtime:Serverless", false);
-if (runStartupTasksInBackground)
-{
-    // Vercel starts routing traffic only after the process binds to PORT. Running
-    // a first-time migration synchronously would exceed its startup timeout, so
-    // let Kestrel bind first and finish the schema/bootstrap immediately after.
-    app.Lifetime.ApplicationStarted.Register(() =>
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await DatabaseMigrator.RunAsync(app);
-                await AdminBootstrapper.RunAsync(app);
-                await GroupDuesRepriceBackfill.RunOnceAsync(app);
-            }
-            catch (Exception exception)
-            {
-                app.Logger.LogError(exception, "Serverless başlangıç görevleri tamamlanamadı.");
-            }
-        });
-    });
-}
-else
-{
-    await DatabaseMigrator.RunAsync(app);
-    await AdminBootstrapper.RunAsync(app);
-    await GroupDuesRepriceBackfill.RunOnceAsync(app);
-}
+await DatabaseMigrator.RunAsync(app);
+await AdminBootstrapper.RunAsync(app);
+await GroupDuesRepriceBackfill.RunOnceAsync(app);
 
 app.Run();
 

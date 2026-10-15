@@ -5,14 +5,11 @@ namespace Abdera.Api.Modules.Messaging;
 
 public static class MessagingModule
 {
-    public static void AddMessagingModule(this IServiceCollection services, bool enableHostedServices = true)
+    public static void AddMessagingModule(this IServiceCollection services)
     {
         services.AddScoped<INotificationScheduler, NotificationScheduler>();
         services.AddScoped<IStaffNotifier, StaffNotifier>();
-        if (enableHostedServices)
-        {
-            services.AddHostedService<NotificationDispatcher>();
-        }
+        services.AddHostedService<NotificationDispatcher>();
     }
 
     public static void MapMessagingModule(this WebApplication app)

@@ -35,7 +35,6 @@ public class OverdueReceivableSweeper(IServiceScopeFactory scopeFactory, ILogger
             var db = scope.ServiceProvider.GetRequiredService<AbderaDbContext>();
             var clock = scope.ServiceProvider.GetRequiredService<IClock>();
 
-            // Serverless ortamdaki cron ucu ile aynı kod yolu (BillingDailyJob).
             var count = await BillingDailyJob.MarkOverdueAsync(db, clock, cancellationToken);
             if (count > 0)
                 logger.LogInformation("{Count} aidat OVERDUE olarak işaretlendi.", count);

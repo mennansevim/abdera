@@ -17,8 +17,7 @@ namespace Abdera.Api.Modules.Progress.Infrastructure;
 // okunmamışa döner; öğretmen eksikleri kapatınca kendiliğinden okundu sayılır. Kullanıcı
 // isteği: "not hatırlatması her gün olmasın, 3 günde bir olabilir".
 //
-// BillingDailyJob kalıbı: kalıcı container'da LessonNoteReminderWorker, serverless yayında
-// (Runtime:Serverless=true) Vercel Cron -> LessonNoteReminderCron aynı RunAsync'i çağırır.
+// LessonNoteReminderWorker periyodik olarak RunAsync'i çağırır.
 // Yalnızca ekran içi bildirim - e-posta gönderilmez (yinelenen bir dürtü için e-posta
 // fazla; ders değişikliği e-postaları M4'teki tek seferlik olaylar için).
 public static class LessonNoteReminderJob

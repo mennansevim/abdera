@@ -1,8 +1,8 @@
 // Backend API ile konuşan tek nokta. Oturum httpOnly cookie ile tutulur (docs/10-decisions.md
 // B4) - bu yüzden her istek `credentials: "include"` ile gider, Authorization header yok.
 
-// Yayında frontend ve API aynı Vercel domain'inde /api üzerinden sunulur; boş taban URL
-// tarayıcının mevcut origin'ini kullanır. Yerel geliştirmede ayrı API portu korunur.
+// Yayında frontend ve API aynı alan adında sunulur (Caddy /api'yi API'ye yönlendirir); boş
+// taban URL tarayıcının mevcut origin'ini kullanır. Yerel geliştirmede ayrı API portu korunur.
 const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 const configuredApiIsLoopback = configuredApiBaseUrl
   ? /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(configuredApiBaseUrl)

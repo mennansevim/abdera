@@ -9,7 +9,7 @@ namespace Abdera.Api.Modules.Ops;
 // gibi yapısal bir DI kararı, Build()'den önce verilmek zorunda (bkz. CLAUDE.md notu).
 public static class OpsModule
 {
-    public static void AddOpsModule(this IServiceCollection services, bool enableHostedServices = true)
+    public static void AddOpsModule(this IServiceCollection services)
     {
         // BackupService hem bir BackgroundService hem de manuel tetikleme uç noktasının
         // enjekte ettiği bir singleton - ikisinin AYNI örneği paylaşması gerekiyor
@@ -19,11 +19,8 @@ public static class OpsModule
         services.AddSingleton<SystemHealthMonitor>();
         // Diğer modüllerin BackgroundService'leri tur sonunda buraya yazar (#31).
         services.AddSingleton<JobHeartbeatRecorder>();
-        if (enableHostedServices)
-        {
-            services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
-            services.AddHostedService(sp => sp.GetRequiredService<SystemHealthMonitor>());
-        }
+        services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
+        services.AddHostedService(sp => sp.GetRequiredService<SystemHealthMonitor>());
     }
 
     public static void MapOpsModule(this WebApplication app)
