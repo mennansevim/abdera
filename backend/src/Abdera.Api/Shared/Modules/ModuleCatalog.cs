@@ -21,6 +21,8 @@ public static class ModuleKeys
     public const string Banking = "banking";
     public const string Profitability = "profitability";
     public const string ParentPortal = "parent-portal";
+    public const string Groups = "groups";
+    public const string Finance = "finance";
 }
 
 public sealed record ModuleDefinition(string Key, string Name, bool IsCore, IReadOnlyList<string> Requires);
@@ -40,7 +42,10 @@ public static class ModuleCatalog
         new(ModuleKeys.Library, "Kütüphane", false, []),
         new(ModuleKeys.Show, "Yıl sonu gösterisi", false, [ModuleKeys.People]),
         new(ModuleKeys.Banking, "Banka entegrasyonu", false, [ModuleKeys.Billing]),
-        new(ModuleKeys.Profitability, "Kârlılık", false, [ModuleKeys.Billing]),
+        new(ModuleKeys.Groups, "Grup dersleri", false, [ModuleKeys.Scheduling, ModuleKeys.Billing]),
+        new(ModuleKeys.Finance, "Gelir-gider ve öğretmen ödemeleri", false, [ModuleKeys.Billing]),
+        // Kârlılık ders başı maliyeti öğretmen ücretinden, sabit gideri gider tablosundan okur.
+        new(ModuleKeys.Profitability, "Kârlılık", false, [ModuleKeys.Finance]),
         new(ModuleKeys.ParentPortal, "Veli portalı", false, [ModuleKeys.People, ModuleKeys.Billing]),
     ];
 

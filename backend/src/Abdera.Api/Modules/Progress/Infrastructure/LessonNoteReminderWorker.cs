@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 
 namespace Abdera.Api.Modules.Progress.Infrastructure;
 
@@ -33,6 +34,14 @@ public class LessonNoteReminderWorker(IServiceScopeFactory scopeFactory, ILogger
             var db = scope.ServiceProvider.GetRequiredService<AbderaDbContext>();
             var clock = scope.ServiceProvider.GetRequiredService<IClock>();
             var notifier = scope.ServiceProvider.GetRequiredService<IStaffNotifier>();
+
+            // Gelişim modülü kapalı okulda "notu bekleyen dersler" listesi (Gelişim ekranı) yok:
+            // hatırlatma da üretilmez. Tur yine başarılı sayılır ki sağlık izleyicisi alarm vermesin.
+            if (!scope.ServiceProvider.GetRequiredService<EnabledModules>().IsEnabled(ModuleKeys.Progress))
+            {
+                await heartbeat.SucceededAsync(BackgroundJobs.LessonNoteReminder, cancellationToken);
+                return;
+            }
 
             var result = await LessonNoteReminderJob.RunAsync(db, clock, notifier, cancellationToken);
             if (result.RemindedCount > 0 || result.ClearedCount > 0)

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Billing.Features;
@@ -14,7 +15,8 @@ public static class Expenses
 
     public static void MapExpenses(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/expenses").RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        var group = app.MapGroup("/api/expenses").RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.Finance);
         group.MapGet("", ListAsync);
         group.MapPost("", CreateAsync);
     }

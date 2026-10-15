@@ -17,6 +17,7 @@ import { meDisplayName, meInitials, useMe } from "@/lib/use-auth";
 import { Panel, StatStrip } from "@/components/ui";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 import { TeacherWeekCard } from "./teacher-week-card";
+import { useModuleQueryEnabled } from "@/lib/instance";
 
 function weekStartFor(date: Date) {
   const result = new Date(date);
@@ -253,7 +254,8 @@ function WeeklySummary({ weekStart, lessons: allLessons, loading, error, retryin
 
 function AdminAttentionRail({ lessons, birthdays, open, onToggle }: { lessons: CalendarLesson[]; birthdays?: UpcomingBirthday[]; open: boolean; onToggle: () => void }) {
   const { data: requests, isLoading } = usePendingChangeRequests();
-  const { data: bankItems, isLoading: bankLoading } = useBankTransactions("NeedsReview", 1, 3);
+  // Banka modülü kapalı okulda sorgu atılmaz; bölüm sayısı sıfır kalır ve gizlenir.
+  const { data: bankItems, isLoading: bankLoading } = useBankTransactions("NeedsReview", 1, 3, { enabled: useModuleQueryEnabled("banking") });
   const approve = useApproveChangeRequest();
   const reject = useRejectChangeRequest();
   const [busyId, setBusyId] = useState<string | null>(null);

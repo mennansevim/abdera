@@ -18,7 +18,9 @@ export type ModuleKey =
   | "show"
   | "banking"
   | "profitability"
-  | "parent-portal";
+  | "parent-portal"
+  | "groups"
+  | "finance";
 
 export interface InstanceModule {
   key: ModuleKey;
@@ -72,6 +74,14 @@ export function isModuleEnabled(config: InstanceConfig | undefined, key: ModuleK
 
 export function useModuleEnabled(key: ModuleKey): boolean {
   const { data } = useInstanceConfig();
+  return isModuleEnabled(data, key);
+}
+
+// Bir sorguyu modüle bağlarken kullanılır: yapılandırma gelene kadar false döner ki kapalı modülün
+// ucuna açılışta bir kez 404 isteği gitmesin. Yapılandırma okunamazsa (hata) açık sayılır.
+export function useModuleQueryEnabled(key: ModuleKey): boolean {
+  const { data, isPending, isError } = useInstanceConfig();
+  if (isPending && !isError) return false;
   return isModuleEnabled(data, key);
 }
 

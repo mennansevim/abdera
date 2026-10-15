@@ -9,7 +9,7 @@ import { NotificationBell, NotificationToasts } from "@/components/notification-
 import { WhatsNewDialog } from "@/components/whats-new";
 import type { Me } from "@/lib/api";
 import { useBankTransactions } from "@/lib/banking";
-import { DEFAULT_PROFILE, isModuleEnabled, useInstanceConfig, type ModuleKey } from "@/lib/instance";
+import { DEFAULT_PROFILE, isModuleEnabled, useInstanceConfig, useModuleQueryEnabled, type ModuleKey } from "@/lib/instance";
 import { useNotifications } from "@/lib/messaging";
 import { CURRENT_VERSION } from "@/lib/releases";
 import { meDisplayName, meInitials, useLogout } from "@/lib/use-auth";
@@ -27,14 +27,14 @@ const CORE_LINKS: NavItem[] = [
   { href: "/dashboard/library", label: "Kütüphane", icon: "note", module: "library", section: "Eğitim" },
   { href: "/dashboard/teachers", label: "Öğretmenler", icon: "teachers", section: "Eğitim" },
   { href: "/dashboard/calendar", label: "Takvim", icon: "calendar", section: "Planlama" },
-  { href: "/dashboard/groups", label: "Grup dersleri", icon: "students", section: "Planlama" },
+  { href: "/dashboard/groups", label: "Grup dersleri", icon: "students", module: "groups", section: "Planlama" },
   { href: "/dashboard/shows", label: "Yıl Sonu Gösterisi", icon: "music", module: "show", section: "Planlama" },
 ];
 
 const ADMIN_LINKS: NavItem[] = [
   { href: "/dashboard/availability", label: "Müsaitlik", icon: "clock", section: "Planlama" },
   { href: "/dashboard/billing", label: "Aidatlar", icon: "wallet", section: "Finans" },
-  { href: "/dashboard/costs", label: "Gelir ve gider", icon: "bank", section: "Finans" },
+  { href: "/dashboard/costs", label: "Gelir ve gider", icon: "bank", module: "finance", section: "Finans" },
   { href: "/dashboard/banking", label: "Banka", icon: "bank", module: "banking", section: "Finans" },
   { href: "/dashboard/notifications", label: "Mesaj Merkezi", icon: "bell", section: "İletişim" },
   { href: "/dashboard/guardians", label: "Veli girişleri", icon: "shield", module: "parent-portal", section: "İletişim" },
@@ -70,6 +70,11 @@ export function navPagesFor(isAdmin: boolean, enabledModule: (key: ModuleKey | u
     .map(({ href, label }) => ({ href, label }));
 }
 
+// Opsiyonel bir modüle bağlı sayfa mı (yapılandırma gelmeden içeriği açılmasın diye).
+function isModulePage(pathname: string): boolean {
+  return [...CORE_LINKS, ...ADMIN_LINKS].some((link) => link.module && pathname.startsWith(link.href));
+}
+
 // Kapalı bir modülün sayfası (menüden düşse de yer imi/eski bağlantıyla açılabilir).
 function disabledModulePage(pathname: string, enabledModule: (key: ModuleKey | undefined) => boolean): NavItem | undefined {
   return [...CORE_LINKS, ...ADMIN_LINKS].find((link) => link.module && pathname.startsWith(link.href) && !enabledModule(link.module));
@@ -90,10 +95,13 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const [sidebarCollapsed, setSidebarCollapsed] = useSessionState("abdera:sidebar-collapsed", false, sidebarStorageOptions);
   const isLibrary = pathname.startsWith("/dashboard/library");
   const isAdmin = me.role === "Admin";
-  const { data: instance } = useInstanceConfig();
+  const { data: instance, isPending: instancePending, isError: instanceError } = useInstanceConfig();
+  // Modül sayfası doğrudan açıldıysa yapılandırma gelene kadar içerik kurulmaz; kurulsaydı kapalı
+  // modülün ucuna bir kez 404 isteği gider, ardından "açık değil" ekranına geçilirdi.
+  const waitingForModules = instancePending && !instanceError && isModulePage(pathname);
   const profile = instance?.profile ?? DEFAULT_PROFILE;
   const enabledModule = (key: ModuleKey | undefined) => isModuleEnabled(instance, key);
-  const alerts = useAdminAlerts(isAdmin, enabledModule("banking"));
+  const alerts = useAdminAlerts(isAdmin, useModuleQueryEnabled("banking"));
   const disabledPage = disabledModulePage(pathname, enabledModule);
   // "Öğretmenler" sayfası öğretmen isim/branş dizini olsa da - kullanıcı isteği üzerine
   // öğretmen oturumundan tamamen kaldırıldı: bir öğretmenin okuldaki diğer öğretmenleri
@@ -231,7 +239,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         <WhatsNewDialog me={me} />
 
         <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-6 lg:pb-8 lg:pt-5 xl:px-8 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
-          {disabledPage ? <DisabledModuleNotice label={disabledPage.label} /> : children}
+          {waitingForModules ? <div className="skeleton h-40 rounded-2xl" aria-busy="true" /> : disabledPage ? <DisabledModuleNotice label={disabledPage.label} /> : children}
         </main>
 
         {/* 320px'lik telefonda (iPhone SE) öğretmenin altı sekmesi ~53px'e düşer: yazı küçülür ki

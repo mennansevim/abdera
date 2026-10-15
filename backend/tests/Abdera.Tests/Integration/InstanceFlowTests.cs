@@ -148,6 +148,36 @@ public class InstanceFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(HttpStatusCode.OK, (await admin.GetAsync("/api/guardians")).StatusCode);
     }
 
+    // Grup dersleri ve gelir-gider kapalı okul: uçlar 404, yeni grup kaydı açılamaz. Kayıt
+    // kontrolü öğrenci aranmadan önce yapılır, bu yüzden olmayan bir öğrenciyle de 400 döner.
+    [Fact]
+    public async Task Disabled_groups_and_finance_close_their_endpoints_and_group_enrollment()
+    {
+        using var coreOnly = _factory.WithWebHostBuilder(builder =>
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [EnabledModules.ConfigurationKey] = ModuleCatalog.NoneSentinel,
+            })));
+        var admin = await LoginAsync(coreOnly, "admin@test.local", "Test1234!");
+
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/lesson-groups")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/expenses")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/recurring-expenses")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/teacher-payouts/week")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.GetAsync("/api/teacher-payouts/group-month?period=2026-10")).StatusCode);
+
+        var unknownStudent = Guid.NewGuid();
+        var groupEnrollment = new { teacherId = Guid.NewGuid(), instrumentId = Guid.NewGuid(), startedAt = "2026-10-01", courseKind = "Group" };
+        var refused = await admin.PostAsJsonAsync($"/api/students/{unknownStudent}/enrollments", groupEnrollment);
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        Assert.Contains("Grup dersleri bu okulda açık değil", await refused.Content.ReadAsStringAsync());
+
+        // Aynı istek tüm modüller açıkken grup kontrolünü geçer ve öğrenci aramasına düşer.
+        var everything = await LoginAsync(_factory, "admin@test.local", "Test1234!");
+        var passed = await everything.PostAsJsonAsync($"/api/students/{unknownStudent}/enrollments", groupEnrollment);
+        Assert.Equal(HttpStatusCode.NotFound, passed.StatusCode);
+    }
+
     private static MultipartFormDataContent LogoForm(byte[] content, string claimedType)
     {
         var file = new ByteArrayContent(content);

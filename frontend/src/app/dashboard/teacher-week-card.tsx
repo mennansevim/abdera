@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { ApiError } from "@/lib/api";
+import { useModuleEnabled } from "@/lib/instance";
 import { ATTENDANCE_LABELS, useMarkAttendance, type AttendanceStatus } from "@/lib/attendance";
 import { usePendingLessonNotes } from "@/lib/progress";
 import { useMyTeacherWeek, type MyTeacherWeek, type MyWeekLesson } from "@/lib/teacher-payouts";
@@ -14,6 +15,8 @@ import { useMyTeacherWeek, type MyTeacherWeek, type MyWeekLesson } from "@/lib/t
 // öğretmen yanlış ya da eksik yoklamayı buradan düzeltir (kullanıcı isteği: "geldi gelmedi
 // durumunu gösterirken aslında gelmedi ya da mazeretli yapılabilsin").
 export function TeacherWeekCard() {
+  // Ödendi/Ödenmedi satırı gelir-gider modülüne bağlı; ders sayıları her okulda görünür.
+  const financeEnabled = useModuleEnabled("finance");
   const [weekStart, setWeekStart] = useState<string | null>(null);
   const { data: week, isLoading, isError } = useMyTeacherWeek(weekStart);
   const { data: pendingNotes } = usePendingLessonNotes();
@@ -31,8 +34,8 @@ export function TeacherWeekCard() {
       <header className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
         <button type="button" onClick={() => setWeekStart(shiftWeek(week.weekStart, -7))} aria-label="Önceki hafta" className="icon-btn icon-btn-quiet shrink-0"><Icon name="chevron" className="h-4 w-4 rotate-180" /></button>
         <div className="min-w-0 flex-1 text-center">
-          <h2 id="haftalik-ozet-baslik" className="text-sm font-bold">{week.isCurrentWeek ? "Bu hafta" : "Ödeme haftası"} · {rangeLabel(week)}</h2>
-          <p className="text-meta mt-0.5">{payLabel(week)}</p>
+          <h2 id="haftalik-ozet-baslik" className="text-sm font-bold">{week.isCurrentWeek ? "Bu hafta" : financeEnabled ? "Ödeme haftası" : "Hafta"} · {rangeLabel(week)}</h2>
+          {financeEnabled && <p className="text-meta mt-0.5">{payLabel(week)}</p>}
         </div>
         <button type="button" onClick={() => setWeekStart(shiftWeek(week.weekStart, 7))} disabled={week.isCurrentWeek} aria-label="Sonraki hafta" className="icon-btn icon-btn-quiet shrink-0 disabled:opacity-30"><Icon name="chevron" className="h-4 w-4" /></button>
       </header>

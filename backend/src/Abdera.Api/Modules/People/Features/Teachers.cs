@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -116,9 +117,11 @@ public static class Teachers
     }
 
     private static async Task<IResult> CreateStudentAsync(
-        Guid teacherId, CreateStudentRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid teacherId, CreateStudentRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        EnabledModules modules)
     {
         await PeopleAuthorization.EnsureActsAsSelfAsync(teacherId, principal, db);
+        Enrollments.EnsureCourseKindAvailable(request.CourseKind, modules);
 
         var teacher = await db.Teachers.SingleOrDefaultAsync(item => item.Id == teacherId)
             ?? throw new NotFoundException("Öğretmen bulunamadı.");

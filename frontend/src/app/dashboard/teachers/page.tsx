@@ -7,6 +7,7 @@ import { AddButton, AdminGate, EmptyState, FormActions, FormMessage, Modal, Noti
 import { DeleteTeacherDialog } from "@/components/delete-person-dialog";
 import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
 import { ApiError } from "@/lib/api";
+import { useModuleEnabled, useModuleQueryEnabled } from "@/lib/instance";
 import { useMe } from "@/lib/use-auth";
 import {
   useCreateEnrollment,
@@ -52,7 +53,10 @@ function TeachersPageContent() {
   );
   // Ödeme durumu: seçilen Pzt-Cmt haftasının ödemesi (docs/10-decisions.md O1 - ödeme haftası
   // da pazartesi başlar, cumartesi kapanır).
-  const { data: payWeek } = useTeacherPayoutWeek(toIsoDate(weekMonday), { enabled: isAdmin });
+  // Ödeme durumu gelir-gider modülüne bağlı; kapalı okulda sorgu atılmaz, sütun boş kalır.
+  const financeEnabled = useModuleEnabled("finance");
+  const financeQueryEnabled = useModuleQueryEnabled("finance");
+  const { data: payWeek } = useTeacherPayoutWeek(toIsoDate(weekMonday), { enabled: isAdmin && financeQueryEnabled });
   const payRowsByTeacher = useMemo(
     () => new Map((payWeek?.teachers ?? []).map((row) => [row.teacherId, row])),
     [payWeek],
@@ -162,12 +166,12 @@ function TeachersPageContent() {
             onChange={(value) => setStatus(value as "all" | TeacherStatus)}
           />
         </div>
-        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-right">Ödeme</span><span className="text-center">Durum</span><span /></div>}
+        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-right">{financeEnabled ? "Ödeme" : ""}</span><span className="text-center">Durum</span><span /></div>}
         {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
         {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!loading && !isError && teacherRows.length === 0 && <EmptyState icon="teachers" title={hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."} action={hasFilters ? <button type="button" onClick={clearFilters} className="btn btn-quiet text-xs">Filtreleri temizle</button> : undefined} />}
         {!loading && !isError && <ul className="divide-y divide-[var(--line)]">
-          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} payRow={payRowsByTeacher.get(teacher.id) ?? null} weekMonday={weekMonday} isAdmin={isAdmin} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
+          {teacherRows.map(({ teacher, teacherStudents }) => <TeacherRow key={teacher.id} teacher={teacher} instruments={instruments ?? []} students={students ?? []} teacherStudents={teacherStudents} weekRow={weekRowsByTeacher.get(teacher.id) ?? null} payRow={payRowsByTeacher.get(teacher.id) ?? null} weekMonday={weekMonday} isAdmin={isAdmin} financeEnabled={financeEnabled} expanded={expandedTeacherId === teacher.id} onToggle={() => setExpandedTeacherId((current) => current === teacher.id ? null : teacher.id)} />)}
         </ul>}
       </div>
 
@@ -184,7 +188,7 @@ function TeachersPageContent() {
   );
 }
 
-function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, payRow, weekMonday, isAdmin, expanded, onToggle }: { teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; payRow: TeacherPayoutWeekRow | null; weekMonday: Date; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
+function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, payRow, weekMonday, isAdmin, financeEnabled, expanded, onToggle }: { financeEnabled: boolean; teacher: Teacher; instruments: { id: string; name: string }[]; students: Student[]; teacherStudents: TeacherStudentEnrollment[]; weekRow: TeacherBenchmarkRow | null; payRow: TeacherPayoutWeekRow | null; weekMonday: Date; isAdmin: boolean; expanded: boolean; onToggle: () => void }) {
   const router = useRouter();
   const [studentSearch, setStudentSearch] = useState("");
   const [detailTab, setDetailTab] = useState<"students" | "availability">("students");
@@ -235,7 +239,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
         {teacher.status === "Active" && <RowMenuItem icon="plus" onClick={() => { close(); setShowAddForm(true); }}>Öğrenci ekle</RowMenuItem>}
         {/* Ödeme Giderler ekranındaki "Gider ekle > Haftalık" formunda yapılır; buradan o form
             öğretmen ve seçili haftayla açılır (ikinci bir ödeme formu değil). */}
-        {!payRow?.payout && <RowMenuItem icon="wallet" onClick={() => { close(); router.push(`/dashboard/costs?odeme=${teacher.id}&hafta=${toIsoDate(weekMonday)}`); }}>Ödeme yap</RowMenuItem>}
+        {financeEnabled && !payRow?.payout && <RowMenuItem icon="wallet" onClick={() => { close(); router.push(`/dashboard/costs?odeme=${teacher.id}&hafta=${toIsoDate(weekMonday)}`); }}>Ödeme yap</RowMenuItem>}
         <RowMenuItem icon="pencil" onClick={() => { close(); setShowEditForm(true); }}>Bilgileri düzenle</RowMenuItem>
         {teacher.status === "Active"
           ? <RowMenuItem icon="x" onClick={() => { close(); void setTeacherStatus("Inactive"); }}>Pasife al</RowMenuItem>

@@ -5,6 +5,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Billing.Features;
@@ -41,7 +42,8 @@ public static class TeacherGroupPayouts
     public static void MapTeacherGroupPayouts(this IEndpointRouteBuilder app)
     {
         // Maaş verisi yalnızca Admin'e açık (TeacherPayouts ile aynı kural).
-        var group = app.MapGroup("/api/teacher-payouts/group-month").RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        var group = app.MapGroup("/api/teacher-payouts/group-month").RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.Finance).RequireModule(ModuleKeys.Groups);
         group.MapGet("", MonthAsync);
         group.MapPost("", CreateAsync);
     }

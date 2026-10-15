@@ -15,6 +15,7 @@ import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { PendingLessonNotes } from "../pending-lesson-notes";
 import { TermReportsPanel } from "./term-reports-panel";
+import { useModuleQueryEnabled } from "@/lib/instance";
 
 type TimelineFilter = "all" | "pieces" | "homework";
 
@@ -55,6 +56,8 @@ export default function ProgressPage() {
 // öğrenci → güncel ödev/hedef → özet (repertuvar) → ders ders akış. Geniş ekranda özet sağ
 // sütuna geçer.
 function ProgressPageContent() {
+  // Kütüphane önerileri yalnızca kütüphane modülü açık okulda (docs/multi-tenant/ARCHITECTURE.md §5.2).
+  const libraryEnabled = useModuleQueryEnabled("library");
   const { data: me } = useMe();
   const canWrite = me?.role === "Teacher";
   const isAdmin = me?.role === "Admin";
@@ -199,7 +202,7 @@ function ProgressPageContent() {
               onLastWorkedFrom={setLastWorkedFrom}
               onClearFilters={clearFilters}
             />
-            <StudentLibrarySuggestions key={`suggestions-${activeStudent.id}`} studentId={activeStudent.id} />
+            {libraryEnabled && <StudentLibrarySuggestions key={`suggestions-${activeStudent.id}`} studentId={activeStudent.id} />}
           </div>
         </>
       )}

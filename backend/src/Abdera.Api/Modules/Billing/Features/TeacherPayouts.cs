@@ -6,6 +6,7 @@ using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Billing.Features;
@@ -65,12 +66,14 @@ public static class TeacherPayouts
     {
         // Maaş verisi tamamen Admin'e özel (docs/04-permissions.md) - bir öğretmenin
         // başka bir öğretmenin ücretini görmesi söz konusu değil.
-        var group = app.MapGroup("/api/teacher-payouts").RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        var group = app.MapGroup("/api/teacher-payouts").RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.Finance);
         group.MapGet("/week", WeekAsync);
         group.MapPost("", CreateAsync);
         group.MapPut("/rates/{teacherId:guid}", SetRateAsync);
 
-        // Öğretmen yalnızca kendi haftasını görür; uç başka bir öğretmen id'si almaz.
+        // Öğretmen yalnızca kendi haftasını görür; uç başka bir öğretmen id'si almaz. Ders sayıları
+        // çekirdek bilgidir, bu yüzden uç finance modülüne bağlı değil; ödeme durumu modül kapalıyken boş kalır.
         app.MapGet("/api/teacher-payouts/my-week", MyWeekAsync)
             .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }

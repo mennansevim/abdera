@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput, Segmented } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { useModuleEnabled } from "@/lib/instance";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
 import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, useUpdateStudent, type RecentAttendanceWeek, type Student, type StudentStatus } from "@/lib/people";
@@ -313,6 +314,8 @@ function TeacherCreateStudentForm({
   const [birthDate, setBirthDate] = useState("");
   const [instrumentId, setInstrumentId] = useState("");
   const [courseKind, setCourseKind] = useState<"Individual" | "Group">("Individual");
+  // Grup dersleri modülü kapalı okulda yalnızca Birebir kayıt açılır (sunucu da reddeder).
+  const groupsEnabled = useModuleEnabled("groups");
   const [error, setError] = useState<string | null>(null);
 
   const selectedInstrumentId = own.some((instrument) => instrument.id === instrumentId)
@@ -370,7 +373,7 @@ function TeacherCreateStudentForm({
         <label className="form-label">Ders türü
           <select value={courseKind} onChange={(event) => setCourseKind(event.target.value as "Individual" | "Group")} className="field text-sm">
             <option value="Individual">Birebir</option>
-            <option value="Group">Grup</option>
+            {groupsEnabled && <option value="Group">Grup</option>}
           </select>
         </label>
       </div>

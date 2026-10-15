@@ -6,6 +6,7 @@ using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Scheduling.Features;
@@ -37,7 +38,7 @@ public static class LessonGroups
 
     public static void MapLessonGroups(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/lesson-groups");
+        var group = app.MapGroup("/api/lesson-groups").RequireModule(ModuleKeys.Groups);
         // Öğretmen kendi gruplarını görür (sınıf listesi); kurmak/değiştirmek yöneticinin işi.
         group.MapGet("", ListAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);

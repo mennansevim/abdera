@@ -893,10 +893,13 @@ type ExpenseKind = "recurring" | "oneOff" | "weekly" | "groupMonthly";
 const KIND_LABEL: [ExpenseKind, string][] = [["recurring", "Her ay tekrar eden"], ["oneOff", "Tek seferlik"], ["weekly", "Haftalık"], ["groupMonthly", "Aylık grup"]];
 
 function CreateExpenseForm({ initialKind, initialTeacherId, initialWeek, initialDate, initialMonth, initialCategory, onClose }: { initialKind: ExpenseKind; initialTeacherId?: string; initialWeek?: string; initialDate: string | null; initialMonth: string; initialCategory: ExpenseCategory; onClose: () => void }) {
-  const [kind, setKind] = useState<ExpenseKind>(initialKind);
+  // Grup dersi aylık payı yalnızca grup dersleri modülü açık okulda (docs/multi-tenant/ARCHITECTURE.md §5.2).
+  const groupsEnabled = useModuleEnabled("groups");
+  const kinds = KIND_LABEL.filter(([value]) => groupsEnabled || value !== "groupMonthly");
+  const [kind, setKind] = useState<ExpenseKind>(initialKind === "groupMonthly" && !groupsEnabled ? "recurring" : initialKind);
   const tabs = (
-    <div className="grid grid-cols-2 rounded-xl border border-[var(--line)] p-1 sm:grid-cols-4" role="group" aria-label="Gider türü">
-      {KIND_LABEL.map(([value, label]) => (
+    <div className={`grid grid-cols-2 rounded-xl border border-[var(--line)] p-1 ${kinds.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`} role="group" aria-label="Gider türü">
+      {kinds.map(([value, label]) => (
         <button key={value} type="button" onClick={() => setKind(value)} aria-pressed={kind === value} className={`pressable min-h-10 rounded-lg px-2 text-xs font-bold ${kind === value ? "bg-[var(--brand)] text-white" : "text-[var(--muted)]"}`}>{label}</button>
       ))}
     </div>

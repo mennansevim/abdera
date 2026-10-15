@@ -3,6 +3,7 @@ using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.Billing.Features;
@@ -21,7 +22,8 @@ public static class RecurringExpenses
 
     public static void MapRecurringExpenses(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/recurring-expenses").RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        var group = app.MapGroup("/api/recurring-expenses").RequireAuthorization(AuthorizationPolicies.AdminOnly)
+            .RequireModule(ModuleKeys.Finance);
         group.MapGet("", ListAsync);
         group.MapPost("", CreateAsync);
         group.MapPost("/{id:guid}/amounts", ChangeAmountAsync);

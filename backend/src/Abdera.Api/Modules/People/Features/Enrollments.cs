@@ -6,6 +6,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
+using Abdera.Api.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
 
 namespace Abdera.Api.Modules.People.Features;
@@ -53,8 +54,9 @@ public static class Enrollments
             .RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
-    private static async Task<IResult> CreateAsync(Guid studentId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> CreateAsync(Guid studentId, CreateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, EnabledModules modules)
     {
+        EnsureCourseKindAvailable(request.CourseKind, modules);
         if (!await db.Students.AnyAsync(s => s.Id == studentId))
             throw new NotFoundException("Öğrenci bulunamadı.");
 
@@ -211,8 +213,9 @@ public static class Enrollments
 
     private static async Task<IResult> UpdateAsync(
         Guid studentId, Guid enrollmentId, UpdateRequest request, ClaimsPrincipal principal,
-        AbderaDbContext db, IClock clock)
+        AbderaDbContext db, IClock clock, EnabledModules modules)
     {
+        EnsureCourseKindAvailable(request.CourseKind, modules);
         var enrollment = await db.Enrollments
             .SingleOrDefaultAsync(e => e.Id == enrollmentId && e.StudentId == studentId)
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
@@ -276,4 +279,15 @@ public static class Enrollments
     private static EnrollmentResponse ToResponse(Enrollment e) =>
         new(e.Id, e.StudentId, e.TeacherId, e.InstrumentId, e.InstrumentVariant, e.CourseKind,
             e.ManualDiscountPercent, e.ManualDiscountReason, e.Status, e.StartedAt, e.EndedAt, e.EndReason, e.EndNote);
+
+    // Grup dersleri opsiyonel modül (docs/multi-tenant/ARCHITECTURE.md §5.2): kapalı okulda yeni
+    // grup kaydı açılamaz, mevcut kayıt Grup'a çevrilemez. Var olan grup kayıtları olduğu gibi kalır.
+    public static void EnsureCourseKindAvailable(CourseKind? courseKind, EnabledModules modules)
+    {
+        if (courseKind == People.Domain.CourseKind.Group && !modules.IsEnabled(ModuleKeys.Groups))
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["courseKind"] = ["Grup dersleri bu okulda açık değil."],
+            });
+    }
 }

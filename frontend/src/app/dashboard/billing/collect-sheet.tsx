@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { FormMessage, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { useModuleEnabled } from "@/lib/instance";
 import {
   COURSE_KIND_LABEL,
   useBillingBoard,
@@ -381,6 +382,8 @@ function EnrollmentDiscountBlock({
 }) {
   const updateBilling = useUpdateEnrollmentBilling(studentId);
   const [kind, setKind] = useState<CourseKind>(courseKind);
+  // Grup dersleri kapalı okulda kayıt Grup'a çevrilemez; zaten Grup olan kayıt seçeneği görmeye devam eder.
+  const groupsEnabled = useModuleEnabled("groups");
   const [percent, setPercent] = useState<number | "">(manualDiscountPercent ?? "");
   const [reason, setReason] = useState(manualDiscountReason ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -410,7 +413,7 @@ function EnrollmentDiscountBlock({
         <label className="form-label">Ders türü
           <select value={kind} onChange={(event) => { setKind(event.target.value as CourseKind); setSaved(false); }} className="field min-h-10 text-xs">
             <option value="Individual">{COURSE_KIND_LABEL.Individual}</option>
-            <option value="Group">{COURSE_KIND_LABEL.Group}</option>
+            {(groupsEnabled || kind === "Group") && <option value="Group">{COURSE_KIND_LABEL.Group}</option>}
           </select>
         </label>
         <label className="form-label">Özel indirim (%)
