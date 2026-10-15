@@ -35,6 +35,7 @@ services:
       Dns__Cloudflare__ZoneId: ${CLOUDFLARE_ZONE_ID:?}
       Dns__Cloudflare__ApiToken: ${CLOUDFLARE_API_TOKEN:?}
       SchoolClient__Provider: Http
+      Certificates__Provider: Tls
       Backup__R2__AccountId: ${R2_ACCOUNT_ID:?}
       Backup__R2__Bucket: ${R2_BUCKET:-abdera-backups}
       # Okullara dağıtılan anahtar: okuma + yazma, SİLME YOK (§16.9).

@@ -42,3 +42,13 @@ export function alertTone(level: string): "danger" | "warning" | "muted" {
   if (value.includes("warn") || value.includes("degraded")) return "warning";
   return "muted";
 }
+
+// Platformun kendi ürettiği alarm türleri (CertificateWatcher). Okuldan gelen türler olduğu gibi gösterilir.
+const ALERT_KIND_LABEL: Record<string, string> = {
+  tls_expiring: "Sertifika bitiyor",
+  tls_invalid: "Sertifika geçersiz",
+};
+
+export function alertKindLabel(kind: string): string {
+  return ALERT_KIND_LABEL[kind] ?? kind;
+}

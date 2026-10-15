@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Badge, EmptyState, FormMessage, LoadError, PageHeader, Panel, Segmented, Skeleton } from "@/components/ui";
-import { alertTone, useAcknowledgeAlert, useAlerts } from "@/lib/alerts";
+import { alertKindLabel, alertTone, useAcknowledgeAlert, useAlerts } from "@/lib/alerts";
 import { errorMessage } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
@@ -17,7 +17,7 @@ export default function AlertsPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Alarmlar"
-        description="Okulların imzalı olarak bildirdiği sorunlar."
+        description="Okulların imzalı olarak bildirdiği sorunlar ve platformun kendi izlediği sertifika bitişleri."
         actions={<Segmented label="Görünüm" value={view} onChange={setView} options={[{ value: "open", label: "Açık" }, { value: "all", label: "Tümü (son 200)" }]} />}
       />
       {acknowledge.error && <FormMessage tone="error">{errorMessage(acknowledge.error)}</FormMessage>}
@@ -33,7 +33,7 @@ export default function AlertsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-bold">
                       <Link href={`/schools/${alert.schoolId}`} className="font-mono text-[var(--brand-strong)] hover:underline">{alert.slug}</Link>
-                      <span>{alert.kind}</span>
+                      <span>{alertKindLabel(alert.kind)}</span>
                     </p>
                     <p className="text-meta break-words">{alert.detail}</p>
                     <p className="text-[.72rem] text-[var(--muted)]">

@@ -105,6 +105,17 @@ anahtarlar girilmezse WhatsApp kapalı kurulur, sonra Modüller sekmesinden aç�
   e-posta, banka, alarm ve yedek **kapalı** başlar, yayına alınmaz. Doğrulayınca kopyayı elle sil:
   `abdera-host destroy <okul>-drill && abdera-host purge <okul>-drill` (veri almadığı için beklemeden silinir).
 
+## 7a. İzleme ve alarmlar
+
+- **Telemetri:** platform 5 dakikada bir her okulun sağlık/sayı/yedek bilgisini okur; ulaşılamayan okulun kutucuğu kırmızıya döner.
+- **Okul alarmları:** okul kendi sorunlarını (yedek, bildirim, sağlık) imzalı olarak bildirir; Panel → Alarmlar.
+- **Sertifika:** platform 6 saatte bir her okulun alan adına TLS ile bağlanır. Sertifikanın bitmesine 14 günden az
+  kaldıysa "Sertifika bitiyor" (3 günden az: kritik), zincir doğrulanmıyorsa "Sertifika geçersiz" alarmı düşer.
+  Caddy normalde 30 gün kala yeniler; bu alarm yenilemenin durduğu anlamına gelir (DNS kaydı değişti, port 80
+  kapandı, Let's Encrypt sınırı). Okul sunucusunda `docker logs abdera-caddy` ile bak. Aynı sorun için onaylanmamış
+  alarm varken yenisi yazılmaz; onaylarsan ve sorun sürerse bir sonraki turda tekrar düşer.
+  Ayarlar: `Certificates__CheckHours`, `Certificates__WarnDays`.
+
 ## 8. Sunucu çökerse
 
 Platform otomatik bir şey yapmaz (§16.6). Sunucu dönünce okullar kendiliğinden kalkar (`restart: unless-stopped`).

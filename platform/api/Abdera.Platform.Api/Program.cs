@@ -42,21 +42,26 @@ builder.Services.AddScoped<ProvisioningEngine>();
 var agentProvider = builder.Configuration["HostAgent:Provider"] ?? "Fake";
 var dnsProvider = builder.Configuration["Dns:Provider"] ?? "Fake";
 var schoolClientProvider = builder.Configuration["SchoolClient:Provider"] ?? "Fake";
+var certificateProvider = builder.Configuration["Certificates:Provider"] ?? "Fake";
 if (agentProvider == "Ssh") builder.Services.AddSingleton<IHostAgent, SshHostAgent>();
 else builder.Services.AddSingleton<IHostAgent, FakeHostAgent>();
 if (dnsProvider == "Cloudflare") builder.Services.AddHttpClient<IDnsProvider, CloudflareDnsProvider>();
 else builder.Services.AddSingleton<IDnsProvider, FakeDnsProvider>();
 if (schoolClientProvider == "Http") builder.Services.AddHttpClient<ISchoolClient, HttpSchoolClient>(client => client.Timeout = TimeSpan.FromSeconds(15));
 else builder.Services.AddSingleton<ISchoolClient, FakeSchoolClient>();
+if (certificateProvider == "Tls") builder.Services.AddSingleton<ICertificateProbe, TlsCertificateProbe>();
+else builder.Services.AddSingleton<ICertificateProbe, FakeCertificateProbe>();
 
 builder.Services.AddSingleton<ProvisioningWorker>();
 builder.Services.AddSingleton<RolloutWorker>();
 builder.Services.AddSingleton<TelemetryPoller>();
+builder.Services.AddSingleton<CertificateWatcher>();
 if (builder.Configuration.GetValue("Platform:RunWorkers", true))
 {
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ProvisioningWorker>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<RolloutWorker>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<TelemetryPoller>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<CertificateWatcher>());
 }
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
@@ -109,6 +114,7 @@ if (app.Environment.IsProduction())
     if (agentProvider != "Ssh") problems.Add("HostAgent__Provider=Ssh");
     if (dnsProvider != "Cloudflare") problems.Add("Dns__Provider=Cloudflare");
     if (schoolClientProvider != "Http") problems.Add("SchoolClient__Provider=Http");
+    if (certificateProvider != "Tls") problems.Add("Certificates__Provider=Tls");
     if (string.IsNullOrWhiteSpace(app.Configuration["Platform:KeysDirectory"])) problems.Add("Platform__KeysDirectory");
     if (string.IsNullOrWhiteSpace(app.Configuration["Platform:PublicUrl"])) problems.Add("Platform__PublicUrl");
     if (problems.Count > 0) throw new InvalidOperationException($"Platform production yapılandırması eksik: {string.Join(", ", problems)}");

@@ -6,7 +6,7 @@ import { IntegrationFields } from "@/components/integration-fields";
 import { ModulePicker } from "@/components/module-picker";
 import { AuditTable } from "@/components/audit-table";
 import { Badge, ConfirmDialog, CopyField, EmptyState, FormMessage, LoadError, Panel, ProgressBar, Skeleton, StatStrip, type Tone } from "@/components/ui";
-import { alertTone, useAcknowledgeAlert } from "@/lib/alerts";
+import { alertKindLabel, alertTone, useAcknowledgeAlert } from "@/lib/alerts";
 import { errorMessage } from "@/lib/api";
 import { useAudit } from "@/lib/audit";
 import { formatAge, formatBytes, formatDateTime, formatDuration, formatNumber, hoursSince } from "@/lib/format";
@@ -287,7 +287,7 @@ export function AlertsTab({ detail }: { detail: SchoolDetail }) {
           <li key={alert.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
             <Badge tone={alertTone(alert.level)}>{alert.level}</Badge>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">{alert.kind}</p>
+              <p className="text-sm font-bold">{alertKindLabel(alert.kind)}</p>
               <p className="text-meta break-words">{alert.detail}</p>
               <p className="text-[.72rem] text-[var(--muted)]">{formatDateTime(alert.occurredAt)}{alert.acknowledgedAt && ` · onaylandı ${formatDateTime(alert.acknowledgedAt)}`}</p>
             </div>

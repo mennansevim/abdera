@@ -241,3 +241,63 @@ public class TelemetryPoller(IServiceScopeFactory scopes, IConfiguration config,
         await db.SaveChangesAsync(cancellationToken);
     }
 }
+
+// TLS bitiş tarihlerini izler (§3.3). Caddy sertifikayı kendisi yeniler; bu yalnızca güvence: yenileme
+// sessizce durursa (DNS kaydı değişti, Let's Encrypt sınırı) okul kırılmadan alarm düşer. Ulaşılamayan okul
+// burada alarm üretmez - onu TelemetryPoller zaten kırmızıya çevirir. Aynı okul ve türde onaylanmamış
+// alarm varken yenisi yazılmaz; operatör onaylarsa ve sorun sürerse bir sonraki turda yeniden düşer.
+public class CertificateWatcher(IServiceScopeFactory scopes, IConfiguration config, TimeProvider time, ILogger<CertificateWatcher> logger) : BackgroundService
+{
+    public const string ExpiringKind = "tls_expiring";
+    public const string InvalidKind = "tls_invalid";
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(config.GetValue("Certificates:CheckHours", 6)), time);
+        do
+        {
+            try { await CheckAllAsync(stoppingToken); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Sertifika turu başarısız oldu."); }
+        }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    public async Task CheckAllAsync(CancellationToken cancellationToken)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var probe = scope.ServiceProvider.GetRequiredService<ICertificateProbe>();
+        var warnDays = config.GetValue("Certificates:WarnDays", 14);
+        var schools = await db.Schools.Where(s => s.Status == SchoolStatus.Active).ToListAsync(cancellationToken);
+        var open = (await db.Alerts
+                .Where(a => a.AcknowledgedAt == null && (a.Kind == ExpiringKind || a.Kind == InvalidKind))
+                .Select(a => new { a.SchoolId, a.Kind })
+                .ToListAsync(cancellationToken))
+            .Select(a => (a.SchoolId, a.Kind)).ToHashSet();
+
+        foreach (var school in schools)
+        {
+            CertificateInfo info;
+            try { info = await probe.GetAsync(school.PrimaryDomain, cancellationToken); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogInformation("Sertifika okunamadı: {Domain} ({Error})", school.PrimaryDomain, ex.Message);
+                continue;
+            }
+
+            var now = time.GetUtcNow();
+            var daysLeft = (info.NotAfter - now).TotalDays;
+            if (daysLeft < warnDays && !open.Contains((school.Id, ExpiringKind)))
+            {
+                var detail = daysLeft <= 0
+                    ? $"{school.PrimaryDomain} sertifikasının süresi {info.NotAfter:yyyy-MM-dd} tarihinde doldu."
+                    : $"{school.PrimaryDomain} sertifikası {info.NotAfter:yyyy-MM-dd} tarihinde bitiyor ({Math.Floor(daysLeft)} gün). Caddy yenilemesi çalışmıyor olabilir.";
+                db.Alerts.Add(SchoolAlert.Create(school.Id, ExpiringKind, daysLeft < 3 ? "critical" : "warning", detail, now, now));
+            }
+            if (!info.ChainValid && !open.Contains((school.Id, InvalidKind)))
+                db.Alerts.Add(SchoolAlert.Create(school.Id, InvalidKind, "critical",
+                    $"{school.PrimaryDomain} sertifikası doğrulanamıyor (zincir, ad uyuşmazlığı ya da kendinden imzalı).", now, now));
+        }
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
