@@ -33,7 +33,8 @@ public class Rollout
         StartedAt = now,
     };
 
-    public void CompleteWave(DateTimeOffset now) => WaveCompletedAt = now;
+    // İlk tamamlanma anı korunur: dağıtım işçisi her turda çağırır, kanarya bekleme süresi bu andan ölçülür.
+    public void CompleteWave(DateTimeOffset now) => WaveCompletedAt ??= now;
 
     public void NextWave(DateTimeOffset now)
     {

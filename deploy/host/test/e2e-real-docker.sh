@@ -124,6 +124,7 @@ check "prova geri yükleme" "$AGENT" restore e2eokul "$DUMP" --drill
 check "veri prova kopyasına geldi" bash -c "[ \"\$(docker compose -p abdera-e2eokul-drill exec -T db psql -tA -U abdera -d abdera -c 'SELECT count(*) FROM e2e')\" = 3 ]"
 check "provada WhatsApp/e-posta kapalı" bash -c "docker exec \$(docker compose -p abdera-e2eokul-drill ps -q api) env | grep -qx 'WhatsApp__Provider=Disabled' && docker exec \$(docker compose -p abdera-e2eokul-drill ps -q api) env | grep -qx 'Email__Provider=Disabled'"
 check "prova Caddy'de yok" bash -c "! docker exec '$ABDERA_CADDY_CONTAINER' wget -q -O- http://127.0.0.1:2019/config/ | grep -q 'e2eokul-drill'"
+check "prova kopyası silinir (destroy + beklemesiz purge)" bash -c "'$AGENT' destroy e2eokul-drill && '$AGENT' purge e2eokul-drill"
 
 # --- iki aşamalı silme (§16.9) ---
 check "silme 1. aşama" "$AGENT" destroy e2eokul

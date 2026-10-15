@@ -47,7 +47,9 @@ if (agentProvider == "Ssh") builder.Services.AddSingleton<IHostAgent, SshHostAge
 else builder.Services.AddSingleton<IHostAgent, FakeHostAgent>();
 if (dnsProvider == "Cloudflare") builder.Services.AddHttpClient<IDnsProvider, CloudflareDnsProvider>();
 else builder.Services.AddSingleton<IDnsProvider, FakeDnsProvider>();
-if (schoolClientProvider == "Http") builder.Services.AddHttpClient<ISchoolClient, HttpSchoolClient>(client => client.Timeout = TimeSpan.FromSeconds(15));
+if (schoolClientProvider == "Http")
+    builder.Services.AddHttpClient<ISchoolClient, HttpSchoolClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
+        .ConfigurePrimaryHttpMessageHandler(sp => SchoolTls.Handler(sp.GetRequiredService<IConfiguration>()));
 else builder.Services.AddSingleton<ISchoolClient, FakeSchoolClient>();
 if (certificateProvider == "Tls") builder.Services.AddSingleton<ICertificateProbe, TlsCertificateProbe>();
 else builder.Services.AddSingleton<ICertificateProbe, FakeCertificateProbe>();
@@ -115,8 +117,11 @@ if (app.Environment.IsProduction())
     if (dnsProvider != "Cloudflare") problems.Add("Dns__Provider=Cloudflare");
     if (schoolClientProvider != "Http") problems.Add("SchoolClient__Provider=Http");
     if (certificateProvider != "Tls") problems.Add("Certificates__Provider=Tls");
+    if (!string.IsNullOrEmpty(app.Configuration["SchoolClient:HttpsPort"])) problems.Add("SchoolClient__HttpsPort boş olmalı");
+    if (!string.IsNullOrEmpty(app.Configuration["SchoolClient:TrustedRootCaPath"])) problems.Add("SchoolClient__TrustedRootCaPath boş olmalı");
     if (string.IsNullOrWhiteSpace(app.Configuration["Platform:KeysDirectory"])) problems.Add("Platform__KeysDirectory");
-    if (string.IsNullOrWhiteSpace(app.Configuration["Platform:PublicUrl"])) problems.Add("Platform__PublicUrl");
+    if (app.Configuration["Platform:PublicUrl"] is not { } publicUrl || !publicUrl.StartsWith("https://", StringComparison.Ordinal))
+        problems.Add("Platform__PublicUrl (https://)");
     if (problems.Count > 0) throw new InvalidOperationException($"Platform production yapılandırması eksik: {string.Join(", ", problems)}");
 }
 

@@ -48,6 +48,13 @@ case "$args" in
   *"exec -T api sh -c"*) cat > "$STUB_STATE/provision-body"; [ -f "$STUB_STATE/provision-fails" ] && exit 1; echo '{"alreadyProvisioned":false}'; exit 0 ;;
   *"exec -T db pg_isready"*) exit 0 ;;
   *"exec -T db psql"*) cat > /dev/null; exit 0 ;;
+  *" up -d"*)
+    # up-fails-for: bu API imajıyla compose up hata döner (yeni imaj açılmıyor, web bağımlılığı düşer).
+    if [ -f "$STUB_STATE/up-fails-for" ]; then
+      envf="$(echo "$args" | sed -E 's/.*--env-file ([^ ]+).*/\1/')"
+      grep -qxF "ABDERA_API_IMAGE=$(cat "$STUB_STATE/up-fails-for")" "$envf" && exit 1
+    fi
+    exit 0 ;;
   run*) exit 0 ;;
   *) exit 0 ;;
 esac
@@ -136,6 +143,11 @@ check "sağlıksız güncelleme geri alınır" 9 "$AGENT" upgrade deniz "$API2" 
 assert "önceki imaja dönüldü" grep -qxF "ABDERA_API_IMAGE=$API" "$ABDERA_ROOT/deniz/.env"
 assert "güncelleme öncesi döküm alındı" bash -c "ls '$ABDERA_ROOT'/deniz/predeploy/*.sql.gz >/dev/null"
 rm -f "$STUB_STATE/unhealthy"
+# Yerel gerçek Docker provasında bulundu: bozuk imajda compose up'ın kendisi hata dönünce geri dönüş atlanıyordu.
+echo "$API2" > "$STUB_STATE/up-fails-for"
+check "compose up hata dönen güncelleme de geri alınır" 9 "$AGENT" upgrade deniz "$API2" "$WEB2"
+assert "compose up hatasından sonra önceki imaja dönüldü" grep -qxF "ABDERA_API_IMAGE=$API" "$ABDERA_ROOT/deniz/.env"
+rm -f "$STUB_STATE/up-fails-for"
 check "sağlıklı güncelleme" 0 "$AGENT" upgrade deniz "$API2" "$WEB2"
 assert "yeni imaj yazıldı" grep -qxF "ABDERA_API_IMAGE=$API2" "$ABDERA_ROOT/deniz/.env"
 check "geçersiz imajla güncelleme" 2 "$AGENT" upgrade deniz "ghcr.io/x/y:latest" "$WEB2"
@@ -185,6 +197,10 @@ check "tekrar silme 1. aşama" 0 "$AGENT" destroy deniz
 check "süre dolunca kalıcı silme" 0 env ABDERA_DESTROY_GRACE_DAYS=0 "$AGENT" purge deniz
 assert "okul dizini silindi" [ ! -d "$ABDERA_ROOT/deniz" ]
 check "destroy olmadan purge reddedilir" 10 "$AGENT" purge deniz-drill
+# Yerel gerçek Docker provasında bulundu: prova kopyasında dumps/ olmadığı için destroy düşüyordu.
+check "prova kopyası silme 1. aşama" 0 "$AGENT" destroy deniz-drill
+check "veri almamış prova kopyası beklemeden silinir" 0 "$AGENT" purge deniz-drill
+assert "prova dizini silindi" [ ! -d "$ABDERA_ROOT/deniz-drill" ]
 
 # Kurulumu hiç tamamlanmamış okul (veri yok) beklemeden temizlenebilir; yarıda kalan kurulumun geri alınması.
 check "yarım okul oluşturulur" 0 bash -c "$(declare -f env_for); API='$API'; WEB='$WEB'; env_for yarim | '$AGENT' create yarim"

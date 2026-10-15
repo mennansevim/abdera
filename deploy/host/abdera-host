@@ -72,6 +72,13 @@ set_env_value() { # atomik güncelleme
   mv -f "$tmp" "$file"
 }
 
+r2_endpoint() { # R2_ENDPOINT yalnızca yerel test ortamında (yerel S3); boşsa Cloudflare R2
+  local endpoint
+  endpoint="$(env_value "$1/.env" R2_ENDPOINT || true)"
+  echo "${endpoint:-https://$(env_value "$1/.env" R2_ACCOUNT_ID).r2.cloudflarestorage.com}"
+}
+r2_provider() { local provider; provider="$(env_value "$1/.env" R2_PROVIDER || true)"; echo "${provider:-Cloudflare}"; }
+
 write_api_env() { # R2 anahtarları API konteynerine gitmez
   local dir="$1" tmp
   tmp="$(mktemp "$dir/api.env.XXXX")"
@@ -254,8 +261,9 @@ cmd_upgrade() {
   set_env_value "$dir/.env" ABDERA_WEB_IMAGE "$web_ref"
   write_api_env "$dir"
   compose "$slug" pull --quiet
-  compose "$slug" up -d --remove-orphans
-  if wait_healthy "$slug"; then log "güncellendi: $slug"; return 0; fi
+  # Yeni imaj sağlıksızsa compose up'ın kendisi de hata döner (web, api'nin sağlığını bekler); set -e
+  # betiği geri dönüşten önce bitirmesin diye ikisi tek koşulda.
+  if compose "$slug" up -d --remove-orphans && wait_healthy "$slug"; then log "güncellendi: $slug"; return 0; fi
   log "sağlıksız, önceki imaja dönülüyor: $slug"
   cmd_rollback "$slug"
   die 9 "güncelleme geri alındı (şema geri gelmez; migration'lar yalnızca ekleyici olmalı)"
@@ -320,12 +328,14 @@ cmd_dump() {
   [ -s "$file" ] || die 8 "döküm alınamadı"
   if [ -n "$(env_value "$dir/.env" R2_ACCESS_KEY_ID)" ]; then
     # Anahtarlar komut satırına değil ortama verilir (ps çıktısında görünmesin).
+    # ABDERA_DOCKER_RUN_OPTS: yalnızca SELinux'lu yerel test VM'i (label=disable).
+    # shellcheck disable=SC2086
     RCLONE_CONFIG_R2_ACCESS_KEY_ID="$(env_value "$dir/.env" R2_ACCESS_KEY_ID)" \
     RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$(env_value "$dir/.env" R2_SECRET_ACCESS_KEY)" \
-    RCLONE_CONFIG_R2_ENDPOINT="https://$(env_value "$dir/.env" R2_ACCOUNT_ID).r2.cloudflarestorage.com" \
-    docker run --rm -v "$dir/dumps:/dumps:ro" \
+    RCLONE_CONFIG_R2_ENDPOINT="$(r2_endpoint "$dir")" \
+    docker run --rm ${ABDERA_DOCKER_RUN_OPTS:-} -v "$dir/dumps:/dumps:ro" \
       -e RCLONE_CONFIG_R2_ACCESS_KEY_ID -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY -e RCLONE_CONFIG_R2_ENDPOINT \
-      -e RCLONE_CONFIG_R2_TYPE=s3 -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
+      -e RCLONE_CONFIG_R2_TYPE=s3 -e RCLONE_CONFIG_R2_PROVIDER="$(r2_provider "$dir")" -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
       rclone/rclone:1.75.1 copyto "/dumps/$(basename "$file")" "r2:$(env_value "$dir/.env" R2_BUCKET)/$slug/suspended/$(basename "$file")" \
       >/dev/null 2>&1 || log "UYARI: R2 kopyası alınamadı; yerel döküm duruyor: $file"
   fi
@@ -362,7 +372,8 @@ cmd_restore() {
   if [ "$drill" = "1" ]; then
     target="$slug-drill"
     valid_slug "$target" || die 2 "prova adı geçersiz"
-    mkdir -p "$(school_dir "$target")"; chmod 700 "$(school_dir "$target")"
+    # dumps/ ve ops/: prova kopyası da destroy (önce döküm) ve --op kaydıyla silinebilsin.
+    mkdir -p "$(school_dir "$target")/dumps" "$(school_dir "$target")/ops"; chmod 700 "$(school_dir "$target")"
     sed -E -e "s/^INSTANCE_SLUG=.*/INSTANCE_SLUG=$target/" \
       -e '/^(WhatsApp__Provider|Email__Provider|Banking__Provider|Backup__Provider|Alerts__WebhookUrl|Ai__Provider|R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY)=/d' \
       "$dir/.env" > "$(school_dir "$target")/.env"

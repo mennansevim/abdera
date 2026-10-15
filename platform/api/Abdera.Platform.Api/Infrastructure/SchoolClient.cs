@@ -13,13 +13,18 @@ public interface ISchoolClient
     Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken);
 }
 
-public class HttpSchoolClient(HttpClient http) : ISchoolClient
+public class HttpSchoolClient(HttpClient http, IConfiguration config) : ISchoolClient
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    // SchoolClient:HttpsPort yalnızca yerel test ortamı (Caddy 8443'te); production'da reddedilir.
+    private string Base(School school) => config["SchoolClient:HttpsPort"] is { Length: > 0 } port
+        ? $"https://{school.PrimaryDomain}:{port}"
+        : $"https://{school.PrimaryDomain}";
+
     public async Task<SchoolTelemetry> GetTelemetryAsync(School school, string telemetryToken, CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://{school.PrimaryDomain}/api/instance/telemetry");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{Base(school)}/api/instance/telemetry");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", telemetryToken);
         using var response = await http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -28,11 +33,11 @@ public class HttpSchoolClient(HttpClient http) : ISchoolClient
 
     public async Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken)
     {
-        using var health = await http.GetAsync($"https://{school.PrimaryDomain}/health", cancellationToken);
+        using var health = await http.GetAsync($"{Base(school)}/health", cancellationToken);
         if (!health.IsSuccessStatusCode) return $"/health {(int)health.StatusCode}";
-        using var login = await http.GetAsync($"https://{school.PrimaryDomain}/login", cancellationToken);
+        using var login = await http.GetAsync($"{Base(school)}/login", cancellationToken);
         if (!login.IsSuccessStatusCode) return $"/login {(int)login.StatusCode}";
-        var config = await http.GetFromJsonAsync<JsonElement>($"https://{school.PrimaryDomain}/api/instance/config", Json, cancellationToken);
+        var config = await http.GetFromJsonAsync<JsonElement>($"{Base(school)}/api/instance/config", Json, cancellationToken);
         var name = config.GetProperty("profile").GetProperty("name").GetString();
         return name == school.DisplayName ? null : $"okul adı '{name}' görünüyor, '{school.DisplayName}' bekleniyordu";
     }
@@ -50,4 +55,26 @@ public class FakeSchoolClient : ISchoolClient
             12_000_000));
 
     public Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+}
+
+// Yerel test ortamı: okullar Caddy'nin kendi (internal) sertifika otoritesiyle yayında. O kök sertifika
+// verilirse yalnızca ona zincirlenen sertifikalar kabul edilir (doğrulama kapatılmaz). Production'da
+// TrustedRootCaPath boş olmak zorunda (Program.cs), orada sistem güven deposu kullanılır.
+public static class SchoolTls
+{
+    public static HttpMessageHandler Handler(IConfiguration config)
+    {
+        var handler = new SocketsHttpHandler();
+        if (config["SchoolClient:TrustedRootCaPath"] is { Length: > 0 } path)
+        {
+            var root = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadCertificateFromFile(path);
+            handler.SslOptions.CertificateChainPolicy = new System.Security.Cryptography.X509Certificates.X509ChainPolicy
+            {
+                TrustMode = System.Security.Cryptography.X509Certificates.X509ChainTrustMode.CustomRootTrust,
+                CustomTrustStore = { root },
+                RevocationMode = System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck,
+            };
+        }
+        return handler;
+    }
 }

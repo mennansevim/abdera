@@ -138,3 +138,34 @@ hazır: **Var olan okulu taşı** (`POST /api/schools/adopt`). Sıra:
    geçince okul etkin olur.
 7. Eski `/opt/abdera` bir hafta durdurulmuş halde bekletilir, sonra kaldırılır. Eski oturum çerezleri geçersiz
    olur (yeni Data Protection anahtarları): kullanıcılar bir kez yeniden giriş yapar.
+
+## 10. Yerel test ortamı (`deploy/local/`, macOS + Podman)
+
+Gerçek okul imajları, gerçek ajan (SSH ile), gerçek paylaşılan Caddy ve yerel bir S3 ile tüm yapı Mac'te
+denenir. Okullar `https://<kısaltma>.localhost:8443` adresinde açılır. Cloudflare yerine sahte DNS (`*.localhost`
+zaten 127.0.0.1'e çözülür), R2 yerine `rclone serve s3` kullanılır. Hiçbir dış hesap gerekmez.
+
+```bash
+deploy/local/up.sh                              # depo (5050), yerel S3 (9000), Caddy (8088/8443), sunucu konteyneri (2222)
+deploy/local/build-release.sh 2026.10.16.1      # okul imajlarını derleyip yerel depoya iter
+deploy/local/platform.sh                        # platform API'si (8090); veritabanı .out/platform-db.env
+(cd platform/web && npm run dev)                # panel: http://localhost:3100
+python3 deploy/local/seed.py                    # operatörün TOTP'si, sürümler, sunucu kaydı
+python3 deploy/local/seed.py totp               # panele giriş kodu (operatör bilgileri .out/operator.env)
+python3 deploy/local/seed.py school ornek "Örnek Müzik Okulu" progress library   # ya da paneldeki sihirbaz
+deploy/local/seed-demo.sh ornek                 # okula 6 aylık örnek veri
+python3 deploy/local/seed.py reveal a b && deploy/local/check-isolation.sh a b   # oturum izolasyonu
+```
+
+Notlar:
+- Podman VM'inde SELinux açık; bind mount'lar `label=disable` ile bağlanır. VM'e yalnızca `localhost:5050`
+  deposunu şifresiz kabul eden tek bir dosya eklenir: `/etc/containers/registries.conf.d/50-abdera-local-registry.conf`.
+- Platform `http` üzerinde çalıştığı için okullara alarm adresi yazılmaz (okul uygulaması `https` olmayan adresle
+  açılmaz). Alarm imzası platform testlerinde sınanır.
+- Caddy'nin yerel kök sertifikası `.out/caddy-root.crt`. Okulu tarayıcıda açmak için ya uyarıyı kabul et ya da bu
+  sertifikaya güven.
+- `.out/` repoya girmez (anahtarlar, parolalar, sürüm kayıtları).
+
+2026-10-16 yerel provasında bulunup düzeltilenler: kanarya bekleme süresinin hiç dolmaması (dağıtım 0. dalgada
+kalıyordu), bozuk imajda `compose up` hata dönünce ajanın geri dönüşü atlaması (okul kapalı kalıyordu), prova
+kopyasının `destroy` ile silinememesi, başarısız güncellemeden sonra panelin okulu bozuk sürüme geçiyor göstermesi.

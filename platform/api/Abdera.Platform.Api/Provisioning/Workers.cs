@@ -94,6 +94,9 @@ public class ProvisioningWorker(IServiceScopeFactory scopes, IConfiguration conf
                 {
                     run.Fail($"{plan[step].Name}: {outcome.Log}", time.GetUtcNow());
                     if (run.Kind == RunKind.Create) school.MarkFailed(time.GetUtcNow());
+                    // Başarısız güncellemede ajan önceki imaja döner; okul hâlâ eski sürümde. Hedef temizlenir ki panel
+                    // okulu bozuk sürüme geçiyormuş gibi göstermesin (işlemin kendi hedefi "Yeniden dene" için kalır).
+                    if (run.Kind == RunKind.Upgrade) school.ClearTargetVersion(time.GetUtcNow());
                     db.AuditLogs.Add(PlatformAuditLog.Record(null, "run.failed", school.Id, time.GetUtcNow(),
                         afterJson: JsonSerializer.Serialize(new { run.Id, kind = run.Kind.ToString(), step = plan[step].Name, error = outcome.Log })));
                     await db.SaveChangesAsync(cancellationToken);

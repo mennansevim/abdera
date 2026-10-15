@@ -94,6 +94,7 @@ public class School
     public void RestoreFromPendingDestroy(DateTimeOffset now) { Status = SchoolStatus.Active; UpdatedAt = now; }
 
     public void SetTargetVersion(string version, DateTimeOffset now) { TargetVersion = version; UpdatedAt = now; }
+    public void ClearTargetVersion(DateTimeOffset now) { TargetVersion = null; UpdatedAt = now; }
     public void CompleteUpgrade(string version, DateTimeOffset now) { AppVersion = version; TargetVersion = null; UpdatedAt = now; }
     public void SetCanary(bool canary, DateTimeOffset now) { IsCanary = canary; UpdatedAt = now; }
     public void SetVersionPinned(bool pinned, DateTimeOffset now) { IsVersionPinned = pinned; UpdatedAt = now; }

@@ -45,7 +45,9 @@ public class SchoolEnvBuilder(IConfiguration config)
             ("Modules__Enabled", school.ModulesEnvValue),
             ("Provisioning__Token", Secret(SecretNames.ProvisioningToken)),
             ("Telemetry__Token", Secret(SecretNames.TelemetryToken)),
-            ("Alerts__WebhookUrl", $"{platformUrl}/api/alerts"),
+            // Okul uygulaması https olmayan alarm adresiyle açılmaz (ProductionSecretsGuard). Platform https
+            // değilse (yalnızca yerel test ortamı; production'da Program.cs https zorunlu tutar) alarm kapalı.
+            ("Alerts__WebhookUrl", platformUrl.StartsWith("https://", StringComparison.Ordinal) ? $"{platformUrl}/api/alerts" : ""),
             ("Alerts__WebhookSecret", Secret(SecretNames.AlertsSecret)),
             ("Backup__Provider", "Sftp"),
             ("Backup__EncryptionKey", Secret(SecretNames.BackupEncryptionKey)),
@@ -59,6 +61,9 @@ public class SchoolEnvBuilder(IConfiguration config)
             // Okul anahtarının silme yetkisi olmamalı (§16.9); platform yapılandırmasında belgelenir.
             ("R2_ACCESS_KEY_ID", config["Backup:R2:AccessKeyId"] ?? ""),
             ("R2_SECRET_ACCESS_KEY", config["Backup:R2:SecretAccessKey"] ?? ""),
+            // Yalnızca yerel test ortamı (yerel S3); production'da boş kalır, okul Cloudflare R2'ye gider.
+            ("R2_ENDPOINT", config["Backup:R2:Endpoint"] ?? ""),
+            ("R2_PROVIDER", config["Backup:R2:Provider"] ?? ""),
             ("WhatsApp__Provider", whatsApp ? "Cloud" : "Disabled"),
             ("WhatsApp__PayloadSigningKey", Secret(SecretNames.WhatsAppPayloadSigningKey)),
             ("Email__Provider", email ? "Smtp" : "Disabled"),

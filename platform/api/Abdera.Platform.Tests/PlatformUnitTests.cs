@@ -85,6 +85,19 @@ public class PlatformUnitTests
     }
 
     [Fact]
+    public void Alerts_webhook_is_written_only_for_an_https_platform()
+    {
+        var school = School.Create("deniz", "Deniz", "Deniz", "deniz.abdera.app", "2026.10.15.1", [], null, DateTimeOffset.UtcNow);
+        string Env(string url) => new SchoolEnvBuilder(new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Platform:PublicUrl"] = url }).Build())
+            .Build(school, Release(), BaseSecrets);
+
+        Assert.Contains("Alerts__WebhookUrl=https://platform.abdera.app/api/alerts\n", Env("https://platform.abdera.app"));
+        // Okul uygulaması http alarm adresiyle açılmaz; yerel test ortamında alarm kapalı kalır.
+        Assert.Contains("Alerts__WebhookUrl=\n", Env("http://localhost:8090"));
+    }
+
+    [Fact]
     public void Empty_module_selection_is_written_as_none()
     {
         var school = School.Create("bos", "Boş", "Boş", "bos.abdera.app", "2026.10.15.1", [], null, DateTimeOffset.UtcNow);

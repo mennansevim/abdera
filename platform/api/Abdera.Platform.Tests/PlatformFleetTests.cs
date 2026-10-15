@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Http.Json;
 using Abdera.Platform.Api.Domain;
@@ -66,7 +67,53 @@ public class PlatformFleetTests(PlatformFleetTests.Fixture factory) : IClassFixt
             Assert.Equal(RolloutStatus.Halted, rollout.Status);
             Assert.Contains("kanarya", rollout.HaltReason);
             Assert.Equal(0, await db.Schools.CountAsync(s => s.AppVersion == "2026.10.25.1"));
+            // Geri alınan güncellemeden sonra okul bozuk sürüme "geçiyor" görünmez.
+            Assert.Null((await db.Schools.SingleAsync(s => s.Slug == "kanarya")).TargetVersion);
         }
+    }
+}
+
+// Kanarya bekleme süresi (§7): işçi her turda dalgayı "tamamlandı" görür; süre ilk tamamlanmadan ölçülmeli.
+// Önceki hata: tamamlanma anı her turda yenilendiği için süre hiç dolmuyor, dağıtım 0. dalgada kalıyordu.
+public class PlatformCanarySoakTests(PlatformCanarySoakTests.Fixture factory) : IClassFixture<PlatformCanarySoakTests.Fixture>
+{
+    public class Fixture : PlatformFactory
+    {
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Rollouts:CanarySoakMinutes"] = "60" }));
+        }
+    }
+
+    [Fact]
+    public async Task Rollout_leaves_the_canary_wave_once_the_soak_time_has_passed()
+    {
+        var client = await factory.OperatorAsync();
+        await factory.RegisterReleaseAsync(client, "2026.10.15.1", 'a');
+        await factory.AddHostAsync(client, "bekleme-1");
+        await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("kanarya", "2026.10.15.1", canary: true));
+        await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("diger", "2026.10.15.1"));
+        await factory.RunAllAsync();
+        await factory.RegisterReleaseAsync(client, "2026.10.20.1", 'b');
+        await client.PostAsJsonAsync("/api/rollouts", new { version = "2026.10.20.1" });
+
+        var rollouts = factory.Services.GetRequiredService<RolloutWorker>();
+        async Task<int> TickAsync()
+        {
+            await rollouts.TickAsync(CancellationToken.None);
+            await factory.RunAllAsync();
+            await using var db = factory.Db();
+            return (await db.Rollouts.SingleAsync()).Wave;
+        }
+
+        Assert.Equal(0, await TickAsync()); // kanarya güncellemesi
+        Assert.Equal(0, await TickAsync()); // dalga tamamlandı, bekleme başladı
+        factory.Time.Advance(TimeSpan.FromMinutes(30));
+        Assert.Equal(0, await TickAsync()); // bekleme sürüyor; bu tur tamamlanma anını yenilememeli
+        factory.Time.Advance(TimeSpan.FromMinutes(31));
+        Assert.Equal(1, await TickAsync());
     }
 }
 

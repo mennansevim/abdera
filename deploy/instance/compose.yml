@@ -90,10 +90,11 @@ services:
       - --vfs-cache-mode=off
     environment:
       RCLONE_CONFIG_R2_TYPE: s3
-      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_PROVIDER: ${R2_PROVIDER:-Cloudflare}
       RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
-      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-none}.r2.cloudflarestorage.com
+      # R2_ENDPOINT yalnızca yerel test ortamında (yerel S3) verilir; boşsa Cloudflare R2.
+      RCLONE_CONFIG_R2_ENDPOINT: ${R2_ENDPOINT:-https://${R2_ACCOUNT_ID:-none}.r2.cloudflarestorage.com}
       RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
     mem_limit: 96m
     networks: [internal]
