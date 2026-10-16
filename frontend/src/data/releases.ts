@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.16.2",
+    date: "2026-10-16",
+    items: [
+      { audience: "admin", text: "Kârlılık sekmesindeki \"ders ücreti girilmemiş\" uyarısı artık hangi öğretmenlerin ücretinin eksik olduğunu adlarıyla gösterir." },
+    ],
+  },
+  {
     version: "2026.10.16",
     date: "2026-10-16",
     items: [
