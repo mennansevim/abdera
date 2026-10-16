@@ -23,7 +23,7 @@ public static class Profitability
 
     public record InstrumentResponse(Guid Id, string Name, int Individual, int Group, int Teachers, decimal? TeacherRate, decimal BookedHours, decimal? AvailableHours, decimal? Utilization, decimal? SpareHours);
 
-    public record GapResponse(string Key, GapSeverity Severity, int Count, string Message);
+    public record GapResponse(string Key, GapSeverity Severity, int Count, string Message, IReadOnlyList<string> Names);
 
     public record EvaluationResponse(decimal MonthlyNet, decimal OneTimeCost, decimal TwelveMonthNet, int? PaybackMonth, IReadOnlyList<decimal> Series, IdeaVerdict Verdict, IReadOnlyList<string> Reasons);
 
@@ -75,7 +75,7 @@ public static class Profitability
                     row.BookedHours, row.AvailableHours, row.Utilization is { } u ? decimal.Round(u, 3) : null,
                     row.SpareHours is { } spare ? decimal.Round(spare, 1) : null))
                 .ToList(),
-            snapshot.Gaps.Select(gap => new GapResponse(gap.Key, gap.Severity, gap.Count, gap.Message)).ToList(),
+            snapshot.Gaps.Select(gap => new GapResponse(gap.Key, gap.Severity, gap.Count, gap.Message, gap.Names ?? [])).ToList(),
             ProfitInsights.Build(snapshot),
             ideas.Select(idea => ToResponse(idea, snapshot.Baseline)).ToList()));
     }

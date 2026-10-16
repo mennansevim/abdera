@@ -45,7 +45,10 @@ export function ProfitabilityView() {
       {data.gaps.length > 0 && (
         <Panel title="Düzeltilmesi gerekenler" meta="hesabın doğru çıkması için">
           <ul className="space-y-2.5">{data.gaps.map((gap) => (
-            <Bullet key={gap.key} icon="alert-triangle" tone={gap.severity === "Warning" ? "warning" : "muted"}>{gap.message}</Bullet>
+            <Bullet key={gap.key} icon="alert-triangle" tone={gap.severity === "Warning" ? "warning" : "muted"}>
+              {gap.message}
+              {gap.names?.length > 0 && <span className="mt-0.5 block font-bold">{gap.names.join(", ")}</span>}
+            </Bullet>
           ))}</ul>
         </Panel>
       )}
