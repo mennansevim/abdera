@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Abdera Platform operatör paneli. Görsel dil okul uygulamasının "Sıcak Atölye" kimliğinden
+/* Miralay operatör paneli. Görsel dil okul uygulamasının "Sıcak Atölye" kimliğinden
    (frontend/src/app/globals.css) kopyalandı - klasörler arası içe aktarma yok, iki uygulama
    ayrı derlenir. Fark: panel karanlık modu da destekler; tüm renkler CSS değişkeninden okunur,
    bileşenler sabit renk yazmaz. */

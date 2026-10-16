@@ -30,9 +30,9 @@ function isActive(pathname: string, href: string) {
 function BrandMark() {
   return (
     <span className="inline-flex items-center gap-2.5">
-      <span className="brand-mark font-serif text-sm font-bold italic" aria-hidden="true">A</span>
+      <span className="brand-mark font-serif text-sm font-bold italic" aria-hidden="true">M</span>
       <span className="min-w-0 leading-none">
-        <span className="block truncate font-serif text-[1.15rem] font-bold italic tracking-[-0.03em]">Abdera</span>
+        <span className="block truncate font-serif text-[1.15rem] font-bold italic tracking-[-0.03em]">Miralay</span>
         <span className="mt-1 block truncate text-[.7rem] font-semibold tracking-[0.12em] opacity-70">PLATFORM</span>
       </span>
     </span>

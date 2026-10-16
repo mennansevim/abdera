@@ -5,8 +5,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Abdera.Api.Modules.Instance.Domain;
 
 // Okulun kimliği: adı, kısa adı, ana rengi ve logosu (docs/multi-tenant/ARCHITECTURE.md §5.1).
-// Tek satır - BillingSettings ile aynı singleton deseni. Satır yoksa bugünkü Abdera kimliği
-// döner, yani bu tablo boşken arayüz hiçbir şey değişmemiş gibi görünür.
+// Tek satır - BillingSettings ile aynı singleton deseni. Satır yoksa platformun kurulumda yazdığı
+// School:Name / School:ShortName ayarı, o da yoksa nötr "Okul" döner. Ürünün kendi adı hiçbir okulun
+// ekranında görünmez; her okul kendi adıyla açılır.
 //
 // Logo, ScoreFile/StudentPhoto gibi veritabanında tutulur: ayrı volume yok, okulun yedeğiyle
 // birlikte taşınır ve geri yüklenir.
@@ -14,8 +15,8 @@ public partial class SchoolProfile
 {
     public static readonly Guid SingletonId = Guid.Parse("00000000-0000-0000-0000-0000000000c1");
 
-    public const string DefaultName = "Abdera Sanat Akademi";
-    public const string DefaultShortName = "Abdera";
+    public const string DefaultName = "Okul";
+    public const string DefaultShortName = "Okul";
     public const int MaxNameLength = 120;
     public const int MaxShortNameLength = 40;
     public const int MaxLogoBytes = 512 * 1024;
@@ -27,7 +28,7 @@ public partial class SchoolProfile
     public string ShortName { get; private set; } = DefaultShortName;
     public string? PrimaryColor { get; private set; }
     // Gizlilik metnindeki veri sorumlusu unvanı ve KVKK başvuru adresi (herkese açık okul bilgisi).
-    // Boşsa bugünkü Abdera metni gösterilir.
+    // Boşsa gizlilik metni okulun adını kullanır.
     public string? LegalName { get; private set; }
     public string? ContactEmail { get; private set; }
     public byte[]? Logo { get; private set; }
@@ -41,19 +42,35 @@ public partial class SchoolProfile
 
     private SchoolProfile() { }
 
-    public static SchoolProfile CreateDefault(DateTimeOffset now) => new()
+    public static SchoolProfile CreateDefault(DateTimeOffset now, IConfiguration? config = null)
     {
-        Id = SingletonId,
-        CreatedAt = now,
-        UpdatedAt = now,
-    };
+        var name = config?["School:Name"]?.Trim();
+        var shortName = config?["School:ShortName"]?.Trim();
+        return new SchoolProfile
+        {
+            Id = SingletonId,
+            Name = string.IsNullOrEmpty(name) || name.Length > MaxNameLength ? DefaultName : name,
+            ShortName = string.IsNullOrEmpty(shortName) || shortName.Length > MaxShortNameLength
+                ? (string.IsNullOrEmpty(name) || name.Length > MaxShortNameLength ? DefaultShortName : name)
+                : shortName,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+    }
 
     // Satır yoksa kalıcı olmayan bir varsayılan döner - salt okuma çağrısı Add/Save tetiklemez.
-    public static async Task<SchoolProfile> GetCurrentAsync(AbderaDbContext db) =>
+    public static async Task<SchoolProfile> GetCurrentAsync(AbderaDbContext db, IConfiguration? config = null) =>
         await db.SchoolProfiles.AsNoTracking().SingleOrDefaultAsync(p => p.Id == SingletonId)
-        ?? CreateDefault(DateTimeOffset.MinValue);
+        ?? CreateDefault(DateTimeOffset.MinValue, config);
 
     public bool HasLogo => Logo is { Length: > 0 };
+
+    // E-posta konusu gibi yerlerde okulun kısa adı; okunamazsa (veritabanı sorunu uyarısı) ayardan ya da nötr.
+    public static async Task<string> ShortNameAsync(AbderaDbContext db, IConfiguration config)
+    {
+        try { return (await GetCurrentAsync(db, config)).ShortName; }
+        catch (Exception) { return CreateDefault(DateTimeOffset.MinValue, config).ShortName; }
+    }
 
     public void UpdateIdentity(string name, string shortName, string? primaryColor, Guid? updatedBy, DateTimeOffset now)
     {

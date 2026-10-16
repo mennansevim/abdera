@@ -187,3 +187,27 @@ public class PlatformTakeoverTests(PlatformTakeoverTests.Fixture factory) : ICla
         Assert.Equal(1, await after.Steps.CountAsync(s => s.Step == 5 && s.Status == StepStatus.Succeeded && s.Attempt == 1));
     }
 }
+
+// Yerel test ortamı: Platform:RequireTotp=false iken parola yeterli (production açılışı bunu reddeder).
+public class PlatformLocalLoginTests(PlatformLocalLoginTests.Fixture factory) : IClassFixture<PlatformLocalLoginTests.Fixture>
+{
+    public class Fixture : PlatformFactory
+    {
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(
+                new Dictionary<string, string?> { ["Platform:RequireTotp"] = "false" }));
+        }
+    }
+
+    [Fact]
+    public async Task Password_alone_opens_an_operator_session_when_totp_is_not_required()
+    {
+        var client = factory.CreateClient(new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions { HandleCookies = true });
+        var login = await client.PostAsJsonAsync("/api/auth/login", new { email = PlatformFactory.OperatorEmail, password = PlatformFactory.OperatorPassword, totpCode = (string?)null });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/schools")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/login", new { email = PlatformFactory.OperatorEmail, password = "yanlis-parola-123", totpCode = (string?)null })).StatusCode);
+    }
+}

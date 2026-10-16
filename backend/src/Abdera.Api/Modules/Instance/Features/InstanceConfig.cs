@@ -29,7 +29,7 @@ public static class InstanceConfig
 
     private static async Task<IResult> GetAsync(HttpContext http, AbderaDbContext db, IConfiguration config, EnabledModules modules)
     {
-        var profile = await SchoolProfile.GetCurrentAsync(db);
+        var profile = await SchoolProfile.GetCurrentAsync(db, config);
         var policy = await SchoolPolicy.GetCurrentAsync(db, config);
         var enabled = modules.Current;
         var categories = await People.Features.BranchCategories.ResponsesAsync(db);

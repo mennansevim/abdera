@@ -1,4 +1,4 @@
-# Abdera Platform — işletim kılavuzu
+# Miralay — işletim kılavuzu
 
 Bu belge `arch/multi-tenant` branch'indeki platformun nasıl kurulup işletileceğini anlatır. Tasarım ve
 gerekçeler `ARCHITECTURE.md`'dedir; burada yalnızca yapılacaklar var.
@@ -165,6 +165,8 @@ Notlar:
 - Caddy'nin yerel kök sertifikası `.out/caddy-root.crt`. Okulu tarayıcıda açmak için ya uyarıyı kabul et ya da bu
   sertifikaya güven.
 - `.out/` repoya girmez (anahtarlar, parolalar, sürüm kayıtları).
+- Yerelde platform girişinde iki adımlı doğrulama istenmez (`Platform__RequireTotp=false`, `platform.sh`); doğrulama
+  kodu alanı boş bırakılır. Production bu ayarla açılmaz.
 
 2026-10-16 yerel provasında bulunup düzeltilenler: kanarya bekleme süresinin hiç dolmaması (dağıtım 0. dalgada
 kalıyordu), bozuk imajda `compose up` hata dönünce ajanın geri dönüşü atlaması (okul kapalı kalıyordu), prova

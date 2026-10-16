@@ -149,14 +149,14 @@ export function instrumentBadgeStyle(instrumentName: string) {
   return INSTRUMENT_BADGE_STYLES[instrumentName] ?? { icon: "music" as const, className: "bg-[var(--surface-muted)] text-[var(--muted)]" };
 }
 
-// Varsayılan değerler bugünkü kimliktir; okul kurulumuna göre değişen sürüm için
+// Varsayılanlar nötrdür (logo yok, baş harf); okul kurulumuna göre değişen sürüm için
 // components/school-brand.tsx (SchoolBrandMark) kullanılır - bu dosya sunucu bileşenlerinden de
 // içe aktarıldığı için hook çağıramaz.
 export function BrandMark({
   compact = false,
-  title = "Abdera",
-  subtitle = "SANAT AKADEMİ",
-  logoSrc = "/abdera-logo.webp",
+  title = "Okul",
+  subtitle = "",
+  logoSrc = null,
   initials,
 }: { compact?: boolean; title?: string; subtitle?: string; logoSrc?: string | null; initials?: string }) {
   const markClass = `${compact ? "h-9 w-9" : "h-11 w-11"} shrink-0 rounded-full bg-white object-cover shadow-[0_7px_18px_rgba(70,34,30,.2)] ring-1 ring-white/35`;

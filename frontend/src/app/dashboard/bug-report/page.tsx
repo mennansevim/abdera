@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { Badge, EmptyState, FormMessage, Notice, PageHeader, Pager, Panel, Segmented, type Tone } from "@/components/ui";
 import { ApiError, type Me } from "@/lib/api";
 import {
-  BUG_REPORT_ISSUE_URL, useAwaitingMe, useBugReports, useConfirmBugReport, useCreateBugReport, useProvideBugReportDetails, useTriageBugReport,
+  useAwaitingMe, useBugReports, useConfirmBugReport, useCreateBugReport, useProvideBugReportDetails, useTriageBugReport,
   type BugReport, type BugReportKind, type BugReportStatus,
 } from "@/lib/bug-reports";
 import { isModuleEnabled, useInstanceConfig } from "@/lib/instance";
@@ -395,9 +395,8 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
             {report.reporterEmail && <div><dt className="inline font-semibold">Gönderen: </dt><dd className="inline">{report.reporterEmail}</dd></div>}
           </dl>
           {report.githubIssueNumber && report.status !== "New" && report.status !== "Rejected" && (
-            <a href={`${BUG_REPORT_ISSUE_URL}/${report.githubIssueNumber}`} target="_blank" rel="noreferrer" className="justify-self-start">
-              <Badge tone="success">Görev #{report.githubIssueNumber}</Badge>
-            </a>
+            // Kayıt numarası gösterilir; ürün ekibinin iç görev takibine bağlantı okula açılmaz.
+            <Badge tone="success" className="justify-self-start">Görev #{report.githubIssueNumber}</Badge>
           )}
           {report.status === "Rejected" && report.triageNote && <p className="text-meta">Ret gerekçesi: {report.triageNote}</p>}
           {report.status === "NeedsInfo" && (

@@ -322,7 +322,7 @@ export function NotificationToasts() {
     }
   }, [data]);
 
-  // Sekme arka plandayken de fark edilsin: "(2) Abdera". Next.js sayfa geçişinde başlığı
+  // Sekme arka plandayken de fark edilsin: "(2) Okul adı". Next.js sayfa geçişinde başlığı
   // yeniden yazdığı için önek her değişimde temizlenip tekrar eklenir.
   useEffect(() => {
     const apply = () => {

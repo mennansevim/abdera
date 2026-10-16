@@ -154,7 +154,8 @@ public class BackupService(
                     var recipients = ParseRecipients(config);
                     if (recipients.Count > 0)
                     {
-                        await emailSender.SendAsync(recipients, "Abdera - Yedekleme başarısız oldu",
+                        var schoolName = await Abdera.Api.Modules.Instance.Domain.SchoolProfile.ShortNameAsync(db, config);
+                        await emailSender.SendAsync(recipients, $"{schoolName} - Yedekleme başarısız oldu",
                             $"Günlük veritabanı yedeklemesi başarısız oldu.\n\nHata: {ex.Message}\n\nZaman: {clock.ToSchoolLocal(clock.UtcNow):dd.MM.yyyy HH:mm}",
                             cancellationToken);
                     }

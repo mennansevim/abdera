@@ -5,7 +5,7 @@ import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type FormE
 import { AppLoader } from "@/components/app-loader";
 import { Icon, type IconName } from "@/components/icons";
 import { SchoolBrandMark as BrandMark } from "@/components/school-brand";
-import { useDemoEnabled, useModuleEnabled } from "@/lib/instance";
+import { useDemoEnabled, useModuleEnabled, useSchoolProfile } from "@/lib/instance";
 import { ApiError } from "@/lib/api";
 import { useSessionDestination } from "@/lib/session-destination";
 import { readLastRole, readSavedEmail, rememberLastRole, rememberLogin, requestSavedLogin } from "@/lib/saved-logins";
@@ -42,11 +42,11 @@ function RoleCardContent({ option }: { option: (typeof ROLE_OPTIONS)[number] }) 
   );
 }
 
-const DEMO_PASSWORD = "AbderaDemo2026!";
+const DEMO_PASSWORD = "DemoParola2026!";
 // Yönetici için demo hesabı yok - eski demo yönetici okulun gerçek hesabı oldu
 // (RenameDemoAdminAccount), onun bilgileri burada önceden doldurulmaz.
 const DEMO_EMAILS: Partial<Record<StaffRole, string>> = {
-  Teacher: "demo.ogretmen@abdera.com",
+  Teacher: "demo.ogretmen@demo.local",
 };
 
 function demoEmailFor(role: StaffRole, demo: boolean) {
@@ -75,6 +75,8 @@ export default function LoginPage() {
 }
 
 function LoginPageContent() {
+  // Tarayıcının parola yöneticisine kaydedilen hesap adı okulun adını taşır.
+  const schoolShortName = useSchoolProfile().shortName;
   const router = useRouter();
   const searchParams = useSearchParams();
   const login = useLogin();
@@ -164,7 +166,7 @@ function LoginPageContent() {
     setError(null);
     try {
       const result = await login.mutateAsync({ email: loginEmail, password: loginPassword, expectedRole: role, passwordless });
-      if (!passwordless) rememberLogin(role, loginEmail.trim().toLowerCase(), loginPassword);
+      if (!passwordless) rememberLogin(role, loginEmail.trim().toLowerCase(), loginPassword, schoolShortName);
       rememberLastRole(role);
       router.push(result.mustChangePassword ? "/dashboard/settings?changePassword=1" : "/dashboard");
     } catch (err) {
@@ -277,7 +279,7 @@ function LoginPageContent() {
               ) : (
                 <>
                 <label htmlFor="email" className={`${demoEnabled ? "" : "mt-5"} mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]`}>E-posta</label>
-                <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@abdera.com" className="field text-sm" />
+                <input ref={emailRef} id="email" type="email" required autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ornek@okulunuz.com" className="field text-sm" />
 
                 <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>
                 <input id="password" type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" className="field text-sm tracking-[.18em]" />

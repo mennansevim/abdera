@@ -34,5 +34,7 @@ export Certificates__Provider=Fake
 export Backup__R2__AccountId=local Backup__R2__Bucket=abdera-backups Backup__R2__Provider=Other
 export Backup__R2__Endpoint=http://host.containers.internal:9000
 export Backup__R2__AccessKeyId="$S3_ACCESS_KEY" Backup__R2__SecretAccessKey="$S3_SECRET_KEY"
+# Yalnızca yerel ortam: platform girişinde iki adımlı doğrulama istenmez (production reddeder).
+export Platform__RequireTotp=false
 export Provisioning__SmokeAttempts=20 Provisioning__SmokeDelaySeconds=3 Rollouts__CanarySoakMinutes=1
 cd "$API" && exec dotnet run --no-launch-profile

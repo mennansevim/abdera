@@ -77,7 +77,7 @@ export default function AdoptSchoolPage() {
   if (!DUMP_NAME_PATTERN.test(dumpName.trim())) errors.dumpName = "Döküm adı “<ad>.sql.gz” ya da “<ad>.sql.gz.enc” olmalı.";
   const shown = showErrors ? errors : {};
 
-  const domain = customDomain.trim().toLowerCase() || slugCheck?.domain || (slug ? `${slug}.abdera.app` : "");
+  const domain = customDomain.trim().toLowerCase() || slugCheck?.domain || "";
 
   function submit(event: FormEvent) {
     event.preventDefault();

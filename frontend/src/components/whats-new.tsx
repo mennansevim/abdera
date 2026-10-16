@@ -47,7 +47,7 @@ export function WhatsNewDialog({ me }: { me: Me }) {
   }
 
   return (
-    <Modal open={releases.length > 0} title="Yenilikler" description="Abdera güncellendi. Bu sürümde değişenler:" onClose={close} size="sm">
+    <Modal open={releases.length > 0} title="Yenilikler" description="Panel güncellendi. Bu sürümde değişenler:" onClose={close} size="sm">
       <div className="space-y-5">
         {releases.map((release) => <ReleaseNotes key={release.version} release={release} isCurrent={release.version === CURRENT_VERSION} />)}
       </div>

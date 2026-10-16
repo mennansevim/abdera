@@ -47,13 +47,13 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Abdera",
-    template: "%s · Abdera",
+    default: "Okul Paneli",
+    template: "%s · Okul Paneli",
   },
-  description: "Abdera Müzik Okulu Yönetim Sistemi",
-  // İkonlar dosya kuralıyla gelir: app/favicon.ico, app/icon.png, app/apple-icon.png.
-  // Bu alan yalnızca iPhone "Ana Ekrana Ekle" etiketini sayfa başlığından bağımsız sabitler.
-  appleWebApp: { title: "Abdera" },
+  description: "Kurs ve okul yönetim paneli",
+  // İkonlar dosya kuralıyla üretilir (app/icon.tsx, app/apple-icon.tsx; nötr). Sekme başlığındaki
+  // "Okul Paneli" istemcide okulun kısa adıyla değişir (components/document-title-brand.tsx).
+  appleWebApp: { title: "Okul Paneli" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

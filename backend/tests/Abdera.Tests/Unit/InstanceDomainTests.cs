@@ -78,14 +78,22 @@ public class InstanceDomainTests
     }
 
     [Fact]
-    public void Missing_profile_row_reads_as_the_current_abdera_identity()
+    public void Missing_profile_row_reads_the_configured_school_name_never_the_product_name()
     {
-        var profile = SchoolProfile.CreateDefault(Now);
+        // Çok kiracılı kurulum: ekranlarda ürünün adı görünmez. Profil yoksa platformun yazdığı ad,
+        // o da yoksa nötr "Okul".
+        var neutral = SchoolProfile.CreateDefault(Now);
+        Assert.Equal("Okul", neutral.Name);
+        Assert.Equal("Okul", neutral.ShortName);
+        Assert.Null(neutral.PrimaryColor);
+        Assert.False(neutral.HasLogo);
 
-        Assert.Equal("Abdera Sanat Akademi", profile.Name);
-        Assert.Equal("Abdera", profile.ShortName);
-        Assert.Null(profile.PrimaryColor);
-        Assert.False(profile.HasLogo);
+        var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["School:Name"] = "Deniz Müzik Akademisi", ["School:ShortName"] = "Deniz" })
+            .Build();
+        var configured = SchoolProfile.CreateDefault(Now, config);
+        Assert.Equal("Deniz Müzik Akademisi", configured.Name);
+        Assert.Equal("Deniz", configured.ShortName);
     }
 
     [Theory]

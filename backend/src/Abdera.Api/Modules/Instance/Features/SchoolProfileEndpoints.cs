@@ -44,11 +44,11 @@ public static class SchoolProfileEndpoints
     }
 
     private static async Task<IResult> UpdateAsync(
-        UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IConfiguration config)
     {
         var now = clock.UtcNow;
         var actorId = AuthContext.GetUserId(principal);
-        var profile = await LoadOrCreateAsync(db, now);
+        var profile = await LoadOrCreateAsync(db, now, config);
         var before = JsonSerializer.Serialize(new { profile.Name, profile.ShortName, profile.PrimaryColor, profile.LegalName, profile.ContactEmail });
 
         profile.UpdateIdentity(request.Name, request.ShortName, request.PrimaryColor, actorId, now);
@@ -65,7 +65,7 @@ public static class SchoolProfileEndpoints
     }
 
     private static async Task<IResult> UploadLogoAsync(
-        IFormFile? file, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        IFormFile? file, ClaimsPrincipal principal, AbderaDbContext db, IClock clock, IConfiguration config)
     {
         // Boyut sınırı belleğe almadan ÖNCE kontrol edilir (StudentPhotos ile aynı gerekçe).
         if (file is null || file.Length == 0 || file.Length > SchoolProfile.MaxLogoBytes)
@@ -79,7 +79,7 @@ public static class SchoolProfileEndpoints
 
         var now = clock.UtcNow;
         var actorId = AuthContext.GetUserId(principal);
-        var profile = await LoadOrCreateAsync(db, now);
+        var profile = await LoadOrCreateAsync(db, now, config);
         profile.ReplaceLogo(buffer.ToArray(), actorId, now);
 
         db.AuditLogs.Add(AuditLog.Record(
@@ -103,12 +103,12 @@ public static class SchoolProfileEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<SchoolProfile> LoadOrCreateAsync(AbderaDbContext db, DateTimeOffset now)
+    private static async Task<SchoolProfile> LoadOrCreateAsync(AbderaDbContext db, DateTimeOffset now, IConfiguration config)
     {
         var profile = await db.SchoolProfiles.SingleOrDefaultAsync(p => p.Id == SchoolProfile.SingletonId);
         if (profile is not null) return profile;
 
-        profile = SchoolProfile.CreateDefault(now);
+        profile = SchoolProfile.CreateDefault(now, config);
         db.SchoolProfiles.Add(profile);
         return profile;
     }

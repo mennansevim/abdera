@@ -38,7 +38,7 @@ export interface SchoolProfile {
   shortName: string;
   primaryColor: string | null;
   logoUrl: string | null;
-  // Gizlilik metninin veri sorumlusu unvanı ve KVKK başvuru adresi; boşsa bugünkü Abdera metni.
+  // Gizlilik metninin veri sorumlusu unvanı ve KVKK başvuru adresi; boşsa okulun adı kullanılır.
   legalName?: string | null;
   contactEmail?: string | null;
 }
@@ -82,11 +82,11 @@ export interface InstanceConfig {
   categories?: BranchCategory[];
 }
 
-// Yapılandırma okunamazsa (yükleniyor, ağ hatası, eski API) bugünkü kimlik ve "her şey açık"
-// varsayılır: tek okullu kurulumda hiçbir ekran kaybolmamalı, marka yine "Abdera" görünmeli.
+// Yapılandırma okunamazsa (yükleniyor, ağ hatası) nötr kimlik ve "her şey açık" varsayılır: hiçbir
+// ekran kaybolmaz; okulun adı yapılandırma gelince görünür. Ürünün adı hiçbir okulda görünmez.
 export const DEFAULT_PROFILE: SchoolProfile = {
-  name: "Abdera Sanat Akademi",
-  shortName: "Abdera",
+  name: "Okul",
+  shortName: "Okul",
   primaryColor: null,
   logoUrl: null,
 };
@@ -149,8 +149,9 @@ export function useModuleQueryEnabled(key: ModuleKey): boolean {
   return isModuleEnabled(data, key);
 }
 
-export function schoolLogoSrc(profile: SchoolProfile): string {
-  return profile.logoUrl ? `${apiBaseUrl()}${profile.logoUrl}` : "/abdera-logo.webp";
+// Logo yüklenmemişse null: çağıran baş harfleri gösterir (ürünün logosu hiçbir okulda görünmez).
+export function schoolLogoSrc(profile: SchoolProfile): string | null {
+  return profile.logoUrl ? `${apiBaseUrl()}${profile.logoUrl}` : null;
 }
 
 // Backend SchoolProfile.MaxLogoBytes ile aynı; sunucu yine kendisi denetler (tür dosya içeriğinden).

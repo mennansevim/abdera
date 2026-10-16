@@ -43,9 +43,9 @@ export default function LoginPage() {
     <main className="grid min-h-dvh place-items-center bg-[var(--background)] px-4 py-8">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center justify-center gap-2.5 text-[var(--brand-strong)]">
-          <span className="brand-mark font-serif text-sm font-bold italic" aria-hidden="true">A</span>
+          <span className="brand-mark font-serif text-sm font-bold italic" aria-hidden="true">M</span>
           <span className="leading-none">
-            <span className="block font-serif text-[1.35rem] font-bold italic tracking-[-0.03em]">Abdera</span>
+            <span className="block font-serif text-[1.35rem] font-bold italic tracking-[-0.03em]">Miralay</span>
             <span className="mt-1 block text-[.72rem] font-semibold tracking-[0.12em] text-[var(--muted)]">PLATFORM</span>
           </span>
         </div>

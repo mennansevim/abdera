@@ -82,14 +82,14 @@ public class SystemHealthMonitor(
             var cooldown = TimeSpan.FromMinutes(config.GetValue("Ops:AlertCooldownMinutes", 60));
             if (status.ShouldSendAlert(now, cooldown))
             {
-                await SendAlertAsync(emailSender, config, level, detail, clock, now, cancellationToken);
+                await SendAlertAsync(emailSender, config, await Abdera.Api.Modules.Instance.Domain.SchoolProfile.ShortNameAsync(db, config), level, detail, clock, now, cancellationToken);
                 await scope.ServiceProvider.GetRequiredService<AlertWebhookNotifier>()
                     .NotifyAsync("health", level, detail, now, cancellationToken);
                 status.MarkAlertSent(now);
             }
             else if (level == SystemHealthLevel.Healthy && previousLevel != SystemHealthLevel.Healthy)
             {
-                await SendRecoveryAlertAsync(emailSender, config, clock, now, cancellationToken);
+                await SendRecoveryAlertAsync(emailSender, config, await Abdera.Api.Modules.Instance.Domain.SchoolProfile.ShortNameAsync(db, config), clock, now, cancellationToken);
                 await scope.ServiceProvider.GetRequiredService<AlertWebhookNotifier>()
                     .NotifyAsync("recovery", level, "Sistem tekrar sağlıklı durumda.", now, cancellationToken);
             }
@@ -162,23 +162,23 @@ public class SystemHealthMonitor(
     }
 
     private static async Task SendAlertAsync(
-        IEmailSender emailSender, IConfiguration config, SystemHealthLevel level, string detail, IClock clock, DateTimeOffset now, CancellationToken cancellationToken)
+        IEmailSender emailSender, IConfiguration config, string schoolName, SystemHealthLevel level, string detail, IClock clock, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var recipients = BackupService.ParseRecipients(config);
         if (recipients.Count == 0) return;
 
-        await emailSender.SendAsync(recipients, $"Abdera - Sistem durumu: {level}",
+        await emailSender.SendAsync(recipients, $"{schoolName} - Sistem durumu: {level}",
             $"{detail}\n\nZaman: {clock.ToSchoolLocal(now):dd.MM.yyyy HH:mm}\n\nBu uyarı, aynı sorun devam ettiği sürece en fazla {config.GetValue("Ops:AlertCooldownMinutes", 60)} dakikada bir tekrar gönderilir.",
             cancellationToken);
     }
 
     private static async Task SendRecoveryAlertAsync(
-        IEmailSender emailSender, IConfiguration config, IClock clock, DateTimeOffset now, CancellationToken cancellationToken)
+        IEmailSender emailSender, IConfiguration config, string schoolName, IClock clock, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var recipients = BackupService.ParseRecipients(config);
         if (recipients.Count == 0) return;
 
-        await emailSender.SendAsync(recipients, "Abdera - Sistem durumu düzeldi",
+        await emailSender.SendAsync(recipients, $"{schoolName} - Sistem durumu düzeldi",
             $"Sistem tekrar sağlıklı durumda.\n\nZaman: {clock.ToSchoolLocal(now):dd.MM.yyyy HH:mm}",
             cancellationToken);
     }

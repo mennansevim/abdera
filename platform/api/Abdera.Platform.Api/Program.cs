@@ -117,6 +117,8 @@ if (app.Environment.IsProduction())
     if (dnsProvider != "Cloudflare") problems.Add("Dns__Provider=Cloudflare");
     if (schoolClientProvider != "Http") problems.Add("SchoolClient__Provider=Http");
     if (certificateProvider != "Tls") problems.Add("Certificates__Provider=Tls");
+    if (string.IsNullOrWhiteSpace(app.Configuration["Dns:BaseDomain"])) problems.Add("Dns__BaseDomain");
+    if (!app.Configuration.GetValue("Platform:RequireTotp", true)) problems.Add("Platform__RequireTotp boş ya da true olmalı");
     if (!string.IsNullOrEmpty(app.Configuration["SchoolClient:HttpsPort"])) problems.Add("SchoolClient__HttpsPort boş olmalı");
     if (!string.IsNullOrEmpty(app.Configuration["SchoolClient:TrustedRootCaPath"])) problems.Add("SchoolClient__TrustedRootCaPath boş olmalı");
     if (string.IsNullOrWhiteSpace(app.Configuration["Platform:KeysDirectory"])) problems.Add("Platform__KeysDirectory");

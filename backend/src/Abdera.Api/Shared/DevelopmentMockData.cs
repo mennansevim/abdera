@@ -324,7 +324,7 @@ public static class DevelopmentMockData
                         null,
                         item.Guardian.Id,
                         null,
-                        $"Abdera Müzik Okulu: {item.Student.FirstName} için {item.Instrument.Name} gelişim takibi güncellendi. Öğretmeni {item.Teacher.FirstName}, son derste düzenli pratik ve bir sonraki hedefleri paylaştı.",
+                        $"Okulumuz: {item.Student.FirstName} için {item.Instrument.Name} gelişim takibi güncellendi. Öğretmeni {item.Teacher.FirstName}, son derste düzenli pratik ve bir sonraki hedefleri paylaştı.",
                         $"mock-followup-{item.Student.Id:N}-{lessonIndex}",
                         startAt.AddHours(3)));
                     counts.GuardianMessages++;

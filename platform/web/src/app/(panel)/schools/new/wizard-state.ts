@@ -89,7 +89,7 @@ function firstDayOfThisMonth(): string {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-// Varsayılanlar bugünkü Abdera değerleri (ARCHITECTURE.md §4.2 adım 6).
+// Önerilen başlangıç değerleri (ARCHITECTURE.md §4.2 adım 6); okul yöneticisi sonradan değiştirir.
 export function initialState(): WizardState {
   const effectiveFrom = firstDayOfThisMonth();
   return {

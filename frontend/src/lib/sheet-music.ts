@@ -25,7 +25,7 @@ export type ArchiveScore = LibraryEntryBase & {
 };
 
 // A piece inside a printed book the school works from. Only the contents-page facts are
-// catalogued; the score is read from the book, never stored or served by Abdera.
+// catalogued; the score is read from the book, never stored or served by the app.
 export type BookEntry = LibraryEntryBase & {
   source: "book";
   book: { id: string; title: string; authors: string; publisher: string; edition: string };
@@ -148,7 +148,7 @@ export function matchesMusic(piece: SheetMusic, filters: MusicFilters) {
     && terms.every(term => text.includes(term));
 }
 
-// These are broad Abdera practice suggestions, not examined grades or a claim of
+// These are broad practice suggestions, not examined grades or a claim of
 // teacher approval. Only recognisable pedagogical works receive a suggestion.
 function withPracticeSuggestion(piece: ArchiveScore): ArchiveScore {
   let level: number | null = null;

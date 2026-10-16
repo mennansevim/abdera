@@ -87,7 +87,9 @@ public static class Schools
     }
 
     private static string DomainFor(IConfiguration config, string slug, string? custom) =>
-        string.IsNullOrWhiteSpace(custom) ? $"{slug}.{config["Dns:BaseDomain"] ?? "abdera.app"}" : custom.Trim().ToLowerInvariant();
+        string.IsNullOrWhiteSpace(custom)
+            ? $"{slug}.{config["Dns:BaseDomain"] ?? throw new InvalidOperationException("Dns:BaseDomain tanımlı değil (okul alt alan adlarının tabanı).")}"
+            : custom.Trim().ToLowerInvariant();
 
     private static async Task<IResult> CheckSlugAsync(string slug, PlatformDbContext db, IConfiguration config)
     {
@@ -234,8 +236,11 @@ public static class Schools
     public static List<string> ValidateModules(IReadOnlyList<string> selected, IReadOnlyList<Releases.ModuleEntry> catalog)
     {
         var byKey = catalog.ToDictionary(m => m.Key);
-        var unknown = selected.Where(key => !byKey.TryGetValue(key, out var entry) || entry.IsCore).ToList();
+        var unknown = selected.Where(key => !byKey.ContainsKey(key)).ToList();
         if (unknown.Count > 0) throw ValidationFailedException.For("modules", $"Bu sürümde olmayan modül: {string.Join(", ", unknown)}");
+        // Hedef sürümde standart pakete girmiş (çekirdek) modül seçimden düşer: eski sürümde opsiyonel
+        // seçilmiş "progress", "groups"... yeni sürümde zaten açıktır, güncellemeyi engellemez.
+        selected = selected.Where(key => !byKey[key].IsCore).ToList();
         var enabled = catalog.Where(m => m.IsCore).Select(m => m.Key).Concat(selected).ToHashSet();
         var missing = selected.SelectMany(key => byKey[key].Requires.Where(r => !enabled.Contains(r)).Select(r => $"{byKey[key].Name} → {byKey.GetValueOrDefault(r)?.Name ?? r}")).ToList();
         if (missing.Count > 0) throw ValidationFailedException.For("modules", $"Bağımlılığı seçilmemiş modül: {string.Join(", ", missing)}");
@@ -360,7 +365,8 @@ public static class Schools
             ?? throw ValidationFailedException.For("version", "Sürüm bulunamadı ya da geri çekilmiş.");
         if (school.AppVersion is not null && Release.Compare(release.Version, school.AppVersion) <= 0)
             throw new ConflictException($"Okul zaten {school.AppVersion} sürümünde; yalnızca ileri sürüme geçilebilir.");
-        // Yeni sürümün kataloğunda okulun modülleri hâlâ var mı.
+        // Yeni sürümün kataloğunda okulun modülleri hâlâ var mı; standart pakete girenler seçimden düşer.
+        // Okulun kaydı değiştirilmez: güncelleme geri alınırsa eski sürümün seçimi geçerli kalmalı.
         ValidateModules(school.Modules, Releases.Catalog(release));
         await EnsureNoOpenRunAsync(db, id);
         school.SetTargetVersion(release.Version, time.GetUtcNow());

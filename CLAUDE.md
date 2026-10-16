@@ -155,7 +155,11 @@ Okul başına kurulumda (`docs/multi-tenant/ARCHITECTURE.md`) her okul hangi **�
 - **Okula özel sabit koda yazılmaz:** `school_policy` (`SchoolPolicy.GetCurrentAsync`). Hesabın tek yeri değişmez, sabiti oradan okur.
 - Okulun kimliği (`school_profile`) ve kuralları değişirse audit'e yazılır. Platform yalnızca kurulumda yazar, sonra okur.
 
-## Genel eğitim alanları — Abdera yalnızca müzik okulu değil (yalnızca `arch/multi-tenant`)
+## Ürün adı okul ekranlarında görünmez (yalnızca `arch/multi-tenant`)
+
+Çok kiracılı platformun adı **Miralay** (operatör paneli, `platform/`). Okulun (müşterinin) ekranlarında, e-postalarında, veliye giden metinlerde ve ikonlarında ürünün adı **hiç geçmez**; her yerde okulun kendi adı görünür (`useSchoolProfile()` / `SchoolProfile.ShortNameAsync`). Profil yoksa platformun yazdığı `School__Name`, o da yoksa nötr "Okul". Yeni bir kullanıcıya görünen metin, e-posta konusu, sekme başlığı ya da görsel eklerken buna uy; markalı görsel (logo basılı PNG) ekleme. Kod içi adlar (`AbderaDbContext`, namespace, depolama anahtarları) kullanıcıya görünmediği için kalabilir.
+
+## Genel eğitim alanları — yalnızca müzik okulu değil (yalnızca `arch/multi-tenant`)
 
 Dans, spor, dil, kodlama... her okulda ders/seri/yoklama/aidat aynı; değişen "neyin dersi" sorusudur (`docs/multi-tenant/ARCHITECTURE.md` §5.6).
 

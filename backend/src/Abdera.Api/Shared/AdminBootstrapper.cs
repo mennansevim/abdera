@@ -14,8 +14,8 @@ namespace Abdera.Api.Shared;
 // şifreli bir yönetici hesabını her açılışta geri getirmek canlı veriye arka kapı olurdu.
 public static class AdminBootstrapper
 {
-    private const string DemoTeacherEmail = "demo.ogretmen@abdera.com";
-    private const string DemoPassword = "AbderaDemo2026!";
+    private const string DemoTeacherEmail = "demo.ogretmen@demo.local";
+    private const string DemoPassword = "DemoParola2026!";
 
     public static async Task RunAsync(WebApplication app)
     {

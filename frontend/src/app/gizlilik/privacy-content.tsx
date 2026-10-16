@@ -3,22 +3,20 @@
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { SchoolBrandMark } from "@/components/school-brand";
-import { DEFAULT_PROFILE, useSchoolProfile } from "@/lib/instance";
+import { useSchoolProfile } from "@/lib/instance";
 
 // Gizlilik metni okulun kendi adını, unvanını ve başvuru adresini taşır (docs/multi-tenant/ARCHITECTURE.md
-// §5.1). Profil varsayılansa (bugünkü okul) metin önceki sürümle birebir aynıdır.
-const ABDERA = { controller: "Abdera Sanat", panel: "panel.abderasanat.com", email: "admin@abderasanat.com" };
+// §5.1). Veri sorumlusu okuldur; unvan girilmemişse okulun adı, başvuru adresi girilmemişse okulun
+// kendisine başvuru yolu yazılır.
 
 const noSubscribe = () => () => {};
 
 function usePrivacySections() {
   const profile = useSchoolProfile();
-  const isDefault = profile.name === DEFAULT_PROFILE.name && !profile.legalName && !profile.contactEmail;
-  const controller = isDefault ? ABDERA.controller : profile.legalName || profile.name;
+  const controller = profile.legalName || profile.name;
   // Sunucu çiziminde adres bilinmez; istemcide hidrasyon uyuşmazlığı olmadan doldurulur.
-  const host = useSyncExternalStore(noSubscribe, () => window.location.host, () => "");
-  const panel = isDefault ? ABDERA.panel : host;
-  const CONTACT_EMAIL = (isDefault ? ABDERA.email : profile.contactEmail) || ABDERA.email;
+  const panel = useSyncExternalStore(noSubscribe, () => window.location.host, () => "");
+  const CONTACT_EMAIL = profile.contactEmail ?? "";
   return { sections: buildSections(controller, panel, CONTACT_EMAIL), contactEmail: CONTACT_EMAIL, shortName: profile.shortName };
 }
 
@@ -27,7 +25,7 @@ function buildSections(controller: string, panel: string, CONTACT_EMAIL: string)
   {
     title: "Kapsam",
     body: [
-      `Bu metin, ${controller === ABDERA.controller ? "Abdera Sanat'ın" : `${controller} adına işletilen`} okul yönetim paneli${panel ? ` (${panel})` : ""} ve bu panel üzerinden gönderilen WhatsApp bildirimleri kapsamında işlenen kişisel verileri açıklar. Veri sorumlusu ${controller === ABDERA.controller ? "Abdera Sanat'tır" : controller}.`,
+      `Bu metin, ${controller} adına işletilen okul yönetim paneli${panel ? ` (${panel})` : ""} ve bu panel üzerinden gönderilen WhatsApp bildirimleri kapsamında işlenen kişisel verileri açıklar. Veri sorumlusu ${controller}.`,
     ],
   },
   {
@@ -65,7 +63,9 @@ function buildSections(controller: string, panel: string, CONTACT_EMAIL: string)
     title: "Haklarınız ve veri silme",
     body: [
       "6698 sayılı KVKK'nın 11. maddesi kapsamında verilerinize erişme, düzeltilmesini veya silinmesini isteme ve işlemeye itiraz etme hakkına sahipsiniz.",
-      `Talebinizi ${CONTACT_EMAIL} adresine e-posta ile iletebilirsiniz. Talepler en geç 30 gün içinde yanıtlanır.`,
+      CONTACT_EMAIL
+        ? `Talebinizi ${CONTACT_EMAIL} adresine e-posta ile iletebilirsiniz. Talepler en geç 30 gün içinde yanıtlanır.`
+        : "Talebinizi okul yönetimine yazılı olarak iletebilirsiniz. Talepler en geç 30 gün içinde yanıtlanır.",
     ],
   },
 ];
@@ -85,9 +85,11 @@ export function PrivacyContent() {
         <h2 className="text-lg font-bold">{section.title}</h2>
         {section.body.map((paragraph) => <p key={paragraph} className="mt-3 leading-relaxed">{paragraph}</p>)}
       </section>)}
-      <p className="mt-10 leading-relaxed">
-        İletişim: <a href={`mailto:${contactEmail}`} className="font-bold text-[var(--brand-strong)] underline">{contactEmail}</a>
-      </p>
+      {contactEmail && (
+        <p className="mt-10 leading-relaxed">
+          İletişim: <a href={`mailto:${contactEmail}`} className="font-bold text-[var(--brand-strong)] underline">{contactEmail}</a>
+        </p>
+      )}
     </main>
   </div>;
 }

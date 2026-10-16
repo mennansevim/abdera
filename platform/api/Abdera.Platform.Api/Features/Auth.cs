@@ -56,7 +56,7 @@ public static class Auth
 
     private static async Task<IResult> LoginAsync(
         LoginRequest request, HttpContext http, PlatformDbContext db, IPasswordHasher<PlatformUser> hasher,
-        IDataProtectionVault vault, TimeProvider time)
+        IDataProtectionVault vault, TimeProvider time, IConfiguration config)
     {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Email == request.Email.Trim().ToLower());
         // Kullanıcı yokken de hash doğrulaması yapılır: cevap süresinden hesabın varlığı anlaşılmasın.
@@ -64,8 +64,11 @@ public static class Auth
         if (user is null || verification == PasswordVerificationResult.Failed)
             return Results.Problem(title: "Giriş başarısız", detail: "E-posta, parola veya kod hatalı.", statusCode: 401);
 
-        var totpVerified = false;
-        if (user.TotpEnabled)
+        // Platform:RequireTotp=false yalnızca yerel test ortamı içindir (deploy/local); production'da
+        // Program.cs açılışı reddeder. O modda parola yeterli sayılır ve oturum doğrulanmış açılır.
+        var totpRequired = config.GetValue("Platform:RequireTotp", true);
+        var totpVerified = !totpRequired;
+        if (totpRequired && user.TotpEnabled)
         {
             var step = Totp.Verify(vault.Unprotect(user.TotpSecretCiphertext!), request.TotpCode, time.GetUtcNow(), user.LastTotpStep);
             if (step is null) return Results.Problem(title: "Giriş başarısız", detail: "E-posta, parola veya kod hatalı.", statusCode: 401);

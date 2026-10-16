@@ -6,24 +6,25 @@ import type { MetadataRoute } from "next";
 // önbellek (service worker) bilinçli olarak yok: bayat ders/yoklama verisi göstermek, hiç
 // göstermemekten kötü.
 //
-// Okul başına kurulumda (docs/multi-tenant/ARCHITECTURE.md §5.1) ad ve ikon okulun profilinden
+// Okul başına kurulumda (docs/multi-tenant/ARCHITECTURE.md §5.1) ad, renk ve ikon okulun profilinden
 // gelir: API_INTERNAL_URL (çalışma anı değişkeni, ör. http://api:8080) tanımlıysa profil okunur.
-// Tanımlı değilse ya da API'ye ulaşılamazsa bugünkü Abdera manifesti aynen döner.
+// Okunamazsa nötr bir manifest döner; ürünün adı hiçbir okulda görünmez.
 export const dynamic = "force-dynamic";
 
-const ABDERA: MetadataRoute.Manifest = {
-  name: "Abdera Sanat Akademi",
-  short_name: "Abdera",
-  description: "Abdera Müzik Okulu Yönetim Sistemi",
+const NEUTRAL: MetadataRoute.Manifest = {
+  name: "Okul Paneli",
+  short_name: "Okul Paneli",
+  description: "Kurs ve okul yönetim paneli",
   lang: "tr",
   start_url: "/dashboard",
   scope: "/",
   display: "standalone",
   background_color: "#fdf3e7",
-  theme_color: "#a65858",
+  theme_color: "#7a5148",
+  // Nötr ikon kodla üretilir (app/icon.tsx, app/apple-icon.tsx).
   icons: [
-    { src: "/icon.png", sizes: "192x192", type: "image/png" },
-    { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    { src: "/icon", sizes: "512x512", type: "image/png" },
+    { src: "/apple-icon", sizes: "180x180", type: "image/png" },
   ],
 };
 
@@ -46,14 +47,14 @@ async function readProfile(): Promise<Profile | null> {
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   const profile = await readProfile();
-  if (!profile || (profile.name === ABDERA.name && profile.shortName === ABDERA.short_name && !profile.logoUrl)) return ABDERA;
+  if (!profile) return NEUTRAL;
   return {
-    ...ABDERA,
+    ...NEUTRAL,
     name: profile.name,
     short_name: profile.shortName,
-    description: `${profile.name} yönetim sistemi`,
-    theme_color: profile.primaryColor ?? ABDERA.theme_color,
+    description: `${profile.name} yönetim paneli`,
+    theme_color: profile.primaryColor ?? NEUTRAL.theme_color,
     // Logo aynı origin'deki /api üzerinden sunulur (Caddy); boyutu bilinmediği için "any".
-    icons: profile.logoUrl ? [{ src: profile.logoUrl, sizes: "any" }, ...ABDERA.icons!] : ABDERA.icons,
+    icons: profile.logoUrl ? [{ src: profile.logoUrl, sizes: "any" }, ...NEUTRAL.icons!] : NEUTRAL.icons,
   };
 }

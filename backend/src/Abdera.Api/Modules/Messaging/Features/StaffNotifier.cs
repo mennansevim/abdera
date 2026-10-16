@@ -83,7 +83,7 @@ public interface IStaffNotifier
 }
 
 public class StaffNotifier(
-    AbderaDbContext db, IClock clock, IEmailSender emailSender, EnabledModules modules, ILogger<StaffNotifier> logger) : IStaffNotifier
+    AbderaDbContext db, IClock clock, IEmailSender emailSender, EnabledModules modules, IConfiguration config, ILogger<StaffNotifier> logger) : IStaffNotifier
 {
     private readonly List<(string To, string Subject, string Body)> _pendingEmails = [];
 
@@ -132,6 +132,7 @@ public class StaffNotifier(
             .ToListAsync();
 
         var added = 0;
+        string? schoolName = null;
         foreach (var recipient in recipients)
         {
             var alreadyExists = await db.StaffNotifications.AnyAsync(notification =>
@@ -144,7 +145,11 @@ public class StaffNotifier(
             db.StaffNotifications.Add(StaffNotification.Create(
                 recipient.Id, type, title, body, referenceType, referenceId, clock.UtcNow));
             if (!string.IsNullOrWhiteSpace(recipient.Email))
-                _pendingEmails.Add((recipient.Email, $"Abdera · {title}", $"{title}\n\n{body}\n\nAyrıntı için Abdera'da Ders Programı ekranına bakabilirsin."));
+            {
+                // E-postada ürünün değil okulun adı görünür (çok kiracılı kurulum: her okul kendi adıyla).
+                schoolName ??= await Abdera.Api.Modules.Instance.Domain.SchoolProfile.ShortNameAsync(db, config);
+                _pendingEmails.Add((recipient.Email, $"{schoolName} · {title}", $"{title}\n\n{body}\n\nAyrıntı için panelde Ders Programı ekranına bakabilirsin."));
+            }
             added++;
         }
 

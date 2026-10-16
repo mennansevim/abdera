@@ -10,7 +10,7 @@ public static class Totp
     public static string NewSecret() => Base32Encode(RandomNumberGenerator.GetBytes(20));
 
     public static string ProvisioningUri(string secret, string account) =>
-        $"otpauth://totp/{Uri.EscapeDataString("Abdera Platform:" + account)}?secret={secret}&issuer={Uri.EscapeDataString("Abdera Platform")}&digits=6&period=30";
+        $"otpauth://totp/{Uri.EscapeDataString("Miralay:" + account)}?secret={secret}&issuer={Uri.EscapeDataString("Miralay")}&digits=6&period=30";
 
     public static long StepAt(DateTimeOffset time) => time.ToUnixTimeSeconds() / StepSeconds;
 

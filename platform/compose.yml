@@ -31,7 +31,7 @@ services:
       HostAgent__Provider: Ssh
       HostAgent__PrivateKeyPath: /run/secrets/platform_ssh_key
       Dns__Provider: Cloudflare
-      Dns__BaseDomain: ${SCHOOLS_BASE_DOMAIN:-abdera.app}
+      Dns__BaseDomain: ${SCHOOLS_BASE_DOMAIN:?}
       Dns__Cloudflare__ZoneId: ${CLOUDFLARE_ZONE_ID:?}
       Dns__Cloudflare__ApiToken: ${CLOUDFLARE_API_TOKEN:?}
       SchoolClient__Provider: Http

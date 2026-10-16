@@ -95,6 +95,7 @@ public class PlatformUnitTests
         Assert.Contains("Alerts__WebhookUrl=https://platform.abdera.app/api/alerts\n", Env("https://platform.abdera.app"));
         // Okul uygulaması http alarm adresiyle açılmaz; yerel test ortamında alarm kapalı kalır.
         Assert.Contains("Alerts__WebhookUrl=\n", Env("http://localhost:8090"));
+        Assert.Contains("School__Name=Deniz\n", Env("https://platform.abdera.app"));
     }
 
     [Fact]
@@ -111,4 +112,17 @@ public class PlatformUnitTests
     [InlineData("2026.10.15.1", "2026.10.15.1", 0)]
     public void Release_versions_compare_numerically(string left, string right, int sign) =>
         Assert.Equal(sign, Math.Sign(Api.Domain.Release.Compare(left, right)));
+
+    [Fact]
+    public void Modules_that_became_standard_are_dropped_instead_of_blocking_an_upgrade()
+    {
+        // Eski sürümde opsiyonel seçilen "progress", yeni sürümde çekirdek: güncelleme reddedilmez.
+        var catalog = new List<Api.Features.Releases.ModuleEntry>
+        {
+            new("progress", "Gelişim", true, []),
+            new("whatsapp", "WhatsApp", false, []),
+        };
+        Assert.Equal(["whatsapp"], Api.Features.Schools.ValidateModules(["progress", "whatsapp"], catalog));
+        Assert.Throws<ValidationFailedException>(() => Api.Features.Schools.ValidateModules(["olmayan"], catalog));
+    }
 }

@@ -3,11 +3,11 @@
 import { useEffect } from "react";
 import { DEFAULT_PROFILE, useSchoolProfile } from "@/lib/instance";
 
-// Sekme başlığındaki "· Abdera" son eki okulun kısa adıyla değiştirilir (docs/multi-tenant/ARCHITECTURE.md
+// Sekme başlığındaki "· Okul Paneli" son eki okulun kısa adıyla değiştirilir (docs/multi-tenant/ARCHITECTURE.md
 // §5.1). Sayfa başlıkları sunucuda statik üretildiği için (layout.tsx metadata şablonu) değişim
 // istemcide yapılır; Next başlığı her gezinmede yeniden yazdığından <title> izlenir.
-// Varsayılan profilde hiçbir şey yapmaz - bugünkü okulda başlıklar birebir aynı kalır.
-const BUILD_SUFFIX = " · Abdera";
+const BUILD_TITLE = "Okul Paneli";
+const BUILD_SUFFIX = ` · ${BUILD_TITLE}`;
 
 export function DocumentTitleBrand() {
   const { shortName } = useSchoolProfile();
@@ -17,7 +17,7 @@ export function DocumentTitleBrand() {
     const apply = () => {
       const title = document.title;
       if (title.endsWith(BUILD_SUFFIX)) document.title = title.slice(0, -BUILD_SUFFIX.length) + ` · ${shortName}`;
-      else if (title === "Abdera") document.title = shortName;
+      else if (title === BUILD_TITLE) document.title = shortName;
     };
     apply();
     const observer = new MutationObserver(apply);

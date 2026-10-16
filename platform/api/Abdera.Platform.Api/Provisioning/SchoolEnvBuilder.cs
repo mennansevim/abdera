@@ -32,7 +32,7 @@ public class SchoolEnvBuilder(IConfiguration config)
         // E-posta standart pakette (okul uygulamasının kataloğunda çekirdek): SMTP bilgisi girildiyse açık.
         var email = SmtpKeys.All(integrations.ContainsKey);
         var ai = school.Modules.Contains(ModuleAi) && integrations.ContainsKey("Ai__ApiKey");
-        var platformUrl = (config["Platform:PublicUrl"] ?? "https://platform.abdera.app").TrimEnd('/');
+        var platformUrl = (config["Platform:PublicUrl"] ?? "").TrimEnd('/');
 
         var lines = new List<(string Key, string Value)>
         {
@@ -42,6 +42,9 @@ public class SchoolEnvBuilder(IConfiguration config)
             ("App__Version", release.Version),
             ("POSTGRES_PASSWORD", Secret(SecretNames.PostgresPassword)),
             ("Frontend__Origin", $"https://{school.PrimaryDomain}"),
+            // Okulun kimliği: profil kaydı yokken (ör. sahiplenilen okul) ekranlar bu adla açılır.
+            ("School__Name", school.DisplayName),
+            ("School__ShortName", school.ShortName),
             ("SCHOOL_TIMEZONE", config["Schools:TimeZone"] ?? "Europe/Istanbul"),
             ("Modules__Enabled", school.ModulesEnvValue),
             ("Provisioning__Token", Secret(SecretNames.ProvisioningToken)),

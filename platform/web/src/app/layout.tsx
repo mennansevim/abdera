@@ -34,10 +34,10 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Abdera Platform",
-    template: "%s · Abdera Platform",
+    default: "Miralay",
+    template: "%s · Miralay",
   },
-  description: "Abdera okul kurulumlarını yöneten operatör paneli",
+  description: "Miralay - okul kurulumlarını yöneten operatör paneli",
   robots: { index: false, follow: false },
 };
 

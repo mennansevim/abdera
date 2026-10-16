@@ -43,7 +43,7 @@ export function rememberLastRole(role: StaffRole) {
   }
 }
 
-export function rememberLogin(role: StaffRole, email: string, password: string) {
+export function rememberLogin(role: StaffRole, email: string, password: string, schoolName: string) {
   try {
     window.localStorage.setItem(EMAIL_KEY_PREFIX + role, email);
   } catch {
@@ -52,7 +52,7 @@ export function rememberLogin(role: StaffRole, email: string, password: string) 
 
   const PasswordCredentialCtor = passwordCredentialCtor();
   if (!PasswordCredentialCtor) return;
-  const name = role === "Admin" ? "Abdera · Yönetici" : "Abdera · Öğretmen";
+  const name = `${schoolName} · ${role === "Admin" ? "Yönetici" : "Öğretmen"}`;
   navigator.credentials.store(new PasswordCredentialCtor({ id: email, password, name })).catch(() => {});
 }
 

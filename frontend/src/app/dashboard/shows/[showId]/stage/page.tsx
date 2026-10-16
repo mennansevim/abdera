@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { BrandMark, Icon, instrumentBadgeStyle } from "@/components/icons";
+import { Icon, instrumentBadgeStyle } from "@/components/icons";
+import { SchoolBrandMark } from "@/components/school-brand";
 import { useMe } from "@/lib/use-auth";
 import styles from "./stage.module.css";
 import {
@@ -65,53 +66,6 @@ function UpNextCard({ label, item }: { label: string; item: StageItem | null }) 
   );
 }
 
-// Şablon PNG'leri /public/bg altında, 1536x1024 (3:2) - Canva/AI ile üretilmiş, kesikli
-// çemberli bir "ÖĞRENCİ FOTOĞRAFI BURAYA GELECEK" alanı ve iki noktalı satır + "ENSTRÜMAN"
-// alt çizgisi taşıyorlar. Koordinatlar görselin kendi genişlik/yüksekliğine göre yüzde -
-// dıştaki kutu aspect-[3/2] ile görselle birebir aynı orana kilitlendiği için bu yüzdeler
-// her ekran boyutunda hizalı kalır (bkz. sohbet - piksel piksel kalibre edildi).
-interface PerformerTemplate {
-  src: string;
-  photo: { x: number; y: number; w: number; h: number };
-  details: { x: number; y: number; w: number };
-}
-
-// /public/bg içindeki bütün yıl sonu gösterisi şablonları tek eşleme üzerinden seçilir.
-// Piyano için iki varyant olduğu için art arda gelen öğrencilerde `position` ile dönüşür.
-const PERFORMER_TEMPLATES: Record<string, PerformerTemplate[]> = {
-  piyano: [
-    { src: "/bg/piano_bg.png", photo: { x: 13.5, y: 32, w: 27.5, h: 41.5 }, details: { x: 45, y: 39, w: 27 } },
-    { src: "/bg/piano2_bg.png", photo: { x: 17, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 48, y: 39, w: 28 } },
-  ],
-  keman: [
-    { src: "/bg/keman_bg.png", photo: { x: 7.5, y: 32.5, w: 31.5, h: 41.5 }, details: { x: 43, y: 39, w: 29 } },
-  ],
-  bateri: [
-    { src: "/bg/bateri_bg.png", photo: { x: 15.2, y: 32.5, w: 27.5, h: 41.5 }, details: { x: 47, y: 39, w: 28 } },
-  ],
-  gitar: [
-    { src: "/bg/gitar_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
-  ],
-  "çello": [
-    { src: "/bg/cello_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
-  ],
-  cello: [
-    { src: "/bg/cello_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
-  ],
-  viyolonsel: [
-    { src: "/bg/cello_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
-  ],
-  resim: [
-    { src: "/bg/resim_bg.png", photo: { x: 17.1, y: 32.5, w: 30.5, h: 41.5 }, details: { x: 49, y: 39, w: 27 } },
-  ],
-};
-
-function pickTemplate(instrumentName: string | null, position: number): PerformerTemplate | null {
-  const key = instrumentName?.trim().toLocaleLowerCase("tr-TR");
-  const variants = key ? PERFORMER_TEMPLATES[key] : undefined;
-  return variants?.[position % variants.length] ?? null;
-}
-
 // Kullanıcı isteği: "background resmin üzerine progress barı ekleyebilirsin" - hem şablon
 // görselinin hem de şablonsuz enstrümanların (gitar/çello/resim) gradyan kartının altına
 // aynı şerit biniyor, ikisi arasında geçişte tutarlı görünsün diye.
@@ -129,43 +83,8 @@ function PerformerProgressStrip({ position, totalItems, groupName }: { position:
   );
 }
 
-function TemplatedPerformerCard({ current, totalItems, template, fillHeight }: { current: StageItem; totalItems: number; template: PerformerTemplate; fillHeight?: boolean }) {
-  const initials = (current.studentName ?? "?").split(" ").map((part) => part[0]).slice(0, 2).join("");
-  return (
-    <div
-      className={`relative aspect-[3/2] overflow-hidden rounded-[2rem] border border-white/80 shadow-[0_24px_70px_rgba(124,65,48,.2)] [container-type:size] ${styles.slideReveal} ${
-        fillHeight ? "mx-auto h-full max-w-full" : "w-full"
-      }`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={template.src} alt="" className={`absolute inset-0 h-full w-full object-cover ${styles.slideImage}`} />
-
-      <div
-        className="absolute overflow-hidden rounded-full bg-[var(--brand-soft)]"
-        style={{ left: `${template.photo.x}%`, top: `${template.photo.y}%`, width: `${template.photo.w}%`, height: `${template.photo.h}%` }}
-      >
-        {current.hasPhoto && current.studentId
-          /* eslint-disable-next-line @next/next/no-img-element */
-          ? <img src={studentPhotoUrl(current.studentId, current.photoVersion)} alt={current.studentName ?? ""} className="h-full w-full object-cover" />
-          : <span className="grid h-full w-full place-items-center font-bold text-[var(--brand-strong)]" style={{ fontSize: "11cqw" }}>{initials}</span>}
-      </div>
-
-      <div
-        className={`absolute text-center ${styles.performerDetails}`}
-        style={{ left: `${template.details.x}%`, top: `${template.details.y}%`, width: `${template.details.w}%` }}
-      >
-        <p className="truncate font-serif font-bold text-[#6f302e]" style={{ fontSize: "clamp(1rem, 2.9cqw, 4.5rem)", lineHeight: 1.05 }}>{current.studentName}</p>
-        <p className={`mt-[1cqh] font-serif font-bold text-[#2d2e31] ${styles.pieceTitle}`} style={{ fontSize: "clamp(.875rem, 1.95cqw, 3rem)", lineHeight: 1.12 }}>{current.pieceTitle}</p>
-        {current.composer && <p className="mt-[.55cqh] truncate font-semibold text-[#775d55]" style={{ fontSize: "clamp(.75rem, 1.25cqw, 2rem)" }}>{current.composer}</p>}
-      </div>
-
-      <PerformerProgressStrip position={current.position} totalItems={totalItems} groupName={current.groupName} />
-    </div>
-  );
-}
-
-// Şablon PNG'si olmayan enstrümanlar (gitar/çello/resim) için - önceki tasarımın gradyan/blob
-// kartı, artık yalnızca kimlik bilgisini taşıyor (eser adı paylaşılan bloğa taşındı, bkz. aşağı).
+// Sahnedeki öğrenci kartı: okulun kendi markasıyla (SchoolBrandMark) çizilir. Görsel şablonlar
+// (ürün markası basılı PNG'ler) çok kiracılı kurulumda kaldırıldı; her okul kendi adını görür.
 function GradientPerformerCard({ current, totalItems, fillHeight }: { current: StageItem; totalItems: number; fillHeight?: boolean }) {
   return (
     <div
@@ -183,7 +102,7 @@ function GradientPerformerCard({ current, totalItems, fillHeight }: { current: S
           dizildiğinde) içerik alttaki ilerleme şeridinin üzerine binmesin (gerçek bir dizilim
           hatası olarak bulundu - bkz. sohbet). `pb` alttaki şeridin yüksekliğini önden ayırır. */}
       <div className="relative flex h-full flex-col p-[4cqw] pb-[22cqh]">
-        <BrandMark compact />
+        <SchoolBrandMark compact />
         <div className="flex flex-1 flex-col items-center justify-center gap-[3cqw] text-[#3e2d28] sm:flex-row sm:gap-[4cqw]">
           <div className="relative shrink-0">
             <div aria-hidden className="absolute -inset-[6%] -rotate-6 bg-[#d45f52]/20" style={{ borderRadius: "42% 58% 65% 35% / 45% 40% 60% 55%" }} />
@@ -404,13 +323,10 @@ export default function StagePage() {
           )}
 
           {isLive && current && current.kind === "Performance" && (() => {
-            const template = pickTemplate(current.instrumentName, current.position);
             return (
               <div className={isFullscreen ? "flex min-h-0 flex-1 flex-col items-center" : ""}>
                 <div className={isFullscreen ? "min-h-0 flex-1" : ""}>
-                  {template
-                    ? <TemplatedPerformerCard key={current.id} current={current} totalItems={stage.totalItems} template={template} fillHeight={isFullscreen} />
-                    : <GradientPerformerCard key={current.id} current={current} totalItems={stage.totalItems} fillHeight={isFullscreen} />}
+                  <GradientPerformerCard key={current.id} current={current} totalItems={stage.totalItems} fillHeight={isFullscreen} />
                 </div>
               </div>
             );

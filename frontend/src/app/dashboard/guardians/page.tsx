@@ -16,6 +16,7 @@ import {
   type GuardianPasswordState,
 } from "@/lib/people";
 import { useSessionState } from "@/lib/use-session-state";
+import { useSchoolProfile } from "@/lib/instance";
 
 // docs/10-decisions.md AA: veli giriş bilgilerini okul yönetir. Kullanıcı adı velinin telefonu,
 // şifreyi okul verir (rastgele 6 hane) ve gerektiğinde tekrar görür. İşletme WhatsApp hesabı
@@ -173,7 +174,8 @@ function CredentialBox({ row, credential, onClose, onIssue }: {
   onIssue: () => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
-  const message = credential.password ? guardianCredentialMessage(row.phoneNumber, credential.password, window.location.origin) : null;
+  const schoolName = useSchoolProfile().shortName;
+  const message = credential.password ? guardianCredentialMessage(row.phoneNumber, credential.password, window.location.origin, schoolName) : null;
 
   async function copy(text: string, label: string) {
     try {

@@ -353,8 +353,8 @@ export function useRevealGuardianPassword() {
 
 // Veliye iletilecek hazır metin: panel adresi + kullanıcı adı + şifre. Yönetici kopyalayıp
 // kendi telefonundan gönderir (işletme hesabı şifre içeren mesaj gönderemiyor, R2).
-export function guardianCredentialMessage(phoneNumber: string, password: string, origin: string) {
-  return `Abdera veli paneli giriş bilgileriniz:\n${origin}/parent/login\nKullanıcı adı: ${localPhone(phoneNumber)}\nŞifre: ${password}`;
+export function guardianCredentialMessage(phoneNumber: string, password: string, origin: string, schoolName: string) {
+  return `${schoolName} veli paneli giriş bilgileriniz:\n${origin}/parent/login\nKullanıcı adı: ${localPhone(phoneNumber)}\nŞifre: ${password}`;
 }
 
 // +905551234567 → 05551234567: veli giriş ekranına yazdığı biçim. Giriş her iki biçimi de kabul eder.

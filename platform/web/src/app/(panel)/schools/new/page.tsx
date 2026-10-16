@@ -228,7 +228,7 @@ function StepBody(props: StepProps) {
 function IdentityStep({ state, update, errors, slugCheck, slugChecking }: StepProps) {
   const [logoError, setLogoError] = useState<string | null>(null);
   const slugError = slugFormatError(state.slug);
-  const defaultDomain = slugCheck?.domain ?? (state.slug ? `${state.slug}.abdera.app` : "");
+  const defaultDomain = slugCheck?.domain ?? "";
   const domain = state.customDomain.trim().toLowerCase() || defaultDomain;
 
   function onNameChange(value: string) {
@@ -606,7 +606,7 @@ function PolicyStep({ state, update, errors, catalog }: StepProps) {
           <input className="field" type="time" value={state.schoolDayEnd} onChange={(event) => update({ schoolDayEnd: event.target.value })} aria-invalid={Boolean(errors.schoolDayEnd)} />
         </Field>
       </div>
-      <p className="text-meta sm:col-span-2">Varsayılanlar bugünkü Abdera değerleridir; okul yöneticisi bunları sonradan Ayarlar&apos;dan değiştirebilir.</p>
+      <p className="text-meta sm:col-span-2">Varsayılanlar önerilen başlangıç değerleridir; okul yöneticisi bunları sonradan Ayarlar&apos;dan değiştirebilir.</p>
     </div>
   );
 }
@@ -732,7 +732,7 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
   const groups = isModuleOn("groups", state.modules, entries);
   const integrations = integrationsFor(state, entries);
   const allFields = [...Object.values(INTEGRATION_FIELDS).flat(), OPS_ALERT_FIELD];
-  const domain = state.customDomain.trim().toLowerCase() || slugCheck?.domain || `${state.slug}.abdera.app`;
+  const domain = state.customDomain.trim().toLowerCase() || slugCheck?.domain || state.slug;
   const name = (key: string) => entries.find((m) => m.key === key)?.name ?? key;
   const money = (value: string) => `${value.replace(".", ",")} TRY`;
 

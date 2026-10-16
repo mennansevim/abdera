@@ -33,7 +33,6 @@ export interface BugReportList {
   counts: Record<"new" | "triaged" | "rejected" | "resolved" | "verified" | "reopened" | "needsInfo", number>;
 }
 
-export const BUG_REPORT_ISSUE_URL = "https://github.com/mennansevim/abdera/issues";
 
 export function useCreateBugReport() {
   const queryClient = useQueryClient();

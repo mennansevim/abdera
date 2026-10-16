@@ -61,10 +61,10 @@ function ProfileForm({ profile }: { profile: SchoolProfile }) {
     <form onSubmit={submit} className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="form-label">Okulun tam adı
-          <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={120} className="field text-sm" placeholder="Örn. Abdera Sanat Akademi" />
+          <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={120} className="field text-sm" placeholder="Örn. Deniz Müzik ve Dans Akademisi" />
         </label>
         <label className="form-label">Kısa ad
-          <input value={shortName} onChange={(event) => setShortName(event.target.value)} required maxLength={40} className="field text-sm" placeholder="Örn. Abdera" />
+          <input value={shortName} onChange={(event) => setShortName(event.target.value)} required maxLength={40} className="field text-sm" placeholder="Örn. Deniz" />
           <span className="text-meta mt-1 block font-normal">Menüde büyük yazılır. Tam ad kısa adla başlıyorsa kalanı alt satırda görünür.</span>
         </label>
         <label className="form-label">Resmi unvan (isteğe bağlı)

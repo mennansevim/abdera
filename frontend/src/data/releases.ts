@@ -143,7 +143,7 @@ export const RELEASES: Release[] = [
       { audience: "all", text: "Yoklamada \"Geldi + önceki dersten devam\" düğmesi geçen dersin çalışmasını, ödevini ve hedefini hazır getirir; Kaydet telefonda hep ekranın altında durur." },
       { audience: "all", text: "Yarım bıraktığın ders notu sayfa yenilense de kaybolmaz; ders kartından veliyi tek dokunuşla arayabilir ya da WhatsApp'tan yazabilirsin." },
       { audience: "all", text: "Bildirimlerdeki \"öğrenci geldi mi?\" sorusuna \"Mazeretli\" cevabı eklendi; giriş ekranı en son kullandığın rolle açılır." },
-      { audience: "all", text: "Abdera'yı telefonunun ana ekranına ekleyebilirsin: tarayıcı menüsünden \"Ana Ekrana Ekle\" dediğinde uygulama gibi tam ekran açılır." },
+      { audience: "all", text: "Paneli telefonunun ana ekranına ekleyebilirsin: tarayıcı menüsünden \"Ana Ekrana Ekle\" dediğinde uygulama gibi tam ekran açılır." },
     ],
   },
   {
