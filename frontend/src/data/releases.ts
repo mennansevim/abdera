@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.16",
+    date: "2026-10-16",
+    items: [
+      { audience: "admin", text: "Gelir ve gider ekranında bir ayın geliri artık yalnızca o ayın aidatlarından tahsil edilen parayı gösterir. Geçmiş ayların geç ödenen aidatı bu aya karışmaz, kendi ayında görünür." },
+    ],
+  },
+  {
     version: "2026.10.15.4",
     date: "2026-10-15",
     items: [],
