@@ -20,6 +20,7 @@ import {
   MAX_LOGO_BYTES,
   STEPS,
   buildRequest,
+  customCategoryKey,
   initialState,
   integrationsFor,
   slugFormatError,
@@ -388,12 +389,45 @@ function VersionStep({ state, update, errors, releases }: StepProps) {
 function BranchesStep({ state, update, errors, categories }: StepProps) {
   const [custom, setCustom] = useState("");
   const [customCategory, setCustomCategory] = useState<string>("");
+  const [newCategory, setNewCategory] = useState<{ name: string; unitLabel: string } | null>(null);
+  const [newCategoryError, setNewCategoryError] = useState<string | null>(null);
   if (categories.isLoading) return <Skeleton className="h-48" />;
   if (categories.error) return <LoadError message={errorMessage(categories.error)} onRetry={() => categories.refetch()} />;
   // Kataloğu olmayan eski sürüm: yalnızca serbest ad, kategori "Diğer".
-  const catalog: CategoryEntry[] = categories.data && categories.data.length > 0
+  const releaseCatalog: CategoryEntry[] = categories.data && categories.data.length > 0
     ? categories.data
     : [{ key: "other", name: "Diğer", unitLabel: "Ders", unitLabelPlural: "Dersler", suggestions: [] }];
+  // Elle açılan alanlar katalogdan sonra; önerisi yok, dersleri serbest yazılır.
+  const catalog: CategoryEntry[] = [
+    ...releaseCatalog,
+    ...state.customCategories.map((c) => ({ key: c.key, name: c.name, unitLabel: c.unitLabel || "Ders", unitLabelPlural: c.unitLabel || "Ders", suggestions: [] })),
+  ];
+  const isCustom = (key: string) => state.customCategories.some((c) => c.key === key);
+
+  function createCategory() {
+    const name = newCategory?.name.trim() ?? "";
+    if (!name) return;
+    const lower = name.toLocaleLowerCase("tr-TR");
+    if (catalog.some((c) => c.name.toLocaleLowerCase("tr-TR") === lower)) { setNewCategoryError(`“${name}” alanı zaten var.`); return; }
+    let key = customCategoryKey(name);
+    for (let n = 2; catalog.some((c) => c.key === key); n += 1) key = `${customCategoryKey(name).slice(0, 36)}-${n}`;
+    const next = new Set(state.categories);
+    next.add(key);
+    update({ categories: next, customCategories: [...state.customCategories, { key, name, unitLabel: newCategory!.unitLabel.trim() || "Ders" }] });
+    setCustomCategory(key);
+    setNewCategory(null);
+    setNewCategoryError(null);
+  }
+
+  function removeCustomCategory(key: string) {
+    const next = new Set(state.categories);
+    next.delete(key);
+    update({
+      categories: next,
+      customCategories: state.customCategories.filter((c) => c.key !== key),
+      branches: state.branches.filter((b) => b.category !== key),
+    });
+  }
   const has = (name: string) => state.branches.some((b) => b.name.trim().toLocaleLowerCase("tr-TR") === name.trim().toLocaleLowerCase("tr-TR"));
   const selectedCategories = catalog.filter((category) => state.categories.has(category.key));
   const targetCategory = customCategory && state.categories.has(customCategory) ? customCategory : selectedCategories[0]?.key ?? catalog[0].key;
@@ -433,14 +467,33 @@ function BranchesStep({ state, update, errors, categories }: StepProps) {
           {catalog.map((category) => {
             const on = state.categories.has(category.key);
             return (
-              <button key={category.key} type="button" onClick={() => toggleCategory(category.key)} aria-pressed={on}
+              <button key={category.key} type="button" onClick={() => (isCustom(category.key) ? removeCustomCategory(category.key) : toggleCategory(category.key))} aria-pressed={on}
+                title={isCustom(category.key) ? "Elle açılan alan - kaldırmak için tıkla" : undefined}
                 className={`pressable rounded-2xl border px-3 py-2 text-left ${on ? "border-[var(--brand)] bg-[var(--brand-soft)]/50" : "border-[var(--line)]"}`}>
                 <span className="block text-sm font-bold">{category.name}</span>
-                <span className="text-meta">{category.unitLabelPlural}</span>
+                <span className="text-meta">{isCustom(category.key) ? `Yeni alan · ${category.unitLabel}` : category.unitLabelPlural}</span>
               </button>
             );
           })}
+          <button type="button" onClick={() => { setNewCategory(newCategory ? null : { name: "", unitLabel: "Ders" }); setNewCategoryError(null); }} aria-expanded={newCategory !== null}
+            className="pressable rounded-2xl border border-dashed border-[var(--line-strong)] px-3 py-2 text-left text-[var(--brand-strong)]">
+            <span className="block text-sm font-bold">+ Yeni alan</span>
+            <span className="text-meta">Listede yoksa oluştur</span>
+          </button>
         </div>
+        {newCategory && (
+          <div className="mt-3 grid gap-2 rounded-2xl border border-[var(--line)] p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <Field label="Alan adı" hint="ör. Yoga ve meditasyon, Mutfak atölyesi">
+              <input className="field" value={newCategory.name} maxLength={60} autoFocus onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })}
+                onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createCategory(); } }} />
+            </Field>
+            <Field label="Alt birim adı" hint="Ekranlarda görünecek terim: Ders, Atölye, Seans…">
+              <input className="field" value={newCategory.unitLabel} maxLength={40} onChange={(event) => setNewCategory({ ...newCategory, unitLabel: event.target.value })} />
+            </Field>
+            <button type="button" onClick={createCategory} disabled={!newCategory.name.trim()} className="btn btn-primary">Alanı ekle</button>
+            {newCategoryError && <span className="form-error sm:col-span-3">{newCategoryError}</span>}
+          </div>
+        )}
       </div>
 
       {selectedCategories.map((category) => (
@@ -697,6 +750,9 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
         <SummaryRow label="Unvan / iletişim">{state.legalName || "—"} · {state.contactEmail || "—"}</SummaryRow>
       </SummarySection>
       <SummarySection title="Alanlar ve dersler" step="branches" onGoTo={onGoTo}>
+        {state.customCategories.some((c) => state.branches.some((b) => b.category === c.key)) && (
+          <SummaryRow label="Yeni alanlar">{state.customCategories.filter((c) => state.branches.some((b) => b.category === c.key)).map((c) => `${c.name} (${c.unitLabel})`).join(", ")}</SummaryRow>
+        )}
         <SummaryRow label="Dersler">
           <span className="flex flex-wrap gap-1">{state.branches.map((b) => <Badge key={b.name} tone="brand">{b.name}</Badge>)}</span>
         </SummaryRow>

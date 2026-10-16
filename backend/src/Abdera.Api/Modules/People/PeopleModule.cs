@@ -8,6 +8,7 @@ public static class PeopleModule
     public static void MapPeopleModule(this WebApplication app)
     {
         app.MapInstruments();
+        app.MapBranchCategories();
         app.MapStudents();
         app.MapGuardians();
         app.MapLinkGuardianToStudent();

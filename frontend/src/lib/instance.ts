@@ -69,6 +69,8 @@ export interface BranchCategory {
   unitLabelPlural: string;
   suggestions: string[];
   inUse: boolean;
+  // Okulun kendi açtığı alan ("c-..." anahtarlı); katalog alanları düzenlenemez.
+  isCustom?: boolean;
 }
 
 export interface InstanceConfig {

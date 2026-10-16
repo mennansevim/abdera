@@ -165,6 +165,26 @@ export function useInstruments() {
   return useQuery({ queryKey: ["instruments"], queryFn: () => api.get<Instrument[]>("/api/instruments") });
 }
 
+// Okulun kendi eğitim alanı (katalogda olmayan). Oluştur / ad-terim düzenle / boşsa sil.
+export function useSaveBranchCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { key?: string; name: string; unitLabel: string }) =>
+      input.key
+        ? api.put(`/api/branch-categories/${encodeURIComponent(input.key)}`, { name: input.name, unitLabel: input.unitLabel })
+        : api.post("/api/branch-categories", { name: input.name, unitLabel: input.unitLabel }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["instance-config"] }),
+  });
+}
+
+export function useDeleteBranchCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (key: string) => api.delete(`/api/branch-categories/${encodeURIComponent(key)}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["instance-config"] }),
+  });
+}
+
 // Ayarlar → Branşlar (yalnızca Admin). Alt birim eklenince/değişince arayüz terimi de değişebilir
 // (tek kategori "Enstrüman", karışık "Branş"), bu yüzden okul yapılandırması da tazelenir.
 export function useSaveInstrument() {

@@ -20,6 +20,19 @@ export interface BranchDraft {
   name: string;
 }
 
+// Katalogda olmayan, sihirbazda elle açılan alan. Anahtar addan türetilir ("c-yoga-ve-meditasyon").
+export interface CustomCategoryDraft {
+  key: string;
+  name: string;
+  unitLabel: string;
+}
+
+// Okul uygulaması BranchCatalog.CustomKeyFor ile aynı kural: "c-" + sadeleştirilmiş ad.
+export function customCategoryKey(name: string): string {
+  const slug = suggestSlug(name).replace(/^-+|-+$/g, "");
+  return `c-${slug || "alan"}`.slice(0, 40).replace(/-+$/, "");
+}
+
 export interface WizardState {
   displayName: string;
   shortName: string;
@@ -37,6 +50,7 @@ export interface WizardState {
   modules: Set<string>;
   // Seçilen kategoriler (öneriler bunlara göre gösterilir) ve okulun alt birimleri.
   categories: Set<string>;
+  customCategories: CustomCategoryDraft[];
   branches: BranchDraft[];
   adminEmail: string;
   adminDisplayName: string;
@@ -94,6 +108,7 @@ export function initialState(): WizardState {
     isCanary: false,
     modules: new Set(),
     categories: new Set(),
+    customCategories: [],
     branches: [],
     adminEmail: "",
     adminDisplayName: "",
@@ -305,6 +320,10 @@ export function buildRequest(state: WizardState, catalog: ModuleEntry[]): Create
     integrations: Object.keys(integrations).length > 0 ? integrations : null,
     isCanary: state.isCanary,
     branches: state.branches.map((branch) => ({ category: branch.category, name: branch.name.trim() })),
+    // Yalnızca altında ders olan özel alanlar gönderilir.
+    customCategories: state.customCategories
+      .filter((category) => state.branches.some((branch) => branch.category === category.key))
+      .map((category) => ({ key: category.key, name: category.name.trim(), unitLabel: category.unitLabel.trim() || "Ders", unitLabelPlural: null })),
   };
 }
 

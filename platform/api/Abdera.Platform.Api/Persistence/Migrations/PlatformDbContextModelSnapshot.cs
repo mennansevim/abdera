@@ -361,6 +361,13 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("CustomCategoryNamesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("custom_category_names_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(120)

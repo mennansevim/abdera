@@ -27,6 +27,10 @@ public class School
     // Okulun öğrettiği alan kategorileri (music, dance, sport...; §5.6). Yalnızca panelde gösterim ve
     // süzme için; alt birimlerin kendisi okulun veritabanındadır, okul yöneticisi sonradan değiştirebilir.
     public List<string> Categories { get; private set; } = [];
+    // Okulun kendi açtığı alanların adları (anahtar "c-..." → ad); katalog alanlarının adı sürüm kataloğundan.
+    public string CustomCategoryNamesJson { get; private set; } = "{}";
+    public IReadOnlyDictionary<string, string> CustomCategoryNames =>
+        System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(CustomCategoryNamesJson) ?? [];
     public string? PrimaryColor { get; private set; }
     // Filo güncellemesinde ilk dalga (kanarya) ve güncellemeden muaf tutma (§7).
     public bool IsCanary { get; private set; }
@@ -101,8 +105,9 @@ public class School
     public void CompleteUpgrade(string version, DateTimeOffset now) { AppVersion = version; TargetVersion = null; UpdatedAt = now; }
     public void SetCanary(bool canary, DateTimeOffset now) { IsCanary = canary; UpdatedAt = now; }
     public void SetVersionPinned(bool pinned, DateTimeOffset now) { IsVersionPinned = pinned; UpdatedAt = now; }
-    public void SetCategories(IEnumerable<string> categories, DateTimeOffset now)
+    public void SetCategories(IEnumerable<string> categories, DateTimeOffset now, IReadOnlyDictionary<string, string>? customNames = null)
     {
+        CustomCategoryNamesJson = System.Text.Json.JsonSerializer.Serialize(customNames ?? new Dictionary<string, string>());
         Categories = categories.Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToList();
         UpdatedAt = now;
     }

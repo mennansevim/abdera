@@ -37,9 +37,11 @@ public static class InstanceProvisioning
     public record TariffRequest(CourseKind CourseKind, int LessonsPerMonth, decimal MonthlyAmount, string? Currency, DateOnly EffectiveFrom);
     // Alt birim (branş): kategori BranchCatalog anahtarı, ad okulun kendi verdiği ad ("Bale", "Robotik kodlama").
     public record BranchRequest(string Category, string Name);
+    // Okulun kendi açtığı alan (katalogda olmayan); anahtar "c-" önekli, platform sihirbazı üretir.
+    public record CategoryRequest(string Key, string Name, string? UnitLabel, string? UnitLabelPlural);
     public record ProvisionRequest(
         AdminRequest Admin, ProfileRequest Profile, PolicyRequest? Policy, BillingRequest? Billing, IReadOnlyList<TariffRequest>? Tariffs,
-        IReadOnlyList<BranchRequest>? Branches = null);
+        IReadOnlyList<BranchRequest>? Branches = null, IReadOnlyList<CategoryRequest>? Categories = null);
     public record ProvisionResponse(bool AlreadyProvisioned, string AdminEmail, DateTimeOffset ProvisionedAt);
 
     public static void MapInstanceProvisioning(this IEndpointRouteBuilder app)
@@ -140,6 +142,9 @@ public static class InstanceProvisioning
                 await db.GrowthIdeas.Where(idea => idea.InstrumentId != null).ExecuteDeleteAsync();
                 await db.Instruments.ExecuteDeleteAsync();
             }
+            foreach (var category in request.Categories ?? [])
+                if (!await db.CustomBranchCategories.AnyAsync(c => c.Key == category.Key))
+                    await People.Features.BranchCategories.AddAsync(db, category.Key, category.Name, category.UnitLabel, category.UnitLabelPlural, now);
             foreach (var branch in branches)
                 if (!await db.Instruments.AnyAsync(i => i.Name == branch.Name.Trim()))
                     await People.Features.Instruments.AddAsync(db, branch.Name, null, branch.Category);
@@ -163,6 +168,7 @@ public static class InstanceProvisioning
                 schoolName = profile.Name,
                 tariffCount = request.Tariffs?.Count ?? 0,
                 branchCount = request.Branches?.Count ?? 0,
+                customCategoryCount = request.Categories?.Count ?? 0,
                 policy = request.Policy is not null,
             })));
 
@@ -184,9 +190,17 @@ public static class InstanceProvisioning
             if (tariff.MonthlyAmount < 0) errors[$"tariffs[{index}].monthlyAmount"] = ["Tutar negatif olamaz."];
             if (tariff.LessonsPerMonth is < 1 or > 31) errors[$"tariffs[{index}].lessonsPerMonth"] = ["Aylık ders sayısı 1 ile 31 arasında olmalı."];
         }
+        var customKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (category, index) in (request.Categories ?? []).Select((category, index) => (category, index)))
+        {
+            if (!Shared.Branches.BranchCatalog.IsCustomKey(category.Key?.ToLowerInvariant())) errors[$"categories[{index}].key"] = ["Alan anahtarı 'c-' ile başlamalı."];
+            else if (!customKeys.Add(category.Key)) errors[$"categories[{index}].key"] = ["Aynı alan iki kez verilmiş."];
+            if (string.IsNullOrWhiteSpace(category.Name) || category.Name.Trim().Length > 60) errors[$"categories[{index}].name"] = ["Alan adı 1-60 karakter olmalı."];
+        }
         foreach (var (branch, index) in (request.Branches ?? []).Select((branch, index) => (branch, index)))
         {
-            if (Shared.Branches.BranchCatalog.Find(branch.Category) is null) errors[$"branches[{index}].category"] = ["Bilinmeyen kategori."];
+            if (Shared.Branches.BranchCatalog.Find(branch.Category) is null && !customKeys.Contains(branch.Category ?? ""))
+                errors[$"branches[{index}].category"] = ["Bilinmeyen kategori."];
             if (string.IsNullOrWhiteSpace(branch.Name) || branch.Name.Trim().Length > 100) errors[$"branches[{index}].name"] = ["Ad 1-100 karakter olmalı."];
         }
         if ((request.Branches ?? []).GroupBy(b => (b.Name ?? "").Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))

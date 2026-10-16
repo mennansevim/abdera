@@ -4,11 +4,12 @@ import { useMemo, useState, type FormEvent } from "react";
 import { FormMessage, SectionHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useBranchCategories, useBranchTerms, type BranchCategory } from "@/lib/instance";
-import { useInstruments, useSaveInstrument, type Instrument } from "@/lib/people";
+import { useDeleteBranchCategory, useInstruments, useSaveBranchCategory, useSaveInstrument, type Instrument } from "@/lib/people";
 
 // Okulun öğrettiği alanlar (docs/multi-tenant/ARCHITECTURE.md §5.6): kategori (Müzik, Dans, Spor...)
 // ve altındaki alt birimler (enstrüman, dans türü, branş...). Yalnızca yönetici görür. Alt birim
-// silinmez, pasife alınır: eski kayıtlar adını göstermeye devam eder, yeni kayıtta seçilmez.
+// silinmez, pasife alınır: eski kayıtlar adını göstermeye devam eder, yeni kayıtta seçilmez. Katalogda
+// olmayan bir alan ("Yoga ve meditasyon") elle açılır; yalnızca okulun açtığı alanlar düzenlenir/silinir.
 export function BranchesPanel() {
   const terms = useBranchTerms();
   const categories = useBranchCategories();
@@ -43,7 +44,9 @@ function BranchList({ branches, categories }: { branches: Instrument[]; categori
       const key = categories.some((category) => category.key === branch.category) ? branch.category! : "other";
       byCategory.set(key, [...(byCategory.get(key) ?? []), branch]);
     }
-    return categories.filter((category) => byCategory.has(category.key)).map((category) => ({ category, items: byCategory.get(category.key)! }));
+    // Okulun açtığı alan, henüz alt birimi olmasa da listelenir (düzenlenip silinebilsin).
+    return categories.filter((category) => byCategory.has(category.key) || category.isCustom)
+      .map((category) => ({ category, items: byCategory.get(category.key) ?? [] }));
   }, [branches, categories]);
 
   async function run(input: Parameters<typeof save.mutateAsync>[0], success: string) {
@@ -65,7 +68,7 @@ function BranchList({ branches, categories }: { branches: Instrument[]; categori
       {grouped.length === 0 && <p className="text-meta">Henüz alt birim yok. Aşağıdan bir kategori seçip ekle.</p>}
       {grouped.map(({ category, items }) => (
         <div key={category.key}>
-          <p className="text-xs font-bold uppercase tracking-wide text-[var(--muted)]">{category.name} · {category.unitLabelPlural}</p>
+          <CategoryHeader category={category} empty={items.length === 0} onMessage={setMessage} />
           <ul className="mt-2 flex flex-wrap gap-2">
             {items.map((branch) => editing === branch.id
               ? <li key={branch.id} className="w-full"><EditBranch branch={branch} categories={categories} onDone={() => setEditing(null)} onSave={run} pending={save.isPending} /></li>
@@ -86,6 +89,55 @@ function BranchList({ branches, categories }: { branches: Instrument[]; categori
       ))}
       <AddBranches branches={branches} categories={categories} onSave={run} pending={save.isPending} />
     </>
+  );
+}
+
+function CategoryHeader({ category, empty, onMessage }: {
+  category: BranchCategory;
+  empty: boolean;
+  onMessage: (message: { tone: "success" | "error"; text: string } | null) => void;
+}) {
+  const save = useSaveBranchCategory();
+  const remove = useDeleteBranchCategory();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(category.name);
+  const [unitLabel, setUnitLabel] = useState(category.unitLabel);
+  const fail = (err: unknown, fallback: string) => onMessage({ tone: "error", text: err instanceof ApiError ? err.detail ?? err.title : fallback });
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await save.mutateAsync({ key: category.key, name, unitLabel });
+      onMessage({ tone: "success", text: `${name.trim()} kaydedildi.` });
+      setEditing(false);
+    } catch (err) { fail(err, "Alan kaydedilemedi."); }
+  }
+
+  async function del() {
+    try {
+      await remove.mutateAsync(category.key);
+      onMessage({ tone: "success", text: `${category.name} silindi.` });
+    } catch (err) { fail(err, "Alan silinemedi."); }
+  }
+
+  if (!editing) {
+    return (
+      <p className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--muted)]">
+        {category.name} · {category.unitLabelPlural}
+        {category.isCustom && <button type="button" onClick={() => setEditing(true)} className="normal-case tracking-normal text-[var(--brand-strong)] underline">düzenle</button>}
+      </p>
+    );
+  }
+  return (
+    <form onSubmit={submit} className="grid gap-2 rounded-xl border border-[var(--line)] p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <label className="form-label">Alan adı<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={60} className="field text-sm" /></label>
+      <label className="form-label">Alt birim adı<input value={unitLabel} onChange={(event) => setUnitLabel(event.target.value)} required maxLength={40} className="field text-sm" /></label>
+      <div className="flex flex-wrap gap-2">
+        {empty && <button type="button" onClick={del} disabled={remove.isPending} className="btn btn-quiet text-[var(--danger-strong)]">Sil</button>}
+        <button type="button" onClick={() => setEditing(false)} className="btn btn-quiet">Vazgeç</button>
+        <button type="submit" disabled={save.isPending} className="btn btn-primary">Kaydet</button>
+      </div>
+    </form>
   );
 }
 
@@ -132,6 +184,22 @@ function AddBranches({ branches, categories, onSave, pending }: {
 }) {
   const [categoryKey, setCategoryKey] = useState(() => categories.find((category) => category.inUse)?.key ?? categories[0]?.key ?? "other");
   const [custom, setCustom] = useState("");
+  const [newCategory, setNewCategory] = useState<{ name: string; unitLabel: string } | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const saveCategory = useSaveBranchCategory();
+
+  async function createCategory(event: FormEvent) {
+    event.preventDefault();
+    if (!newCategory?.name.trim()) return;
+    setCategoryError(null);
+    try {
+      const created = await saveCategory.mutateAsync({ name: newCategory.name, unitLabel: newCategory.unitLabel || "Ders" }) as { key: string };
+      setCategoryKey(created.key);
+      setNewCategory(null);
+    } catch (err) {
+      setCategoryError(err instanceof ApiError ? err.detail ?? err.title : "Alan oluşturulamadı.");
+    }
+  }
   const category = categories.find((item) => item.key === categoryKey) ?? categories[0];
   const existing = new Set(branches.map((branch) => branch.name.toLocaleLowerCase("tr-TR")));
   const suggestions = (category?.suggestions ?? []).filter((name) => !existing.has(name.toLocaleLowerCase("tr-TR")));
@@ -151,7 +219,23 @@ function AddBranches({ branches, categories, onSave, pending }: {
             {item.name}
           </button>
         ))}
+        <button type="button" onClick={() => setNewCategory(newCategory ? null : { name: "", unitLabel: "Ders" })} aria-expanded={newCategory !== null}
+          className="pressable min-h-9 rounded-full border border-dashed border-[var(--line)] px-3 text-xs font-bold text-[var(--brand-strong)]">
+          + Yeni alan
+        </button>
       </div>
+      {newCategory && (
+        <form onSubmit={createCategory} className="mt-3 grid gap-2 rounded-xl border border-[var(--line)] p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <label className="form-label">Alan adı
+            <input value={newCategory.name} onChange={(event) => setNewCategory({ ...newCategory, name: event.target.value })} required maxLength={60} placeholder="ör. Yoga ve meditasyon" className="field text-sm" />
+          </label>
+          <label className="form-label">Alt birim adı
+            <input value={newCategory.unitLabel} onChange={(event) => setNewCategory({ ...newCategory, unitLabel: event.target.value })} maxLength={40} placeholder="Ders, Atölye, Seans…" className="field text-sm" />
+          </label>
+          <button type="submit" disabled={saveCategory.isPending || !newCategory.name.trim()} className="btn btn-primary">Alanı oluştur</button>
+          {categoryError && <p className="form-error sm:col-span-3">{categoryError}</p>}
+        </form>
+      )}
       {suggestions.length > 0 && (
         <div className="mt-3">
           <p className="text-meta">Öneriler (tıkla, eklensin)</p>

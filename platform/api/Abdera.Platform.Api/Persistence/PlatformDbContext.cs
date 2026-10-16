@@ -36,6 +36,8 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.Property(x => x.PrimaryColor).HasMaxLength(7);
             e.Property(x => x.Modules).HasColumnType("text[]");
             e.Property(x => x.Categories).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]");
+            e.Property(x => x.CustomCategoryNamesJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
+            e.Ignore(x => x.CustomCategoryNames);
             e.Property(x => x.RowVersion).IsRowVersion();
             e.Ignore(x => x.ModulesEnvValue);
         });

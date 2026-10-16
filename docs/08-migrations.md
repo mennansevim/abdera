@@ -375,3 +375,9 @@ DEFAULT 'music'` ve `is_active boolean NOT NULL DEFAULT true`. Alt birim (branş
 davranışı değişmez. Yalnızca ekleme; kişiye referans yok, `PersonEraser` değişmez. `Down()` kolonları düşürür.
 Platform veritabanında aynı turda **AddBranchCategories**: `schools.categories text[]` ve
 `releases.category_catalog_json jsonb` (ikisi de boş varsayılanla).
+
+**AddCustomBranchCategories** (People, yalnızca `arch/multi-tenant` branch'i): `branch_categories` tablosu - okulun
+katalogda olmayan kendi eğitim alanları (`key varchar(40)` "c-" önekli, `name varchar(60)`, `unit_label`,
+`unit_label_plural`, `created_at/updated_at`). `UNIQUE (key)`, `UNIQUE (name)`. Kişiye referans yok, `PersonEraser`
+değişmez. Boş tabloyla başlar, davranış değişmez. `Down()` tabloyu düşürür. Platform tarafında **AddCustomCategoryNames**:
+`schools.custom_category_names_json jsonb` (kutucukta alan adı için).

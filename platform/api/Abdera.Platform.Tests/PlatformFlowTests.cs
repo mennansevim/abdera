@@ -342,16 +342,25 @@ public class PlatformFlowTests(PlatformFactory factory) : IClassFixture<Platform
         Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(new[] { new { category = "magic", name = "Uçan halı" } })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(new[] { new { category = "dance", name = "Bale" }, new { category = "dance", name = "bale" } })).StatusCode);
 
-        var created = await PostAsync(new[] { new { category = "dance", name = "Bale" }, new { category = "DANCE", name = "Hip hop" }, new { category = "other", name = "Yaratıcı drama" } });
+        // Katalogda olmayan alan: istekte tanımlanmadan kullanılamaz.
+        Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(new[] { new { category = "c-yoga", name = "Hatha yoga" } })).StatusCode);
+
+        var custom = ",\"customCategories\":[{\"key\":\"c-yoga\",\"name\":\"Yoga\",\"unitLabel\":\"Seans\"}]";
+        var body = Body(new object[] { new { category = "dance", name = "Bale" }, new { category = "DANCE", name = "Hip hop" }, new { category = "other", name = "Yaratıcı drama" }, new { category = "c-yoga", name = "Hatha yoga" } });
+        var created = await client.PostAsync("/api/schools", new StringContent(body.TrimEnd('}') + custom + "}", System.Text.Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
         await using var db = factory.Db();
-        Assert.Equal(["dance", "other"], (await db.Schools.SingleAsync(s => s.Id == id)).Categories);
+        var school = await db.Schools.SingleAsync(s => s.Id == id);
+        Assert.Equal(["c-yoga", "dance", "other"], school.Categories);
+        Assert.Equal("Yoga", school.CustomCategoryNames["c-yoga"]);
         using var scope = factory.Services.CreateScope();
         var request = await scope.ServiceProvider.GetRequiredService<SecretVault>().GetAsync(id, SecretNames.ProvisionRequest);
         var branches = JsonDocument.Parse(request!).RootElement.GetProperty("branches");
-        Assert.Equal(["dance:Bale", "dance:Hip hop", "other:Yaratıcı drama"],
+        Assert.Equal(["dance:Bale", "dance:Hip hop", "other:Yaratıcı drama", "c-yoga:Hatha yoga"],
             branches.EnumerateArray().Select(b => $"{b.GetProperty("category").GetString()}:{b.GetProperty("name").GetString()}"));
+        var customSent = JsonDocument.Parse(request!).RootElement.GetProperty("categories");
+        Assert.Equal("Seans", customSent[0].GetProperty("unitLabel").GetString());
     }
 }

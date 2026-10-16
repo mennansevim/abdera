@@ -42,14 +42,34 @@ public static class BranchCatalog
     public static BranchCategory? Find(string? key) =>
         All.FirstOrDefault(category => string.Equals(category.Key, key, StringComparison.OrdinalIgnoreCase));
 
+    // Okulun kendi açtığı alanlar (CustomBranchCategory) "c-" önekli anahtar taşır; katalogla çakışmaz.
+    public const string CustomPrefix = "c-";
+    private static readonly System.Text.RegularExpressions.Regex CustomKeyRegex = new(@"^c-[a-z0-9]+(-[a-z0-9]+)*$");
+    public static bool IsCustomKey(string? key) => key is { Length: <= 40 } && CustomKeyRegex.IsMatch(key);
+
+    public static string CustomKeyFor(string name)
+    {
+        var slug = string.Join('-', CodeFor(name).ToLowerInvariant().Split('_', StringSplitOptions.RemoveEmptyEntries));
+        var key = CustomPrefix + (slug.Length == 0 ? "alan" : slug);
+        return key.Length > 40 ? key[..40].TrimEnd('-') : key;
+    }
+
+    // Çoğul terim önerisi ("Ders" -> "Dersler", "Atölye" -> "Atölyeler"): son ünlüye göre -lar/-ler.
+    public static string PluralOf(string singular)
+    {
+        var last = singular.ToLowerInvariant().LastOrDefault(c => "aıouöüei".Contains(c));
+        return singular + ("aıou".Contains(last) ? "lar" : "ler");
+    }
+
     // Arayüz terimi: okulun tüm alt birimleri tek kategorideyse o kategorinin adı ("Enstrüman"),
     // birden fazla kategori varsa genel "Branş". Hiç alt birim yoksa da genel terim.
-    public static (string Singular, string Plural) TermsFor(IReadOnlyCollection<string> categoryKeys)
+    public static (string Singular, string Plural) TermsFor(IReadOnlyCollection<string> categoryKeys, IReadOnlyList<BranchCategory>? available = null)
     {
         var distinct = categoryKeys.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return distinct.Count == 1 && Find(distinct[0]) is { } only
-            ? (only.UnitLabel, only.UnitLabelPlural)
-            : ("Branş", "Branşlar");
+        var only = distinct.Count == 1
+            ? (available ?? All).FirstOrDefault(c => string.Equals(c.Key, distinct[0], StringComparison.OrdinalIgnoreCase))
+            : null;
+        return only is not null ? (only.UnitLabel, only.UnitLabelPlural) : ("Branş", "Branşlar");
     }
 
     // Alt birim kodu addan türetilir (büyük harf, Türkçe harfler sadeleştirilir); okul içinde benzersiz.

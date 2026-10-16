@@ -41,11 +41,12 @@ public static class Instruments
     private static async Task<IResult> UpdateAsync(Guid id, UpdateRequest request, AbderaDbContext db)
     {
         var instrument = await db.Instruments.SingleOrDefaultAsync(i => i.Id == id) ?? throw new NotFoundException("Alt birim bulunamadı.");
-        Validate(request.Name, request.Category);
+        Validate(request.Name);
+        var category = await BranchCategories.EnsureKnownAsync(db, request.Category);
         var name = request.Name.Trim();
         if (await db.Instruments.AnyAsync(i => i.Id != id && i.Name == name))
             throw new ConflictException($"'{name}' adlı bir alt birim zaten var.");
-        instrument.Update(name, request.Category);
+        instrument.Update(name, category);
         instrument.SetActive(request.IsActive);
         await db.SaveChangesAsync();
         return Results.Ok(ToResponse(instrument));
@@ -54,7 +55,8 @@ public static class Instruments
     // Kurulum (InstanceProvisioning) ve Ayarlar aynı kuralla ekler: ad ve kod okul içinde benzersiz.
     public static async Task<Instrument> AddAsync(AbderaDbContext db, string name, string? code, string category)
     {
-        Validate(name, category);
+        Validate(name);
+        category = await BranchCategories.EnsureKnownAsync(db, category);
         var trimmed = name.Trim();
         if (await db.Instruments.AnyAsync(i => i.Name == trimmed) || db.Instruments.Local.Any(i => i.Name == trimmed))
             throw new ConflictException($"'{trimmed}' adlı bir alt birim zaten var.");
@@ -71,12 +73,10 @@ public static class Instruments
         return instrument;
     }
 
-    private static void Validate(string? name, string? category)
+    private static void Validate(string? name)
     {
-        var errors = new Dictionary<string, string[]>();
-        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 100) errors["name"] = ["Ad 1-100 karakter olmalı."];
-        if (BranchCatalog.Find(category) is null) errors["category"] = ["Geçerli bir kategori seçilmeli."];
-        if (errors.Count > 0) throw new ValidationFailedException(errors);
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 100)
+            throw new ValidationFailedException(new Dictionary<string, string[]> { ["name"] = ["Ad 1-100 karakter olmalı."] });
     }
 
     private static InstrumentResponse ToResponse(Instrument i) => new(i.Id, i.Name, i.Code, i.Category, i.IsActive);

@@ -93,7 +93,7 @@ export default function SchoolsHomePage() {
             <span className="sr-only">Alana göre süz</span>
             <select value={category} onChange={(event) => setCategory(event.target.value)} className="field appearance-none pr-8 text-sm">
               <option value="">Tüm alanlar</option>
-              {usedCategories.map((key) => <option key={key} value={key}>{categoryName(key)}</option>)}
+              {usedCategories.map((key) => <option key={key} value={key}>{schools.flatMap((s) => s.customCategories ?? []).find((c) => c.key === key)?.name ?? categoryName(key)}</option>)}
             </select>
           </label>
         )}
@@ -104,7 +104,7 @@ export default function SchoolsHomePage() {
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(15rem,1fr))]">
         {isLoading && Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-48" />)}
-        {visible.map((school) => <SchoolTileCard key={school.id} school={school} now={now} categoryName={categoryName} />)}
+        {visible.map((school) => <SchoolTileCard key={school.id} school={school} now={now} categoryName={(key) => school.customCategories?.find((c) => c.key === key)?.name ?? categoryName(key)} />)}
         <Link
           href="/schools/new"
           className="pressable grid min-h-48 place-items-center rounded-[1.1rem] border-2 border-dashed border-[var(--line-strong)] text-[var(--muted)] hover:border-[var(--brand)] hover:text-[var(--brand)]"

@@ -32,9 +32,11 @@ public class Instrument
     public void Update(string name, string category)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("İsim boş olamaz.", nameof(name));
-        if (BranchCatalog.Find(category) is not { } known) throw new ArgumentException($"Bilinmeyen kategori: {category}", nameof(category));
+        // Katalog anahtarı ya da okulun açtığı alan ("c-..."); okulun alanlarında var olduğu kurulum/uç katmanında denetlenir.
+        var key = BranchCatalog.Find(category)?.Key ?? (BranchCatalog.IsCustomKey(category?.ToLowerInvariant()) ? category!.ToLowerInvariant() : null)
+            ?? throw new ArgumentException($"Bilinmeyen kategori: {category}", nameof(category));
         Name = name.Trim();
-        Category = known.Key;
+        Category = key;
     }
 
     public void SetActive(bool active) => IsActive = active;

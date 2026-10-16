@@ -28,4 +28,28 @@ public class BranchCatalogTests
         Assert.Throws<ArgumentException>(() => Instrument.Create("Uçan halı", "UCAN", "magic"));
         Assert.Equal("dance", Instrument.Create("Bale", "BALE", "DANCE").Category);
     }
+
+    [Theory]
+    [InlineData("Yoga ve meditasyon", "c-yoga-ve-meditasyon")]
+    [InlineData("Çocuk atölyesi", "c-cocuk-atolyesi")]
+    public void Custom_key_is_derived_and_recognised(string name, string key)
+    {
+        Assert.Equal(key, BranchCatalog.CustomKeyFor(name));
+        Assert.True(BranchCatalog.IsCustomKey(key));
+        Assert.False(BranchCatalog.IsCustomKey("music"));
+        Assert.False(BranchCatalog.IsCustomKey("c-"));
+    }
+
+    [Theory]
+    [InlineData("Ders", "Dersler")]
+    [InlineData("Seans", "Seanslar")]
+    [InlineData("Atölye", "Atölyeler")]
+    public void Plural_follows_vowel_harmony(string singular, string plural) => Assert.Equal(plural, BranchCatalog.PluralOf(singular));
+
+    [Fact]
+    public void Terms_use_a_custom_category_label_when_it_is_the_only_one()
+    {
+        var yoga = new BranchCategory("c-yoga", "Yoga", "Seans", "Seanslar", []);
+        Assert.Equal(("Seans", "Seanslar"), BranchCatalog.TermsFor(["c-yoga"], [.. BranchCatalog.All, yoga]));
+    }
 }

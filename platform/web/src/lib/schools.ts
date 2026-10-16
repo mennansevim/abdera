@@ -55,6 +55,8 @@ export interface SchoolTile {
   openAlerts: number;
   // Okulun öğrettiği alan kategorileri (music, dance, sport...). Eski kayıtlarda boş.
   categories?: string[];
+  // Okulun kendi açtığı alanların adları (katalog alanlarının adı sürüm kataloğundan gelir).
+  customCategories?: { key: string; name: string }[];
 }
 
 export interface Step {
@@ -135,6 +137,7 @@ export interface CreateSchoolInput {
   isCanary: boolean;
   // Okulun alt birimleri (branş): kategori sürümün kataloğundan, ad serbest.
   branches: { category: string; name: string }[];
+  customCategories: { key: string; name: string; unitLabel: string; unitLabelPlural: string | null }[];
 }
 
 // Var olan okulu taşıma - backend Schools.AdoptRequest. Kurulum ucu çağrılmaz; okulun verisi

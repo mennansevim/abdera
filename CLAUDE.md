@@ -163,6 +163,7 @@ Dans, spor, dil, kodlama... her okulda ders/seri/yoklama/aidat aynı; değişen 
 - **Arayüzde "Enstrüman" yazma.** Terim okulun kategorisinden gelir: `useBranchTerms()` (`branch`, `branchPlural`, `branchLower`...). Tek kategorili okulda "Enstrüman"/"Dans türü", karışık okulda "Branş". Cümle içinde Türkçe ek gerektiren yapı ("Enstrümana göre") kurma; terimden bağımsız kalıp kullan ("{terim} filtresi").
 - **Müziğe özel özellik** (enstrüman bakımı, nota kütüphanesi) yalnızca müzik öğreten okulda görünür: `useTeachesMusic()`. Yeni bir alana özel özellik eklerken kategori kontrolü koy; varsayılan her alana uyan davranıştır.
 - Yeni kategori ya da öneri `BranchCatalog`'a eklenir; platform sihirbazı sürüm kaydındaki kopyasını okur (`--print-branch-catalog`).
+- Katalogda olmayan alanı okul kendisi açar (`CustomBranchCategory`, anahtar `c-...`). Kategori doğrulaması her zaman `BranchCategories.EnsureKnownAsync` (katalog + okulun alanları) üzerinden yapılır; `BranchCatalog.Find` tek başına yetmez.
 
 ## Yapılmayacaklar
 

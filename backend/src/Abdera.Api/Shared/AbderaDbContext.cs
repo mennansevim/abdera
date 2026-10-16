@@ -30,6 +30,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<Instrument> Instruments => Set<Instrument>();
+    public DbSet<CustomBranchCategory> CustomBranchCategories => Set<CustomBranchCategory>();
     public DbSet<Student> Students => Set<Student>();
     public DbSet<Guardian> Guardians => Set<Guardian>();
     public DbSet<StudentGuardian> StudentGuardians => Set<StudentGuardian>();
