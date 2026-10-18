@@ -362,10 +362,10 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
   const kindTone: Tone = report.kind === "Bug" ? "danger" : "warning";
   const statusBadge = STATUS_BADGE[report.status];
 
-  async function update(status: BugReportStatus) {
+  async function update(status: BugReportStatus, triageNote = status === "Rejected" || status === "NeedsInfo" ? note.trim() || null : null) {
     setError(null);
     try {
-      await triage.mutateAsync({ id: report.id, status, githubIssueNumber: null, triageNote: status === "Rejected" || status === "NeedsInfo" ? note.trim() || null : null });
+      await triage.mutateAsync({ id: report.id, status, githubIssueNumber: null, triageNote });
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Güncellenemedi.");
     }
@@ -402,6 +402,8 @@ function InboxRow({ report, pageLabel }: { report: BugReport; pageLabel?: string
             <>
               {report.triageNote && <p className="text-meta">Sorulan: {report.triageNote}</p>}
               <DetailsForm report={report} />
+              {/* Detay gelmeyecekse bildirim kapatılır; Reddedildi sekmesinden "Yeniden aç" ile geri alınır. */}
+              <button type="button" onClick={() => update("Rejected", "Detay beklerken iptal edildi.")} disabled={triage.isPending} className="btn btn-quiet justify-self-start">İptal et</button>
             </>
           )}
           {report.status === "Reopened" && <p className="text-meta">Hâlâ hatalı{report.feedbackNote ? `: ${report.feedbackNote}` : " (açıklama yok)"}</p>}
