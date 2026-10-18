@@ -4,13 +4,13 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  AnalysisCard, AnalysisHero, Gauge, HeroChip, LevelRow, MiniBar, PeriodPicker, StateLegend, StatBlock,
-  STATE_STYLE, Strip, StripRow, rateTone,
+  AnalysisCard, AnalysisHero, EmptyCell, Gauge, HeroChip, LevelRow, MiniBar, PeriodPicker, StateLegend, StatBlock,
+  STATE_STYLE, Strip, StripFootnote, StripRow, rateTone,
 } from "@/components/analysis";
 import { EmptyState } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  WEEKDAY_NAMES, formatDecimal, levelName, longMonth, rate, sum, useTeacherAnalysis,
+  WEEKDAY_NAMES, formatDecimal, levelName, longMonth, rate, sum, trimLeadingMonths, useTeacherAnalysis,
   type AnalysisLessonState, type PeriodOption, type TeacherAnalysis, type TeacherAnalysisMonth,
 } from "@/lib/analysis";
 import { formatMoney } from "@/lib/billing-format";
@@ -57,9 +57,14 @@ function TeacherAnalysisContent() {
   }
   if (isLoading || !data) return <div className="app-card h-96 animate-pulse" aria-label="Yükleniyor" />;
 
-  const periods = data.months.map((month) => month.period);
+  const visible = trimLeadingMonths(data.months, (month) => monthTotal(month) > 0 || month.paid > 0);
+  const view: TeacherAnalysis = { ...data, months: visible };
+  const periods = visible.map((month) => month.period);
   const selected = Math.max(0, selectedPeriod ? periods.indexOf(selectedPeriod) : periods.length - 1);
-  const maxLessons = Math.max(1, ...data.months.map(monthTotal));
+  const maxLessons = Math.max(1, ...visible.map(monthTotal));
+  const hasLevel = visible.some((month) => month.averageDifficulty !== null);
+  const hasPaid = visible.some((month) => month.paid > 0);
+  const hidden = [!hasLevel && "eser zorluğu (ders notuna zorluk girildikçe)", !hasPaid && "ödenen (ödeme yapıldıkça)"].filter(Boolean);
   const isAdmin = me?.role === "Admin";
 
   return (
@@ -73,50 +78,57 @@ function TeacherAnalysisContent() {
         <PeriodPicker value={months} onChange={(value) => { setMonths(value); setSelectedPeriod(null); }} />
       </div>
 
-      <TeacherHero data={data} />
+      <TeacherHero data={view} trimmed={visible.length < data.months.length} />
 
-      <AnalysisCard title="Aylık şerit" action={<StateLegend states={["Present", "Makeup", "Excused", "Absent", "Unmarked", "Cancelled", "Upcoming"]} />}>
-        <p className="text-meta -mt-2">Ders yükü, öğrenci devamı, yoklama/not düzeni ve ödemeler aynı zaman ekseninde. Ayrıntı için bir aya dokunun.</p>
+      <AnalysisCard title="Ay ay" action={<StateLegend states={["Present", "Makeup", "Excused", "Absent", "Unmarked", "Cancelled", "Upcoming"]} />}>
         <Strip periods={periods} selected={selected} onSelect={(index) => setSelectedPeriod(periods[index]!)} caption="Aylık öğretmen şeridi">
           <StripRow label="Dersler" hint="durumlarına göre" periods={periods} selected={selected}>
-            {(index) => <LessonStack month={data.months[index]!} max={maxLessons} />}
+            {(index) => <LessonStack month={visible[index]!} max={maxLessons} />}
           </StripRow>
           <StripRow label="Öğrenci devamı" periods={periods} selected={selected}>
             {(index) => {
-              const month = data.months[index]!;
-              return <span className={`text-sm font-extrabold tabular-nums ${rateTone(month.attendanceRate)}`}>{month.attendanceRate === null ? "—" : `%${month.attendanceRate}`}</span>;
+              const month = visible[index]!;
+              return month.attendanceRate === null
+                ? <EmptyCell label="Yoklama yok" />
+                : <span className={`text-sm font-extrabold tabular-nums ${rateTone(month.attendanceRate)}`}>%{month.attendanceRate}</span>;
             }}
           </StripRow>
           <StripRow label="Ders notu" hint="gelinen derslerde" periods={periods} selected={selected}>
             {(index) => {
-              const month = data.months[index]!;
-              const attended = month.present + month.makeup;
-              return attended ? <MiniBar tone="brand" percent={month.noteCoverage} label={`%${month.noteCoverage ?? 0}`} /> : <span className="text-[.7rem] font-semibold text-[#b6a594]">—</span>;
+              const month = visible[index]!;
+              return month.present + month.makeup
+                ? <MiniBar tone="brand" percent={month.noteCoverage} label={`%${month.noteCoverage ?? 0}`} />
+                : <EmptyCell label="Yapılan ders yok" />;
             }}
           </StripRow>
           <StripRow label="Öğrenci" hint="ders gören" periods={periods} selected={selected}>
-            {(index) => <span className="text-sm font-extrabold tabular-nums">{data.months[index]!.activeStudents}</span>}
+            {(index) => visible[index]!.activeStudents
+              ? <span className="text-sm font-extrabold tabular-nums">{visible[index]!.activeStudents}</span>
+              : <EmptyCell label="Öğrenci yok" />}
           </StripRow>
-          <LevelRow label="Eser zorluğu" values={data.months.map((month) => month.averageDifficulty)} periods={periods} selected={selected} format={formatDecimal} />
-          <StripRow label="Ödenen" hint="haftalık + grup" periods={periods} selected={selected}>
-            {(index) => {
-              const paid = data.months[index]!.paid;
-              return <span className={`text-xs font-extrabold tabular-nums ${paid ? "" : "text-[#b6a594]"}`}>{paid ? formatMoney(paid, data.currency) : "—"}</span>;
-            }}
-          </StripRow>
+          {hasLevel && <LevelRow label="Eser zorluğu" hint="1–5" values={visible.map((month) => month.averageDifficulty)} periods={periods} selected={selected} format={formatDecimal} />}
+          {hasPaid && (
+            <StripRow label="Ödenen" hint="haftalık + grup" periods={periods} selected={selected}>
+              {(index) => {
+                const paid = visible[index]!.paid;
+                return paid ? <span className="text-xs font-extrabold tabular-nums">{formatMoney(paid, data.currency)}</span> : <EmptyCell label="Ödeme yok" />;
+              }}
+            </StripRow>
+          )}
         </Strip>
-        <MonthDetail month={data.months[selected]!} currency={data.currency} />
+        {hidden.length > 0 && <StripFootnote>Henüz veri olmadığı için gösterilmeyen satırlar: {hidden.join(", ")}.</StripFootnote>}
+        <MonthDetail month={visible[selected]!} currency={data.currency} />
       </AnalysisCard>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <StudentsCard data={data} />
-        <WeekdayCard data={data} />
+        <StudentsCard data={view} />
+        <WeekdayCard data={view} />
       </div>
     </div>
   );
 }
 
-function TeacherHero({ data }: { data: TeacherAnalysis }) {
+function TeacherHero({ data, trimmed }: { data: TeacherAnalysis; trimmed: boolean }) {
   const months = data.months;
   const attended = sum(months, (month) => month.present + month.makeup);
   const rated = sum(months, (month) => month.present + month.makeup + month.excused + month.absent);
@@ -131,7 +143,7 @@ function TeacherHero({ data }: { data: TeacherAnalysis }) {
   const initials = data.fullName.split(" ").map((part) => part[0]).slice(0, 2).join("");
 
   const parts = [
-    `Son ${months.length} ayda ${attended} ders yaptı${cancelled ? `, ${cancelled} ders iptal oldu` : ""}`,
+    `${trimmed ? "İlk dersinden bu yana" : `Son ${months.length} ayda`} ${attended} ders yaptı${cancelled ? `, ${cancelled} ders iptal oldu` : ""}`,
     attendance === null ? "öğrenci devamı için yoklama yok" : `öğrencilerinin devamı %${attendance}`,
     unmarked ? `${unmarked} geçmiş dersin yoklaması girilmedi` : "geçmiş derslerin hepsinin yoklaması girildi",
     paid ? `bu dönemde ${formatMoney(paid, data.currency)} ödendi` : null,
@@ -155,7 +167,7 @@ function TeacherHero({ data }: { data: TeacherAnalysis }) {
           <Gauge label="Öğrenci devamı" value={attendance === null ? "—" : `%${attendance}`} hint={`${attended} / ${rated} ders`} percent={attendance} color="#86c98d" />
           <Gauge label="Yoklama" value={marking === null ? "—" : `%${marking}`} hint={unmarked ? `${unmarked} ders eksik` : "eksik yok"} percent={marking} color={unmarked ? "#f2c14e" : "#86c98d"} />
           <Gauge label="Ders notu" value={notes === null ? "—" : `%${notes}`} hint="gelinen derslerde" percent={notes} color="#e9d8c4" />
-          <Gauge label="Eser zorluğu" value={formatDecimal(level)} hint={level === null ? "ders notu yok" : levelName(level)} percent={level === null ? null : ((level - 1) / 4) * 100} color="#f0a273" />
+          {level !== null && <Gauge label="Eser zorluğu" value={formatDecimal(level)} hint={levelName(level)} percent={((level - 1) / 4) * 100} color="#f0a273" />}
         </div>
       </div>
     </AnalysisHero>
@@ -164,13 +176,13 @@ function TeacherHero({ data }: { data: TeacherAnalysis }) {
 
 function LessonStack({ month, max }: { month: TeacherAnalysisMonth; max: number }) {
   const total = monthTotal(month);
-  if (!total) return <span className="text-[.7rem] font-semibold text-[#b6a594]">ders yok</span>;
+  if (!total) return <EmptyCell label="Ders yok" />;
   return (
-    <div className="flex h-28 flex-col items-center justify-end gap-1">
+    <div className="flex h-[5.5rem] w-full flex-col items-center justify-end gap-1">
       <span className="text-[.7rem] font-extrabold tabular-nums">{total}</span>
       <div
         className="flex w-full max-w-9 flex-col-reverse overflow-hidden rounded-t-lg rounded-b-sm"
-        style={{ height: `${Math.max(6, (total / max) * 88)}px` }}
+        style={{ height: `${Math.max(6, (total / max) * 64)}px` }}
         role="img"
         aria-label={STACK.filter((item) => item.pick(month)).map((item) => `${STATE_STYLE[item.state].label} ${item.pick(month)}`).join(", ")}
       >

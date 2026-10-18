@@ -110,6 +110,13 @@ export function useTeacherAnalysis(teacherId: string | null, months: number) {
   });
 }
 
+// Şerit kayıttan (ya da ilk dersten) önceki boş aylarla başlamasın. En az bir ay (bu ay) kalır.
+export function trimLeadingMonths<T extends { period: string }>(months: T[], hasData: (month: T) => boolean, since?: string | null) {
+  const sincePeriod = since?.slice(0, 7) ?? null;
+  const first = months.findIndex((month) => hasData(month) || (sincePeriod !== null && month.period >= sincePeriod));
+  return first < 0 ? months.slice(-1) : months.slice(first);
+}
+
 export function rate(part: number, whole: number) {
   return whole === 0 ? null : Math.round((part / whole) * 100);
 }

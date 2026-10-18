@@ -4,14 +4,14 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  AnalysisCard, AnalysisHero, Gauge, HeroChip, LevelRow, MiniBar, PeriodPicker, StateLegend, StatBlock,
-  STATE_STYLE, Strip, StripRow, rateTone,
+  AnalysisCard, AnalysisHero, EmptyCell, Gauge, HeroChip, LevelRow, MiniBar, PeriodPicker, StateLegend, StatBlock,
+  STATE_STYLE, STICKY_LABEL, Strip, StripFootnote, StripRow, monthColumns, rateTone,
 } from "@/components/analysis";
 import { Icon } from "@/components/icons";
 import { EmptyState } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import {
-  WEEKDAY_NAMES, formatDecimal, levelName, longMonth, rate, sum, useStudentAnalysis,
+  WEEKDAY_NAMES, formatDecimal, levelName, longMonth, rate, sum, trimLeadingMonths, useStudentAnalysis,
   type AnalysisReceivableStatus, type PeriodOption, type StudentAnalysis, type StudentAnalysisMonth,
 } from "@/lib/analysis";
 import { formatMoney } from "@/lib/billing-format";
@@ -66,8 +66,15 @@ function StudentAnalysisContent() {
   }
   if (isLoading || !data) return <div className="app-card h-96 animate-pulse" aria-label="Yükleniyor" />;
 
-  const periods = data.months.map((month) => month.period);
+  const visible = trimLeadingMonths(data.months, (month) => month.lessons.length > 0 || month.billing !== null || month.noteCount > 0, data.enrolledSince);
+  const view: StudentAnalysis = { ...data, months: visible };
+  const trimmed = visible.length < data.months.length;
+  const periods = visible.map((month) => month.period);
   const selected = Math.max(0, selectedPeriod ? periods.indexOf(selectedPeriod) : periods.length - 1);
+  const hasLevel = visible.some((month) => month.averageDifficulty !== null);
+  const hasAssignments = visible.some((month) => month.assignmentCount > 0);
+  const hasBilling = data.billingVisible && visible.some((month) => month.billing !== null);
+  const hidden = [!hasLevel && "seviye (ders notuna eser zorluğu girildikçe)", !hasAssignments && "ödev (derste ödev verildikçe)"].filter(Boolean);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
@@ -83,46 +90,48 @@ function StudentAnalysisContent() {
         </div>
       </div>
 
-      <StudentHero data={data} />
+      <StudentHero data={view} trimmed={trimmed} />
 
       <AnalysisCard
-        title="Aylık şerit"
-        action={<StateLegend states={["Present", "Makeup", "Excused", "Absent", "Cancelled", "Unmarked"]} />}
+        title="Ay ay"
+        action={<StateLegend states={["Present", "Makeup", "Excused", "Absent", "Cancelled", "Unmarked", "Upcoming"]} />}
       >
-        <p className="text-meta -mt-2">Devam, seviye, ödev{data.billingVisible ? " ve aidat" : ""} aynı zaman ekseninde. Ayrıntı için bir aya dokunun.</p>
         <Strip periods={periods} selected={selected} onSelect={(index) => setSelectedPeriod(periods[index]!)} caption="Aylık öğrenci şeridi">
           <StripRow label="Dersler" periods={periods} selected={selected}>
-            {(index) => <LessonDots month={data.months[index]!} />}
+            {(index) => <LessonDots month={visible[index]!} />}
           </StripRow>
-          <LevelRow label="Seviye" values={data.months.map((month) => month.averageDifficulty)} periods={periods} selected={selected} format={formatDecimal} />
-          <StripRow label="Ödev" hint="tamamlanan" periods={periods} selected={selected}>
-            {(index) => {
-              const month = data.months[index]!;
-              return month.assignmentCount
-                ? <MiniBar percent={month.assignmentRate} label={`${month.assignmentCompleted}/${month.assignmentCount}`} />
-                : <span className="text-[.7rem] font-semibold text-[#b6a594]">ödev yok</span>;
-            }}
-          </StripRow>
-          {data.billingVisible && (
-            <StripRow label="Aidat" periods={periods} selected={selected}>
-              {(index) => <BillingCell month={data.months[index]!} />}
+          {hasLevel && <LevelRow label="Seviye" hint="eser zorluğu, 1–5" values={visible.map((month) => month.averageDifficulty)} periods={periods} selected={selected} format={formatDecimal} />}
+          {hasAssignments && (
+            <StripRow label="Ödev" hint="tamamlanan" periods={periods} selected={selected}>
+              {(index) => {
+                const month = visible[index]!;
+                return month.assignmentCount
+                  ? <MiniBar percent={month.assignmentRate} label={`${month.assignmentCompleted}/${month.assignmentCount}`} />
+                  : <EmptyCell label="Ödev verilmedi" />;
+              }}
             </StripRow>
           )}
-          <PieceRows data={data} periods={periods} />
+          {hasBilling && (
+            <StripRow label="Aidat" periods={periods} selected={selected}>
+              {(index) => <BillingCell month={visible[index]!} />}
+            </StripRow>
+          )}
+          <PieceRows data={view} periods={periods} />
         </Strip>
-        <MonthDetail month={data.months[selected]!} billingVisible={data.billingVisible} />
+        {hidden.length > 0 && <StripFootnote>Henüz veri olmadığı için gösterilmeyen satırlar: {hidden.join(", ")}.</StripFootnote>}
+        <MonthDetail month={visible[selected]!} billingVisible={hasBilling} showLevel={hasLevel} showAssignments={hasAssignments} />
       </AnalysisCard>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <WeekdayCard data={data} />
+        <WeekdayCard data={view} />
         <ProfileCard data={data} />
-        {data.billingVisible && <AccountCard data={data} />}
+        {data.billingVisible && <AccountCard data={view} />}
       </div>
     </div>
   );
 }
 
-function StudentHero({ data }: { data: StudentAnalysis }) {
+function StudentHero({ data, trimmed }: { data: StudentAnalysis; trimmed: boolean }) {
   const months = data.months;
   const attended = sum(months, (month) => month.attended);
   const rated = sum(months, (month) => month.rated);
@@ -140,7 +149,7 @@ function StudentHero({ data }: { data: StudentAnalysis }) {
   const initials = data.fullName.split(" ").map((part) => part[0]).slice(0, 2).join("");
 
   const parts: string[] = [];
-  parts.push(attendance === null ? "Bu dönemde yoklaması girilmiş ders yok" : `Son ${months.length} ayda derslerin %${attendance}'ine geldi`);
+  parts.push(attendance === null ? "Bu dönemde yoklaması girilmiş ders yok" : `${trimmed ? "Kayıttan bu yana" : `Son ${months.length} ayda`} derslerin %${attendance}'ine geldi`);
   if (level !== null) parts.push(levelDelta !== null && Math.abs(levelDelta) >= 0.1
     ? `çalıştığı eserlerin zorluğu ${formatDecimal(levels[0]!)} → ${formatDecimal(level)}`
     : `eser zorluğu ${formatDecimal(level)} (${levelName(level)})`);
@@ -171,8 +180,8 @@ function StudentHero({ data }: { data: StudentAnalysis }) {
         </div>
         <div className="grid flex-[1_1_30rem] grid-cols-2 gap-3.5 sm:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
           <Gauge label="Devam" value={attendance === null ? "—" : `%${attendance}`} hint={`${attended} / ${rated} ders`} percent={attendance} color="#86c98d" />
-          <Gauge label="Seviye" value={formatDecimal(level)} hint={level === null ? "ders notu yok" : `${levelName(level)}${levelDelta !== null ? ` · ${levelDelta >= 0 ? "+" : ""}${formatDecimal(levelDelta)}` : ""}`} percent={level === null ? null : ((level - 1) / 4) * 100} color="#f0a273" />
-          <Gauge label="Ödev" value={assignmentRate === null ? "—" : `%${assignmentRate}`} hint={assignmentCount ? `${assignmentCount} ödevden` : "ödev verilmedi"} percent={assignmentRate} color="#e9d8c4" />
+          {level !== null && <Gauge label="Seviye" value={formatDecimal(level)} hint={level === null ? "ders notu yok" : `${levelName(level)}${levelDelta !== null && Math.abs(levelDelta) >= 0.05 ? ` · ${levelDelta > 0 ? "+" : ""}${formatDecimal(levelDelta)}` : ""}`} percent={level === null ? null : ((level - 1) / 4) * 100} color="#f0a273" />}
+          {assignmentCount > 0 && <Gauge label="Ödev" value={assignmentRate === null ? "—" : `%${assignmentRate}`} hint={assignmentCount ? `${assignmentCount} ödevden` : "ödev verilmedi"} percent={assignmentRate} color="#e9d8c4" />}
           {data.billingVisible && (
             <Gauge label="Ödeme" value={payRate === null ? "—" : `%${payRate}`} hint={billed ? `${formatMoney(paid, currency)} / ${formatMoney(billed, currency)}` : "aidat yok"} percent={payRate} color={payRate !== null && payRate < 100 ? "#f2c14e" : "#86c98d"} />
           )}
@@ -183,10 +192,10 @@ function StudentHero({ data }: { data: StudentAnalysis }) {
 }
 
 function LessonDots({ month }: { month: StudentAnalysisMonth }) {
-  if (!month.lessons.length) return <span className="text-[.7rem] font-semibold text-[#b6a594]">ders yok</span>;
+  if (!month.lessons.length) return <EmptyCell label="Ders yok" />;
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap gap-1">
+    <>
+      <div className="flex max-w-[5.5rem] flex-wrap justify-center gap-1">
         {month.lessons.map((lesson) => (
           <span
             key={lesson.startAt}
@@ -196,19 +205,21 @@ function LessonDots({ month }: { month: StudentAnalysisMonth }) {
           />
         ))}
       </div>
-      <span className={`text-xs font-extrabold tabular-nums ${rateTone(month.attendanceRate)}`}>{month.attendanceRate === null ? "—" : `%${month.attendanceRate}`}</span>
-    </div>
+      {month.rated > 0 && (
+        <span title={`Devam %${month.attendanceRate}`} className={`text-xs font-extrabold tabular-nums ${rateTone(month.attendanceRate)}`}>{month.attended}/{month.rated}</span>
+      )}
+    </>
   );
 }
 
 function BillingCell({ month }: { month: StudentAnalysisMonth }) {
-  if (!month.billing) return <span className="text-[.7rem] font-semibold text-[#b6a594]">aidat yok</span>;
+  if (!month.billing) return <EmptyCell label="Aidat yok" />;
   const style = BILL_STYLE[month.billing.status];
   return (
-    <div className={`flex flex-col rounded-[10px] px-2 py-1.5 ${style.className}`}>
-      <span className="text-xs font-extrabold tabular-nums">{formatMoney(month.billing.amount, month.billing.currency)}</span>
-      <span className="text-[.7rem] font-bold">{style.label}</span>
-    </div>
+    <span title={`${formatMoney(month.billing.amount, month.billing.currency)} · ${style.label}`} className={`inline-flex flex-col items-center rounded-lg px-2.5 py-1 leading-tight ${style.className}`}>
+      <span className="text-[.75rem] font-extrabold tabular-nums">{formatMoney(month.billing.amount, month.billing.currency)}</span>
+      <span className="text-[.65rem] font-bold">{style.label}</span>
+    </span>
   );
 }
 
@@ -217,8 +228,8 @@ function PieceRows({ data, periods }: { data: StudentAnalysis; periods: string[]
   const last = periods.length - 1;
   return (
     <>
-      <div className="grid grid-cols-[9rem_minmax(0,1fr)] border-t border-[#f1e7da] pt-2">
-        <span className="py-1.5 text-xs font-bold text-[var(--muted)]">Repertuvar</span>
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)] border-t border-[#f3ebe0] pt-2 sm:grid-cols-[7.5rem_minmax(0,1fr)]">
+        <span className={`py-1.5 text-[.78rem] font-bold ${STICKY_LABEL}`}>Repertuvar</span>
       </div>
       {data.pieces.map((piece) => {
         const start = Math.max(0, periods.indexOf(piece.firstPeriod));
@@ -227,19 +238,19 @@ function PieceRows({ data, periods }: { data: StudentAnalysis; periods: string[]
         const ongoing = !piece.finished && end >= last - 1;
         const tone = DIFFICULTY_STYLE[piece.difficulty ?? 2] ?? DIFFICULTY_STYLE[2];
         return (
-          <div key={piece.title} className="grid grid-cols-[9rem_minmax(0,1fr)] items-center">
-            <div className="min-w-0 py-1 pr-2.5">
+          <div key={piece.title} className="grid grid-cols-[6rem_minmax(0,1fr)] items-center sm:grid-cols-[7.5rem_minmax(0,1fr)]">
+            <div className={`min-w-0 py-1 pr-2.5 ${STICKY_LABEL}`}>
               <p className="truncate text-xs font-bold">{piece.title}</p>
               {piece.composer && <p className="truncate text-[.7rem] font-semibold text-[#9a8573]">{piece.composer}</p>}
             </div>
-            <div className="grid py-1" style={{ gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))` }}>
+            <div className="grid py-1" style={monthColumns(periods.length)}>
               <div
                 title={`${piece.title} · ${levelName(piece.difficulty)}`}
                 className={`mx-1 flex h-[26px] items-center justify-between gap-1.5 overflow-hidden whitespace-nowrap px-2.5 text-[.7rem] font-extrabold ${tone} ${ongoing ? "rounded-l-lg rounded-r-sm" : "rounded-lg"}`}
                 style={{ gridColumn: `${start + 1} / ${end + 2}` }}
               >
                 <span>{levelName(piece.difficulty)}</span>
-                <span>{piece.finished ? "Bitti" : ongoing ? "Sürüyor" : ""}</span>
+                {end > start && <span>{piece.finished ? "Bitti" : ongoing ? "Sürüyor" : ""}</span>}
               </div>
             </div>
           </div>
@@ -249,7 +260,7 @@ function PieceRows({ data, periods }: { data: StudentAnalysis; periods: string[]
   );
 }
 
-function MonthDetail({ month, billingVisible }: { month: StudentAnalysisMonth; billingVisible: boolean }) {
+function MonthDetail({ month, billingVisible, showLevel, showAssignments }: { month: StudentAnalysisMonth; billingVisible: boolean; showLevel: boolean; showAssignments: boolean }) {
   const extra = [month.cancelled && `${month.cancelled} iptal`, month.unmarked && `${month.unmarked} yoklamasız`].filter(Boolean).join(" · ");
   return (
     <div className="mt-1 flex flex-wrap items-start gap-x-7 gap-y-4 rounded-2xl bg-[#fbf4eb] px-5 py-4">
@@ -259,8 +270,8 @@ function MonthDetail({ month, billingVisible }: { month: StudentAnalysisMonth; b
       </div>
       <div className="grid flex-[1_1_22rem] grid-cols-2 gap-3 sm:grid-cols-4">
         <StatBlock value={`${month.attended} / ${month.rated}`} label={extra ? `ders · ${extra}` : "derse geldi"} />
-        <StatBlock value={formatDecimal(month.averageDifficulty)} label="ort. eser zorluğu" />
-        <StatBlock value={month.assignmentRate === null ? "—" : `%${month.assignmentRate}`} label="ödev tamamlama" />
+        {showLevel && <StatBlock value={formatDecimal(month.averageDifficulty)} label="ort. eser zorluğu" />}
+        {showAssignments && <StatBlock value={month.assignmentRate === null ? "—" : `%${month.assignmentRate}`} label="ödev tamamlama" />}
         {billingVisible && (month.billing
           ? <StatBlock value={BILL_STYLE[month.billing.status].label} tone={BILL_STYLE[month.billing.status].className.split(" ")[1]}
               label={`${formatMoney(month.billing.amount, month.billing.currency)}${month.billing.lastPaymentDate ? ` · ${formatDate(month.billing.lastPaymentDate, false)}` : ` · vade ${formatDate(month.billing.dueDate, false)}`}`} />
