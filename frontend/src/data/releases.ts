@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.18.3",
+    date: "2026-10-18",
+    items: [
+      { audience: "all", text: "Öğrenci ve öğretmen analizindeki aylık görünüm sadeleşti: kayıttan önceki boş aylar ve henüz verisi olmayan satırlar artık gösterilmiyor. Telefonda görünüm en güncel aydan açılır." },
+    ],
+  },
+  {
     version: "2026.10.18.2",
     date: "2026-10-18",
     items: [
