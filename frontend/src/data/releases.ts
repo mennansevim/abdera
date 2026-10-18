@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.18",
+    date: "2026-10-18",
+    items: [
+      { audience: "admin", text: "Hata bildir → Gelen bildirimler'de detay beklenen bir bildirimi artık \"İptal et\" ile kapatabilirsin. Gerekirse Reddedildi sekmesinden yeniden açılır." },
+    ],
+  },
+  {
     version: "2026.10.16.2",
     date: "2026-10-16",
     items: [
