@@ -22,6 +22,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.18.2",
+    date: "2026-10-18",
+    items: [
+      { audience: "all", text: "Yeni öğrenci analizi ekranı: öğrencinin devamı, çalıştığı eserlerin zorluğu, ödevleri ve repertuvarı ay ay tek bir şeritte. Öğrenciler listesinde her satırdaki analiz butonundan açılır." },
+      { audience: "admin", text: "Öğrenci analizinde aidat durumu ve açık bakiye de aynı şeritte görünür." },
+      { audience: "admin", text: "Öğretmenler listesindeki analiz butonuyla her öğretmenin ders yükünü, öğrencilerinin devamını, ders notu düzenini ve aylık ödemelerini görebilirsin." },
+      { audience: "all", text: "Öğretmenler menüdeki \"Analizim\" ile kendi aylık özetlerini ve öğrencilerinin devam durumunu görebilir." },
+    ],
+  },
+  {
     version: "2026.10.18",
     date: "2026-10-18",
     items: [
