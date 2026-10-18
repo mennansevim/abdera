@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
@@ -105,7 +106,7 @@ export default function StudentsPage() {
           />
           {isAdmin && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-quiet text-xs">Hızlı ekle</button>}
         </div>
-        {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_7.5rem_6rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span title="Haftalık yoklama, eskiden yeniye: ✓ geldi · ✕ gelmedi · M mazeretli · ? yoklama girilmedi · – ders yok">Son 4 hafta</span><span className="text-center">Durum</span></div>}
+        {!isLoading && !isError && visibleRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_7.5rem_6rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğrenci</span><span>Doğum tarihi</span><span>Kurslar</span><span title="Haftalık yoklama, eskiden yeniye: ✓ geldi · ✕ gelmedi · M mazeretli · ? yoklama girilmedi · – ders yok">Son 4 hafta</span><span className="text-center">Durum</span><span /></div>}
         {isLoading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
         {!isLoading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğrenciler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={() => void refetch()} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!isLoading && !isError && visibleRows.length === 0 && (
@@ -118,7 +119,7 @@ export default function StudentsPage() {
         {!isLoading && !isError && <ul className="divide-y divide-[var(--line)]">
           {visibleRows.map(({ student, instruments, recentAttendance }) => (
             <li id={`student-${student.id}`} key={student.id} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
-              <div className="px-2 py-0.5">
+              <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 py-0.5">
               <button
                 onClick={() => setExpandedId(expandedId === student.id ? null : student.id)}
                 className="pressable grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] md:grid-cols-[minmax(0,1.2fr)_9rem_minmax(10rem,.9fr)_7.5rem_6rem]"
@@ -134,6 +135,7 @@ export default function StudentsPage() {
                 <AttendanceWeekBadges weeks={recentAttendance} className="hidden md:flex" />
                 <span className={`hidden justify-self-center rounded-full px-2 py-0.5 text-[.72rem] font-bold md:block ${student.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{student.status === "Active" ? "Aktif" : "Pasif"}</span>
               </button>
+              <Link href={`/dashboard/students/analysis?studentId=${student.id}`} className="icon-btn icon-btn-quiet" aria-label={`${student.firstName} ${student.lastName} analizi`} title="Analiz"><Icon name="target" className="h-4 w-4" /></Link>
               </div>
               {expandedId === student.id && <StudentDetail student={student} isAdmin={isAdmin} canManage={canManage} onDelete={() => setDeleting(student)} />}
             </li>

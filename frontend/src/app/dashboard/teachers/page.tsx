@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
@@ -162,7 +163,7 @@ function TeachersPageContent() {
             onChange={(value) => setStatus(value as "all" | TeacherStatus)}
           />
         </div>
-        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-right">Ödeme</span><span className="text-center">Durum</span><span /></div>}
+        {!loading && !isError && teacherRows.length > 0 && <div className="hidden grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem_2.75rem_2.75rem] items-center gap-3 border-b border-[var(--line)] px-3 py-2 text-micro text-[var(--muted)] md:grid"><span>Öğretmen</span><span>Branş</span><span className="text-right">Öğrenci</span><span className="text-right">Ders</span><span className="text-right">Tamamlanan</span><span className="text-right">Ödeme</span><span className="text-center">Durum</span><span /><span /></div>}
         {loading && <div className="space-y-2 p-3">{Array.from({ length: 5 }, (_, index) => <div key={index} className="skeleton h-10 rounded-lg" />)}</div>}
         {!loading && isError && <div className="grid min-h-48 place-items-center p-6 text-center"><div><p className="text-sm font-bold">Öğretmenler yüklenemedi</p><p className="text-meta mt-1">Bağlantıyı kontrol edip yeniden deneyebilirsin.</p><button type="button" onClick={retry} disabled={isFetching} className="btn btn-quiet mt-3 disabled:opacity-50">{isFetching ? "Yükleniyor…" : "Tekrar dene"}</button></div></div>}
         {!loading && !isError && teacherRows.length === 0 && <EmptyState icon="teachers" title={hasFilters ? "Seçili filtrelerle eşleşen öğretmen yok." : "Henüz öğretmen yok."} action={hasFilters ? <button type="button" onClick={clearFilters} className="btn btn-quiet text-xs">Filtreleri temizle</button> : undefined} />}
@@ -219,7 +220,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
   }, [groupedStudents, studentSearch]);
 
   return <li id={`teacher-${teacher.id}`} className="scroll-mt-24 target:bg-[var(--brand-soft)]">
-    <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] items-center gap-1 px-2 py-0.5 md:grid-cols-[minmax(0,1fr)_2.75rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)_2.75rem_2.75rem] items-center gap-1 px-2 py-0.5">
       <button type="button" onClick={onToggle} aria-expanded={isAdmin ? expanded : undefined} disabled={!isAdmin} className="pressable grid min-h-11 min-w-0 grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-lg px-1.5 text-left hover:bg-[var(--surface-muted)] disabled:cursor-default disabled:hover:bg-transparent disabled:active:transform-none md:grid-cols-[minmax(0,1.15fr)_minmax(0,.9fr)_5rem_4.5rem_6rem_7.5rem_5.5rem]">
         <span className="min-w-0">
           <span className="flex min-w-0 items-center gap-1.5"><span className="truncate text-sm font-bold">{teacher.firstName} {teacher.lastName}</span>{isAdmin && <Icon name="chevron" className={`h-3.5 w-3.5 shrink-0 text-[var(--muted)] transition-transform ${expanded ? "rotate-90" : ""}`} />}</span>
@@ -231,6 +232,7 @@ function TeacherRow({ teacher, instruments, students, teacherStudents, weekRow, 
         <PayoutStatusCell payRow={payRow} />
         <span className={`hidden justify-self-center rounded-full px-2 py-0.5 text-[.72rem] font-bold md:block ${teacher.status === "Active" ? "bg-[var(--success-soft)] text-[var(--success-strong)]" : "bg-[var(--surface-muted)] text-[var(--muted)]"}`}>{teacher.status === "Active" ? "Aktif" : "Pasif"}</span>
       </button>
+      <Link href={`/dashboard/teachers/analysis?teacherId=${teacher.id}`} className="icon-btn icon-btn-quiet" aria-label={`${teacher.firstName} ${teacher.lastName} analizi`} title="Analiz"><Icon name="target" className="h-4 w-4" /></Link>
       {isAdmin && <RowMenu label={`${teacher.firstName} ${teacher.lastName} işlemleri`}>{(close) => <>
         {teacher.status === "Active" && <RowMenuItem icon="plus" onClick={() => { close(); setShowAddForm(true); }}>Öğrenci ekle</RowMenuItem>}
         {/* Ödeme Giderler ekranındaki "Gider ekle > Haftalık" formunda yapılır; buradan o form
