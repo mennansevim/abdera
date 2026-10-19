@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 
 export type SchoolStatus = "Provisioning" | "Active" | "Failed" | "Suspended" | "PendingDestroy" | "Destroyed";
-export type RunKind = "Create" | "Upgrade" | "Suspend" | "Resume" | "Destroy" | "Undestroy" | "Purge" | "Cancel" | "Reconfigure" | "Drill" | "Adopt";
+export type RunKind = "Create" | "Upgrade" | "Suspend" | "Resume" | "Destroy" | "Undestroy" | "Purge" | "Cancel" | "Reconfigure" | "Drill" | "Adopt" | "DomainAttach" | "DomainDetach";
 export type RunStatus = "Pending" | "Running" | "Succeeded" | "Failed" | "Cancelled";
 export type StepStatus = "Running" | "Succeeded" | "Failed";
 
@@ -57,6 +57,8 @@ export interface SchoolTile {
   categories?: string[];
   // Okulun kendi açtığı alanların adları (katalog alanlarının adı sürüm kataloğundan gelir).
   customCategories?: { key: string; name: string }[];
+  // Okula girilen adres: bağlı özel alan adı varsa o, yoksa platform alt alanı.
+  publicDomain?: string;
 }
 
 export interface Step {
@@ -100,6 +102,25 @@ export interface SchoolDetail {
   telemetryHistory: Telemetry[];
   alerts: SchoolAlert[];
   createdAt: string;
+  domain?: SchoolDomain;
+}
+
+// Okulun kendi alan adı (platform/api Features/SchoolDomains.cs). target: CNAME kaydının hedefi.
+export interface SchoolDomain {
+  customDomain: string | null;
+  redirect: boolean;
+  active: boolean;
+  target: string;
+  hostIp: string | null;
+  lastCheck: string | null;
+  checkedAt: string | null;
+}
+
+export interface DomainCheck {
+  ready: boolean;
+  found: string[];
+  expected: string | null;
+  message: string;
 }
 
 export interface SlugCheck {
@@ -180,6 +201,8 @@ export const RUN_KIND_LABEL: Record<RunKind, string> = {
   Reconfigure: "Yapılandırma",
   Drill: "Prova geri yükleme",
   Adopt: "Sahiplenme",
+  DomainAttach: "Alan adını bağlama",
+  DomainDetach: "Alan adını kaldırma",
 };
 
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
@@ -242,7 +265,7 @@ export function useAdoptSchool() {
   });
 }
 
-function useSchoolMutation<TVariables>(call: (variables: TVariables) => Promise<unknown>) {
+function useSchoolMutation<TVariables, TResult = unknown>(call: (variables: TVariables) => Promise<TResult>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: call,
@@ -268,6 +291,18 @@ export function useSchoolFlags(id: string) {
 export function useSchoolModules(id: string) {
   return useSchoolMutation((input: { modules: string[]; integrations: Record<string, string> | null }) =>
     api.put<{ runId: string }>(`/api/schools/${id}/modules`, input));
+}
+
+export function useSetSchoolDomain(id: string) {
+  return useSchoolMutation((input: { domain: string; redirect: boolean }) => api.put<SchoolDomain>(`/api/schools/${id}/domain`, input));
+}
+
+export function useCheckSchoolDomain(id: string) {
+  return useSchoolMutation(() => api.post<DomainCheck>(`/api/schools/${id}/domain/check`));
+}
+
+export function useRemoveSchoolDomain(id: string) {
+  return useSchoolMutation(() => api.delete<void>(`/api/schools/${id}/domain`));
 }
 
 export function useRevealAdminPassword(id: string) {

@@ -48,7 +48,7 @@ public sealed partial record AgentCommand(string Text, string? Stdin)
 
     private static readonly HashSet<string> Verbs =
     [
-        "create", "reconfigure", "pull", "up", "down", "upgrade", "rollback", "route add", "route remove", "suspend", "resume",
+        "create", "reconfigure", "pull", "up", "down", "upgrade", "rollback", "route add", "route remove", "route alias", "route alias-remove", "suspend", "resume",
         "provision", "backup-now", "dump", "restore", "destroy", "undestroy", "purge", "status", "host-info", "version",
     ];
 

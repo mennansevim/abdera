@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Abdera.Platform.Api.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Http.Json;
@@ -209,5 +211,102 @@ public class PlatformLocalLoginTests(PlatformLocalLoginTests.Fixture factory) : 
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/schools")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync("/api/auth/login", new { email = PlatformFactory.OperatorEmail, password = "yanlis-parola-123", totpCode = (string?)null })).StatusCode);
+    }
+}
+
+// Okulun kendi alan adı: kaydet → DNS hazır değilse bekler → hazırsa bağlanır (Caddy) → yönlendirme → kaldır.
+public class PlatformCustomDomainTests(PlatformCustomDomainTests.Fixture factory) : IClassFixture<PlatformCustomDomainTests.Fixture>
+{
+    public class Fixture : PlatformFactory;
+
+    [Fact]
+    public async Task School_domain_is_attached_only_after_its_dns_points_to_the_host()
+    {
+        var client = await factory.OperatorAsync();
+        await factory.RegisterReleaseAsync(client, "2026.10.15.1", 'a');
+        await factory.AddHostAsync(client, "alan-1");
+        var id = await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("deniz", "2026.10.15.1"));
+        var other = await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("diger", "2026.10.15.1"));
+        await factory.RunAllAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/schools/{id}/domain", new { domain = "x.abdera.test", redirect = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync($"/api/schools/{id}/domain", new { domain = "panel;rm", redirect = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/schools/{id}/domain", new { domain = "Panel.DenizMuzik.com", redirect = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync($"/api/schools/{other}/domain", new { domain = "panel.denizmuzik.com", redirect = false })).StatusCode);
+
+        // DNS kaydı yok: bağlanmaz, sebebi kaydedilir.
+        var notReady = await (await client.PostAsync($"/api/schools/{id}/domain/check", null)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.False(notReady.GetProperty("ready").GetBoolean());
+        await using (var db = factory.Db()) Assert.False(await db.Runs.AnyAsync(r => r.SchoolId == id && r.Kind == RunKind.DomainAttach));
+
+        // Okulun DNS'i sunucuya çözülüyor: bağlanır, https denenir, etkinleşir.
+        var resolver = (FakeDomainResolver)factory.Services.GetRequiredService<IDomainResolver>();
+        resolver.Set("panel.denizmuzik.com", "203.0.113.10");
+        var ready = await (await client.PostAsync($"/api/schools/{id}/domain/check", null)).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(ready.GetProperty("ready").GetBoolean());
+        await factory.RunAllAsync();
+        await using (var db = factory.Db())
+        {
+            var school = await db.Schools.SingleAsync(s => s.Id == id);
+            Assert.True(school.CustomDomainActive);
+            Assert.Equal("panel.denizmuzik.com", school.PublicDomain);
+        }
+        Assert.Contains(factory.Agent.Calls, c => c.EndsWith("route alias deniz panel.denizmuzik.com", StringComparison.Ordinal) || c.Contains("route alias deniz panel.denizmuzik.com --op"));
+
+        // Bağlı alan adının sertifikası da izlenir: asıl adres sağlamken okulun alanı bozulursa alarm düşer.
+        var probe = (FakeCertificateProbe)factory.Services.GetRequiredService<ICertificateProbe>();
+        var now = factory.Time.GetUtcNow();
+        probe.Set("deniz.abdera.test", new CertificateInfo(now.AddDays(80), true));
+        probe.Set("panel.denizmuzik.com", new CertificateInfo(now.AddDays(2), true));
+        await factory.Services.GetRequiredService<CertificateWatcher>().CheckAllAsync(CancellationToken.None);
+        await using (var db = factory.Db())
+        {
+            var alert = await db.Alerts.SingleAsync(a => a.SchoolId == id && a.Kind == CertificateWatcher.ExpiringKind);
+            Assert.Contains("panel.denizmuzik.com", alert.Detail);
+            Assert.Equal("critical", alert.Level);
+        }
+
+        // Bağlıyken başka alan adı yazılamaz; aynı alan adında yönlendirme tercihi değişince yeniden bağlanır.
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PutAsJsonAsync($"/api/schools/{id}/domain", new { domain = "yeni.denizmuzik.com", redirect = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/schools/{id}/domain", new { domain = "panel.denizmuzik.com", redirect = true })).StatusCode);
+        await factory.RunAllAsync();
+        Assert.Contains(factory.Agent.Calls, c => c.Contains("route alias deniz panel.denizmuzik.com redirect"));
+
+        // Kaldırma: Caddy'den çıkar, kayıt temizlenir.
+        Assert.Equal(HttpStatusCode.Accepted, (await client.DeleteAsync($"/api/schools/{id}/domain")).StatusCode);
+        await factory.RunAllAsync();
+        Assert.Contains(factory.Agent.Calls, c => c.Contains("route alias-remove deniz"));
+        await using (var db = factory.Db())
+        {
+            var school = await db.Schools.SingleAsync(s => s.Id == id);
+            Assert.Null(school.CustomDomain);
+            Assert.Equal(school.PrimaryDomain, school.PublicDomain);
+        }
+    }
+
+    [Fact]
+    public async Task Destroyed_school_releases_its_domain_for_another_school()
+    {
+        var client = await factory.OperatorAsync();
+        await factory.RegisterReleaseAsync(client, "2026.10.15.1", 'a');
+        await factory.AddHostAsync(client, "alan-2");
+        var id = await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("eski", "2026.10.15.1"));
+        var next = await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("yeni", "2026.10.15.1"));
+        await factory.RunAllAsync();
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/schools/{id}/domain", new { domain = "panel.devren.com", redirect = false })).StatusCode);
+
+        await client.PostAsync($"/api/schools/{id}/destroy", null);
+        await factory.RunAllAsync();
+        await client.PostAsync($"/api/schools/{id}/purge", null);
+        await factory.RunAllAsync();
+        await using (var db = factory.Db())
+        {
+            var school = await db.Schools.SingleAsync(s => s.Id == id);
+            Assert.Equal(SchoolStatus.Destroyed, school.Status);
+            Assert.Null(school.CustomDomain);
+        }
+
+        // Tekil indeks silinen okulun kaydına takılmaz (önceden 500 dönerdi).
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/schools/{next}/domain", new { domain = "panel.devren.com", redirect = false })).StatusCode);
     }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Platform API'sini yerel test ortamına bağlı başlatır (Mac'te, http://localhost:8090). Gerçek SSH ajanı
-# (sunucu konteyneri, 2222), gerçek okul istemcisi (https://<okul>.localhost:8443, Caddy'nin yerel kök
+# (sunucu konteyneri, 2222), gerçek okul istemcisi (https://<okul>.okul.localhost:8443, Caddy'nin yerel kök
 # sertifikası), sahte DNS (*.localhost zaten 127.0.0.1'e çözülür), yedek için yerel S3.
 # Veritabanı: PLATFORM_DB ya da .out/platform-db.env (ör. yerel Postgres'te abdera_platform_local).
 # Panel: (cd platform/web && npm run dev) -> http://localhost:3100
@@ -28,7 +28,8 @@ export ConnectionStrings__Platform="${PLATFORM_DB:?PLATFORM_DB tanımlı değil:
 export Platform__PublicUrl=http://host.containers.internal:8090 Platform__KeysDirectory="$OUT/platform-keys"
 export Platform__BootstrapEmail="$OPERATOR_EMAIL" Platform__BootstrapPassword="$OPERATOR_PASSWORD"
 export HostAgent__Provider=Ssh HostAgent__PrivateKeyPath="$OUT/platform_key"
-export Dns__Provider=Fake Dns__BaseDomain=localhost
+# Okul alt alanları <kısaltma>.okul.localhost; başka bir *.localhost adresi okulun "kendi alan adı" denemesi için boş kalır.
+export Dns__Provider=Fake Dns__BaseDomain=okul.localhost
 export SchoolClient__Provider=Http SchoolClient__HttpsPort=8443 SchoolClient__TrustedRootCaPath="$OUT/caddy-root.crt"
 export Certificates__Provider=Fake
 export Backup__R2__AccountId=local Backup__R2__Bucket=abdera-backups Backup__R2__Provider=Other

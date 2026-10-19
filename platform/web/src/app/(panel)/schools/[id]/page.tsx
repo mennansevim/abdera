@@ -18,13 +18,15 @@ import {
   type SchoolDetail,
 } from "@/lib/schools";
 import { AlertsTab, AuditTab, GeneralTab, ModulesTab, RunsTab, TelemetryTab } from "./tabs";
+import { DomainTab } from "./domain-tab";
 
-type TabKey = "general" | "runs" | "modules" | "telemetry" | "alerts" | "audit";
+type TabKey = "general" | "runs" | "modules" | "domain" | "telemetry" | "alerts" | "audit";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "general", label: "Genel" },
   { key: "runs", label: "İşlemler" },
   { key: "modules", label: "Modüller" },
+  { key: "domain", label: "Alan adı" },
   { key: "telemetry", label: "Telemetri" },
   { key: "alerts", label: "Alarmlar" },
   { key: "audit", label: "Denetim" },
@@ -128,7 +130,7 @@ export default function SchoolDetailPage() {
               {school.isVersionPinned && <Badge tone="info">Sürüm sabit</Badge>}
             </div>
             <p className="text-meta mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <a href={`https://${school.primaryDomain}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono hover:text-[var(--brand)]">{school.primaryDomain}<Icon name="external" className="h-3 w-3" /></a>
+              <a href={`https://${school.publicDomain ?? school.primaryDomain}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono hover:text-[var(--brand)]">{school.publicDomain ?? school.primaryDomain}<Icon name="external" className="h-3 w-3" /></a>
               <span className="font-mono">{school.appVersion ? `v${school.appVersion}` : "kurulmadı"}{school.targetVersion && school.targetVersion !== school.appVersion ? ` → v${school.targetVersion}` : ""}</span>
               <span className="inline-flex items-center gap-1"><Icon name="server" className="h-3.5 w-3.5" />{school.hostName ?? "sunucu atanmadı"}</span>
             </p>
@@ -190,6 +192,7 @@ export default function SchoolDetailPage() {
         {tab === "general" && <GeneralTab detail={data} />}
         {tab === "runs" && <RunsTab detail={data} />}
         {tab === "modules" && <ModulesTab detail={data} onQueued={() => { setNotice("Yapılandırma sıraya alındı; okul ~30 sn yeniden başlayacak."); setTab("runs"); }} />}
+        {tab === "domain" && <DomainTab detail={data} onQueued={(message) => { setNotice(message); setTab("runs"); }} />}
         {tab === "telemetry" && <TelemetryTab detail={data} />}
         {tab === "alerts" && <AlertsTab detail={data} />}
         {tab === "audit" && <AuditTab schoolId={id} />}

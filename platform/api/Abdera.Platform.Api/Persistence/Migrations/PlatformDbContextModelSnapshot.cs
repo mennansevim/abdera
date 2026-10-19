@@ -368,6 +368,28 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnName("custom_category_names_json")
                         .HasDefaultValueSql("'{}'::jsonb");
 
+                    b.Property<string>("CustomDomain")
+                        .HasMaxLength(253)
+                        .HasColumnType("character varying(253)")
+                        .HasColumnName("custom_domain");
+
+                    b.Property<bool>("CustomDomainActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("custom_domain_active");
+
+                    b.Property<string>("CustomDomainCheck")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("custom_domain_check");
+
+                    b.Property<DateTimeOffset?>("CustomDomainCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("custom_domain_checked_at");
+
+                    b.Property<bool>("CustomDomainRedirect")
+                        .HasColumnType("boolean")
+                        .HasColumnName("custom_domain_redirect");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -439,6 +461,10 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CustomDomain")
+                        .IsUnique()
+                        .HasFilter("custom_domain IS NOT NULL");
 
                     b.HasIndex("PrimaryDomain")
                         .IsUnique();

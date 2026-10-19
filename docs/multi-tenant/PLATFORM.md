@@ -88,6 +88,23 @@ veri almadıysa sunucudaki her şey hemen silinir, DNS kaydı ve kapasite bırak
 WhatsApp: her okulun kendi Meta (WABA) hesabı ve şablon onayı ayrı bir operasyon işidir; sihirbazdaki
 anahtarlar girilmezse WhatsApp kapalı kurulur, sonra Modüller sekmesinden açılabilir.
 
+### Okulun kendi alan adı
+
+Okul paneli platform alt alanı yerine kendi adresinde (ör. `panel.okulum.com`) isterse: okul detayı → **Alan adı**.
+Okulun web sitesi kendi yerinde kalır; sitesine bu adresi "Giriş" bağlantısı olarak koyar.
+
+1. Alan adını kaydet (isteğe bağlı: eski adres yeni adrese yönlensin). Platformun kendi alanı ve başka okulun
+   adresi reddedilir.
+2. Panelin gösterdiği DNS kaydını müşteriye ver: alt alan için `CNAME → <kısaltma>.<platform alanı>`, kök alan için
+   `A → sunucu IP'si`. Cloudflare kullanan okulda kaydın proxy'si kapalı olmalı (sertifikayı Caddy alır).
+3. **DNS'i kontrol et:** alan adı okulun sunucusuna çözülüyorsa "Alan adını bağla" işlemi kurulur — ajan
+   `route alias` ile Caddy bloğuna ikinci adresi ekler, platform `https` duman testi yapar, adres etkinleşir.
+   Yönlendirmede `/api` ve `/health` asıl adreste kalır (telemetri, kurulum ve sertifika izleme oradan gider).
+4. Kaldırma: **Alan adını kaldır** → `route alias-remove`; okul yalnızca platform adresinde açılır.
+
+Ek adres askı/devam/güncellemede korunur, askıda askı sayfasını gösterir. Sertifika izleyicisi bağlı adresi de
+denetler. Okul silinince (`purge`) alan adı serbest kalır.
+
 ## 6. Güncelleme
 
 - **Tek okul:** okul detayı → Güncelle (yalnızca ileri sürüm). Ajan önce döküm alır, yeni imajı başlatır,
@@ -142,7 +159,7 @@ hazır: **Var olan okulu taşı** (`POST /api/schools/adopt`). Sıra:
 ## 10. Yerel test ortamı (`deploy/local/`, macOS + Podman)
 
 Gerçek okul imajları, gerçek ajan (SSH ile), gerçek paylaşılan Caddy ve yerel bir S3 ile tüm yapı Mac'te
-denenir. Okullar `https://<kısaltma>.localhost:8443` adresinde açılır. Cloudflare yerine sahte DNS (`*.localhost`
+denenir. Okullar `https://<kısaltma>.okul.localhost:8443` adresinde açılır. Cloudflare yerine sahte DNS (`*.localhost`
 zaten 127.0.0.1'e çözülür), R2 yerine `rclone serve s3` kullanılır. Hiçbir dış hesap gerekmez.
 
 ```bash

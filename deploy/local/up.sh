@@ -7,7 +7,7 @@
 #   deploy/local/platform.sh      platform API'sini bu ortama bağlı başlatır (Mac'te, 8090)
 #   deploy/local/down.sh          her şeyi siler (okullar dahil)
 #
-# Okullar https://<kısaltma>.localhost:8443 adresinde açılır (Caddy'nin yerel sertifikası).
+# Okullar https://<kısaltma>.okul.localhost:8443 adresinde açılır (Caddy'nin yerel sertifikası).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY="$(cd "$HERE/.." && pwd)"

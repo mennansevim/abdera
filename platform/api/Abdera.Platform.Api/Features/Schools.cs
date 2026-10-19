@@ -39,14 +39,16 @@ public static class Schools
     public record TileResponse(
         Guid Id, string Slug, string DisplayName, string ShortName, string? PrimaryColor, SchoolStatus Status, string PrimaryDomain,
         string? AppVersion, string? TargetVersion, string? HostName, bool IsCanary, bool IsVersionPinned, TelemetryResponse? Telemetry,
-        RunSummary? OpenRun, int OpenAlerts, IReadOnlyList<string> Categories, IReadOnlyList<CategoryName> CustomCategories);
+        RunSummary? OpenRun, int OpenAlerts, IReadOnlyList<string> Categories, IReadOnlyList<CategoryName> CustomCategories,
+        string PublicDomain);
     public record RunSummary(Guid Id, RunKind Kind, RunStatus Status, int CurrentStep, int TotalSteps, string? CurrentStepName, string? Error, DateTimeOffset CreatedAt);
     public record StepResponse(int Step, string Name, StepStatus Status, int Attempt, string? Log, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
     public record RunResponse(Guid Id, RunKind Kind, RunStatus Status, int CurrentStep, IReadOnlyList<string> Plan, string? TargetVersion, string? Error,
         DateTimeOffset CreatedAt, DateTimeOffset? FinishedAt, IReadOnlyList<StepResponse> Steps);
     public record AlertResponse(Guid Id, string Kind, string Level, string Detail, DateTimeOffset OccurredAt, DateTimeOffset? AcknowledgedAt);
     public record DetailResponse(TileResponse School, IReadOnlyList<string> Modules, string? AdminEmail, IReadOnlyList<string> SecretNames,
-        IReadOnlyList<RunResponse> Runs, IReadOnlyList<TelemetryResponse> TelemetryHistory, IReadOnlyList<AlertResponse> Alerts, DateTimeOffset CreatedAt);
+        IReadOnlyList<RunResponse> Runs, IReadOnlyList<TelemetryResponse> TelemetryHistory, IReadOnlyList<AlertResponse> Alerts, DateTimeOffset CreatedAt,
+        SchoolDomains.DomainResponse? Domain = null);
     public record UpgradeRequest(string Version);
     public record FlagsRequest(bool IsCanary, bool IsVersionPinned);
     public record ModulesRequest(IReadOnlyList<string> Modules, IReadOnlyDictionary<string, string>? Integrations);
@@ -277,7 +279,8 @@ public static class Schools
             latest.TryGetValue(s.Id, out var t) ? ToTelemetry(t) : null,
             openRuns.TryGetValue(s.Id, out var r) && (r.IsOpen || s.Status == SchoolStatus.Failed) ? Summary(r, engine) : null,
             alerts.GetValueOrDefault(s.Id), s.Categories,
-            s.CustomCategoryNames.Select(pair => new CategoryName(pair.Key, pair.Value)).OrderBy(c => c.Name).ToList())).ToList();
+            s.CustomCategoryNames.Select(pair => new CategoryName(pair.Key, pair.Value)).OrderBy(c => c.Name).ToList(),
+            s.PublicDomain)).ToList();
     }
 
     private static RunSummary Summary(ProvisioningRun run, ProvisioningEngine engine)
@@ -311,7 +314,8 @@ public static class Schools
                 steps.Where(s => s.RunId == r.Id).Select(s => new StepResponse(s.Step, s.Name, s.Status, s.Attempt, s.Log, s.StartedAt, s.FinishedAt)).ToList())).ToList(),
             history.Select(ToTelemetry).ToList(),
             alerts.Select(a => new AlertResponse(a.Id, a.Kind, a.Level, a.Detail, a.OccurredAt, a.AcknowledgedAt)).ToList(),
-            school.CreatedAt));
+            school.CreatedAt,
+            await SchoolDomains.ResponseAsync(db, school)));
     }
 
     private static async Task<IResult> RevealAdminPasswordAsync(Guid id, ClaimsPrincipal principal, PlatformDbContext db, SecretVault vault, TimeProvider time)

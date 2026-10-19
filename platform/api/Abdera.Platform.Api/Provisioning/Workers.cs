@@ -280,26 +280,34 @@ public class CertificateWatcher(IServiceScopeFactory scopes, IConfiguration conf
 
         foreach (var school in schools)
         {
-            CertificateInfo info;
-            try { info = await probe.GetAsync(school.PrimaryDomain, cancellationToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Okulun bağlı kendi alan adının sertifikasını da Caddy alır ve yeniler; ikisi de izlenir.
+            // Alarm okul + tür başına tektir: iki adres aynı anda bozulursa ilki yazılır.
+            IEnumerable<string> domains = school.CustomDomainActive && school.CustomDomain is { } custom
+                ? [school.PrimaryDomain, custom]
+                : [school.PrimaryDomain];
+            foreach (var domain in domains)
             {
-                logger.LogInformation("Sertifika okunamadı: {Domain} ({Error})", school.PrimaryDomain, ex.Message);
-                continue;
-            }
+                CertificateInfo info;
+                try { info = await probe.GetAsync(domain, cancellationToken); }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogInformation("Sertifika okunamadı: {Domain} ({Error})", domain, ex.Message);
+                    continue;
+                }
 
-            var now = time.GetUtcNow();
-            var daysLeft = (info.NotAfter - now).TotalDays;
-            if (daysLeft < warnDays && !open.Contains((school.Id, ExpiringKind)))
-            {
-                var detail = daysLeft <= 0
-                    ? $"{school.PrimaryDomain} sertifikasının süresi {info.NotAfter:yyyy-MM-dd} tarihinde doldu."
-                    : $"{school.PrimaryDomain} sertifikası {info.NotAfter:yyyy-MM-dd} tarihinde bitiyor ({Math.Floor(daysLeft)} gün). Caddy yenilemesi çalışmıyor olabilir.";
-                db.Alerts.Add(SchoolAlert.Create(school.Id, ExpiringKind, daysLeft < 3 ? "critical" : "warning", detail, now, now));
+                var now = time.GetUtcNow();
+                var daysLeft = (info.NotAfter - now).TotalDays;
+                if (daysLeft < warnDays && open.Add((school.Id, ExpiringKind)))
+                {
+                    var detail = daysLeft <= 0
+                        ? $"{domain} sertifikasının süresi {info.NotAfter:yyyy-MM-dd} tarihinde doldu."
+                        : $"{domain} sertifikası {info.NotAfter:yyyy-MM-dd} tarihinde bitiyor ({Math.Floor(daysLeft)} gün). Caddy yenilemesi çalışmıyor olabilir.";
+                    db.Alerts.Add(SchoolAlert.Create(school.Id, ExpiringKind, daysLeft < 3 ? "critical" : "warning", detail, now, now));
+                }
+                if (!info.ChainValid && open.Add((school.Id, InvalidKind)))
+                    db.Alerts.Add(SchoolAlert.Create(school.Id, InvalidKind, "critical",
+                        $"{domain} sertifikası doğrulanamıyor (zincir, ad uyuşmazlığı ya da kendinden imzalı).", now, now));
             }
-            if (!info.ChainValid && !open.Contains((school.Id, InvalidKind)))
-                db.Alerts.Add(SchoolAlert.Create(school.Id, InvalidKind, "critical",
-                    $"{school.PrimaryDomain} sertifikası doğrulanamıyor (zincir, ad uyuşmazlığı ya da kendinden imzalı).", now, now));
         }
         await db.SaveChangesAsync(cancellationToken);
     }

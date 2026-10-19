@@ -67,7 +67,7 @@ export function GeneralTab({ detail }: { detail: SchoolDetail }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Okul">
           <dl className="grid gap-2 text-sm">
-            <Row label="Adres"><a className="font-mono text-[var(--brand-strong)] hover:underline" href={`https://${detail.school.primaryDomain}`} target="_blank" rel="noreferrer">https://{detail.school.primaryDomain}</a></Row>
+            <Row label="Adres"><a className="font-mono text-[var(--brand-strong)] hover:underline" href={`https://${detail.school.publicDomain ?? detail.school.primaryDomain}`} target="_blank" rel="noreferrer">https://{detail.school.publicDomain ?? detail.school.primaryDomain}</a></Row>
             <Row label="Kısaltma"><span className="font-mono">{detail.school.slug}</span></Row>
             <Row label="Kısa ad">{detail.school.shortName}</Row>
             <Row label="Oluşturulma">{formatDateTime(detail.createdAt)}</Row>

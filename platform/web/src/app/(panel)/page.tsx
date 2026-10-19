@@ -61,7 +61,7 @@ export default function SchoolsHomePage() {
       if (filter === "problem" ? problemsOf(school, now).length === 0 : filter !== "all" && school.status !== filter) return false;
       if (category && !(school.categories ?? []).includes(category)) return false;
       if (!query) return true;
-      return [school.displayName, school.shortName, school.slug, school.primaryDomain, school.hostName ?? ""]
+      return [school.displayName, school.shortName, school.slug, school.primaryDomain, school.publicDomain ?? "", school.hostName ?? ""]
         .some((value) => value.toLocaleLowerCase("tr-TR").includes(query));
     });
   }, [schools, filter, search, now, category]);
@@ -155,7 +155,7 @@ function SchoolTileCard({ school, now, categoryName }: { school: SchoolTile; now
 
       <div className="min-w-0">
         <p className="truncate text-sm font-bold">{school.displayName}</p>
-        <p className="text-meta truncate">{school.primaryDomain}</p>
+        <p className="text-meta truncate">{school.publicDomain ?? school.primaryDomain}</p>
         {(school.categories ?? []).length > 0 && (
           <p className="mt-1 flex flex-wrap gap-1">
             {school.categories!.map((key) => <span key={key} className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[.68rem] font-bold text-[var(--muted)]">{categoryName(key)}</span>)}

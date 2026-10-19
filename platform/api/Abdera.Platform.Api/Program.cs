@@ -51,6 +51,9 @@ if (schoolClientProvider == "Http")
     builder.Services.AddHttpClient<ISchoolClient, HttpSchoolClient>(client => client.Timeout = TimeSpan.FromSeconds(15))
         .ConfigurePrimaryHttpMessageHandler(sp => SchoolTls.Handler(sp.GetRequiredService<IConfiguration>()));
 else builder.Services.AddSingleton<ISchoolClient, FakeSchoolClient>();
+// Okul alan adı DNS denetimi gerçek okul istemcisiyle birlikte gerçektir; sahte modda testler ayarlar.
+if (schoolClientProvider == "Http") builder.Services.AddSingleton<IDomainResolver, DnsDomainResolver>();
+else builder.Services.AddSingleton<IDomainResolver, FakeDomainResolver>();
 if (certificateProvider == "Tls") builder.Services.AddSingleton<ICertificateProbe, TlsCertificateProbe>();
 else builder.Services.AddSingleton<ICertificateProbe, FakeCertificateProbe>();
 
@@ -157,6 +160,7 @@ app.MapAuth();
 app.MapHosts();
 app.MapReleases();
 app.MapSchools();
+app.MapSchoolDomains();
 app.MapRollouts();
 app.MapAlerts();
 app.MapAudit();

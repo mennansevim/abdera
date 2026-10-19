@@ -10,7 +10,8 @@ public interface ISchoolClient
 {
     Task<SchoolTelemetry> GetTelemetryAsync(School school, string telemetryToken, CancellationToken cancellationToken);
     // https://<alan>/health 200 ve /api/instance/config okulun adını taşıyor mu.
-    Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken);
+    // domain verilirse okulun o adresi denenir (bağlanan özel alan adı).
+    Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken, string? domain = null);
 }
 
 public class HttpSchoolClient(HttpClient http, IConfiguration config) : ISchoolClient
@@ -18,9 +19,9 @@ public class HttpSchoolClient(HttpClient http, IConfiguration config) : ISchoolC
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     // SchoolClient:HttpsPort yalnızca yerel test ortamı (Caddy 8443'te); production'da reddedilir.
-    private string Base(School school) => config["SchoolClient:HttpsPort"] is { Length: > 0 } port
-        ? $"https://{school.PrimaryDomain}:{port}"
-        : $"https://{school.PrimaryDomain}";
+    private string Base(School school, string? domain = null) => config["SchoolClient:HttpsPort"] is { Length: > 0 } port
+        ? $"https://{domain ?? school.PrimaryDomain}:{port}"
+        : $"https://{domain ?? school.PrimaryDomain}";
 
     public async Task<SchoolTelemetry> GetTelemetryAsync(School school, string telemetryToken, CancellationToken cancellationToken)
     {
@@ -31,13 +32,14 @@ public class HttpSchoolClient(HttpClient http, IConfiguration config) : ISchoolC
         return (await response.Content.ReadFromJsonAsync<SchoolTelemetry>(Json, cancellationToken))!;
     }
 
-    public async Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken)
+    public async Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken, string? domain = null)
     {
-        using var health = await http.GetAsync($"{Base(school)}/health", cancellationToken);
+        var baseUrl = Base(school, domain);
+        using var health = await http.GetAsync($"{baseUrl}/health", cancellationToken);
         if (!health.IsSuccessStatusCode) return $"/health {(int)health.StatusCode}";
-        using var login = await http.GetAsync($"{Base(school)}/login", cancellationToken);
+        using var login = await http.GetAsync($"{baseUrl}/login", cancellationToken);
         if (!login.IsSuccessStatusCode) return $"/login {(int)login.StatusCode}";
-        var config = await http.GetFromJsonAsync<JsonElement>($"{Base(school)}/api/instance/config", Json, cancellationToken);
+        var config = await http.GetFromJsonAsync<JsonElement>($"{baseUrl}/api/instance/config", Json, cancellationToken);
         var name = config.GetProperty("profile").GetProperty("name").GetString();
         return name == school.DisplayName ? null : $"okul adı '{name}' görünüyor, '{school.DisplayName}' bekleniyordu";
     }
@@ -54,7 +56,7 @@ public class FakeSchoolClient : ISchoolClient
             new SchoolTelemetry.NotificationsPart(0, 0),
             12_000_000));
 
-    public Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+    public Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken, string? domain = null) => Task.FromResult<string?>(null);
 }
 
 // Yerel test ortamı: okullar Caddy'nin kendi (internal) sertifika otoritesiyle yayında. O kök sertifika

@@ -16,6 +16,10 @@
 #   rollback <slug>                  son upgrade'den önceki imajlara dön
 #   route add <slug> <domain>        Caddy site bloğu (sunucu kilidi + validate + atomik)
 #   route remove <slug>
+#   route alias <slug> <domain> [redirect]  okulun kendi alan adı (ör. panel.okulum.com); redirect
+#                                    verilirse asıl adres (platform alt alanı) ona yönlenir, /api ve
+#                                    /health yönlenmez (platformun telemetri ve kurulum istekleri)
+#   route alias-remove <slug>        okulun alan adını kaldır, yalnızca asıl adres kalır
 #   suspend <slug> | resume <slug>   askı: önce son yedek (saklama kuralı dışı), sonra askı sayfası
 #   provision <slug>                 kurulum isteği (JSON) stdin'den; okulun iç ağından /api/instance/provision
 #   backup-now <slug>                uygulamanın yedeğini tetikle
@@ -126,11 +130,36 @@ wait_healthy() {
 }
 
 # --- Caddy ---
+# Okulun ek alan adı (okulun kendi alanı, ör. panel.okulum.com) ve yönlendirme tercihi okul dizininde
+# durur: askı/devam/geri alma/yönlendirme ekleme her zaman aynı bloğu yeniden üretir, ek adres kaybolmaz.
+alias_of() { cat "$(school_dir "$1")/alias" 2>/dev/null || true; }
+alias_redirects() { [ -f "$(school_dir "$1")/alias-redirect" ]; }
+
+app_handlers() { # $1 slug
+  cat <<EOF
+	handle /api/* {
+		reverse_proxy $1-api:8080
+	}
+	handle /health {
+		reverse_proxy $1-api:8080
+	}
+	handle {
+		reverse_proxy $1-web:3000
+	}
+EOF
+}
+
 render_site() { # $1 slug, $2 domain, $3 mode (live|suspended)
-  local slug="$1" domain="$2" mode="$3"
-  if [ "$mode" = "live" ]; then
+  local slug="$1" domain="$2" mode="$3" alias addresses
+  alias="$(alias_of "$slug")"
+  addresses="$domain${alias:+, $alias}"
+  if [ "$mode" = "live" ] && [ -n "$alias" ] && alias_redirects "$slug"; then
     cat <<EOF
 # abdera-host tarafından yazıldı - elle düzenleme.
+$alias {
+	import abdera_headers
+$(app_handlers "$slug")
+}
 $domain {
 	import abdera_headers
 	handle /api/* {
@@ -140,14 +169,22 @@ $domain {
 		reverse_proxy $slug-api:8080
 	}
 	handle {
-		reverse_proxy $slug-web:3000
+		redir https://$alias{uri} permanent
 	}
+}
+EOF
+  elif [ "$mode" = "live" ]; then
+    cat <<EOF
+# abdera-host tarafından yazıldı - elle düzenleme.
+$addresses {
+	import abdera_headers
+$(app_handlers "$slug")
 }
 EOF
   else
     cat <<EOF
 # abdera-host tarafından yazıldı - okul askıda.
-$domain {
+$addresses {
 	import abdera_headers
 	root * /etc/caddy/suspended
 	rewrite * /index.html
@@ -283,11 +320,44 @@ cmd_rollback() {
 cmd_route_add() {
   local slug="$1" domain="$2"
   valid_domain "$domain" || die 2 "geçersiz alan adı: $domain"
-  printf '%s\n' "$domain" > "$(school_dir "$slug")/domain"
+  # Adres kaydı yalnızca Caddy yapılandırmayı kabul ettikten sonra güncellenir; reddedilen adres
+  # sonraki askı/devam bloklarına sızmasın.
   caddy_apply "$slug" "$(render_site "$slug" "$domain" live)"
+  printf '%s\n' "$domain" > "$(school_dir "$slug")/domain"
 }
 
 cmd_route_remove() { caddy_apply "$1" ""; }
+
+current_mode() { if [ -f "$(school_dir "$1")/.suspended" ]; then echo suspended; else echo live; fi; }
+
+cmd_route_alias() { # $1 slug, $2 alan adı, $3 "redirect" (isteğe bağlı)
+  local slug="$1" alias="$2" option="${3:-}" dir domain old_alias had_redirect=0
+  dir="$(school_dir "$slug")"
+  valid_domain "$alias" || die 2 "geçersiz alan adı: $alias"
+  [ -z "$option" ] || [ "$option" = "redirect" ] || die 2 "bilinmeyen seçenek: $option"
+  domain="$(cat "$dir/domain" 2>/dev/null || true)"
+  [ -n "$domain" ] || die 4 "okulun asıl adresi yok (önce route add)"
+  [ "$alias" != "$domain" ] || die 2 "ek alan adı asıl adresle aynı olamaz"
+  # Dosyalar önce yerine konur; Caddy doğrulamazsa eski hâline döndürülür.
+  old_alias="$(alias_of "$slug")"
+  [ -f "$dir/alias-redirect" ] && had_redirect=1
+  printf '%s\n' "$alias" > "$dir/alias"
+  if [ "$option" = "redirect" ]; then touch "$dir/alias-redirect"; else rm -f "$dir/alias-redirect"; fi
+  if ! ( caddy_apply "$slug" "$(render_site "$slug" "$domain" "$(current_mode "$slug")")" ); then
+    if [ -n "$old_alias" ]; then printf '%s\n' "$old_alias" > "$dir/alias"; else rm -f "$dir/alias"; fi
+    if [ "$had_redirect" = 1 ]; then touch "$dir/alias-redirect"; else rm -f "$dir/alias-redirect"; fi
+    die 5 "Caddy yapılandırması doğrulanamadı; alan adı eklenmedi"
+  fi
+}
+
+cmd_route_alias_remove() {
+  local slug="$1" dir domain
+  dir="$(school_dir "$slug")"
+  rm -f "$dir/alias" "$dir/alias-redirect"
+  domain="$(cat "$dir/domain" 2>/dev/null || true)"
+  [ -n "$domain" ] && caddy_apply "$slug" "$(render_site "$slug" "$domain" "$(current_mode "$slug")")"
+  return 0
+}
 
 telemetry_token() { env_value "$(school_dir "$1")/.env" Telemetry__Token; }
 
@@ -445,9 +515,9 @@ cmd_status() {
   dir="$(school_dir "$slug")"
   [ -f "$dir/.suspended" ] && state="suspended"
   [ -f "$dir/.pending-destroy" ] && state="pending-destroy"
-  printf '{"slug":"%s","state":"%s","api":"%s","web":"%s","domain":"%s","healthy":%s}\n' \
+  printf '{"slug":"%s","state":"%s","api":"%s","web":"%s","domain":"%s","alias":"%s","healthy":%s}\n' \
     "$slug" "$state" "$(env_value "$dir/.env" ABDERA_API_IMAGE)" "$(env_value "$dir/.env" ABDERA_WEB_IMAGE)" \
-    "$(cat "$dir/domain" 2>/dev/null || true)" \
+    "$(cat "$dir/domain" 2>/dev/null || true)" "$(alias_of "$slug")" \
     "$(compose "$slug" exec -T api wget -q --spider http://localhost:8080/health >/dev/null 2>&1 && echo true || echo false)"
 }
 
@@ -510,6 +580,8 @@ set +e
     rollback) require_school "$SLUG"; cmd_rollback "$SLUG" ;;
     route-add) require_school "$SLUG"; [ $# -eq 2 ] || die 2 "route add <slug> <domain>"; cmd_route_add "$SLUG" "$2" ;;
     route-remove) require_school "$SLUG"; cmd_route_remove "$SLUG" ;;
+    route-alias) require_school "$SLUG"; [ $# -ge 2 ] && [ $# -le 3 ] || die 2 "route alias <slug> <domain> [redirect]"; cmd_route_alias "$SLUG" "$2" "${3:-}" ;;
+    route-alias-remove) require_school "$SLUG"; cmd_route_alias_remove "$SLUG" ;;
     suspend) require_school "$SLUG"; cmd_suspend "$SLUG" ;;
     resume) require_school "$SLUG"; cmd_resume "$SLUG" ;;
     provision) require_school "$SLUG"; cmd_provision "$SLUG" ;;

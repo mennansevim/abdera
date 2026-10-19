@@ -13,6 +13,8 @@ public enum RunKind
     Reconfigure,
     Drill,
     Adopt,
+    DomainAttach,
+    DomainDetach,
 }
 
 public enum RunStatus

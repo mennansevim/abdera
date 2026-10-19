@@ -133,8 +133,25 @@ cp "$ABDERA_ROOT/caddy/sites/deniz.caddy" "$WORK/deniz.before"
 echo "BOZUK" > "$ABDERA_ROOT/caddy/sites/zzz.caddy"
 check "doğrulanamayan Caddy yapılandırması reddedilir" 5 "$AGENT" route add deniz yeni.abdera.app
 assert "yayındaki site dosyası değişmedi" cmp -s "$WORK/deniz.before" "$ABDERA_ROOT/caddy/sites/deniz.caddy"
+assert "reddedilen adres kaydedilmedi" grep -qx "deniz.abdera.app" "$ABDERA_ROOT/deniz/domain"
 rm -f "$ABDERA_ROOT/caddy/sites/zzz.caddy"
 assert "staging dizini temizlendi" bash -c "! ls -d '$ABDERA_ROOT'/caddy/.staging.* 2>/dev/null"
+
+# --- okulun kendi alan adı (ek adres) ---
+check "geçersiz ek alan adı" 2 "$AGENT" route alias deniz "panel.deniz.com;rm"
+check "bilinmeyen seçenek" 2 "$AGENT" route alias deniz panel.deniz.com yonlendir
+check "ek alan adı eklenir" 0 "$AGENT" route alias deniz panel.deniz.com
+assert "iki adres aynı blokta" grep -q "^deniz.abdera.app, panel.deniz.com {" "$ABDERA_ROOT/caddy/sites/deniz.caddy"
+check "yönlendirmeli ek alan adı" 0 "$AGENT" route alias deniz panel.deniz.com redirect
+assert "asıl adres yeni adrese yönlenir" grep -q "redir https://panel.deniz.com{uri} permanent" "$ABDERA_ROOT/caddy/sites/deniz.caddy"
+assert "yönlendirmede /api asıl adreste kalır" bash -c "awk '\$0==\"deniz.abdera.app {\"{f=1} f{print} f&&/^}/{exit}' '$ABDERA_ROOT/caddy/sites/deniz.caddy' | grep -q 'reverse_proxy deniz-api:8080'"
+echo "BOZUK" > "$ABDERA_ROOT/caddy/sites/zzz.caddy"
+check "doğrulanamayan ek alan adı reddedilir" 5 "$AGENT" route alias deniz baska.deniz.com
+assert "ek alan adı eski hâline döndü" grep -qx "panel.deniz.com" "$ABDERA_ROOT/deniz/alias"
+assert "yönlendirme tercihi korundu" [ -f "$ABDERA_ROOT/deniz/alias-redirect" ]
+rm -f "$ABDERA_ROOT/caddy/sites/zzz.caddy"
+check "yönlendirmesiz hâle döner" 0 "$AGENT" route alias deniz panel.deniz.com
+assert "yönlendirme kalktı" bash -c "! grep -q redir '$ABDERA_ROOT/caddy/sites/deniz.caddy'"
 
 # --- upgrade / rollback ---
 # Yeni sürüm iki sağlık kontrolünde de düşer (ABDERA_HEALTH_ATTEMPTS=2), geri dönülen sürüm sağlıklı.
@@ -166,8 +183,12 @@ assert "şifreli askı dökümü alındı" bash -c "ls '$ABDERA_ROOT'/deniz/dump
 assert "döküm açık metin değil" bash -c "! grep -q 'SQL DUMP' '$ABDERA_ROOT'/deniz/dumps/*.enc"
 assert "döküm R2 suspended/ önekine kopyalandı" grep -q "r2:abdera-backups/deniz/suspended/" "$STUB_LOG"
 assert "R2 anahtarı komut satırında değil" bash -c "! grep -q 'r2-secret' '$STUB_LOG'"
+assert "askıda ek alan adı da askı sayfasında" grep -q "^deniz.abdera.app, panel.deniz.com {" "$ABDERA_ROOT/caddy/sites/deniz.caddy"
 check "devam ettirme" 0 "$AGENT" resume deniz
 assert "canlı site geri geldi" grep -q "reverse_proxy deniz-web:3000" "$ABDERA_ROOT/caddy/sites/deniz.caddy"
+assert "devamda ek alan adı korundu" grep -q "panel.deniz.com" "$ABDERA_ROOT/caddy/sites/deniz.caddy"
+check "ek alan adı kaldırılır" 0 "$AGENT" route alias-remove deniz
+assert "yalnızca asıl adres kaldı" bash -c "grep -q '^deniz.abdera.app {' '$ABDERA_ROOT/caddy/sites/deniz.caddy' && ! grep -q panel.deniz.com '$ABDERA_ROOT/caddy/sites/deniz.caddy'"
 
 # --- prova geri yükleme ---
 DUMP="$(basename "$(ls "$ABDERA_ROOT"/deniz/dumps/*.enc | head -1)")"

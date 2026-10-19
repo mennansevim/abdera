@@ -124,6 +124,19 @@ public class ProvisioningEngine(
             new("Sağlık", HealthAsync),
             new("Bitir", context => FinishStatusAsync(context, _ => { }, "school.reconfigured")),
         ],
+        RunKind.DomainAttach =>
+        [
+            // Okulun kendi alan adı: Caddy'ye eklenir (sertifikayı Caddy alır), https ile denenir, etkinleşir.
+            new("Alan adını bağla", context => AgentStepAsync(context, "route alias",
+                context.School.CustomDomainRedirect ? [context.School.CustomDomain!, "redirect"] : [context.School.CustomDomain!])),
+            new("Duman testi", context => SmokeAsync(context, context.School.CustomDomain)),
+            new("Bitir", context => FinishStatusAsync(context, school => school.ActivateDomain(time.GetUtcNow()), "school.domain_attached")),
+        ],
+        RunKind.DomainDetach =>
+        [
+            new("Alan adını kaldır", context => AgentStepAsync(context, "route alias-remove")),
+            new("Bitir", context => FinishStatusAsync(context, school => school.ClearDomain(time.GetUtcNow()), "school.domain_removed")),
+        ],
         RunKind.Drill =>
         [
             // Geri yükleme provası (§16.7): uygulamadan bağımsız döküm, aynı sunucuda <slug>-drill
@@ -278,7 +291,9 @@ public class ProvisioningEngine(
     }
 
     // TLS sertifikası ve DNS yayılması zaman alabilir: birkaç deneme, aralarında bekleme.
-    private async Task<StepOutcome> SmokeAsync(StepContext context)
+    private async Task<StepOutcome> SmokeAsync(StepContext context) => await SmokeAsync(context, null);
+
+    private async Task<StepOutcome> SmokeAsync(StepContext context, string? domain)
     {
         var attempts = config.GetValue("Provisioning:SmokeAttempts", 12);
         var delay = TimeSpan.FromSeconds(config.GetValue("Provisioning:SmokeDelaySeconds", 15));
@@ -287,8 +302,8 @@ public class ProvisioningEngine(
         {
             try
             {
-                problem = await schoolClient.SmokeTestAsync(context.School, context.CancellationToken);
-                if (problem is null) return StepOutcome.Ok($"https://{context.School.PrimaryDomain} yanıt veriyor");
+                problem = await schoolClient.SmokeTestAsync(context.School, context.CancellationToken, domain);
+                if (problem is null) return StepOutcome.Ok($"https://{domain ?? context.School.PrimaryDomain} yanıt veriyor");
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {

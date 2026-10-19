@@ -38,6 +38,10 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.Property(x => x.Categories).HasColumnType("text[]").HasDefaultValueSql("'{}'::text[]");
             e.Property(x => x.CustomCategoryNamesJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
             e.Ignore(x => x.CustomCategoryNames);
+            e.Ignore(x => x.PublicDomain);
+            e.Property(x => x.CustomDomain).HasMaxLength(253);
+            e.Property(x => x.CustomDomainCheck).HasMaxLength(300);
+            e.HasIndex(x => x.CustomDomain).IsUnique().HasFilter("custom_domain IS NOT NULL");
             e.Property(x => x.RowVersion).IsRowVersion();
             e.Ignore(x => x.ModulesEnvValue);
         });

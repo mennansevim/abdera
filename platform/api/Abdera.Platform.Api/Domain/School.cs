@@ -27,6 +27,15 @@ public class School
     // Okulun öğrettiği alan kategorileri (music, dance, sport...; §5.6). Yalnızca panelde gösterim ve
     // süzme için; alt birimlerin kendisi okulun veritabanındadır, okul yöneticisi sonradan değiştirebilir.
     public List<string> Categories { get; private set; } = [];
+    // Okulun kendi alan adı (ör. panel.okulum.com): asıl adresin (platform alt alanı) yanına eklenir.
+    // Önce bekleyen kaydedilir; okulun DNS'i sunucuya çözülünce bağlanır ve etkin olur.
+    public string? CustomDomain { get; private set; }
+    public bool CustomDomainRedirect { get; private set; }
+    public bool CustomDomainActive { get; private set; }
+    public string? CustomDomainCheck { get; private set; }
+    public DateTimeOffset? CustomDomainCheckedAt { get; private set; }
+    // Okula girilen adres: bağlı alan adı varsa o, yoksa platform alt alanı.
+    public string PublicDomain => CustomDomainActive && CustomDomain is not null ? CustomDomain : PrimaryDomain;
     // Okulun kendi açtığı alanların adları (anahtar "c-..." → ad); katalog alanlarının adı sürüm kataloğundan.
     public string CustomCategoryNamesJson { get; private set; } = "{}";
     public IReadOnlyDictionary<string, string> CustomCategoryNames =>
@@ -97,7 +106,13 @@ public class School
     }
 
     public void MarkPendingDestroy(DateTimeOffset now) { Status = SchoolStatus.PendingDestroy; UpdatedAt = now; }
-    public void MarkDestroyed(DateTimeOffset now) { Status = SchoolStatus.Destroyed; HostId = null; UpdatedAt = now; }
+    // Silinen okulun alan adı serbest kalır (custom_domain tekil indeksi başka okula verilmesini engellemesin).
+    public void MarkDestroyed(DateTimeOffset now)
+    {
+        Status = SchoolStatus.Destroyed;
+        HostId = null;
+        ClearDomain(now);
+    }
     public void RestoreFromPendingDestroy(DateTimeOffset now) { Status = SchoolStatus.Active; UpdatedAt = now; }
 
     public void SetTargetVersion(string version, DateTimeOffset now) { TargetVersion = version; UpdatedAt = now; }
@@ -105,6 +120,35 @@ public class School
     public void CompleteUpgrade(string version, DateTimeOffset now) { AppVersion = version; TargetVersion = null; UpdatedAt = now; }
     public void SetCanary(bool canary, DateTimeOffset now) { IsCanary = canary; UpdatedAt = now; }
     public void SetVersionPinned(bool pinned, DateTimeOffset now) { IsVersionPinned = pinned; UpdatedAt = now; }
+    public void SetPendingDomain(string domain, bool redirect, DateTimeOffset now)
+    {
+        if (CustomDomain != domain) CustomDomainActive = false;
+        CustomDomain = domain;
+        CustomDomainRedirect = redirect;
+        CustomDomainCheck = null;
+        CustomDomainCheckedAt = null;
+        UpdatedAt = now;
+    }
+
+    public void RecordDomainCheck(string result, DateTimeOffset now)
+    {
+        CustomDomainCheck = result.Length > 300 ? result[..300] : result;
+        CustomDomainCheckedAt = now;
+        UpdatedAt = now;
+    }
+
+    public void ActivateDomain(DateTimeOffset now) { CustomDomainActive = CustomDomain is not null; UpdatedAt = now; }
+
+    public void ClearDomain(DateTimeOffset now)
+    {
+        CustomDomain = null;
+        CustomDomainRedirect = false;
+        CustomDomainActive = false;
+        CustomDomainCheck = null;
+        CustomDomainCheckedAt = null;
+        UpdatedAt = now;
+    }
+
     public void SetCategories(IEnumerable<string> categories, DateTimeOffset now, IReadOnlyDictionary<string, string>? customNames = null)
     {
         CustomCategoryNamesJson = System.Text.Json.JsonSerializer.Serialize(customNames ?? new Dictionary<string, string>());
