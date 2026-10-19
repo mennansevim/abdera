@@ -53,7 +53,7 @@ export interface ProfitInstrument {
   spareHours: number | null;
 }
 
-export interface OperationGap { key: string; severity: GapSeverity; count: number; message: string }
+export interface OperationGap { key: string; severity: GapSeverity; count: number; message: string; names: string[] }
 
 export interface IdeaEvaluation {
   monthlyNet: number;

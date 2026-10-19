@@ -14,7 +14,7 @@ import {
   useExpenses, useRecurringExpenses,
   type CourseKind, type Expense, type ExpenseCategory, type PaymentMethod, type RecurringExpense,
 } from "@/lib/billing";
-import { BUCKET_LABEL, collectedPayments, downloadIncomeCsv, fileSlug, IncomeBreakdownModal, splitByBucket, type IncomeEntry } from "./income-breakdown";
+import { collectedPayments, downloadIncomeCsv, fileSlug, IncomeBreakdownModal, type IncomeEntry } from "./income-breakdown";
 import { IncomeLedger } from "./income-ledger";
 import { ProfitabilityView } from "./profitability";
 
@@ -68,6 +68,10 @@ const monthKey = (year: number, month: number) => `${year}-${pad(month + 1)}`;
 const monthLabel = (key: string) => `${MONTHS_SHORT[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`;
 const inPeriod = (date: string, period: Pick<Period, "scope" | "year" | "month">) =>
   period.scope === "year" ? date.startsWith(`${period.year}-`) : date.startsWith(`${monthKey(period.year, period.month)}-`);
+// Gelir aidat DÖNEMİNE göre sayılır, ödeme tarihine göre değil: Ekim geliri Ekim aidatlarına
+// yapılan ödemelerdir. Eylül aidatı Ekim'de ödense de Eylül'de görünür (kullanıcı isteği - geçmiş
+// ayın parası bu ayın gelirine karışıp kafa karıştırıyordu).
+const incomeInPeriod = (payment: Pick<IncomeEntry, "period">, period: Pick<Period, "scope" | "year" | "month">) => inPeriod(`${payment.period}-`, period);
 const periodMonths = (period: Pick<Period, "scope" | "year" | "month">) =>
   period.scope === "year" ? Array.from({ length: 12 }, (_, month) => monthKey(period.year, month)) : [monthKey(period.year, period.month)];
 // Özetin sütunları: yıllıkta yılın 12 ayı, aylıkta seçili ay ve önceki 5 ay - tek ayı tek
@@ -159,7 +163,7 @@ function CostDashboard() {
     // Net, gelecek ayların planlanan giderini değil bugüne kadarkini düşer - tahsilat da yalnızca
     // gerçekleşmiş parayı sayıyor.
     const toDate = sumTotals(rows.filter((row) => !row.planned));
-    const income = payments.filter((payment) => inPeriod(payment.date, period)).reduce((total, payment) => total + payment.amount, 0);
+    const income = payments.filter((payment) => incomeInPeriod(payment, period)).reduce((total, payment) => total + payment.amount, 0);
     const pending = (dues ?? [])
       .filter((row) => row.status !== "Paid" && row.status !== "Cancelled")
       .reduce((total, row) => total + Math.max(0, row.amount - row.totalPaid), 0);
@@ -167,7 +171,7 @@ function CostDashboard() {
       key,
       planned: key > currentMonth,
       income: Object.fromEntries(COURSE_KINDS.map((kind) => [kind,
-        payments.filter((payment) => payment.courseKind === kind && payment.date.startsWith(`${key}-`)).reduce((sum, payment) => sum + payment.amount, 0)])) as Record<CourseKind, number>,
+        payments.filter((payment) => payment.courseKind === kind && payment.period === key).reduce((sum, payment) => sum + payment.amount, 0)])) as Record<CourseKind, number>,
       expense: Object.fromEntries(CATEGORIES.map((value) => [value,
         allRecurring.filter((item) => item.category === value).reduce((sum, item) => sum + recurringAmountFor(item, key), 0)
         + allExpenses.filter((expense) => expense.category === value && expense.expenseDate.startsWith(`${key}-`)).reduce((sum, expense) => sum + expense.amount, 0)])) as Record<ExpenseCategory, number>,
@@ -185,10 +189,9 @@ function CostDashboard() {
     .filter(({ item, amount }) => amount > 0 && (matches(item.name) || matches(item.note)));
 
   const incomeNeedle = incomeSearch.trim().toLocaleLowerCase("tr-TR");
-  const periodIncome = payments.filter((payment) => inPeriod(payment.date, period));
+  const periodIncome = payments.filter((payment) => incomeInPeriod(payment, period));
   const listedIncome = periodIncome.filter((payment) => !incomeNeedle
     || `${payment.studentName} ${payment.instrumentName}`.toLocaleLowerCase("tr-TR").includes(incomeNeedle));
-  const incomeSplit = splitByBucket(periodIncome);
   const openBreakdown = (title: string, entries: IncomeEntry[]) => setBreakdown({ title, entries });
   const incomeBy = (methods: PaymentMethod[]) => periodIncome.filter((payment) => methods.includes(payment.method)).reduce((sum, payment) => sum + payment.amount, 0);
 
@@ -264,7 +267,7 @@ function CostDashboard() {
           <StatStrip
             label="Dönem özeti"
             items={[
-              { key: "income", label: "Gelir", value: money(summary.income), loading, hint: "Tahsil edilen aidat · dökümü için dokun", tone: "success", onClick: () => openBreakdown(`${periodLabel(period)} geliri`, periodIncome) },
+              { key: "income", label: "Gelir", value: money(summary.income), loading, hint: "Bu ayın aidatından tahsil edilen · dökümü için dokun", tone: "success", onClick: () => openBreakdown(`${periodLabel(period)} geliri`, periodIncome) },
               { key: "expense", label: `Gider${summary.toDate === 0 && summary.expenseTotal > 0 ? " (planlanan)" : ""}`, value: money(summary.expenseTotal), loading, hint: "Sabit + tek seferlik", tone: "danger", onClick: () => { setCategory("all"); setView("expenses"); } },
               {
                 key: "net",
@@ -276,7 +279,6 @@ function CostDashboard() {
               },
               { key: "pending", label: "Bekleyen aidat", value: money(summary.pending), loading, hint: "Tüm dönemler · Aidatlar ekranından tahsil edilir", tone: "warning", href: "/dashboard/billing" },
             ]}
-            footer={!loading && summary.income > 0 && incomeSplit.current !== summary.income ? <IncomeSplitNote split={incomeSplit} period={period} onOpen={() => openBreakdown(`${periodLabel(period)} geliri`, periodIncome)} /> : undefined}
           />
           <Panel title="Gelir ve gider" meta={period.scope === "year" ? String(period.year) : `Son 6 ay · ${periodLabel(period)} dahil`}>
             <FlowBars columns={summary.columns} selected={period.scope === "month" ? monthKey(period.year, period.month) : null} onSelect={(key) => drill("income", key)} loading={loading} />
@@ -289,7 +291,7 @@ function CostDashboard() {
               onDrill={drill}
               onIncome={(key, kind) => openBreakdown(
                 `${kind ? `${COURSE_KIND_LABEL[kind]} aidat · ` : ""}${monthLabel(key)}`,
-                payments.filter((payment) => payment.date.startsWith(`${key}-`) && (!kind || payment.courseKind === kind)))}
+                payments.filter((payment) => payment.period === key && (!kind || payment.courseKind === kind)))}
               loading={loading}
             />
           </Panel>
@@ -394,24 +396,6 @@ function CostDashboard() {
         />
       </Modal>
     </div>
-  );
-}
-
-// Gelir kartının altındaki açıklama: rakam ödeme tarihine göre sayıldığı için bu dönemde
-// alınan peşin ve gecikmiş ödemeleri de içerir; Aidatlar ekranının "X/Y ödedi" sayacı ise
-// yalnızca dönemin kendi aidatına bakar. Fark burada adıyla gösterilir.
-function IncomeSplitNote({ split, period, onOpen }: { split: Record<"current" | "late" | "advance", number>; period: Period; onOpen: () => void }) {
-  const parts = [
-    { label: period.scope === "month" ? `${MONTHS[period.month]} aidatı` : BUCKET_LABEL.current, value: split.current },
-    { label: BUCKET_LABEL.advance.toLocaleLowerCase("tr-TR"), value: split.advance },
-    { label: BUCKET_LABEL.late.toLocaleLowerCase("tr-TR"), value: split.late },
-  ].filter((part) => part.value > 0);
-  return (
-    <button type="button" onClick={onOpen} className="pressable flex w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-[var(--line)] px-4 py-2 text-left text-[.75rem] hover:bg-[var(--surface-muted)]">
-      <span className="font-bold">Gelirin içinde:</span>
-      {parts.map((part, index) => <span key={part.label} className="tabular-nums">{index > 0 && "· "}{money(part.value)} {part.label}</span>)}
-      <span className="ml-auto inline-flex items-center gap-1 font-bold text-[var(--brand-strong)]">Döküm<Icon name="download" className="h-3.5 w-3.5" /></span>
-    </button>
   );
 }
 
@@ -524,7 +508,7 @@ function CashFlowTable({ columns, showTotal, selected, onDrill, onIncome, loadin
           </tbody>
         </table>
       </div>
-      <p className="text-meta border-t border-[var(--line)] px-4 py-2">Gelir ödeme tarihine göre sayılır. &quot;plan&quot; sütunları gelecek aylar: yalnızca sabit giderler var, henüz ödenmedi.</p>
+      <p className="text-meta border-t border-[var(--line)] px-4 py-2">Gelir aidat dönemine göre sayılır: geç ödenen aidat kendi ayında görünür. &quot;plan&quot; sütunları gelecek aylar: sabit giderler henüz ödenmedi, gelir yalnızca peşin alınan aidatlar.</p>
     </div>
   );
 }

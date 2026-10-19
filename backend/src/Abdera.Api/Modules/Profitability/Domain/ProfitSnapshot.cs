@@ -27,7 +27,9 @@ public enum GapSeverity
     Info,
 }
 
-public record OperationGap(string Key, GapSeverity Severity, int Count, string Message);
+// Names yalnızca ekrana gider (hangi öğretmen, hangi kayıt); Message ise AI yorumunun girdisine
+// de girdiği için adsız kalır - modele kişi adı gitmez (docs/10-decisions.md V).
+public record OperationGap(string Key, GapSeverity Severity, int Count, string Message, IReadOnlyList<string>? Names = null);
 
 public record ProfitSnapshot(
     string Period,

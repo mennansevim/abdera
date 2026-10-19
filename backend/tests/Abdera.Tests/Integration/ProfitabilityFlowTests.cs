@@ -52,6 +52,24 @@ public class ProfitabilityFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Teacher_without_a_rate_is_named_in_the_gap_but_not_in_its_message()
+    {
+        await SeedTeachingAsync("Ücretsizoğlu", withRate: false);
+        var admin = await CreateAdminClientAsync();
+
+        var response = await admin.GetAsync("/api/profitability");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.StatusCode == HttpStatusCode.OK, $"Beklenmeyen durum: {response.StatusCode}, gövde: {body}");
+        var overview = (await response.Content.ReadFromJsonAsync<Profitability.OverviewResponse>(TestJson.Options))!;
+
+        var gap = overview.Gaps.Single(row => row.Key == "teachers_without_rate");
+        Assert.Contains("Öğretmen Ücretsizoğlu", gap.Names);
+        Assert.Equal(gap.Count, gap.Names.Count);
+        // Message AI yorumunun girdisine de gider; ad yalnızca Names'te durur.
+        Assert.DoesNotContain("Ücretsizoğlu", gap.Message);
+    }
+
+    [Fact]
     public async Task Idea_is_saved_evaluated_with_school_data_and_can_be_removed()
     {
         var seeded = await SeedTeachingAsync("Fikiroğlu");
@@ -108,6 +126,7 @@ public class ProfitabilityFlowTests : IClassFixture<AbderaWebApplicationFactory>
     public async Task Commentary_is_generated_once_a_month_from_nameless_facts_and_refresh_is_capped()
     {
         await SeedTeachingAsync("Gizlioğlu");
+        await SeedTeachingAsync("Ücretsizgizlioğlu", withRate: false);
         await ClearCommentariesAsync();
         var generator = new FakeCommentaryGenerator();
         using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
@@ -125,6 +144,7 @@ public class ProfitabilityFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal("Yorum #1", second.Text);
         Assert.Single(generator.Facts);
         Assert.DoesNotContain("Gizlioğlu", generator.Facts[0]);
+        Assert.DoesNotContain("Ücretsizgizlioğlu", generator.Facts[0]);
         Assert.Equal(ProfitCommentary.MaxRefreshesPerMonth, first.RefreshesLeft);
 
         for (var i = 0; i < ProfitCommentary.MaxRefreshesPerMonth; i++)
@@ -156,7 +176,7 @@ public class ProfitabilityFlowTests : IClassFixture<AbderaWebApplicationFactory>
     // Öğretmen (ders başı 500, pazartesi 10 saat müsait) + öğrenci + birebir kayıt + haftalık
     // 1 saatlik program + bu ay tamamlanmış bir ders. Her test kendi enstrümanını açar ki
     // aynı sınıftaki testlerin sayıları birbirine karışmasın.
-    private async Task<Seeded> SeedTeachingAsync(string lastName)
+    private async Task<Seeded> SeedTeachingAsync(string lastName, bool withRate = true)
     {
         await using var db = await _factory.CreateDbContextAsync();
         var now = DateTimeOffset.UtcNow;
@@ -171,9 +191,9 @@ public class ProfitabilityFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var enrollment = Enrollment.Create(student.Id, teacher.Id, instrument.Id, CourseKind.Individual, today, now);
         db.AddRange(
             TeacherInstrument.Create(teacher.Id, instrument.Id),
-            TeacherPayRate.Create(teacher.Id, 500m, "TRY", null, now),
             TeacherAvailability.Create(teacher.Id, DayOfWeek.Monday, new TimeOnly(10, 0), new TimeOnly(20, 0)),
             enrollment);
+        if (withRate) db.Add(TeacherPayRate.Create(teacher.Id, 500m, "TRY", null, now));
         await db.SaveChangesAsync();
 
         var series = LessonSeries.Create(enrollment.Id, DayOfWeek.Monday, new TimeOnly(10, 0), 60, today, null, now);

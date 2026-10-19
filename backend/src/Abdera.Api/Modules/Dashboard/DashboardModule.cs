@@ -10,5 +10,7 @@ public static class DashboardModule
     {
         app.MapDashboard();
         app.MapBenchmark();
+        app.MapStudentAnalysis();
+        app.MapTeacherAnalysis();
     }
 }

@@ -22,6 +22,44 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.18.3",
+    date: "2026-10-18",
+    items: [
+      { audience: "all", text: "Öğrenci ve öğretmen analizindeki aylık görünüm sadeleşti: kayıttan önceki boş aylar ve henüz verisi olmayan satırlar artık gösterilmiyor. Telefonda görünüm en güncel aydan açılır." },
+    ],
+  },
+  {
+    version: "2026.10.18.2",
+    date: "2026-10-18",
+    items: [
+      { audience: "all", text: "Yeni öğrenci analizi ekranı: öğrencinin devamı, çalıştığı eserlerin zorluğu, ödevleri ve repertuvarı ay ay tek bir şeritte. Öğrenciler listesinde her satırdaki analiz butonundan açılır." },
+      { audience: "admin", text: "Öğrenci analizinde aidat durumu ve açık bakiye de aynı şeritte görünür." },
+      { audience: "admin", text: "Öğretmenler listesindeki analiz butonuyla her öğretmenin ders yükünü, öğrencilerinin devamını, ders notu düzenini ve aylık ödemelerini görebilirsin." },
+      { audience: "all", text: "Öğretmenler menüdeki \"Analizim\" ile kendi aylık özetlerini ve öğrencilerinin devam durumunu görebilir." },
+    ],
+  },
+  {
+    version: "2026.10.18",
+    date: "2026-10-18",
+    items: [
+      { audience: "admin", text: "Hata bildir → Gelen bildirimler'de detay beklenen bir bildirimi artık \"İptal et\" ile kapatabilirsin. Gerekirse Reddedildi sekmesinden yeniden açılır." },
+    ],
+  },
+  {
+    version: "2026.10.16.2",
+    date: "2026-10-16",
+    items: [
+      { audience: "admin", text: "Kârlılık sekmesindeki \"ders ücreti girilmemiş\" uyarısı artık hangi öğretmenlerin ücretinin eksik olduğunu adlarıyla gösterir." },
+    ],
+  },
+  {
+    version: "2026.10.16",
+    date: "2026-10-16",
+    items: [
+      { audience: "admin", text: "Gelir ve gider ekranında bir ayın geliri artık yalnızca o ayın aidatlarından tahsil edilen parayı gösterir. Geçmiş ayların geç ödenen aidatı bu aya karışmaz, kendi ayında görünür." },
+    ],
+  },
+  {
     version: "2026.10.15.4",
     date: "2026-10-15",
     items: [],

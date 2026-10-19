@@ -194,11 +194,17 @@ public static class ProfitabilitySnapshotBuilder
         var gaps = new List<OperationGap>();
         var teachersWithEnrollments = active.Select(enrollment => enrollment.TeacherId).Where(activeTeachers.Contains).Distinct().ToList();
 
-        var withoutRate = teachersWithEnrollments.Count(id => !rates.ContainsKey(id));
+        var withoutRateIds = teachersWithEnrollments.Where(id => !rates.ContainsKey(id)).ToList();
+        var withoutRate = withoutRateIds.Count;
+        List<string> withoutRateNames = withoutRate == 0 ? [] : await db.Teachers.AsNoTracking()
+            .Where(teacher => withoutRateIds.Contains(teacher.Id))
+            .OrderBy(teacher => teacher.FirstName).ThenBy(teacher => teacher.LastName)
+            .Select(teacher => teacher.FirstName + " " + teacher.LastName)
+            .ToListAsync(cancellationToken);
         if (withoutRate > 0)
             gaps.Add(new OperationGap("teachers_without_rate", GapSeverity.Warning, withoutRate, averageRate is null
                 ? $"{withoutRate} öğretmenin ders ücreti girilmemiş. Öğretmen maliyeti sıfır sayıldı, kâr olduğundan yüksek görünüyor."
-                : $"{withoutRate} öğretmenin ders ücreti girilmemiş; onların dersleri ortalama ücretle ({Tl.Format(averageRate.Value)}) hesaplandı."));
+                : $"{withoutRate} öğretmenin ders ücreti girilmemiş; onların dersleri ortalama ücretle ({Tl.Format(averageRate.Value)}) hesaplandı.", withoutRateNames));
 
         foreach (var kind in active.Select(enrollment => enrollment.CourseKind).Distinct())
         {

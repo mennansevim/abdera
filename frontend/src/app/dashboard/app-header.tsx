@@ -57,6 +57,8 @@ function useAdminAlerts(enabled: boolean, bankingEnabled: boolean, whatsAppEnabl
   };
 }
 
+// Öğretmen kendi analizini görür; yönetici bir öğretmenin analizine Öğretmenler listesinden girer.
+const TEACHER_ANALYSIS_LINK: NavItem = { href: "/dashboard/teachers/analysis", label: "Analizim", icon: "target", section: "Eğitim" };
 const SETTINGS_LINK: NavItem = { href: "/dashboard/settings", label: "Ayarlar", icon: "settings", section: "Sistem" };
 // Hata bildir (docs/10-decisions.md W): veli hariç herkesin menüsünde, Sistem bölümünde.
 // Veli /parent altında ayrı bir kabukta olduğu için bu menüyü hiç görmez.
@@ -65,7 +67,7 @@ const BUG_REPORT_LINK: NavItem = { href: "/dashboard/bug-report", label: "Hata b
 // Hata bildir formunun "Hangi sayfada?" listesi menüden türer - ayrıca elle tutulan bir liste
 // olsaydı yeni sayfa eklendiğinde unutulurdu.
 export function navPagesFor(isAdmin: boolean, enabledModule: (key: ModuleKey | undefined) => boolean = () => true): { href: string; label: string }[] {
-  return (isAdmin ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK])
+  return (isAdmin ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK] : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), TEACHER_ANALYSIS_LINK, SETTINGS_LINK])
     .filter((link) => enabledModule(link.module))
     .map(({ href, label }) => ({ href, label }));
 }
@@ -110,7 +112,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   // gezme ihtiyacı yok, CORE_LINKS Admin'de değişmeden kalsın diye burada filtreleniyor.
   const links = (isAdmin
     ? [...CORE_LINKS, ...ADMIN_LINKS, SETTINGS_LINK, BUG_REPORT_LINK]
-    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), SETTINGS_LINK, BUG_REPORT_LINK])
+    : [...CORE_LINKS.filter((link) => link.href !== "/dashboard/teachers"), TEACHER_ANALYSIS_LINK, SETTINGS_LINK, BUG_REPORT_LINK])
     .filter((link) => enabledModule(link.module) && (teachesMusic || link.href !== "/dashboard/library"))
     .map((link) => (alerts[link.href] ? { ...link, alert: true } : link))
     .sort((a, b) => SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section));

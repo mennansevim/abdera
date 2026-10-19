@@ -12,10 +12,10 @@ import { useBranchTerms } from "@/lib/instance";
 // akışı tablosunun aidat hücreleri, Gelirler sekmesi) dokununca açılır ve rakamın hangi
 // ödemelerden oluştuğunu gösterir; aynı satırlar CSV olarak indirilir.
 //
-// Neden gerekli: gelir ÖDEME TARİHİNE göre sayılır (nakit esası). Ekim'de alınan 9 aylık peşin
-// ödeme Ekim gelirine bütünüyle girer, Eylül aidatının Ekim'de ödenen kısmı da öyle. Aidatlar
-// ekranındaki "36/74 ödedi" ise yalnızca EKİM DÖNEMİNİN aidatına bakar. İki rakam farklı
-// soruları yanıtlar; döküm farkı "bu ayın aidatı / gecikmiş / peşin" diye ayırarak açıklar.
+// Gelir AİDAT DÖNEMİNE göre sayılır: Ekim dökümü yalnızca Ekim aidatlarına yapılan ödemeleri
+// listeler. Eylül aidatı Ekim'de ödense de Eylül'de görünür. Eskiden ödeme tarihine göre
+// sayılıp "kendi ayı / gecikmiş / peşin" diye ayrılıyordu; geçmiş ayın parası bu ayın gelirine
+// karıştığı için kullanıcı kafa karıştırıcı buldu ve kaldırıldı.
 
 export interface IncomeEntry {
   id: string;
@@ -59,26 +59,15 @@ export function collectedPayments(dues: BillingDue[]): IncomeEntry[] {
 }
 
 // Ödemenin aidat dönemi ile ödendiği ay karşılaştırılır: aynı ay = o ayın aidatı, önce =
-// gecikmiş tahsilat, sonra = ileri bir ayın peşin ödemesi.
+// gecikmiş tahsilat, sonra = ileri bir ayın peşin ödemesi. Gelir toplamını bölmez; yalnızca
+// tahsilat defterinin filtresi, tarih düzeltme önerisi ve CSV'nin "Gelir türü" sütunu kullanır.
 export type IncomeBucket = "current" | "late" | "advance";
 export const BUCKET_LABEL: Record<IncomeBucket, string> = { current: "Kendi ayının aidatı", late: "Gecikmiş aidat", advance: "Peşin (ileri aylar)" };
-const BUCKET_HINT: Record<IncomeBucket, string> = {
-  current: "Ödendiği ayın aidatı",
-  late: "Önceki ayların aidatı bu dönemde ödendi",
-  advance: "Sonraki ayların aidatı bu dönemde peşin alındı",
-};
 export const BUCKET_COLOR: Record<IncomeBucket, string> = { current: "var(--success)", late: "#b7791f", advance: "#3f6fb0" };
-const BUCKETS: IncomeBucket[] = ["current", "late", "advance"];
 
 export function bucketOf(entry: Pick<IncomeEntry, "date" | "period">): IncomeBucket {
   const paidMonth = entry.date.slice(0, 7);
   return entry.period === paidMonth ? "current" : entry.period < paidMonth ? "late" : "advance";
-}
-
-export function splitByBucket(entries: IncomeEntry[]): Record<IncomeBucket, number> {
-  const totals: Record<IncomeBucket, number> = { current: 0, late: 0, advance: 0 };
-  for (const entry of entries) totals[bucketOf(entry)] += entry.amount;
-  return totals;
 }
 
 const money = (value: number) => `₺${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
@@ -129,15 +118,13 @@ function groupSum<K extends string>(entries: IncomeEntry[], key: (entry: IncomeE
 export function IncomeBreakdownModal({ open, title, entries, onClose }: { open: boolean; title: string; entries: IncomeEntry[]; onClose: () => void }) {
   const terms = useBranchTerms();
   const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
-  const buckets = useMemo(() => splitByBucket(entries), [entries]);
   const students = useMemo(() => new Set(entries.map((entry) => entry.studentName)).size, [entries]);
   const byPeriod = useMemo(() => groupSum(entries, (entry) => entry.period).sort((a, b) => a[0].localeCompare(b[0])), [entries]);
   const byInstrument = useMemo(() => groupSum(entries, (entry) => `${entry.instrumentName} · ${COURSE_KIND_LABEL[entry.courseKind]}`), [entries]);
   const byMethod = useMemo(() => groupSum(entries, (entry) => methodLabel(entry.method)), [entries]);
-  const prepayCount = entries.filter((entry) => bucketOf(entry) === "advance").length;
 
   return (
-    <Modal open={open} title={title} description="Gelir ödeme tarihine göre sayılır. Aşağıda bu rakamın hangi ödemelerden oluştuğu var." onClose={onClose} size="lg">
+    <Modal open={open} title={title} description="Bu dönemin aidatlarına yapılan ödemeler. Geçmiş ayların geç ödenen aidatı kendi ayında görünür." onClose={onClose} size="lg">
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -150,44 +137,20 @@ export function IncomeBreakdownModal({ open, title, entries, onClose }: { open: 
           </button>
         </div>
 
-        {entries.length > 0 && (
-          <section aria-label="Gelirin kaynağı" className="rounded-xl border border-[var(--line)] p-3">
-            <p className="text-xs font-bold">Bu gelir nereden geldi?</p>
-            <div className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]" aria-hidden="true">
-              {BUCKETS.map((bucket) => buckets[bucket] > 0 && <span key={bucket} style={{ width: `${(buckets[bucket] / total) * 100}%`, background: BUCKET_COLOR[bucket] }} />)}
-            </div>
-            <ul className="mt-3 grid gap-2 sm:grid-cols-3">
-              {BUCKETS.map((bucket) => (
-                <li key={bucket} className="min-w-0">
-                  <span className="flex items-center gap-1.5 text-xs font-bold"><span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: BUCKET_COLOR[bucket] }} />{BUCKET_LABEL[bucket]}</span>
-                  <span className="block text-base font-bold tabular-nums">{money(buckets[bucket])}</span>
-                  <span className="text-meta block text-[.72rem]">{BUCKET_HINT[bucket]}</span>
-                </li>
-              ))}
-            </ul>
-            {buckets.advance > 0 && (
-              <p className="text-meta mt-3 rounded-lg bg-[var(--surface-muted)] px-2.5 py-2 text-[.75rem]">
-                {prepayCount} satır ileri ayların peşin ödemesi ({money(buckets.advance)}). Bu para kasaya bu dönemde girdi, ama Aidatlar ekranındaki &quot;ödedi&quot; sayacı yalnızca o ayın kendi aidatına baktığı için orada görünmez.
-              </p>
-            )}
-          </section>
-        )}
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <BreakdownTable title="Aidat dönemine göre" rows={byPeriod.map(([period, value]) => ({ label: formatPeriod(period), ...value }))} />
+        <div className={`grid gap-3 ${byPeriod.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+          {byPeriod.length > 1 && <BreakdownTable title="Aidat dönemine göre" rows={byPeriod.map(([period, value]) => ({ label: formatPeriod(period), ...value }))} />}
           <BreakdownTable title={`${terms.branch} ve ders türü`} rows={byInstrument.map(([label, value]) => ({ label, ...value }))} />
           <BreakdownTable title="Ödeme yöntemi" rows={byMethod.map(([label, value]) => ({ label, ...value }))} />
         </div>
 
         <section aria-label="Ödemeler" className="overflow-hidden rounded-xl border border-[var(--line)]">
           <div className="max-h-80 overflow-auto">
-            <table className="w-full min-w-[36rem] text-[.8125rem]">
+            <table className="w-full min-w-[30rem] text-[.8125rem]">
               <thead className="sticky top-0 bg-[var(--surface-muted)] text-[.6875rem] font-bold text-[var(--muted)]">
                 <tr>
-                  <th scope="col" className="px-3 py-2 text-left">Tarih</th>
+                  <th scope="col" className="px-3 py-2 text-left">Ödeme tarihi</th>
                   <th scope="col" className="px-3 py-2 text-left">Öğrenci</th>
                   <th scope="col" className="px-3 py-2 text-left">Aidat</th>
-                  <th scope="col" className="px-3 py-2 text-left">Tür</th>
                   <th scope="col" className="px-3 py-2 text-right">Tutar</th>
                 </tr>
               </thead>
@@ -197,11 +160,10 @@ export function IncomeBreakdownModal({ open, title, entries, onClose }: { open: 
                     <td className="px-3 py-1.5 tabular-nums whitespace-nowrap">{dateTr(entry.date)}</td>
                     <td className="px-3 py-1.5"><span className="font-semibold">{entry.studentName}</span><span className="text-meta block text-[.72rem]">{entry.instrumentName} · {COURSE_KIND_LABEL[entry.courseKind]} · {methodLabel(entry.method)}</span></td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{formatPeriod(entry.period)}</td>
-                    <td className="px-3 py-1.5 whitespace-nowrap"><span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: BUCKET_COLOR[bucketOf(entry)] }} />{BUCKET_LABEL[bucketOf(entry)]}</span></td>
                     <td className="px-3 py-1.5 text-right font-semibold tabular-nums whitespace-nowrap">{money(entry.amount)}</td>
                   </tr>
                 ))}
-                {!entries.length && <tr><td colSpan={5} className="text-meta px-3 py-6 text-center">Bu kalemde tahsilat yok.</td></tr>}
+                {!entries.length && <tr><td colSpan={4} className="text-meta px-3 py-6 text-center">Bu kalemde tahsilat yok.</td></tr>}
               </tbody>
             </table>
           </div>
