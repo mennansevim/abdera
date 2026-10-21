@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.21",
+    date: "2026-10-21",
+    items: [
+      { audience: "admin", text: "Telefonda alt menü artık Bugün, Takvim, Aidatlar ve Öğrenciler'den oluşuyor. Mesaj Merkezi \"Daha Fazla\" menüsüne taşındı; incelenecek bir havale ya da gönderilemeyen bir mesaj olduğunda \"Daha Fazla\" üzerinde kırmızı nokta görünür." },
+    ],
+  },
+  {
     version: "2026.10.18.3",
     date: "2026-10-18",
     items: [

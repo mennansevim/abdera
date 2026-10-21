@@ -121,8 +121,8 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
   const linkHref = (href: string) =>
     href === BUG_REPORT_LINK.href && !pathname.startsWith(href) ? `${href}?from=${encodeURIComponent(pathname)}` : href;
   const mobilePrimary: NavItem[] = me.role === "Admin"
-    // Alt çubukta beş sütun ~70px: "Mesaj Merkezi" 375px'lik telefonda "Mesaj Merk…" diye kesiliyordu.
-    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), enabledModule("whatsapp") ? { ...navItem("/dashboard/notifications"), label: "Mesajlar" } : navItem("/dashboard/students")]
+    // Yöneticinin gün içinde en çok açtığı dört ekran; Mesaj Merkezi "Daha Fazla"ya taşındı.
+    ? [navItem("/dashboard"), navItem("/dashboard/calendar"), navItem("/dashboard/billing"), navItem("/dashboard/students")]
     : [
         { ...navItem("/dashboard"), label: "Bugün" },
         { ...navItem("/dashboard/calendar"), label: "Takvimim" },
@@ -253,7 +253,9 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         <nav className={`fixed inset-x-0 bottom-0 z-30 grid ${me.role === "Teacher" ? "grid-cols-6" : "grid-cols-5"} border-t border-black/5 bg-[rgba(255,253,249,.94)] px-1 pb-[max(.35rem,env(safe-area-inset-bottom))] pt-1 backdrop-blur-2xl lg:hidden`} aria-label="Mobil ana menü">
           {mobilePrimary.map((link) => <MobileNavLink key={link.href} link={link} active={isActive(pathname, link.href)} />)}
           {me.role === "Teacher" && <NotificationBell variant="mobile" />}
-          <button onClick={() => setIsMenuOpen(true)} className="pressable flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)] max-[359px]:text-[.66rem]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
+          {/* Banka / Mesaj Merkezi uyarısı alt çubukta görünmeyen bir sayfadaysa nokta "Daha Fazla"ya düşer. */}
+          <button onClick={() => setIsMenuOpen(true)} className="pressable relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[.75rem] font-medium text-[var(--muted)] max-[359px]:text-[.66rem]" aria-label={me.role === "Admin" ? "Daha fazla menü" : "Profili aç"}>
+            {Object.values(alerts).some(Boolean) && <span className="absolute right-[calc(50%-1rem)] top-2 h-2 w-2 rounded-full bg-[var(--danger)]" aria-label="Dikkat gereken kayıtlar olabilir" />}
             <Icon name={me.role === "Admin" ? "more" : "teachers"} className="h-[1.05rem] w-[1.05rem]" /><span>{me.role === "Admin" ? "Daha Fazla" : "Profil"}</span>
           </button>
         </nav>
