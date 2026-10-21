@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { SchoolAvatar, StatusBadge } from "@/components/school-bits";
 import { LoadError, PageHeader, ProgressBar, SearchInput, Segmented, Skeleton } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
-import { formatAge, formatNumber, hoursSince } from "@/lib/format";
+import { formatAge, formatMoney, formatNumber, hoursSince } from "@/lib/format";
 import { compareVersions, useReleaseCategories, useReleases } from "@/lib/releases";
 import { BACKUP_STALE_HOURS, RUN_KIND_LABEL, isRunOpen, useSchools, type SchoolTile } from "@/lib/schools";
 import { useNow } from "@/lib/use-now";
@@ -183,6 +183,12 @@ function SchoolTileCard({ school, now, categoryName }: { school: SchoolTile; now
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <dt className="text-[var(--muted)]">Öğrenci</dt>
           <dd className="text-right font-bold tabular-nums">{formatNumber(telemetry?.activeStudents)}</dd>
+          <dt className="text-[var(--muted)]">Kullanıcı</dt>
+          <dd className="text-right font-bold tabular-nums">
+            {school.package?.staffSeats ? `${formatNumber(telemetry?.activeStaffUsers)}/${formatNumber(school.package.staffSeats)}` : "sınırsız"}
+          </dd>
+          <dt className="text-[var(--muted)]">Aylık</dt>
+          <dd className="text-right font-bold tabular-nums">{school.package?.staffSeats ? formatMoney(school.package.monthlyTotal, school.package.currency) : "—"}</dd>
           <dt className="text-[var(--muted)]">Son yedek</dt>
           <dd className={`text-right font-bold ${school.status === "Active" && backupStale ? "text-[var(--danger-strong)]" : ""}`}>{formatAge(telemetry?.lastBackupAt, now)}</dd>
         </dl>

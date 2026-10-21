@@ -444,6 +444,17 @@ export function useTeacherOverviews(enabled = true) {
   });
 }
 
+// Kullanıcı paketi (backend Auth/Features/StaffSeats.cs): okulun açabileceği personel hesabı
+// (yönetici + öğretmen) sayısı. limit null = sınırsız (paket tanımlanmamış okul).
+export interface StaffSeats {
+  limit: number | null;
+  used: number;
+}
+
+export function useStaffSeats(enabled = true) {
+  return useQuery({ queryKey: ["staff-seats"], queryFn: () => api.get<StaffSeats>("/api/staff-seats"), enabled });
+}
+
 export interface CreateTeacherResponse {
   teacher: Teacher;
   temporaryPassword: string | null;
@@ -457,6 +468,7 @@ export function useCreateTeacher() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teachers"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-seats"] });
     },
   });
 }
@@ -473,6 +485,7 @@ export function useUpdateTeacher(teacherId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teachers"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overviews"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-seats"] });
     },
   });
 }

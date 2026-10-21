@@ -13,6 +13,8 @@ public class TelemetrySnapshot
     public int? ActiveStudents { get; private set; }
     public int? ActiveTeachers { get; private set; }
     public int? ActiveEnrollments { get; private set; }
+    // Paket sınırına sayılan etkin personel hesabı (yönetici + öğretmen); eski okul sürümü göndermez.
+    public int? ActiveStaffUsers { get; private set; }
     public DateTimeOffset? LastBackupAt { get; private set; }
     public long? DatabaseSizeBytes { get; private set; }
     public int? PendingNotifications { get; private set; }
@@ -42,6 +44,7 @@ public class TelemetrySnapshot
         ActiveStudents = telemetry.Counts?.ActiveStudents,
         ActiveTeachers = telemetry.Counts?.ActiveTeachers,
         ActiveEnrollments = telemetry.Counts?.ActiveEnrollments,
+        ActiveStaffUsers = telemetry.Counts?.ActiveStaffUsers,
         LastBackupAt = telemetry.Backup?.LastSucceededAt,
         DatabaseSizeBytes = telemetry.DatabaseSizeBytes,
         PendingNotifications = telemetry.Notifications?.Pending,
@@ -59,7 +62,7 @@ public record SchoolTelemetry(
     long? DatabaseSizeBytes)
 {
     public record HealthPart(string? Level, string? Detail);
-    public record CountsPart(int ActiveStudents, int ActiveTeachers, int ActiveEnrollments);
+    public record CountsPart(int ActiveStudents, int ActiveTeachers, int ActiveEnrollments, int? ActiveStaffUsers = null);
     public record BackupPart(DateTimeOffset? LastSucceededAt);
     public record NotificationsPart(int Pending, int Failed);
 }

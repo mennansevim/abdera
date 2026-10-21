@@ -19,13 +19,15 @@ import {
 } from "@/lib/schools";
 import { AlertsTab, AuditTab, GeneralTab, ModulesTab, RunsTab, TelemetryTab } from "./tabs";
 import { DomainTab } from "./domain-tab";
+import { PackageTab } from "./package-tab";
 
-type TabKey = "general" | "runs" | "modules" | "domain" | "telemetry" | "alerts" | "audit";
+type TabKey = "general" | "runs" | "modules" | "package" | "domain" | "telemetry" | "alerts" | "audit";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "general", label: "Genel" },
   { key: "runs", label: "İşlemler" },
   { key: "modules", label: "Modüller" },
+  { key: "package", label: "Paket" },
   { key: "domain", label: "Alan adı" },
   { key: "telemetry", label: "Telemetri" },
   { key: "alerts", label: "Alarmlar" },
@@ -192,6 +194,7 @@ export default function SchoolDetailPage() {
         {tab === "general" && <GeneralTab detail={data} />}
         {tab === "runs" && <RunsTab detail={data} />}
         {tab === "modules" && <ModulesTab detail={data} onQueued={() => { setNotice("Yapılandırma sıraya alındı; okul ~30 sn yeniden başlayacak."); setTab("runs"); }} />}
+        {tab === "package" && <PackageTab detail={data} onQueued={(message) => { setNotice(message); if (message.includes("yeniden başlayacak")) setTab("runs"); }} />}
         {tab === "domain" && <DomainTab detail={data} onQueued={(message) => { setNotice(message); setTab("runs"); }} />}
         {tab === "telemetry" && <TelemetryTab detail={data} />}
         {tab === "alerts" && <AlertsTab detail={data} />}

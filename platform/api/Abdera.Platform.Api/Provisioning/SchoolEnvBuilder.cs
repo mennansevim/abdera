@@ -47,6 +47,8 @@ public class SchoolEnvBuilder(IConfiguration config)
             ("School__ShortName", school.ShortName),
             ("SCHOOL_TIMEZONE", config["Schools:TimeZone"] ?? "Europe/Istanbul"),
             ("Modules__Enabled", school.ModulesEnvValue),
+            // Paketteki personel hesabı sınırı; boşsa okul sınırsız (okul uygulaması StaffSeats).
+            ("School__StaffSeatLimit", school.StaffSeatLimit?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? ""),
             ("Provisioning__Token", Secret(SecretNames.ProvisioningToken)),
             ("Telemetry__Token", Secret(SecretNames.TelemetryToken)),
             // Okul uygulaması https olmayan alarm adresiyle açılmaz (ProductionSecretsGuard). Platform https

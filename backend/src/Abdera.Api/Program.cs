@@ -142,6 +142,7 @@ builder.Services.AddDbContext<AbderaDbContext>((sp, options) => options.UseNpgsq
 builder.Services.AddSingleton<IClock, Abdera.Api.Shared.SystemClock>();
 // Okulun açık modülleri (docs/multi-tenant/ARCHITECTURE.md §5.2). Modules:Enabled boşsa hepsi açık.
 builder.Services.AddSingleton<EnabledModules>();
+builder.Services.AddSingleton<Abdera.Api.Modules.Auth.Features.StaffSeats>();
 builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 // docs/10-decisions.md Karar F reversal - veli OTP girişi için ayrı bir hasher (GuardianAuth.cs).
 builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian>>();

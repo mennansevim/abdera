@@ -75,7 +75,7 @@ public static class Teachers
     }
 
     private static async Task<IResult> CreateAsync(
-        CreateRequest request, AbderaDbContext db, IPasswordHasher<User> passwordHasher, IClock clock)
+        CreateRequest request, AbderaDbContext db, IPasswordHasher<User> passwordHasher, IClock clock, StaffSeats seats)
     {
         var instruments = await db.Instruments.Where(i => request.InstrumentIds.Contains(i.Id)).ToListAsync();
         if (instruments.Count != request.InstrumentIds.Distinct().Count())
@@ -92,6 +92,8 @@ public static class Teachers
             var email = request.Email.Trim().ToLowerInvariant();
             if (await db.Users.AnyAsync(u => u.Email == email))
                 throw new ConflictException("Bu e-posta ile kayıtlı bir kullanıcı zaten var.");
+            // Giriş hesabı personel paketine sayılır (StaffSeats); hesapsız öğretmen kaydı sınırsız.
+            await seats.EnsureAvailableAsync(db);
 
             var user = User.Create(email, "placeholder", UserRole.Teacher, clock.UtcNow, mustChangePassword: true);
             temporaryPassword = TemporaryPasswordGenerator.Generate();
@@ -173,7 +175,7 @@ public static class Teachers
             instrument.Id, instrument.Name, enrollment.StartedAt));
     }
 
-    private static async Task<IResult> UpdateAsync(Guid teacherId, UpdateRequest request, AbderaDbContext db, IClock clock)
+    private static async Task<IResult> UpdateAsync(Guid teacherId, UpdateRequest request, AbderaDbContext db, IClock clock, StaffSeats seats)
     {
         var teacher = await db.Teachers.SingleOrDefaultAsync(t => t.Id == teacherId)
             ?? throw new NotFoundException("Öğretmen bulunamadı.");
@@ -200,7 +202,12 @@ public static class Teachers
             if (teacherUser is not null)
             {
                 if (request.Status == TeacherStatus.Inactive) teacherUser.Deactivate(clock.UtcNow);
-                else teacherUser.Activate(clock.UtcNow);
+                else if (!teacherUser.IsActive)
+                {
+                    // Pasif öğretmeni geri açmak boş bir personel hesabı ister (StaffSeats).
+                    await seats.EnsureAvailableAsync(db);
+                    teacherUser.Activate(clock.UtcNow);
+                }
             }
         }
 

@@ -32,6 +32,11 @@ services:
       HostAgent__PrivateKeyPath: /run/secrets/platform_ssh_key
       Dns__Provider: Cloudflare
       Dns__BaseDomain: ${SCHOOLS_BASE_DOMAIN:?}
+      # Liste fiyatı: sihirbazın başlangıç değeri. Okula yazılan fiyat donar, değiştirmek kurulu okulu etkilemez.
+      Pricing__PricePerSeat: ${PRICE_PER_SEAT:-0}
+      Pricing__Addons__whatsapp: ${PRICE_ADDON_WHATSAPP:-0}
+      Pricing__Addons__ai: ${PRICE_ADDON_AI:-0}
+      Pricing__Addons__banking: ${PRICE_ADDON_BANKING:-0}
       Dns__Cloudflare__ZoneId: ${CLOUDFLARE_ZONE_ID:?}
       Dns__Cloudflare__ApiToken: ${CLOUDFLARE_API_TOKEN:?}
       SchoolClient__Provider: Http

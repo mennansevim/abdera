@@ -24,7 +24,11 @@ public static class Schools
         string? LegalName, string? ContactEmail, string? CustomDomain, string Version, IReadOnlyList<string> Modules,
         AdminRequest Admin, PolicyRequest? Policy, BillingRequest? Billing, IReadOnlyList<TariffRequest>? Tariffs,
         IReadOnlyDictionary<string, string>? Integrations, bool IsCanary, IReadOnlyList<BranchRequest>? Branches = null,
-        IReadOnlyList<CustomCategoryRequest>? CustomCategories = null);
+        IReadOnlyList<CustomCategoryRequest>? CustomCategories = null, PackageRequest? Package = null);
+    // Kullanıcı paketi (SchoolPackage): personel hesabı sınırı, kullanıcı başı fiyat ve seçilen eklentilerin
+    // aylık fiyatı. Sihirbazdan kurulan okulda zorunlu; sahiplenmede boşsa okul sınırsız kalır.
+    public record PackageRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices);
+    public record PackageResponse(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal> AddonPrices, string Currency, decimal MonthlyTotal);
     // Okulun alt birimi (branş): kategori sürümün kataloğundan (Releases.CategoryEntry) ya da okulun
     // kendi açtığı alandan (CustomCategories), ad serbest.
     public record BranchRequest(string Category, string Name);
@@ -35,12 +39,12 @@ public static class Schools
     public record TelemetryResponse(
         DateTimeOffset TakenAt, bool Reachable, string? Health, string? HealthDetail, string? AppVersion, int? ActiveStudents,
         int? ActiveTeachers, int? ActiveEnrollments, DateTimeOffset? LastBackupAt, long? DatabaseSizeBytes, int? PendingNotifications,
-        int? FailedNotifications, string? Error);
+        int? FailedNotifications, string? Error, int? ActiveStaffUsers);
     public record TileResponse(
         Guid Id, string Slug, string DisplayName, string ShortName, string? PrimaryColor, SchoolStatus Status, string PrimaryDomain,
         string? AppVersion, string? TargetVersion, string? HostName, bool IsCanary, bool IsVersionPinned, TelemetryResponse? Telemetry,
         RunSummary? OpenRun, int OpenAlerts, IReadOnlyList<string> Categories, IReadOnlyList<CategoryName> CustomCategories,
-        string PublicDomain);
+        string PublicDomain, PackageResponse Package);
     public record RunSummary(Guid Id, RunKind Kind, RunStatus Status, int CurrentStep, int TotalSteps, string? CurrentStepName, string? Error, DateTimeOffset CreatedAt);
     public record StepResponse(int Step, string Name, StepStatus Status, int Attempt, string? Log, DateTimeOffset StartedAt, DateTimeOffset? FinishedAt);
     public record RunResponse(Guid Id, RunKind Kind, RunStatus Status, int CurrentStep, IReadOnlyList<string> Plan, string? TargetVersion, string? Error,
@@ -49,13 +53,16 @@ public static class Schools
     public record DetailResponse(TileResponse School, IReadOnlyList<string> Modules, string? AdminEmail, IReadOnlyList<string> SecretNames,
         IReadOnlyList<RunResponse> Runs, IReadOnlyList<TelemetryResponse> TelemetryHistory, IReadOnlyList<AlertResponse> Alerts, DateTimeOffset CreatedAt,
         SchoolDomains.DomainResponse? Domain = null);
+    // Sınır değişikliği okulun .env'ini yeniden yazar (Reconfigure); yalnızca fiyat değişikliği okula gitmez.
+    public record PackageUpdateRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices);
     public record UpgradeRequest(string Version);
     public record FlagsRequest(bool IsCanary, bool IsVersionPinned);
     public record ModulesRequest(IReadOnlyList<string> Modules, IReadOnlyDictionary<string, string>? Integrations);
     public record SlugCheckResponse(bool Available, string? Reason, string Domain);
     public record AdoptRequest(
         string Slug, string DisplayName, string ShortName, string? PrimaryColor, string? CustomDomain, string Version,
-        IReadOnlyList<string> Modules, string DumpName, IReadOnlyDictionary<string, string>? Integrations, bool IsCanary);
+        IReadOnlyList<string> Modules, string DumpName, IReadOnlyDictionary<string, string>? Integrations, bool IsCanary,
+        PackageRequest? Package = null);
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -86,6 +93,7 @@ public static class Schools
         group.MapPost("/{id:guid}/upgrade", UpgradeAsync);
         group.MapPut("/{id:guid}/flags", FlagsAsync);
         group.MapPut("/{id:guid}/modules", ModulesAsync);
+        group.MapPut("/{id:guid}/package", PackageAsync);
     }
 
     private static string DomainFor(IConfiguration config, string slug, string? custom) =>
@@ -115,6 +123,7 @@ public static class Schools
         var email = request.Admin?.Email?.Trim().ToLowerInvariant() ?? "";
         if (!System.Net.Mail.MailAddress.TryCreate(email, out _)) throw ValidationFailedException.For("admin.email", "Geçerli bir yönetici e-postası girilmeli.");
         if (request.LogoBase64 is { Length: > 700_000 }) throw ValidationFailedException.For("logoBase64", "Logo en fazla 512 KB olabilir.");
+        if (request.Package?.StaffSeats is null) throw ValidationFailedException.For("package.staffSeats", "Kullanıcı sayısı (personel hesabı) girilmeli.");
         var domain = DomainFor(config, request.Slug, request.CustomDomain);
         if (!System.Text.RegularExpressions.Regex.IsMatch(domain, @"^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"))
             throw ValidationFailedException.For("customDomain", "Geçerli bir alan adı girilmeli.");
@@ -123,6 +132,7 @@ public static class Schools
 
         var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
         if (request.IsCanary) school.SetCanary(true, now);
+        school.SetPackage(request.Package.StaffSeats, request.Package.PricePerSeat, request.Package.AddonPrices ?? new Dictionary<string, decimal>(), now);
         school.SetCategories(branches.Select(branch => branch.Category), now,
             customCategories.Where(c => branches.Any(b => b.Category == c.Key)).ToDictionary(c => c.Key, c => c.Name));
         db.Schools.Add(school);
@@ -158,6 +168,7 @@ public static class Schools
             afterJson: JsonSerializer.Serialize(new
             {
                 school.Slug, school.DisplayName, school.PrimaryDomain, release.Version, modules, adminEmail = email, categories = school.Categories,
+                package = ToPackage(school),
                 integrations = (request.Integrations ?? new Dictionary<string, string>()).Keys.Order().ToList(),
             })));
         await db.SaveChangesAsync();
@@ -181,13 +192,14 @@ public static class Schools
 
         var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
         if (request.IsCanary) school.SetCanary(true, now);
+        if (request.Package is { } package) school.SetPackage(package.StaffSeats, package.PricePerSeat, package.AddonPrices ?? new Dictionary<string, decimal>(), now);
         db.Schools.Add(school);
         await vault.SetAsync(school.Id, SecretNames.AdoptDumpName, request.DumpName!);
         foreach (var (key, value) in request.Integrations ?? new Dictionary<string, string>())
             if (!string.IsNullOrWhiteSpace(value)) await vault.SetAsync(school.Id, SecretNames.IntegrationPrefix + key, value.Trim());
         db.Runs.Add(ProvisioningRun.Create(school.Id, RunKind.Adopt, now, release.Version));
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.adopt_requested", school.Id, now,
-            afterJson: JsonSerializer.Serialize(new { school.Slug, school.PrimaryDomain, release.Version, modules, request.DumpName })));
+            afterJson: JsonSerializer.Serialize(new { school.Slug, school.PrimaryDomain, release.Version, modules, request.DumpName, package = ToPackage(school) })));
         await db.SaveChangesAsync();
         return Results.Created($"/api/schools/{school.Id}", new { school.Id });
     }
@@ -280,7 +292,7 @@ public static class Schools
             openRuns.TryGetValue(s.Id, out var r) && (r.IsOpen || s.Status == SchoolStatus.Failed) ? Summary(r, engine) : null,
             alerts.GetValueOrDefault(s.Id), s.Categories,
             s.CustomCategoryNames.Select(pair => new CategoryName(pair.Key, pair.Value)).OrderBy(c => c.Name).ToList(),
-            s.PublicDomain)).ToList();
+            s.PublicDomain, ToPackage(s))).ToList();
     }
 
     private static RunSummary Summary(ProvisioningRun run, ProvisioningEngine engine)
@@ -292,7 +304,10 @@ public static class Schools
 
     private static TelemetryResponse ToTelemetry(TelemetrySnapshot t) => new(
         t.TakenAt, t.Reachable, t.Health, t.HealthDetail, t.AppVersion, t.ActiveStudents, t.ActiveTeachers, t.ActiveEnrollments,
-        t.LastBackupAt, t.DatabaseSizeBytes, t.PendingNotifications, t.FailedNotifications, t.Error);
+        t.LastBackupAt, t.DatabaseSizeBytes, t.PendingNotifications, t.FailedNotifications, t.Error, t.ActiveStaffUsers);
+
+    private static PackageResponse ToPackage(School school) =>
+        new(school.StaffSeatLimit, school.PricePerSeat, school.AddonPrices, school.Currency, school.MonthlyTotal);
 
     private static async Task<IResult> DetailAsync(Guid id, PlatformDbContext db, ProvisioningEngine engine)
     {
@@ -395,7 +410,8 @@ public static class Schools
     }
 
     // Modül/entegrasyon değişikliği: okulun .env'i yeniden yazılır (Reconfigure). Kapatmak veri silmez.
-    private static async Task<IResult> ModulesAsync(Guid id, ModulesRequest request, ClaimsPrincipal principal, PlatformDbContext db, SecretVault vault, TimeProvider time)
+    private static async Task<IResult> ModulesAsync(
+        Guid id, ModulesRequest request, ClaimsPrincipal principal, PlatformDbContext db, SecretVault vault, IConfiguration config, TimeProvider time)
     {
         var school = await db.Schools.SingleOrDefaultAsync(s => s.Id == id) ?? throw new NotFoundException("Okul bulunamadı.");
         if (school.Status != SchoolStatus.Active) throw new ConflictException("Yalnızca etkin okulun modülleri değiştirilebilir.");
@@ -403,15 +419,53 @@ public static class Schools
         var modules = ValidateModules(request.Modules ?? [], Releases.Catalog(release));
         ValidateIntegrations(request.Integrations);
         await EnsureNoOpenRunAsync(db, id);
-        var before = JsonSerializer.Serialize(new { modules = school.Modules });
+        var before = JsonSerializer.Serialize(new { modules = school.Modules, package = ToPackage(school) });
         school.SetModules(modules, time.GetUtcNow());
+        // Paketteki eklenti fiyatları açık eklentilerle hizalanır: kapatılanın fiyatı düşer, yeni açılan
+        // liste fiyatıyla girer (operatör Paket sekmesinden değiştirir). Sınırsız (eski) okulda fiyat da yok.
+        if (school.StaffSeatLimit is not null)
+        {
+            var listPrices = Pricing.Defaults(config).AddonPrices;
+            var addonPrices = modules.ToDictionary(module => module,
+                module => school.AddonPrices.TryGetValue(module, out var price) ? price : listPrices.GetValueOrDefault(module));
+            school.SetPackage(school.StaffSeatLimit, school.PricePerSeat, addonPrices, time.GetUtcNow());
+        }
         foreach (var (key, value) in request.Integrations ?? new Dictionary<string, string>())
             if (!string.IsNullOrWhiteSpace(value)) await vault.SetAsync(id, SecretNames.IntegrationPrefix + key, value.Trim());
         var run = ProvisioningRun.Create(id, RunKind.Reconfigure, time.GetUtcNow());
         db.Runs.Add(run);
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.modules_changed", id, time.GetUtcNow(),
-            beforeJson: before, afterJson: JsonSerializer.Serialize(new { modules, integrations = (request.Integrations ?? new Dictionary<string, string>()).Keys.Order().ToList() })));
+            beforeJson: before, afterJson: JsonSerializer.Serialize(new { modules, package = ToPackage(school), integrations = (request.Integrations ?? new Dictionary<string, string>()).Keys.Order().ToList() })));
         await db.SaveChangesAsync();
         return Results.Accepted($"/api/schools/{id}", new { runId = run.Id });
+    }
+
+    // Paket değişikliği. Kullanıcı sınırı okulun .env'ine yazıldığından sınır değişince okul yeniden
+    // yapılandırılır (yalnızca etkin okulda); fiyat değişikliği yalnızca platform kaydıdır. Sınırı
+    // kullanılan hesap sayısının altına indirmek var olan hesapları kapatmaz, yalnızca yenisini engeller.
+    private static async Task<IResult> PackageAsync(Guid id, PackageUpdateRequest request, ClaimsPrincipal principal, PlatformDbContext db, TimeProvider time)
+    {
+        var school = await db.Schools.SingleOrDefaultAsync(s => s.Id == id) ?? throw new NotFoundException("Okul bulunamadı.");
+        if (school.Status is SchoolStatus.Destroyed or SchoolStatus.PendingDestroy) throw new ConflictException("Silinen okulun paketi değiştirilemez.");
+        if (request.StaffSeats is null) throw ValidationFailedException.For("package.staffSeats", "Kullanıcı sayısı (personel hesabı) girilmeli.");
+        var seatsChanged = request.StaffSeats != school.StaffSeatLimit;
+        if (seatsChanged)
+        {
+            if (school.Status != SchoolStatus.Active) throw new ConflictException("Kullanıcı sayısı yalnızca etkin okulda değiştirilebilir.");
+            await EnsureNoOpenRunAsync(db, id);
+        }
+
+        var before = JsonSerializer.Serialize(ToPackage(school));
+        school.SetPackage(request.StaffSeats, request.PricePerSeat, request.AddonPrices ?? new Dictionary<string, decimal>(), time.GetUtcNow());
+        ProvisioningRun? run = null;
+        if (seatsChanged)
+        {
+            run = ProvisioningRun.Create(id, RunKind.Reconfigure, time.GetUtcNow());
+            db.Runs.Add(run);
+        }
+        db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.package_changed", id, time.GetUtcNow(),
+            beforeJson: before, afterJson: JsonSerializer.Serialize(ToPackage(school))));
+        await db.SaveChangesAsync();
+        return Results.Ok(new { package = ToPackage(school), runId = run?.Id });
     }
 }

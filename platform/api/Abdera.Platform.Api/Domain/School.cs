@@ -41,6 +41,16 @@ public class School
     public IReadOnlyDictionary<string, string> CustomCategoryNames =>
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(CustomCategoryNamesJson) ?? [];
     public string? PrimaryColor { get; private set; }
+    // Paket (SchoolPackage): personel hesabı sınırı ve aylık fiyatın donmuş hâli. Sınır boşsa okul
+    // sınırsızdır (sihirbazdan önce kurulmuş ya da sahiplenilmiş okul - bugünkü davranış).
+    public int? StaffSeatLimit { get; private set; }
+    public decimal? PricePerSeat { get; private set; }
+    public string Currency { get; private set; } = SchoolPackage.DefaultCurrency;
+    public string AddonPricesJson { get; private set; } = "{}";
+    public IReadOnlyDictionary<string, decimal> AddonPrices =>
+        System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, decimal>>(AddonPricesJson) ?? [];
+    // Fiyat yalnızca açık eklentiler için tutulur (SetPackage doğrular); modül kapatılınca fiyatı da düşer.
+    public decimal MonthlyTotal => SchoolPackage.MonthlyTotal(StaffSeatLimit, PricePerSeat, AddonPrices, Modules);
     // Filo güncellemesinde ilk dalga (kanarya) ve güncellemeden muaf tutma (§7).
     public bool IsCanary { get; private set; }
     public bool IsVersionPinned { get; private set; }
@@ -161,6 +171,16 @@ public class School
         Modules = modules.Distinct().OrderBy(key => key, StringComparer.Ordinal).ToList();
         UpdatedAt = now;
     }
+    public void SetPackage(int? staffSeats, decimal? pricePerSeat, IReadOnlyDictionary<string, decimal> addonPrices, DateTimeOffset now)
+    {
+        SchoolPackage.Validate(staffSeats, pricePerSeat, addonPrices, Modules);
+        StaffSeatLimit = staffSeats;
+        PricePerSeat = pricePerSeat;
+        AddonPricesJson = System.Text.Json.JsonSerializer.Serialize(
+            addonPrices.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary(pair => pair.Key, pair => pair.Value));
+        UpdatedAt = now;
+    }
+
     public void Seen(DateTimeOffset now) => LastSeenAt = now;
 
     // Okulun .env'ine yazılan değer: boş liste "none" olur (boş değer eski kurulumda "hepsi açık" demek).

@@ -155,6 +155,8 @@ public class PlatformFactory : WebApplicationFactory<Program>, IAsyncLifetime
         tariffs = new[] { new { courseKind = "Individual", lessonsPerMonth = 4, monthlyAmount = 3000m, currency = "TRY", effectiveFrom = "2026-10-01" } },
         integrations = integrations ?? new Dictionary<string, string>(),
         isCanary = canary,
+        // Kullanıcı paketi: 8 personel hesabı × 400 + seçilen her eklenti 100.
+        package = new { staffSeats = 8, pricePerSeat = 400m, addonPrices = (modules ?? ["progress"]).Distinct().ToDictionary(m => m, _ => 100m) },
     };
 
     public async Task<Guid> AddHostAsync(HttpClient client, string name, int memoryMb = 65536)

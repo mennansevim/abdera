@@ -24,7 +24,12 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
     {
         model.Entity<School>(e =>
         {
-            e.ToTable("schools", t => t.HasCheckConstraint("CK_schools_slug", "slug ~ '^[a-z][a-z0-9-]{2,30}$'"));
+            e.ToTable("schools", t =>
+            {
+                t.HasCheckConstraint("CK_schools_slug", "slug ~ '^[a-z][a-z0-9-]{2,30}$'");
+                t.HasCheckConstraint("CK_schools_staff_seat_limit", $"staff_seat_limit IS NULL OR staff_seat_limit BETWEEN 1 AND {SchoolPackage.MaxSeats}");
+                t.HasCheckConstraint("CK_schools_price_per_seat", "price_per_seat IS NULL OR price_per_seat >= 0");
+            });
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.Slug).IsUnique();
             e.Property(x => x.Slug).HasMaxLength(31);
@@ -44,6 +49,11 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.HasIndex(x => x.CustomDomain).IsUnique().HasFilter("custom_domain IS NOT NULL");
             e.Property(x => x.RowVersion).IsRowVersion();
             e.Ignore(x => x.ModulesEnvValue);
+            e.Property(x => x.PricePerSeat).HasColumnType("numeric(12,2)");
+            e.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue(SchoolPackage.DefaultCurrency);
+            e.Property(x => x.AddonPricesJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
+            e.Ignore(x => x.AddonPrices);
+            e.Ignore(x => x.MonthlyTotal);
         });
 
         model.Entity<ServerHost>(e =>

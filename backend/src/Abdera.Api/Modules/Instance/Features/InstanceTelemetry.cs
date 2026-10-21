@@ -14,7 +14,8 @@ namespace Abdera.Api.Modules.Instance.Features;
 public static class InstanceTelemetry
 {
     public record HealthResponse(SystemHealthLevel Level, string? Detail, DateTimeOffset LastCheckedAt);
-    public record CountsResponse(int ActiveStudents, int ActiveTeachers, int ActiveEnrollments);
+    // ActiveStaffUsers: paket sınırına sayılan etkin yönetici + öğretmen hesabı (StaffSeats).
+    public record CountsResponse(int ActiveStudents, int ActiveTeachers, int ActiveEnrollments, int ActiveStaffUsers);
     public record BackupResponse(DateTimeOffset? LastSucceededAt, BackupRunStatus? LastStatus, DateTimeOffset? LastStartedAt);
     public record NotificationsResponse(int Pending, int Failed);
     public record TelemetryResponse(
@@ -53,7 +54,8 @@ public static class InstanceTelemetry
             new CountsResponse(
                 await db.Students.CountAsync(student => student.Status == StudentStatus.Active),
                 await db.Teachers.CountAsync(teacher => teacher.Status == TeacherStatus.Active),
-                await db.Enrollments.CountAsync(enrollment => enrollment.Status == EnrollmentStatus.Active)),
+                await db.Enrollments.CountAsync(enrollment => enrollment.Status == EnrollmentStatus.Active),
+                await Auth.Features.StaffSeats.CountUsedAsync(db)),
             new BackupResponse(lastSucceeded, lastBackup?.Status, lastBackup?.StartedAt),
             new NotificationsResponse(
                 await db.NotificationJobs.CountAsync(job => job.Status == NotificationJobStatus.Pending),

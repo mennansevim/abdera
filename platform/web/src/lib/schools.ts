@@ -24,6 +24,31 @@ export interface Telemetry {
   pendingNotifications: number | null;
   failedNotifications: number | null;
   error: string | null;
+  // Paket sınırına sayılan etkin yönetici + öğretmen hesabı; eski okul sürümü göndermez.
+  activeStaffUsers?: number | null;
+}
+
+// Kullanıcı paketi (platform/api Domain/SchoolPackage.cs). staffSeats boşsa okul sınırsız (eski kurulum).
+// monthlyTotal sunucunun hesabıdır; panel kendi toplamını yalnızca form önizlemesinde gösterir.
+export interface SchoolPackage {
+  staffSeats: number | null;
+  pricePerSeat: number | null;
+  addonPrices: Record<string, number>;
+  currency: string;
+  monthlyTotal: number;
+}
+
+export interface PackageInput {
+  staffSeats: number;
+  pricePerSeat: number;
+  addonPrices: Record<string, number>;
+}
+
+// Liste fiyatı (Pricing ayarı): sihirbazın başlangıç değerleri.
+export interface PricingDefaults {
+  currency: string;
+  pricePerSeat: number;
+  addonPrices: Record<string, number>;
 }
 
 export interface RunSummary {
@@ -59,6 +84,7 @@ export interface SchoolTile {
   customCategories?: { key: string; name: string }[];
   // Okula girilen adres: bağlı özel alan adı varsa o, yoksa platform alt alanı.
   publicDomain?: string;
+  package?: SchoolPackage;
 }
 
 export interface Step {
@@ -159,6 +185,7 @@ export interface CreateSchoolInput {
   // Okulun alt birimleri (branş): kategori sürümün kataloğundan, ad serbest.
   branches: { category: string; name: string }[];
   customCategories: { key: string; name: string; unitLabel: string; unitLabelPlural: string | null }[];
+  package: PackageInput;
 }
 
 // Var olan okulu taşıma - backend Schools.AdoptRequest. Kurulum ucu çağrılmaz; okulun verisi
@@ -291,6 +318,16 @@ export function useSchoolFlags(id: string) {
 export function useSchoolModules(id: string) {
   return useSchoolMutation((input: { modules: string[]; integrations: Record<string, string> | null }) =>
     api.put<{ runId: string }>(`/api/schools/${id}/modules`, input));
+}
+
+export function usePricingDefaults() {
+  return useQuery({ queryKey: ["pricing"], queryFn: () => api.get<PricingDefaults>("/api/pricing"), staleTime: 60_000 });
+}
+
+// Kullanıcı sayısı değişirse okul yeniden yapılandırılır (runId döner); yalnızca fiyat değişirse dönmez.
+export function useSchoolPackage(id: string) {
+  return useSchoolMutation((input: PackageInput) =>
+    api.put<{ package: SchoolPackage; runId: string | null }>(`/api/schools/${id}/package`, input));
 }
 
 export function useSetSchoolDomain(id: string) {

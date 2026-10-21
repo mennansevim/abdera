@@ -160,6 +160,7 @@ app.MapAuth();
 app.MapHosts();
 app.MapReleases();
 app.MapSchools();
+app.MapPricing();
 app.MapSchoolDomains();
 app.MapRollouts();
 app.MapAlerts();

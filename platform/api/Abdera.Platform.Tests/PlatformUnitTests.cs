@@ -99,6 +99,27 @@ public class PlatformUnitTests
     }
 
     [Fact]
+    public void Monthly_total_counts_seats_and_only_enabled_add_ons()
+    {
+        var prices = new Dictionary<string, decimal> { ["whatsapp"] = 300m, ["ai"] = 150.5m };
+        Assert.Equal(5 * 450m + 300m, SchoolPackage.MonthlyTotal(5, 450m, prices, ["whatsapp"]));
+        Assert.Equal(300m + 150.5m, SchoolPackage.MonthlyTotal(null, null, prices, ["whatsapp", "ai", "ai"]));
+        Assert.Equal(0m, SchoolPackage.MonthlyTotal(null, null, new Dictionary<string, decimal>(), []));
+    }
+
+    [Fact]
+    public void Seat_limit_is_written_to_the_school_env_and_empty_means_unlimited()
+    {
+        var school = School.Create("paket", "Paket", "Paket", "paket.abdera.app", "2026.10.15.1", ["whatsapp"], null, DateTimeOffset.UtcNow);
+        var builder = new SchoolEnvBuilder(new ConfigurationBuilder().Build());
+        Assert.Contains("School__StaffSeatLimit=\n", builder.Build(school, Release(), BaseSecrets));
+        school.SetPackage(8, 400m, new Dictionary<string, decimal> { ["whatsapp"] = 300m }, DateTimeOffset.UtcNow);
+        Assert.Contains("School__StaffSeatLimit=8\n", builder.Build(school, Release(), BaseSecrets));
+        Assert.Throws<ValidationFailedException>(() => school.SetPackage(8, 400m, new Dictionary<string, decimal> { ["ai"] = 1m }, DateTimeOffset.UtcNow));
+        Assert.Throws<ValidationFailedException>(() => school.SetPackage(8, null, new Dictionary<string, decimal>(), DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public void Empty_module_selection_is_written_as_none()
     {
         var school = School.Create("bos", "Boş", "Boş", "bos.abdera.app", "2026.10.15.1", [], null, DateTimeOffset.UtcNow);

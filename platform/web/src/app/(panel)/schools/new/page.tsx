@@ -10,19 +10,21 @@ import { ModulePicker } from "@/components/module-picker";
 import { SchoolAvatar } from "@/components/school-bits";
 import { Badge, FormMessage, LoadError, PageHeader, Panel, ProgressBar, Skeleton } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
-import { formatDate, readableTextOn } from "@/lib/format";
+import { formatDate, formatMoney, readableTextOn } from "@/lib/format";
 import { HOST_STATUS_LABEL, useHosts, type ServerHost } from "@/lib/hosts";
 import { INTEGRATION_FIELDS, INTEGRATION_TITLES, MODULE_DESCRIPTIONS, OPS_ALERT_FIELD, isModuleOn, optionalOnly } from "@/lib/modules";
 import { useReleaseCategories, useReleaseModules, useReleases, type CategoryEntry, type ModuleEntry } from "@/lib/releases";
-import { checkSlug, useCreateSchool } from "@/lib/schools";
+import { checkSlug, useCreateSchool, usePricingDefaults } from "@/lib/schools";
 import {
   LOGO_TYPES,
   MAX_LOGO_BYTES,
+  MAX_STAFF_SEATS,
   STEPS,
   buildRequest,
   customCategoryKey,
   initialState,
   integrationsFor,
+  packagePreview,
   slugFormatError,
   suggestSlug,
   validateStep,
@@ -37,7 +39,7 @@ import {
 // bilgi amaçlı tahmin; asıl seçimi kurulumun "Sunucu seç" adımı yapar.
 const SCHOOL_RESERVE_MB = 768;
 
-// `+` → yeni okul sihirbazı (ARCHITECTURE.md §4.2). On adım, durum bellekte; "İleri"
+// `+` → yeni okul sihirbazı (ARCHITECTURE.md §4.2). On bir adım, durum bellekte; "İleri"
 // adımın doğrulamasından geçmeden ilerlemez, "Geri" her zaman serbest. Son adım isteği
 // gönderir ve okul detayına (canlı kurulum ilerlemesi) yönlendirir.
 export default function NewSchoolPage() {
@@ -214,6 +216,7 @@ function StepBody(props: StepProps) {
     case "version": return <VersionStep {...props} />;
     case "branches": return <BranchesStep {...props} />;
     case "modules": return <ModulesStep {...props} />;
+    case "package": return <PackageStep {...props} />;
     case "admin": return <AdminStep {...props} />;
     case "policy": return <PolicyStep {...props} />;
     case "billing": return <BillingStep {...props} />;
@@ -554,7 +557,58 @@ function ModulesStep({ state, update, errors, catalog }: StepProps) {
   );
 }
 
-// --- 4. Yönetici ---
+// --- 5. Paket ve fiyat ---
+
+// Fiyatın tek ekseni personel hesabı sayısı (yönetici + öğretmen; veli ve öğrenci sayılmaz).
+// Liste fiyatı boş alanlara bir kez yazılır; operatör okulla anlaştığı fiyatı girer.
+function PackageStep({ state, update, errors, catalog }: StepProps) {
+  const pricing = usePricingDefaults();
+  const entries: ModuleEntry[] = catalog.data ?? [];
+  const addons = optionalOnly(state.modules, entries);
+  const currency = pricing.data?.currency ?? "TRY";
+
+  useEffect(() => {
+    if (!pricing.data || state.pricingSeeded) return;
+    const addonPrices = { ...state.addonPrices };
+    for (const [key, price] of Object.entries(pricing.data.addonPrices)) addonPrices[key] ??= String(price);
+    update({
+      pricingSeeded: true,
+      pricePerSeat: state.pricePerSeat || (pricing.data.pricePerSeat > 0 ? String(pricing.data.pricePerSeat) : ""),
+      addonPrices,
+    });
+    // update her çizimde yeni bir fonksiyon; tohumlama yalnızca liste fiyatı gelince bir kez yapılır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricing.data, state.pricingSeeded]);
+
+  const total = packagePreview(state, entries);
+  const name = (key: string) => entries.find((m) => m.key === key)?.name ?? key;
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <p className="text-meta sm:col-span-2">
+        Okul, aldığı kadar personel hesabı (yönetici + öğretmen) açabilir; veli ve öğrenci sayılmaz. Paket dolunca
+        okulda yeni hesap açılmaz, var olan hesaplar etkilenmez. Paket sonradan okul detayından büyütülüp küçültülebilir.
+      </p>
+      <NumberField label="Kullanıcı sayısı" suffix="hesap" value={state.staffSeats} onChange={(value) => update({ staffSeats: value })} error={errors.staffSeats} hint={`Yönetici dahil, 1-${MAX_STAFF_SEATS}.`} />
+      <NumberField label="Kullanıcı başı aylık fiyat" suffix={currency} value={state.pricePerSeat} onChange={(value) => update({ pricePerSeat: value })} error={errors.pricePerSeat} hint={pricing.data && pricing.data.pricePerSeat > 0 ? `Liste fiyatı ${formatMoney(pricing.data.pricePerSeat, currency)}` : undefined} />
+      {addons.length > 0 && (
+        <fieldset className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+          <legend className="form-label mb-2">Ücretli eklentiler (aylık, sabit)</legend>
+          {addons.map((key) => (
+            <NumberField key={key} label={name(key)} suffix={currency} value={state.addonPrices[key] ?? ""}
+              onChange={(value) => update({ addonPrices: { ...state.addonPrices, [key]: value } })} error={errors[`addon.${key}`]}
+              hint={pricing.data?.addonPrices[key] !== undefined ? `Liste fiyatı ${formatMoney(pricing.data.addonPrices[key], currency)}` : undefined} />
+          ))}
+        </fieldset>
+      )}
+      <div className="app-card flex items-baseline justify-between gap-3 p-4 sm:col-span-2" aria-live="polite">
+        <span className="text-meta">Aylık toplam</span>
+        <b className="text-lg">{total === null ? "—" : formatMoney(total, currency)}</b>
+      </div>
+    </div>
+  );
+}
+
+// --- 6. Yönetici ---
 
 function AdminStep({ state, update, errors }: StepProps) {
   return (
@@ -574,7 +628,7 @@ function AdminStep({ state, update, errors }: StepProps) {
   );
 }
 
-// --- 5. Okul kuralları ---
+// --- 7. Okul kuralları ---
 
 function NumberField({ label, value, onChange, error, hint, suffix }: { label: string; value: string; onChange: (value: string) => void; error?: string; hint?: string; suffix?: string }) {
   return (
@@ -611,7 +665,7 @@ function PolicyStep({ state, update, errors, catalog }: StepProps) {
   );
 }
 
-// --- 6. Aidat ---
+// --- 8. Aidat ---
 
 function TariffCard({ title, prefix, draft, onChange, errors }: { title: string; prefix: string; draft: TariffDraft; onChange: (draft: TariffDraft) => void; errors: Errors }) {
   return (
@@ -644,7 +698,7 @@ function BillingStep({ state, update, errors, catalog }: StepProps) {
   );
 }
 
-// --- 7. Entegrasyonlar ---
+// --- 9. Entegrasyonlar ---
 
 function IntegrationsStep({ state, update, errors, catalog }: StepProps) {
   const errorList = Object.values(errors);
@@ -663,7 +717,7 @@ function IntegrationsStep({ state, update, errors, catalog }: StepProps) {
   );
 }
 
-// --- 8. Sunucu ---
+// --- 10. Sunucu ---
 
 function predictedHost(hosts: ServerHost[]): ServerHost | undefined {
   return [...hosts]
@@ -703,7 +757,7 @@ function HostStep() {
   );
 }
 
-// --- 9. Özet ---
+// --- 11. Özet ---
 
 function SummaryRow({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -764,6 +818,11 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
             <span className="flex flex-wrap gap-1">{optional.map((key) => <Badge key={key} tone="brand"><span title={MODULE_DESCRIPTIONS[key]}>{name(key)}</span></Badge>)}</span>
           )}
         </SummaryRow>
+      </SummarySection>
+      <SummarySection title="Paket ve fiyat" step="package" onGoTo={onGoTo}>
+        <SummaryRow label="Kullanıcı">{state.staffSeats} personel hesabı × {money(state.pricePerSeat)}</SummaryRow>
+        {optional.map((key) => <SummaryRow key={key} label={name(key)}>{money(state.addonPrices[key] ?? "")}</SummaryRow>)}
+        <SummaryRow label="Aylık toplam"><b>{packagePreview(state, entries) === null ? "—" : formatMoney(packagePreview(state, entries))}</b></SummaryRow>
       </SummarySection>
       <SummarySection title="Yönetici" step="admin" onGoTo={onGoTo}>
         <SummaryRow label="E-posta">{state.adminEmail}</SummaryRow>

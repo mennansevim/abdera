@@ -52,6 +52,7 @@ export function GeneralTab({ detail }: { detail: SchoolDetail }) {
             { key: "health", label: "Sağlık", value: telemetry.reachable ? telemetry.health ?? "—" : "Ulaşılamıyor", tone: !telemetry.reachable || (telemetry.health && telemetry.health !== "Healthy") ? "danger" : "success", hint: formatAge(telemetry.takenAt, now) },
             { key: "students", label: "Aktif öğrenci", value: formatNumber(telemetry.activeStudents) },
             { key: "teachers", label: "Aktif öğretmen", value: formatNumber(telemetry.activeTeachers) },
+            { key: "staff", label: "Kullanıcı", value: detail.school.package?.staffSeats ? `${formatNumber(telemetry.activeStaffUsers)} / ${formatNumber(detail.school.package.staffSeats)}` : formatNumber(telemetry.activeStaffUsers), hint: "yönetici + öğretmen hesabı" },
             { key: "enrollments", label: "Kurs kaydı", value: formatNumber(telemetry.activeEnrollments) },
             { key: "backup", label: "Son yedek", value: formatAge(telemetry.lastBackupAt, now), tone: backupAge === null || backupAge > BACKUP_STALE_HOURS ? "danger" : undefined, hint: formatDateTime(telemetry.lastBackupAt) },
             { key: "db", label: "Veritabanı", value: formatBytes(telemetry.databaseSizeBytes), hint: `${formatNumber(telemetry.pendingNotifications)} bekleyen · ${formatNumber(telemetry.failedNotifications)} hatalı bildirim` },

@@ -19,6 +19,7 @@ import {
   useTeacherOverviews,
   useTeachers,
   useResetTeacherPassword,
+  useStaffSeats,
   useUpdateTeacher,
   type Student,
   type Teacher,
@@ -521,6 +522,8 @@ function AddStudentToTeacherForm({
 function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: { id: string; name: string }[]; onClose: () => void; onCreated: (temporaryPassword: string | null, name: string) => void }) {
   const terms = useBranchTerms();
   const createTeacher = useCreateTeacher();
+  const { data: seats } = useStaffSeats();
+  const seatsFull = seats?.limit != null && seats.used >= seats.limit;
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -556,6 +559,16 @@ function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: {
       <label className="form-label">E-posta <span className="font-medium">· giriş hesabı için, opsiyonel</span>
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="field text-sm" />
       </label>
+      {seats?.limit != null && (
+        seatsFull ? (
+          <FormMessage tone="error">
+            Kullanıcı paketiniz dolu ({seats.used}/{seats.limit} personel hesabı). Öğretmeni giriş hesabı olmadan ekleyebilirsiniz;
+            hesap açmak için paketinizi büyütün ya da kullanılmayan bir öğretmeni pasife alın.
+          </FormMessage>
+        ) : (
+          <p className="text-xs text-[var(--muted)]">Kullanıcı paketi: {seats.used}/{seats.limit} personel hesabı kullanılıyor.</p>
+        )
+      )}
 
       <div>
         <p className="form-label">{terms.branchPlural}</p>

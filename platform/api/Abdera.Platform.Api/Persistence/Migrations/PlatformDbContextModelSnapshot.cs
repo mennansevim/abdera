@@ -346,6 +346,13 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AddonPricesJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("addon_prices_json")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<string>("AppVersion")
                         .HasColumnType("text")
                         .HasColumnName("app_version");
@@ -360,6 +367,14 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasDefaultValue("TRY")
+                        .HasColumnName("currency");
 
                     b.Property<string>("CustomCategoryNamesJson")
                         .IsRequired()
@@ -417,6 +432,10 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("modules");
 
+                    b.Property<decimal?>("PricePerSeat")
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("price_per_seat");
+
                     b.Property<string>("PrimaryColor")
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)")
@@ -446,6 +465,10 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("character varying(31)")
                         .HasColumnName("slug");
 
+                    b.Property<int?>("StaffSeatLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("staff_seat_limit");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -474,7 +497,11 @@ namespace Abdera.Platform.Api.Persistence.Migrations
 
                     b.ToTable("schools", null, t =>
                         {
+                            t.HasCheckConstraint("CK_schools_price_per_seat", "price_per_seat IS NULL OR price_per_seat >= 0");
+
                             t.HasCheckConstraint("CK_schools_slug", "slug ~ '^[a-z][a-z0-9-]{2,30}$'");
+
+                            t.HasCheckConstraint("CK_schools_staff_seat_limit", "staff_seat_limit IS NULL OR staff_seat_limit BETWEEN 1 AND 1000");
                         });
                 });
 
@@ -645,6 +672,10 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                     b.Property<int?>("ActiveEnrollments")
                         .HasColumnType("integer")
                         .HasColumnName("active_enrollments");
+
+                    b.Property<int?>("ActiveStaffUsers")
+                        .HasColumnType("integer")
+                        .HasColumnName("active_staff_users");
 
                     b.Property<int?>("ActiveStudents")
                         .HasColumnType("integer")

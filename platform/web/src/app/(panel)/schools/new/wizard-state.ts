@@ -48,6 +48,12 @@ export interface WizardState {
   version: string;
   isCanary: boolean;
   modules: Set<string>;
+  // Kullanıcı paketi: personel hesabı (yönetici + öğretmen) sayısı ve aylık fiyat. Liste fiyatı
+  // (/api/pricing) adım ilk açılınca boş alanlara yazılır; okulla anlaşılan fiyat elle girilir.
+  staffSeats: string;
+  pricePerSeat: string;
+  addonPrices: Record<string, string>;
+  pricingSeeded: boolean;
   // Seçilen kategoriler (öneriler bunlara göre gösterilir) ve okulun alt birimleri.
   categories: Set<string>;
   customCategories: CustomCategoryDraft[];
@@ -74,6 +80,7 @@ export const STEPS = [
   { key: "version", title: "Sürüm" },
   { key: "branches", title: "Alanlar ve dersler" },
   { key: "modules", title: "Eklentiler" },
+  { key: "package", title: "Paket ve fiyat" },
   { key: "admin", title: "Yönetici" },
   { key: "policy", title: "Okul kuralları" },
   { key: "billing", title: "Aidat" },
@@ -107,6 +114,10 @@ export function initialState(): WizardState {
     version: "",
     isCanary: false,
     modules: new Set(),
+    staffSeats: "5",
+    pricePerSeat: "",
+    addonPrices: {},
+    pricingSeeded: false,
     categories: new Set(),
     customCategories: [],
     branches: [],
@@ -219,6 +230,13 @@ export function validateStep(step: StepKey, state: WizardState, context: Validat
     case "modules":
       if (!context.catalog) errors.modules = "Modül listesi yükleniyor…";
       break;
+    case "package":
+      if (!intIn(state.staffSeats, 1, MAX_STAFF_SEATS)) errors.staffSeats = `1 ile ${MAX_STAFF_SEATS} arasında bir tam sayı.`;
+      if (!decimalIn(state.pricePerSeat, 0, MAX_PRICE)) errors.pricePerSeat = "Kullanıcı başı aylık fiyatı gir (en fazla iki ondalık).";
+      for (const key of optionalOnly(state.modules, context.catalog ?? [])) {
+        if (!decimalIn(state.addonPrices[key] ?? "", 0, MAX_PRICE)) errors[`addon.${key}`] = "Aylık fiyatı gir (ücretsizse 0).";
+      }
+      break;
     case "admin": {
       const email = state.adminEmail.trim();
       if (!email || email.length > 254 || !EMAIL_PATTERN.test(email)) errors.adminEmail = "Geçerli bir yönetici e-postası gir.";
@@ -277,6 +295,26 @@ export function integrationsFor(state: WizardState, catalog?: ModuleEntry[]): Re
   return result;
 }
 
+// Sınırlar platform Domain/SchoolPackage.cs ile aynı.
+export const MAX_STAFF_SEATS = 1000;
+const MAX_PRICE = 1_000_000;
+
+// Paketin aylık tutarının önizlemesi (sunucu SchoolPackage.MonthlyTotal ile aynı kural: kullanıcı
+// sayısı × kullanıcı başı fiyat + seçilen eklentilerin fiyatı). Kurulduktan sonra gösterilen tutar
+// sunucunun hesabıdır.
+export function packagePreview(state: WizardState, catalog?: ModuleEntry[]): number | null {
+  const seats = parseNumber(state.staffSeats);
+  const perSeat = parseNumber(state.pricePerSeat);
+  if (!Number.isFinite(seats) || !Number.isFinite(perSeat)) return null;
+  let total = seats * perSeat;
+  for (const key of optionalOnly(state.modules, catalog ?? [])) {
+    const price = parseNumber(state.addonPrices[key] ?? "");
+    if (!Number.isFinite(price)) return null;
+    total += price;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 const toTime = (value: string) => (value.length === 5 ? `${value}:00` : value);
 
 export function buildRequest(state: WizardState, catalog: ModuleEntry[]): CreateSchoolInput {
@@ -319,6 +357,12 @@ export function buildRequest(state: WizardState, catalog: ModuleEntry[]): Create
     tariffs: [tariff("Individual", state.individual), ...(groups ? [tariff("Group", state.group)] : [])],
     integrations: Object.keys(integrations).length > 0 ? integrations : null,
     isCanary: state.isCanary,
+    package: {
+      staffSeats: parseNumber(state.staffSeats),
+      pricePerSeat: parseNumber(state.pricePerSeat),
+      // Yalnızca seçilen eklentilerin fiyatı gönderilir (seçilmeyene fiyat verilirse sunucu reddeder).
+      addonPrices: Object.fromEntries(optionalOnly(state.modules, catalog).map((key) => [key, parseNumber(state.addonPrices[key] ?? "")])),
+    },
     branches: state.branches.map((branch) => ({ category: branch.category, name: branch.name.trim() })),
     // Yalnızca altında ders olan özel alanlar gönderilir.
     customCategories: state.customCategories

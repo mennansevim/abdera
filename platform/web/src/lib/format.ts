@@ -15,6 +15,12 @@ export function formatNumber(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : number.format(value);
 }
 
+// Para: "4.500,00 ₺". Tutar sunucudan gelir (decimal); burada yalnızca gösterim.
+export function formatMoney(value: number | null | undefined, currency = "TRY"): string {
+  if (value === null || value === undefined) return "—";
+  return new Intl.NumberFormat("tr-TR", { style: "currency", currency, minimumFractionDigits: 2 }).format(value);
+}
+
 export function formatBytes(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const units = ["B", "KB", "MB", "GB", "TB"];
