@@ -334,8 +334,14 @@ public class PlatformFlowTests(PlatformFactory factory) : IClassFixture<Platform
         var categories = await client.GetFromJsonAsync<JsonElement>("/api/releases/2026.10.15.1/categories");
         Assert.Equal("Dans türü", categories.EnumerateArray().Single(c => c.GetProperty("key").GetString() == "dance").GetProperty("unitLabel").GetString());
 
-        string Body(object branches) => JsonSerializer.Serialize(PlatformFactory.SchoolRequest("adim-dans", "2026.10.15.1"), PlatformFactory.Json)
-            .TrimEnd('}') + $",\"branches\":{JsonSerializer.Serialize(branches)}}}";
+        // Gövde JsonNode ile genişletilir (iç içe nesneyle biten isteği metinle kesmek bozuk JSON üretir).
+        string Body(object branches, string? customCategories = null)
+        {
+            var node = JsonSerializer.SerializeToNode(PlatformFactory.SchoolRequest("adim-dans", "2026.10.15.1"), PlatformFactory.Json)!.AsObject();
+            node["branches"] = JsonSerializer.SerializeToNode(branches);
+            if (customCategories is not null) node["customCategories"] = System.Text.Json.Nodes.JsonNode.Parse(customCategories);
+            return node.ToJsonString();
+        }
         async Task<HttpResponseMessage> PostAsync(object branches) =>
             await client.PostAsync("/api/schools", new StringContent(Body(branches), System.Text.Encoding.UTF8, "application/json"));
 
@@ -345,9 +351,9 @@ public class PlatformFlowTests(PlatformFactory factory) : IClassFixture<Platform
         // Katalogda olmayan alan: istekte tanımlanmadan kullanılamaz.
         Assert.Equal(HttpStatusCode.BadRequest, (await PostAsync(new[] { new { category = "c-yoga", name = "Hatha yoga" } })).StatusCode);
 
-        var custom = ",\"customCategories\":[{\"key\":\"c-yoga\",\"name\":\"Yoga\",\"unitLabel\":\"Seans\"}]";
-        var body = Body(new object[] { new { category = "dance", name = "Bale" }, new { category = "DANCE", name = "Hip hop" }, new { category = "other", name = "Yaratıcı drama" }, new { category = "c-yoga", name = "Hatha yoga" } });
-        var created = await client.PostAsync("/api/schools", new StringContent(body.TrimEnd('}') + custom + "}", System.Text.Encoding.UTF8, "application/json"));
+        var custom = "[{\"key\":\"c-yoga\",\"name\":\"Yoga\",\"unitLabel\":\"Seans\"}]";
+        var body = Body(new object[] { new { category = "dance", name = "Bale" }, new { category = "DANCE", name = "Hip hop" }, new { category = "other", name = "Yaratıcı drama" }, new { category = "c-yoga", name = "Hatha yoga" } }, custom);
+        var created = await client.PostAsync("/api/schools", new StringContent(body, System.Text.Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
