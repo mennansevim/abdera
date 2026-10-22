@@ -25,7 +25,8 @@ export const RELEASES: Release[] = [
     version: "2026.10.22.2",
     date: "2026-10-22",
     items: [
-      { audience: "admin", text: "Yoklama kartlarında 1 Kasım öncesi işlenen dersler artık kartın altında \"Geçiş öncesi\" olarak görünür. Bu dersler 4'lük sayaca girmez ve aidat açmaz; sayaç 1 Kasım'dan sonraki ilk dersle başlar." },
+      { audience: "admin", text: "Her öğrencinin 4'lük sayacı artık kendi ilk giriş gününden başlar; ay ortası da olabilir. Yoklama kartındaki \"İlk giriş\" alanından girip değiştirebilirsin. O ayın aylık aidatı varsa 1. dönem sayılır, ikinci kez borç yazılmaz." },
+      { audience: "admin", text: "İlk giriş gününden önce işlenen dersler kartın altında bilgi olarak görünür; sayaca girmez ve aidat açmaz." },
     ],
   },
   {
