@@ -42,7 +42,9 @@ public static class AttendanceCards
     public record Card(
         Guid EnrollmentId, Guid StudentId, string StudentName, Guid TeacherId, string TeacherName, string InstrumentName,
         DateOnly StartedAt, DateOnly CountingFrom, int CurrentCycle, int FilledInCurrent, CardState State,
-        decimal UnpaidAmount, string Currency, DateOnly? LastLessonDate, List<CardCycle> Cycles);
+        decimal UnpaidAmount, string Currency, DateOnly? LastLessonDate, List<CardCycle> Cycles,
+        // Geçiş gününden önce işlenmiş dersler: yalnızca bilgi, karta sayılmaz ve aidat açmaz.
+        List<CardLesson> EarlierLessons);
 
     public record CardsResponse(DateOnly? CycleBillingStartsOn, List<Card> Cards);
 
@@ -81,14 +83,18 @@ public static class AttendanceCards
         {
             if (!students.TryGetValue(enrollment.StudentId, out var student)) continue;
             var countingFrom = CycleReceivableAccruer.CountingFrom(enrollment, settings)!.Value;
-            var lessons = await CycleReceivableAccruer.LoadCardLessonsAsync(db, clock, enrollment, countingFrom);
+            // Tek sorgu: kayıt başından itibaren; geçiş öncesi kısım karttan ayrılıp bilgi olarak döner.
+            var all = await CycleReceivableAccruer.LoadCardLessonsAsync(
+                db, clock, enrollment, enrollment.StartedAt < countingFrom ? enrollment.StartedAt : countingFrom);
+            var lessons = all.Where(lesson => lesson.Date >= countingFrom).ToList();
+            var earlier = all.Where(lesson => lesson.Date < countingFrom).ToList();
             var receivables = receivablesByEnrollment[enrollment.Id].ToDictionary(r => BillingCycle.Number(r.Period));
 
             cards.Add(Build(
                 enrollment, $"{student.FirstName} {student.LastName}",
                 teachers.TryGetValue(enrollment.TeacherId, out var teacher) ? $"{teacher.FirstName} {teacher.LastName}" : "Öğretmen",
                 instruments.TryGetValue(enrollment.InstrumentId, out var instrument) ? instrument.Name : "Ders",
-                countingFrom, lessons, receivables, paid));
+                countingFrom, lessons, receivables, paid, earlier));
         }
 
         // Türkçe alfabetik sıra istemcide (localeCompare "tr") - BillingBoard ile aynı gerekçe.
@@ -100,7 +106,8 @@ public static class AttendanceCards
         Enrollment enrollment, string studentName, string teacherName, string instrumentName, DateOnly countingFrom,
         IReadOnlyList<CycleReceivableAccruer.CountedLesson> lessons,
         IReadOnlyDictionary<int, Receivable> receivables,
-        IReadOnlyDictionary<Guid, decimal> paid)
+        IReadOnlyDictionary<Guid, decimal> paid,
+        IReadOnlyList<CycleReceivableAccruer.CountedLesson>? earlierLessons = null)
     {
         var filled = new List<List<CardLesson>>();
         var misses = new Dictionary<int, List<CardLesson>>();
@@ -157,7 +164,8 @@ public static class AttendanceCards
             enrollment.Id, enrollment.StudentId, studentName, enrollment.TeacherId, teacherName, instrumentName,
             enrollment.StartedAt, countingFrom, current, filledInCurrent, state, unpaid,
             receivables.Values.Select(r => r.Currency).FirstOrDefault() ?? "TRY",
-            lessons.Count == 0 ? null : lessons[^1].Date,
-            cycles);
+            lessons.Count > 0 ? lessons[^1].Date : earlierLessons is { Count: > 0 } ? earlierLessons[^1].Date : null,
+            cycles,
+            (earlierLessons ?? []).Select(lesson => new CardLesson(lesson.LessonId, lesson.StartAt, lesson.Date, lesson.Status)).ToList());
     }
 }

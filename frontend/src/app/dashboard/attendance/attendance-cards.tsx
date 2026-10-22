@@ -37,7 +37,7 @@ const PILL_CLASS: Record<Tone, string> = {
 
 function stateLabel(card: AttendanceCard) {
   switch (card.state) {
-    case "NotStarted": return "Henüz ders yok";
+    case "NotStarted": return dayOf(card.countingFrom) > new Date() ? `Başlangıç ${startLabel.format(dayOf(card.countingFrom))}` : "Henüz ders yok";
     case "InProgress": return `Devam ediyor · ${card.filledInCurrent}/4`;
     case "LastLesson": return "Son derse 1 kaldı";
     case "AwaitingPayment": return "Ödeme bekleniyor";
@@ -48,7 +48,14 @@ function stateLabel(card: AttendanceCard) {
 
 const shortDate = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-digit" });
 const longDate = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
+const startLabel = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long" });
 const dayOf = (iso: string) => new Date(`${iso}T00:00:00`);
+
+const MISS_CLASS = {
+  Present: "bg-[var(--surface-muted)] text-[var(--foreground)]",
+  Excused: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
+  Absent: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
+} as const;
 
 function StatePill({ card }: { card: AttendanceCard }) {
   return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold ${PILL_CLASS[STATE_TONE[card.state]]}`}>
@@ -139,7 +146,7 @@ export function AttendanceCards() {
       </FilterField>
     </section>
 
-    <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_31rem]">
+    <div className="grid items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_31rem]">
       <section className="app-card min-w-0 overflow-hidden">
         {!visible.length && <EmptyState title="Bu filtrede öğrenci yok" description="Filtreyi kaldırmayı ya da aramayı temizlemeyi dene." />}
         {!!visible.length && <div className="overflow-x-auto">
@@ -169,6 +176,7 @@ export function AttendanceCards() {
                   <td className="px-3 py-2.5">
                     <span className="block font-bold">{card.studentName}</span>
                     <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
+                    {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">Geçiş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
                   </td>
                   <td className="text-meta px-3 py-2.5 tabular-nums whitespace-nowrap">{longDate.format(dayOf(card.startedAt))}</td>
                   <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
@@ -182,7 +190,7 @@ export function AttendanceCards() {
                       })}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5"><StatePill card={card} /></td>
+                  <td className="px-3 py-2.5 whitespace-nowrap"><StatePill card={card} /></td>
                 </tr>;
               })}
             </tbody>
@@ -224,7 +232,7 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
   }
 
   const cycles = [...card.cycles].reverse();
-  return <article aria-label={`${card.studentName} yoklama kartı`} className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)] xl:sticky xl:top-4">
+  return <article aria-label={`${card.studentName} yoklama kartı`} className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)] 2xl:sticky 2xl:top-4">
     <div className="flex items-baseline justify-between gap-2 border-b-2 border-[var(--foreground)] px-4 py-3">
       <span className="text-xs font-extrabold uppercase tracking-[.08em]">Abdera Sanat Akademi</span>
       <span className="text-xs font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">Yoklama listesi</span>
@@ -261,11 +269,19 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    {!cycles.length && <p className="text-meta px-4 py-6 text-center">{longDate.format(dayOf(card.countingFrom))} sonrasında henüz işlenmiş ders yok. İlk ders 1. dönemi açar.</p>}
+    {!cycles.length && <p className="text-meta px-4 py-6 text-center">{longDate.format(dayOf(card.countingFrom))} sonrasında henüz işlenmiş ders yok. O günden sonraki ilk ders 1. dönemi açar.</p>}
     {!!cycles.length && <div className="grid max-h-[34rem] grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] overflow-y-auto">
       {cycles.map((cycle) => <CycleBlock key={cycle.number} cycle={cycle} current={cycle.number === card.currentCycle} awaiting={card.state === "AwaitingPayment" && cycle.number === card.currentCycle} />)}
     </div>}
-    <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 px-4 py-2.5 text-[.72rem]">
+    {card.earlierLessons.length > 0 && <section aria-label="Geçiş öncesi dersler" className="border-t border-[var(--line)] px-4 py-3">
+      <p className="text-micro text-[var(--muted)]">Geçiş öncesi · {startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz</p>
+      <ul className="mt-2 flex flex-wrap gap-1">
+        {[...card.earlierLessons].reverse().map((lesson) => <li key={lesson.lessonId} title={lesson.status === "Present" ? "Geldi" : lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} className={`rounded-md px-1.5 py-0.5 text-[.7rem] font-semibold tabular-nums ${MISS_CLASS[lesson.status]}`}>
+          {shortDate.format(dayOf(lesson.date))}{lesson.status === "Present" ? " ✓" : lesson.status === "Excused" ? " M" : " ✗"}
+        </li>)}
+      </ul>
+    </section>}
+    <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[.72rem]">
       <span>✓ Geldi ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satırı doldurur</span>
       <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> satır doldurmaz</span>
       <span>En yeni dönem en üstte · {longDate.format(dayOf(card.countingFrom))} itibarıyla</span>

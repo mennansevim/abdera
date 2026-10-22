@@ -96,6 +96,8 @@ export interface AttendanceCard {
   currency: string;
   lastLessonDate: string | null;
   cycles: CardCycle[];
+  // Geçiş gününden önce işlenmiş dersler: yalnızca bilgi, karta sayılmaz ve aidat açmaz.
+  earlierLessons: CardLesson[];
 }
 
 export interface AttendanceCardsResponse {

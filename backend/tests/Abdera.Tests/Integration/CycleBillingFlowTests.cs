@@ -196,6 +196,36 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Lessons_before_the_cycle_start_show_on_the_card_but_neither_count_nor_accrue()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "Gecis", 2);
+
+        // Kayıt geçişten 10 gün önce başlamış, o arada işlenmiş bir ders var.
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var enrollment = await db.Enrollments.SingleAsync(e => e.Id == seeded.EnrollmentId);
+            db.Entry(enrollment).Property(e => e.StartedAt).CurrentValue = CycleStart.AddDays(-10);
+            var start = new DateTimeOffset(CycleStart.AddDays(-5).ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
+            var before = Lesson.CreateMakeup(seeded.StudentId, seeded.TeacherId, seeded.InstrumentId, start, start.AddMinutes(45), Now);
+            db.Lessons.Add(before);
+            await db.SaveChangesAsync();
+            seeded.LessonIds.Insert(0, before.Id);
+        }
+        await MarkAsync(admin, seeded.LessonIds[0], AttendanceStatus.Present);
+        Assert.Empty(await CyclesAsync(seeded.EnrollmentId));
+
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(seeded.LessonIds[0], Assert.Single(card.EarlierLessons).LessonId);
+        Assert.Equal(AttendanceCards.CardState.NotStarted, card.State);
+
+        await MarkAsync(admin, seeded.LessonIds[1], AttendanceStatus.Present);
+        card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(1, card.FilledInCurrent);
+        Assert.Equal("D001", Assert.Single(await CyclesAsync(seeded.EnrollmentId)).Period);
+    }
+
+    [Fact]
     public async Task Monthly_dues_are_not_opened_for_an_individual_enrollment_after_the_cycle_start()
     {
         var admin = await AdminAsync();
