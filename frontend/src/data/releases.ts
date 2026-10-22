@@ -22,6 +22,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.22",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Yoklama ekranında yeni \"Yoklama kartları\" görünümü: her birebir öğrencinin kartı defterdeki yoklama listesi gibi 4'er derslik dönemlerle görünür. Geldi ve Mazeretli bir satır doldurur, Gelmedi doldurmaz." },
+      { audience: "admin", text: "4 dersini tamamlayan öğrenciler üstte \"ödeme bekleniyor\" uyarısıyla listelenir; karttaki \"Tahsil et\" ile ödemeyi oradan alabilirsin." },
+      { audience: "admin", text: "1 Kasım'dan itibaren birebir derslerde aidat her ay değil, yeni dönemin ilk dersinde açılır ve 7 gün içinde ödenmesi beklenir. Ekim ve önceki aylık aidatlar olduğu gibi kalır; başlangıç tarihi Fiyat politikası ekranından değiştirilebilir." },
+      { audience: "admin", text: "Aidatlar çizelgesinde birebir öğrenciler için dönem sütunları var; ödeme penceresinde ay yerine dönem seçilir ve sıradaki dönemler peşin alınabilir." },
+    ],
+  },
+  {
     version: "2026.10.21",
     date: "2026-10-21",
     items: [
