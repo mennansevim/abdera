@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.22.3",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Yoklama kartlarında öğrencinin ilk giriş gününü artık doğrudan listeden girebilirsin: tarihi seçip alandan çıkınca kaydedilir. Kartı açmak için satıra dokun; kart pencere olarak açılır." },
+    ],
+  },
+  {
     version: "2026.10.22.2",
     date: "2026-10-22",
     items: [
