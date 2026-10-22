@@ -108,20 +108,8 @@ export interface AttendanceCard {
 export interface AttendanceCardsResponse {
   cycleBillingStartsOn: string | null;
   cards: AttendanceCard[];
-}
-
-// Öğrencinin ilk giriş günü: bu günden itibaren her 4 derste bir aidat açılır (ay ortası olabilir).
-// Sunucu kartı yeniden sayar ve dönem aidatlarını yeni başlangıca göre eşitler.
-export function useSetCycleStart() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ enrollmentId, cycleStartsOn }: { enrollmentId: string; cycleStartsOn: string | null }) =>
-      api.put(`/api/attendance/cards/${enrollmentId}/cycle-start`, { cycleStartsOn }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
-      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
-    },
-  });
+  // Karta elle ders yazılabilecek en eski gün (geçen ayın 1'i).
+  entriesFrom: string;
 }
 
 // Karta elle yazılan geçmiş ders (kâğıttaki satır): eklenir, tarihi değişir ya da kaldırılır.

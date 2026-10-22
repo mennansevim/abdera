@@ -68,12 +68,19 @@ public static class CycleReceivableAccruer
     public static DateOnly? CountingFrom(Enrollment enrollment, BillingSettings settings) =>
         BillingCycle.StartFor(enrollment.CourseKind, enrollment.CycleStartsOn, enrollment.StartedAt, settings.CycleBillingStartsOn);
 
-    // Sayacın başladığı ayın aylık aidatı (geçiş öncesi açılmış): varsa 1. dönemin ücreti sayılır.
-    public static async Task<Receivable?> FindCoveringMonthlyAsync(AbderaDbContext db, Guid enrollmentId, DateOnly countingFrom)
+    // Sayaç başladıktan sonra açılmış (geçiş öncesi) aylık aidat: varsa 1. dönemin ücreti sayılır.
+    // Sayaç geçen aya geri alınabildiği için (AD11) aralıkta iki ay olabilir - eylül ortasında başlayan
+    // kartın 4 dersi çoğunlukla ekimdedir; en yeni ay 1. dönemi karşılar, öncekiler o ayın dersleridir.
+    public static async Task<Receivable?> FindCoveringMonthlyAsync(AbderaDbContext db, IClock clock, Guid enrollmentId, DateOnly countingFrom)
     {
-        var month = BillingPeriod.Format(countingFrom.Year, countingFrom.Month);
-        return await db.Receivables.AsNoTracking()
-            .SingleOrDefaultAsync(r => r.EnrollmentId == enrollmentId && r.Period == month && r.Status != ReceivableStatus.Cancelled);
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var months = new List<string>();
+        for (var month = new DateOnly(countingFrom.Year, countingFrom.Month, 1); month <= today || months.Count == 0; month = month.AddMonths(1))
+            months.Add(BillingPeriod.Format(month.Year, month.Month));
+        var candidates = await db.Receivables.AsNoTracking()
+            .Where(r => r.EnrollmentId == enrollmentId && months.Contains(r.Period) && r.Status != ReceivableStatus.Cancelled)
+            .ToListAsync();
+        return candidates.MaxBy(r => r.Period);
     }
 
     // Bu dersin yoklaması bir dönem kartına mı sayılıyor - Mazeretli ders kartta satır doldurduğu
@@ -125,7 +132,7 @@ public static class CycleReceivableAccruer
             .ToList();
         var required = BillingCycle.RequiredCycles(counted.Count);
         // Sayacın başladığı ayın aylık aidatı 1. dönemi karşılar (AD9): D001 açılmaz.
-        var firstCovered = await FindCoveringMonthlyAsync(db, enrollment.Id, countingFrom) is not null;
+        var firstCovered = await FindCoveringMonthlyAsync(db, clock, enrollment.Id, countingFrom) is not null;
 
         var cycles = (await db.Receivables
                 .Where(r => r.EnrollmentId == enrollment.Id && r.Period.StartsWith("D"))

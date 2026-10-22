@@ -4,7 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState, FilterField, Modal, SearchInput, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, useSetCycleStart, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
+import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
 import { cycleKey, formatMoney, todayInput } from "@/lib/billing-format";
 import { CollectSheet } from "../billing/collect-sheet";
@@ -36,7 +36,7 @@ const PILL_CLASS: Record<Tone, string> = {
 
 function stateLabel(card: AttendanceCard) {
   switch (card.state) {
-    case "NotStarted": return !card.countingFrom ? "İlk giriş girilmedi" : dayOf(card.countingFrom) > new Date() ? `Başlangıç ${startLabel.format(dayOf(card.countingFrom))}` : "Henüz ders yok";
+    case "NotStarted": return !card.countingFrom || !card.hasOwnCycleStart && dayOf(card.countingFrom) > new Date() ? "İlk ders yazılmadı" : dayOf(card.countingFrom) > new Date() ? `Başlangıç ${startLabel.format(dayOf(card.countingFrom))}` : "Henüz ders yok";
     case "InProgress": return `Devam ediyor · ${card.filledInCurrent}/4`;
     case "LastLesson": return "Son derse 1 kaldı";
     case "AwaitingPayment": return "Ödeme bekleniyor";
@@ -179,9 +179,7 @@ export function AttendanceCards() {
                     <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
                     {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">İlk giriş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
                   </td>
-                  <td className="px-3 py-2" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                    <FirstEntryCell card={card} />
-                  </td>
+                  <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.hasOwnCycleStart && card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : <span className="text-[var(--muted)]">—</span>}</td>
                   <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
                   <td className="px-3 py-2.5">
                     <span className="inline-grid grid-cols-4 gap-1">
@@ -201,53 +199,18 @@ export function AttendanceCards() {
         </div>}
       </section>
 
-      {selected && wide && <AttendanceSheet key={selected.enrollmentId} card={selected} />}
+      {selected && wide && <AttendanceSheet key={selected.enrollmentId} card={selected} entriesFrom={data.entriesFrom} />}
     </div>
 
     {selected && !wide && <Modal open size="lg" title={selected.studentName} description={`${selected.instrumentName} · ${selected.teacherName}`} onClose={() => setSelectedId(null)}>
-      <AttendanceSheet key={selected.enrollmentId} card={selected} />
+      <AttendanceSheet key={selected.enrollmentId} card={selected} entriesFrom={data.entriesFrom} />
     </Modal>}
   </div>;
 }
 
-// Tablodaki "İlk giriş" hücresi: 77 öğrencinin günü kartı tek tek açmadan buradan girilir. Gün
-// seçilip alandan çıkınca (ya da Enter) kaydedilir; okul geneli gün soluk görünür.
-function FirstEntryCell({ card }: { card: AttendanceCard }) {
-  const setCycleStart = useSetCycleStart();
-  const [value, setValue] = useState(card.countingFrom ?? "");
-  const [state, setState] = useState<"idle" | "saved" | "error">("idle");
-  const own = card.hasOwnCycleStart;
-
-  async function commit() {
-    if (!value || value === card.countingFrom && own) return;
-    try {
-      await setCycleStart.mutateAsync({ enrollmentId: card.enrollmentId, cycleStartsOn: value });
-      setState("saved");
-    } catch {
-      setState("error");
-    }
-  }
-
-  return <span className="flex items-center gap-1.5">
-    <input
-      type="date"
-      value={value}
-      onChange={(event) => { setValue(event.target.value); setState("idle"); }}
-      onBlur={commit}
-      onKeyDown={(event) => { if (event.key === "Enter") void commit(); }}
-      aria-label={`${card.studentName} ilk giriş günü`}
-      title={own ? "Öğrenciye girilen ilk giriş günü" : "Okul geneli geçiş günü - öğrencinin ilk giriş gününü seç"}
-      className={`field !min-h-8 w-[9.5rem] px-2 text-xs tabular-nums ${own ? "" : "text-[var(--muted)]"}`}
-    />
-    <span aria-live="polite" className="w-4 text-xs font-bold">
-      {setCycleStart.isPending ? "…" : state === "saved" ? <span className="text-[var(--success-strong)]" title="Kaydedildi">✓</span> : state === "error" ? <span className="text-[var(--danger-strong)]" title="Kaydedilemedi">!</span> : null}
-    </span>
-  </span>;
-}
-
 // ---- Kart ----------------------------------------------------------------------
 
-function AttendanceSheet({ card }: { card: AttendanceCard }) {
+function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesFrom: string }) {
   const year = new Date().getFullYear();
   const { data: board } = useBillingBoard(year);
   const reminder = useSendPaymentReminder();
@@ -318,23 +281,21 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    {!card.countingFrom && <p className="text-meta px-4 py-6 text-center">Öğrencinin ilk giriş gününü seç: o günden itibaren her 4 derste bir aidat açılır, geçmiş dersleri aşağıdaki satırlara yazabilirsin.</p>}
-    {card.countingFrom && <>
-      {older.length > 0 && <button type="button" onClick={() => setShowOlder((value) => !value)} className="w-full border-b border-[var(--line)] px-4 py-2 text-left text-xs font-bold text-[var(--brand-strong)]">
-        {showOlder ? "Önceki dönemleri gizle" : `Önceki ${older.length} dönemi göster`}
-      </button>}
-      <div className="grid sm:grid-cols-2">
-        {(showOlder ? [...older, ...recent] : recent).map((cycle) => <CycleBlock
-          key={cycle.number}
-          card={card}
-          cycle={cycle}
-          current={cycle.number === nextBlock}
-          awaiting={card.state === "AwaitingPayment" && cycle.number === card.currentCycle}
-        />)}
-      </div>
-    </>}
+    {older.length > 0 && <button type="button" onClick={() => setShowOlder((value) => !value)} className="w-full border-b border-[var(--line)] px-4 py-2 text-left text-xs font-bold text-[var(--brand-strong)]">
+      {showOlder ? "Önceki dönemleri gizle" : `Önceki ${older.length} dönemi göster`}
+    </button>}
+    <div className="grid sm:grid-cols-2">
+      {(showOlder ? [...older, ...recent] : recent).map((cycle) => <CycleBlock
+        key={cycle.number}
+        card={card}
+        entriesFrom={entriesFrom}
+        cycle={cycle}
+        current={cycle.number === nextBlock}
+        awaiting={card.state === "AwaitingPayment" && cycle.number === card.currentCycle}
+      />)}
+    </div>
     {card.earlierLessons.length > 0 && <section aria-label="İlk giriş öncesi dersler" className="border-t border-[var(--line)] px-4 py-3">
-      <p className="text-micro text-[var(--muted)]">{card.countingFrom ? `İlk giriş öncesi · ${startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz` : "İşlenen dersler · ilk giriş günü girilince karta sayılır"}</p>
+      <p className="text-micro text-[var(--muted)]">{card.countingFrom ? `İlk giriş öncesi · ${startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz` : "İşlenen dersler · tarihini 1. satıra yazınca kart o dersten başlar"}</p>
       <ul className="mt-2 flex flex-wrap gap-1">
         {[...card.earlierLessons].reverse().map((lesson) => <li key={lesson.lessonId ?? lesson.entryId} title={lesson.status === "Present" ? "Geldi" : lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} className={`rounded-md px-1.5 py-0.5 text-[.7rem] font-semibold tabular-nums ${MISS_CLASS[lesson.status]}`}>
           {shortDate.format(dayOf(lesson.date))}{lesson.status === "Present" ? " ✓" : lesson.status === "Excused" ? " M" : " ✗"}
@@ -344,7 +305,7 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
     <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[.72rem]">
       <span>✓ Geldi ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satırı doldurur</span>
       <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> satır doldurmaz</span>
-      <span>Boş satıra tarih yazarak geçmiş dersi ekle; sonrası yoklamadan gelir{card.countingFrom ? ` · ${longDate.format(dayOf(card.countingFrom))} itibarıyla` : ""}</span>
+      <span>Boş satıra tarih yazarak geçmiş dersi ekle (en erken {longDate.format(dayOf(entriesFrom))}); ilk satır kartın başlangıcıdır, sonrası yoklamadan gelir</span>
     </p>
 
     {collecting && row && <CollectSheet
@@ -357,7 +318,7 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
   </article>;
 }
 
-function CycleBlock({ card, cycle, current, awaiting }: { card: AttendanceCard; cycle: CardCycle; current: boolean; awaiting: boolean }) {
+function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: AttendanceCard; entriesFrom: string; cycle: CardCycle; current: boolean; awaiting: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const receivable = cycle.receivable;
   const tag = awaiting
@@ -382,8 +343,8 @@ function CycleBlock({ card, cycle, current, awaiting }: { card: AttendanceCard; 
           {longDate.format(dayOf(lesson.date)).replace(/\./g, " / ")}
           {lesson.status === "Excused" && <span className="rounded-md bg-[var(--warning-soft)] px-1.5 font-sans text-[.66rem] font-semibold not-italic text-[var(--warning-strong)]">Mazeretli</span>}
         </span>}
-        {lesson?.entryId && <EntryInput key={lesson.entryId} card={card} entryId={lesson.entryId} date={lesson.date} onError={setError} />}
-        {!lesson && <EntryInput card={card} entryId={null} date={null} onError={setError} />}
+        {lesson?.entryId && <EntryInput key={lesson.entryId} card={card} entriesFrom={entriesFrom} entryId={lesson.entryId} date={lesson.date} onError={setError} />}
+        {!lesson && <EntryInput card={card} entriesFrom={entriesFrom} entryId={null} date={null} onError={setError} />}
         <span className={`grid h-full place-items-center border-l border-[var(--line)] text-base font-bold ${lesson?.status === "Excused" ? "text-[var(--warning-strong)]" : "text-[var(--success-strong)]"}`}>{lesson ? "✓" : ""}</span>
       </div>;
     })}
@@ -396,8 +357,9 @@ function CycleBlock({ card, cycle, current, awaiting }: { card: AttendanceCard; 
 
 // Kâğıttaki gibi elle yazılan satır (AD10): boş satıra tarih seçilince geçmiş ders eklenir; elle
 // yazılmış satırın tarihi değiştirilebilir ya da × ile kaldırılır. Sistemdeki yoklama satırları
-// salt okunur. Tarih ilk giriş ile bugün arasında olmalı; kuralları sunucu da denetler.
-function EntryInput({ card, entryId, date, onError }: { card: AttendanceCard; entryId: string | null; date: string | null; onError: (message: string | null) => void }) {
+// salt okunur. Tarih geçen ayın 1'i ile bugün arasında olmalı; karta yazılan en erken gün kartın
+// başlangıcıdır (AD11). Kuralları sunucu da denetler.
+function EntryInput({ card, entriesFrom, entryId, date, onError }: { card: AttendanceCard; entriesFrom: string; entryId: string | null; date: string | null; onError: (message: string | null) => void }) {
   const add = useAddCardEntry();
   const change = useChangeCardEntry();
   const remove = useRemoveCardEntry();
@@ -425,7 +387,7 @@ function EntryInput({ card, entryId, date, onError }: { card: AttendanceCard; en
     <input
       type="date"
       value={value}
-      min={card.countingFrom ?? undefined}
+      min={entriesFrom}
       max={todayInput()}
       disabled={busy}
       onChange={(event) => setValue(event.target.value)}
@@ -438,42 +400,12 @@ function EntryInput({ card, entryId, date, onError }: { card: AttendanceCard; en
   </span>;
 }
 
-// Kartın "İlk giriş" alanı: öğrencinin dönem sayacının başladığı gün (ay ortası olabilir). Boşsa okul
-// geneli geçiş günü kullanılır. Değişince kart baştan sayılır, dönem aidatları yeni güne göre eşitlenir.
+// Kartın "İlk giriş" alanı salt okunur: ayrı seçilmez, karta yazılan ilk satırın günüdür (AD11).
 function CycleStartField({ card }: { card: AttendanceCard }) {
-  const setCycleStart = useSetCycleStart();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(card.countingFrom ?? "");
-  const [error, setError] = useState<string | null>(null);
-
-  async function save(next: string | null) {
-    setError(null);
-    try {
-      await setCycleStart.mutateAsync({ enrollmentId: card.enrollmentId, cycleStartsOn: next });
-      setEditing(false);
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "İlk giriş günü kaydedilemedi.");
-    }
-  }
-
   return <div className="px-4 py-2">
-    <dt className="flex items-center justify-between gap-2 text-[.66rem] font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">
-      İlk giriş
-      {!editing && <button type="button" onClick={() => { setValue(card.countingFrom ?? ""); setEditing(true); }} className="text-[.7rem] font-bold normal-case tracking-normal text-[var(--brand-strong)] underline underline-offset-2">Değiştir</button>}
-    </dt>
-    {!editing && <dd className="font-serif text-lg italic tabular-nums">
-      {card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : "—"}
-      {card.countingFrom && !card.hasOwnCycleStart && <span className="text-meta block font-sans text-[.68rem] not-italic">okul geneli geçiş günü</span>}
-    </dd>}
-    {editing && <dd className="mt-1 space-y-1.5">
-      <input type="date" value={value} onChange={(event) => setValue(event.target.value)} aria-label="İlk giriş günü" className="field !min-h-9 w-full text-sm" />
-      <span className="flex flex-wrap gap-1.5">
-        <button type="button" disabled={!value || setCycleStart.isPending} onClick={() => save(value)} className="btn btn-primary !min-h-8 text-xs">{setCycleStart.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
-        <button type="button" onClick={() => setEditing(false)} className="btn btn-quiet !min-h-8 text-xs">Vazgeç</button>
-        {card.hasOwnCycleStart && <button type="button" disabled={setCycleStart.isPending} onClick={() => save(null)} className="btn btn-quiet !min-h-8 text-xs">Okul genelini kullan</button>}
-      </span>
-      <span className="text-meta block text-[.7rem]">Bu günden itibaren her 4 derste bir aidat açılır. O ayın aylık aidatı varsa 1. dönem sayılır.</span>
-      {error && <span role="alert" className="block text-xs font-semibold text-[var(--danger-strong)]">{error}</span>}
-    </dd>}
+    <dt className="text-[.66rem] font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">İlk giriş</dt>
+    <dd className="font-serif text-lg italic tabular-nums">
+      {card.hasOwnCycleStart && card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : <span className="text-meta block font-sans text-sm not-italic">1. satıra yazılan ilk ders</span>}
+    </dd>
   </div>;
 }

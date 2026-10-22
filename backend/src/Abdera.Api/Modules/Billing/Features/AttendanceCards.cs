@@ -52,7 +52,12 @@ public static class AttendanceCards
         // Sayaç başlangıcı kayda özel girilmiş mi (öğrencinin ilk giriş günü, AD9).
         bool HasOwnCycleStart = false);
 
-    public record CardsResponse(DateOnly? CycleBillingStartsOn, List<Card> Cards);
+    // EntriesFrom: karta elle ders yazılabilecek en eski gün (geçen ayın 1'i, AD11).
+    public record CardsResponse(DateOnly? CycleBillingStartsOn, List<Card> Cards, DateOnly EntriesFrom = default);
+
+    // Geriye dönük yazım penceresi: geçen ayın 1'inden bugüne. Okul geçen yıldan beri kâğıt tutuyor
+    // ama yalnızca son bir ayı (son 4 dersi) karta geçirip sayacı oradan başlatıyor.
+    public static DateOnly EntriesFrom(DateOnly today) => new DateOnly(today.Year, today.Month, 1).AddMonths(-1);
 
     public static void MapAttendanceCards(this IEndpointRouteBuilder app)
     {
@@ -65,27 +70,37 @@ public static class AttendanceCards
 
     public record EntryRequest(DateOnly Date);
 
-    // Karta elle yazılan geçmiş ders (AD10): yönetici ilk giriş gününden sonraki geçmiş dersleri
-    // tarih olarak girer, sonrasını sistemdeki yoklama doldurur. Her değişiklikten sonra kart
-    // baştan sayılır ve dönem aidatları eşitlenir.
+    // Karta elle yazılan geçmiş ders (AD10): yönetici kâğıttaki son dersleri tarih olarak girer,
+    // sonrasını sistemdeki yoklama doldurur. Ayrı bir "ilk giriş" seçimi yok (AD11): karta yazılan en
+    // erken gün sayacın başlangıcıdır. O güne sistemde yoklamalı ders varsa satır açılmaz, yalnızca
+    // sayaç o derse çekilir (ders zaten kartta görünür). Her değişiklikten sonra kart baştan sayılır
+    // ve dönem aidatları eşitlenir.
     private static async Task<IResult> AddEntryAsync(
         Guid enrollmentId, EntryRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
         var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == enrollmentId)
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
-        await ValidateEntryDateAsync(db, clock, enrollment, request.Date, exceptEntryId: null);
+        var movesStart = enrollment.CycleStartsOn is not { } own || request.Date < own;
+        var onLessonDay = await ValidateEntryDateAsync(db, clock, enrollment, request.Date, exceptEntryId: null, movesStart);
 
         var now = clock.UtcNow;
         var actorId = AuthContext.GetUserId(principal);
-        var entry = Attendance.Domain.ManualAttendanceEntry.Create(enrollment.Id, request.Date, actorId, now);
-        db.ManualAttendanceEntries.Add(entry);
-        db.AuditLogs.Add(AuditLog.Record(
-            actorId, "attendance.manual_entry_added", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
-            afterJson: JsonSerializer.Serialize(new { enrollmentId = enrollment.Id, date = request.Date })));
+        Attendance.Domain.ManualAttendanceEntry? entry = null;
+        if (!onLessonDay)
+        {
+            entry = Attendance.Domain.ManualAttendanceEntry.Create(enrollment.Id, request.Date, actorId, now);
+            db.ManualAttendanceEntries.Add(entry);
+            db.AuditLogs.Add(AuditLog.Record(
+                actorId, "attendance.manual_entry_added", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
+                afterJson: JsonSerializer.Serialize(new { enrollmentId = enrollment.Id, date = request.Date })));
+        }
+        if (movesStart) MoveCycleStart(db, enrollment, request.Date, actorId, now);
         await SaveEntryAsync(db);
 
         await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
-        return Results.Created($"/api/attendance/cards/entries/{entry.Id}", new { entry.Id, entry.Date });
+        return entry is null
+            ? Results.Ok(new { Id = (Guid?)null, Date = request.Date })
+            : Results.Created($"/api/attendance/cards/entries/{entry.Id}", new { Id = (Guid?)entry.Id, entry.Date });
     }
 
     private static async Task<IResult> ChangeEntryAsync(
@@ -95,7 +110,9 @@ public static class AttendanceCards
             ?? throw new NotFoundException("Elle yazılmış ders bulunamadı.");
         var enrollment = await db.Enrollments.SingleAsync(e => e.Id == entry.EnrollmentId);
         if (entry.Date == request.Date) return Results.NoContent();
-        await ValidateEntryDateAsync(db, clock, enrollment, request.Date, exceptEntryId: entry.Id);
+        var movesStart = enrollment.CycleStartsOn is not { } own || request.Date < own;
+        // Elle satır sistem dersinin gününe taşınamaz (o gün zaten kartta); doğrulama bunu reddeder.
+        await ValidateEntryDateAsync(db, clock, enrollment, request.Date, exceptEntryId: entry.Id, movesStart: false);
 
         var now = clock.UtcNow;
         var actorId = AuthContext.GetUserId(principal);
@@ -105,7 +122,9 @@ public static class AttendanceCards
             actorId, "attendance.manual_entry_changed", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
             beforeJson: JsonSerializer.Serialize(new { date = before }),
             afterJson: JsonSerializer.Serialize(new { date = request.Date })));
+        if (movesStart) MoveCycleStart(db, enrollment, request.Date, actorId, now);
         await SaveEntryAsync(db);
+        if (!movesStart) await ReanchorCycleStartAsync(db, clock, enrollment, before, actorId);
 
         await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
         return Results.NoContent();
@@ -125,33 +144,58 @@ public static class AttendanceCards
             actorId, "attendance.manual_entry_removed", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
             beforeJson: JsonSerializer.Serialize(new { enrollmentId = enrollment.Id, date = entry.Date })));
         await db.SaveChangesAsync();
+        await ReanchorCycleStartAsync(db, clock, enrollment, entry.Date, actorId);
 
         await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
         return Results.NoContent();
     }
 
-    private static async Task ValidateEntryDateAsync(
-        AbderaDbContext db, IClock clock, Enrollment enrollment, DateOnly date, Guid? exceptEntryId)
+    // Döndürür: o güne sistemde yoklamalı ders var mı (varsa satır açılmaz, yalnızca sayaç çekilir).
+    private static async Task<bool> ValidateEntryDateAsync(
+        AbderaDbContext db, IClock clock, Enrollment enrollment, DateOnly date, Guid? exceptEntryId, bool movesStart)
     {
         static ValidationFailedException Invalid(string message) =>
             new(new Dictionary<string, string[]> { ["date"] = [message] });
 
         if (!BillingCycle.AppliesTo(enrollment.CourseKind))
             throw Invalid("Yoklama kartı yalnızca birebir derslerde tutulur.");
-        var settings = await BillingSettings.GetCurrentAsync(db);
-        if (CycleReceivableAccruer.CountingFrom(enrollment, settings) is not { } start)
-            throw Invalid("Önce öğrencinin ilk giriş gününü seçin.");
-        if (date < start)
-            throw Invalid($"İlk giriş gününden ({start:dd.MM.yyyy}) önce ders yazılamaz.");
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var earliest = EntriesFrom(today);
+        if (date < earliest)
+            throw Invalid($"Geriye dönük en fazla {earliest:dd.MM.yyyy} tarihine kadar ders yazılabilir.");
         if (date > today)
             throw Invalid("İleri bir tarihe ders yazılamaz; gelecek dersler yoklamadan gelir.");
         if (await db.ManualAttendanceEntries.AnyAsync(e => e.EnrollmentId == enrollment.Id && e.Date == date && e.Id != exceptEntryId))
             throw new ConflictException($"{date:dd.MM.yyyy} tarihine zaten bir ders yazılı.");
 
         var lessons = await CycleReceivableAccruer.LoadCardLessonsAsync(db, clock, enrollment, date);
-        if (lessons.Any(lesson => lesson.LessonId is not null && lesson.Date == date))
+        var onLessonDay = lessons.Any(lesson => lesson.LessonId is not null && lesson.Date == date);
+        if (onLessonDay && !movesStart)
             throw new ConflictException($"{date:dd.MM.yyyy} tarihinde sistemde yoklaması girilmiş bir ders var; kartta o görünür.");
+        return onLessonDay;
+    }
+
+    private static void MoveCycleStart(AbderaDbContext db, Enrollment enrollment, DateOnly to, Guid? actorId, DateTimeOffset now)
+    {
+        var before = enrollment.CycleStartsOn;
+        if (before == to) return;
+        enrollment.SetCycleStart(to, now);
+        db.AuditLogs.Add(AuditLog.Record(
+            actorId, "enrollment.cycle_start_set", nameof(Enrollment), enrollment.Id, now,
+            beforeJson: JsonSerializer.Serialize(new { cycleStartsOn = before }),
+            afterJson: JsonSerializer.Serialize(new { cycleStartsOn = to, source = "first_card_row" })));
+    }
+
+    // Sayacı başlatan satır kaldırıldı ya da ileri alındı: sayaç kartta kalan ilk derse kayar. Kartta
+    // ders kalmadıysa gün yerinde durur (yeni yazılan ilk satır onu yine belirler).
+    private static async Task ReanchorCycleStartAsync(AbderaDbContext db, IClock clock, Enrollment enrollment, DateOnly removed, Guid? actorId)
+    {
+        if (enrollment.CycleStartsOn != removed) return;
+        var first = (await CycleReceivableAccruer.LoadCardLessonsAsync(db, clock, enrollment, removed))
+            .FirstOrDefault(lesson => CycleReceivableAccruer.Fills(lesson.Status));
+        if (first is null || first.Date == removed) return;
+        MoveCycleStart(db, enrollment, first.Date, actorId, clock.UtcNow);
+        await db.SaveChangesAsync();
     }
 
     private static async Task SaveEntryAsync(AbderaDbContext db)
@@ -223,7 +267,7 @@ public static class AttendanceCards
         foreach (var enrollment in enrollments)
         {
             if (CycleReceivableAccruer.CountingFrom(enrollment, settings) is { } start
-                && await CycleReceivableAccruer.FindCoveringMonthlyAsync(db, enrollment.Id, start) is { } monthly)
+                && await CycleReceivableAccruer.FindCoveringMonthlyAsync(db, clock, enrollment.Id, start) is { } monthly)
                 coveringMonthly[enrollment.Id] = monthly;
         }
         var paid = await Receivables.ComputeTotalsPaidAsync(
@@ -250,7 +294,8 @@ public static class AttendanceCards
         }
 
         // Türkçe alfabetik sıra istemcide (localeCompare "tr") - BillingBoard ile aynı gerekçe.
-        return Results.Ok(new CardsResponse(settings.CycleBillingStartsOn, cards));
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        return Results.Ok(new CardsResponse(settings.CycleBillingStartsOn, cards, EntriesFrom(today)));
     }
 
     // Saf hesap: dersleri dönemlere dağıtır ve kartın durumunu çıkarır (birim testlenir).
