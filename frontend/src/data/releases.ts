@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartında ilk giriş günü artık ayrıca seçilmiyor: karta yazdığın ilk tarih kartın başlangıcı olur. Geçmiş dersleri geçen ayın 1'ine kadar geriye dönük yazabilirsin." },
+      { audience: "admin", text: "Sistemde yoklaması olan bir dersin tarihini ilk satıra yazarsan kart o dersten başlar; o gün için ayrı satır açılmaz. 4 ders dolunca tek aidat açılır, o ayın aylık aidatı varsa ikinci kez borç yazılmaz." },
+    ],
+  },
+  {
     version: "2026.10.22.4",
     date: "2026-10-22",
     items: [
