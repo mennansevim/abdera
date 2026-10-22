@@ -19,8 +19,8 @@ import {
   type PaymentMethod,
   type PaymentRecord,
 } from "@/lib/billing";
-import { formatMoney, formatPeriod, todayInput } from "@/lib/billing-format";
-import { MONTHS_SHORT, cellState, CELL_LABEL, isSelectable, type CellState } from "./board-model";
+import { cycleNumber, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
+import { MONTHS_SHORT, cellState, CELL_LABEL, CYCLE_LABEL, cycleCellState, cycleChoices, isOwed, isSelectable, type CellState } from "./board-model";
 
 // Aidatlar ekranının TEK ödeme penceresi (docs/10-decisions.md H17). Liste ve Çizelge aynı
 // pencereyi açar: aylar → isteğe bağlı indirimler → tahsil et; altında öğrencinin geçmişi.
@@ -102,11 +102,40 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
     }
   }
 
+  // Dönemle faturalanan birebir kayıt (docs/10-decisions.md AD): seçim ay yerine dönemdir. Geçiş
+  // öncesinden kalmış ödenmemiş aylık aidat varsa ay ızgarası da altında açık kalır.
+  const byCycle = !!row.cycleBillingStartsOn;
+  const legacyOwed = row.cells.some((cell) => !isCyclePeriod(cell.period) && isOwed(cellState(row, cell.period)))
+    || initialPeriods.some((period) => !isCyclePeriod(period));
+
   return <Modal open title={row.studentName} description={`${row.instrumentName} · ${row.teacherName} · ${COURSE_KIND_LABEL[row.courseKind]}`} onClose={onClose}>
     <form onSubmit={submit} className="space-y-4">
-      <section className="space-y-2" aria-label="Aylar">
+      {byCycle && <section className="space-y-2" aria-label="Dönemler">
+        <p className="text-micro text-[var(--muted)]">Hangi dönemler? <span className="font-semibold normal-case tracking-normal">· her dönem 4 ders</span></p>
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+          {cycleChoices(row).map((period) => {
+            const state = cycleCellState(row, period);
+            const on = selected.includes(period);
+            return <button
+              key={period}
+              type="button"
+              disabled={!isSelectable(state)}
+              aria-pressed={on}
+              aria-label={`${formatPeriod(period)}: ${CYCLE_LABEL[state]}`}
+              onClick={() => toggle(period)}
+              className={`pressable flex min-h-12 flex-col items-center justify-center rounded-xl border-[1.5px] px-1 py-1.5 ${chipClass(state, on)}`}
+            >
+              <span className="text-sm font-bold">{cycleNumber(period)}. dönem</span>
+              <span className={`text-[.68rem] font-bold ${on ? "" : chipTextClass(state)}`}>{CYCLE_LABEL[state]}</span>
+            </button>;
+          })}
+        </div>
+        <p className="text-meta text-xs">Henüz başlamamış dönem peşin alınır; ilk dersi işlenince o derse bağlanır.</p>
+      </section>}
+
+      {(!byCycle || legacyOwed) && <section className="space-y-2" aria-label="Aylar">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-micro text-[var(--muted)]">Hangi aylar?</p>
+          <p className="text-micro text-[var(--muted)]">{byCycle ? "Geçiş öncesi aylar" : "Hangi aylar?"}</p>
           <div className="flex items-center gap-1" role="group" aria-label="Yıl">
             <button type="button" onClick={() => setSheetYear((y) => y - 1)} className="icon-btn icon-btn-quiet !h-8 !w-8" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-3.5 w-3.5" /></button>
             <strong className="min-w-12 text-center text-sm tabular-nums">{sheetYear}</strong>
@@ -133,7 +162,7 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
             </button>;
           })}
         </div>
-      </section>
+      </section>}
 
       <section className="space-y-2" aria-label="İndirimler">
         <p className="text-micro text-[var(--muted)]">İndirimler <span className="font-semibold normal-case tracking-normal">· isteğe bağlı</span></p>
@@ -152,7 +181,7 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
           />
           <Toggle
             label={quote?.prepayPercent ? `Peşin ödeme %${trimPercent(quote.prepayPercent)}` : "Peşin ödeme"}
-            hint={quote?.prepayPercent ? "Diğer indirimin üstüne eklenir" : firstTier ? `${firstTier.minMonths} veya daha fazla ay seçince %${trimPercent(firstTier.percent)}` : "Fiyat politikasında kademe yok"}
+            hint={quote?.prepayPercent ? "Diğer indirimin üstüne eklenir" : firstTier ? `${firstTier.minMonths} veya daha fazla ${byCycle ? "dönem" : "ay"} seçince %${trimPercent(firstTier.percent)}` : "Fiyat politikasında kademe yok"}
             on={choice.prepay}
             onChange={(prepay) => setChoice((current) => ({ ...current, prepay }))}
           />
@@ -174,7 +203,7 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
       </div>
 
       <section className="space-y-2 rounded-xl border border-[var(--line)] bg-white p-3" aria-live="polite">
-        {!periods.length && <p className="text-meta">Tahsil edilecek ayları yukarıdan seç.</p>}
+        {!periods.length && <p className="text-meta">Tahsil edilecek {byCycle ? "dönemleri" : "ayları"} yukarıdan seç.</p>}
         {!!periods.length && !quote && <p className="text-meta">Hesaplanıyor…</p>}
         {quote && <>
           <ul className="space-y-1 text-sm tabular-nums">

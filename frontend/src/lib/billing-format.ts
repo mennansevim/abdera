@@ -15,7 +15,22 @@ export function isValidDateInput(value: string | null | undefined): value is str
   return !!value && /^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(value) && Number.isFinite(new Date(`${value}T00:00:00`).getTime());
 }
 
+// Birebir derslerde aidat ay yerine 4 derslik dönemle açılır; sunucu dönemi "D003" anahtarıyla
+// taşır (BillingCycle.cs, docs/10-decisions.md AD).
+export function isCyclePeriod(period: string | null | undefined): boolean {
+  return !!period && /^D\d{3}$/.test(period) && period !== "D000";
+}
+
+export function cycleNumber(period: string) {
+  return Number(period.slice(1));
+}
+
+export function cycleKey(number: number) {
+  return `D${String(number).padStart(3, "0")}`;
+}
+
 export function formatPeriod(period: string | null | undefined) {
+  if (period && isCyclePeriod(period)) return `${cycleNumber(period)}. dönem`;
   if (!isValidPeriod(period)) return "Dönem seçilmedi";
   return new Date(`${period}-01T00:00:00`).toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
 }

@@ -67,9 +67,9 @@ public static class Collections
     // İndirim parametreleri hiç verilmezse öğrencinin olgularından gelen varsayılanlar kullanılır.
     private static async Task<IResult> PreviewAsync(
         Guid enrollmentId, string[]? periods, bool? sibling, bool? multiCourse, bool? prepay, decimal? manualPercent,
-        AbderaDbContext db)
+        AbderaDbContext db, IClock clock)
     {
-        var context = await LoadAsync(enrollmentId, db);
+        var context = await LoadAsync(enrollmentId, db, clock);
         var choice = new DiscountChoice(
             sibling ?? context.Defaults.Sibling,
             multiCourse ?? context.Defaults.MultiCourse,
@@ -95,7 +95,7 @@ public static class Collections
         var replay = await db.Payments.AsNoTracking().SingleOrDefaultAsync(payment => payment.IdempotencyKey == idempotencyKey);
         if (replay is not null) return Results.Ok(new CreateResponse(replay.Amount, "TRY", replay.PrepayPlanId, [], Replayed: true));
 
-        var context = await LoadAsync(enrollmentId, db);
+        var context = await LoadAsync(enrollmentId, db, clock);
         var built = await BuildQuoteAsync(context, request.Periods ?? [], request.Discounts, db);
         var quote = built.Quote;
 
@@ -160,9 +160,15 @@ public static class Collections
             decimal alreadyPaid = item.AlreadyPaid;
             if (receivable is null)
             {
-                receivable = Receivable.Create(
-                    context.Enrollment.Id, item.Rate!.Id, item.Period, item.Breakdown,
-                    item.Rate.Currency, context.Pricer.DueDateFor(item.Period), now, prepayPlanId);
+                // Henüz açılmamış dönem peşin tahsil ediliyor: dersi işlenince tahakkuk eder
+                // (CycleReceivableAccruer). Ödeme hemen alındığı için vadesi ödeme günüdür.
+                receivable = BillingCycle.IsKey(item.Period)
+                    ? Receivable.CreateCycle(
+                        context.Enrollment.Id, item.Rate!.Id, BillingCycle.Number(item.Period), item.Breakdown,
+                        item.Rate.Currency, request.PaymentDate, now, prepayPlanId: prepayPlanId)
+                    : Receivable.Create(
+                        context.Enrollment.Id, item.Rate!.Id, item.Period, item.Breakdown,
+                        item.Rate.Currency, context.Pricer.DueDateFor(item.Period), now, prepayPlanId);
                 db.Receivables.Add(receivable);
             }
             else if (item.CanReprice && (item.Breakdown != Snapshot(receivable) || prepayPlanId is not null))
@@ -226,13 +232,13 @@ public static class Collections
                 receivable, totals.GetValueOrDefault(receivable.Id), payments.GetValueOrDefault(receivable.Id) ?? [])).ToList()));
     }
 
-    private sealed record LoadedContext(Enrollment Enrollment, string StudentName, string InstrumentName, TuitionPricer Pricer, Defaults Defaults);
+    private sealed record LoadedContext(Enrollment Enrollment, string StudentName, string InstrumentName, TuitionPricer Pricer, Defaults Defaults, DateOnly Today);
 
     private sealed record Priced(
         string Period, Receivable? Existing, TuitionRate? Rate, TuitionCalculator.Breakdown Breakdown,
         decimal AlreadyPaid, bool CanReprice);
 
-    private static async Task<LoadedContext> LoadAsync(Guid enrollmentId, AbderaDbContext db)
+    private static async Task<LoadedContext> LoadAsync(Guid enrollmentId, AbderaDbContext db, IClock clock)
     {
         var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == enrollmentId)
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
@@ -247,14 +253,17 @@ public static class Collections
             pricer,
             new Defaults(
                 facts.HasSibling, facts.AttendsMultipleCourses, enrollment.ManualDiscountPercent, enrollment.ManualDiscountReason,
-                pricer.Settings.SiblingDiscountPercent, pricer.Settings.MultiCourseDiscountPercent));
+                pricer.Settings.SiblingDiscountPercent, pricer.Settings.MultiCourseDiscountPercent),
+            DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date));
     }
 
     private static async Task<(Quote Quote, List<Priced> Priced)> BuildQuoteAsync(
         LoadedContext context, IEnumerable<string> requestedPeriods, DiscountChoice? choice, AbderaDbContext db)
     {
+        // Liste ay ("2026-10") ve dönem ("D004", BillingCycle) anahtarlarını birlikte taşıyabilir:
+        // birebir öğrencinin geçiş öncesi kalmış aylık borcu ile dönemleri aynı pencerede ödenir.
         var periods = requestedPeriods.Select(period => period?.Trim() ?? "").Distinct().ToList();
-        foreach (var period in periods) BillingPeriod.Parse(period, "periods");
+        foreach (var period in periods.Where(period => !BillingCycle.IsKey(period))) BillingPeriod.Parse(period, "periods");
         periods.Sort(StringComparer.Ordinal);
         if (periods.Count > 24)
             throw new ValidationFailedException(new Dictionary<string, string[]>
@@ -264,6 +273,7 @@ public static class Collections
 
         var enrollment = context.Enrollment;
         var pricer = context.Pricer;
+        var today = context.Today;
         var existing = await db.Receivables
             .Where(receivable => receivable.EnrollmentId == enrollment.Id && periods.Contains(receivable.Period))
             .ToDictionaryAsync(receivable => receivable.Period);
@@ -321,10 +331,24 @@ public static class Collections
                 continue;
             }
 
-            var rate = pricer.RateFor(enrollment.CourseKind, BillingPeriod.FirstDay(period));
+            var isCycle = BillingCycle.IsKey(period);
+            string? notCollectable = isCycle
+                ? (BillingCycle.AppliesTo(enrollment.CourseKind) && pricer.Settings.CycleBillingStartsOn is not null
+                    ? null : "Bu kurs kaydı dönemle (4 ders) faturalanmıyor.")
+                : receivable is null && pricer.BillsByCycle(enrollment, period) ? TuitionPricer.CycleBilledMessage : null;
+            if (notCollectable is not null)
+            {
+                blockers.Add($"{period}: {notCollectable}");
+                rows.Add(new Row(period, receivable?.Id, receivable?.Status, 0m, 0m, null, 0m, alreadyPaid, 0m, false, "Dönemle faturalanıyor"));
+                continue;
+            }
+
+            // Dönem aidatı tahakkuk gününün, henüz başlamamış (peşin) dönem bugünün tarifesiyle fiyatlanır.
+            var pricedOn = isCycle ? receivable?.AccruedOn ?? today : BillingPeriod.FirstDay(period);
+            var rate = pricer.RateFor(enrollment.CourseKind, pricedOn);
             if (rate is null)
             {
-                var message = pricer.MissingRateMessage(enrollment.CourseKind, period);
+                var message = isCycle ? pricer.MissingRateMessageOn(enrollment.CourseKind, pricedOn) : pricer.MissingRateMessage(enrollment.CourseKind, period);
                 blockers.Add(message);
                 rows.Add(new Row(period, receivable?.Id, receivable?.Status, 0m, 0m, null, 0m, alreadyPaid, 0m, false, "Tarife yok"));
                 continue;

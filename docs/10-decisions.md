@@ -416,6 +416,21 @@ Kullanıcı kuralı: "aylık gelirin %40'ı olarak hesaplanıyor". İki seçenek
 | AC4 | Kârlılık | Ders başı maliyet grup satırlarını saymaz; dönemin grup payı (gelir × %40) öğretmen maliyetine eklenir. Aylık grup ödemesinin Maaş satırı da haftalıkta olduğu gibi sabit gidere tekrar sayılmaz. Fikir değerlendirmesinde grup öğrencisi başı kalan = aidat × (1 − %40). |
 | AC5 | Kapsam dışı | Yüzde şimdilik sabit (40); öğretmen başına farklı yüzde gerekirse `teacher_pay_rates`'e kolon olarak eklenir. Satırda yüzde donduğu için değişiklik geçmiş ödemeleri etkilemez. |
 
+## AD - Birebir derste 4 derslik dönem aidatı ve yoklama kartı (2026-10-22)
+
+Kullanıcı kuralı (okulun kâğıt "Yoklama Listesi"nden): öğrenci her başarılı geldiğinde kartın bir satırı dolar; 4 satır dolunca 1 aylık hak biter, sonraki gelişinde 1 ödeme tahakkuk eder. Kullanıcı kararları: Mazeretli de satır doldurur, Gelmedi doldurmaz; takvim ayına göre aylık üretim birebir derslerde kalkar; vade 7 gün; eski kayıtlara dokunulmaz; kural yalnızca birebir derslere uygulanır; Aidatlar çizelgesi dönem sütunlarına geçer. Yoklama ekranının kart görünümünü yalnızca yönetici görür.
+
+| # | Konu | Karar |
+|---|---|---|
+| AD1 | Sayım | Kart = birebir kurs kaydının (öğrenci + enstrüman) geçiş gününden ve kayıt başlangıcından sonraki yoklamalı dersleri, tarih sırasıyla. **Geldi** ve **Mazeretli** satır doldurur, **Gelmedi** doldurmaz (kartın altına not düşer). 4 satır = 1 dönem. Sayımın tek yeri `CycleReceivableAccruer.LoadCardLessonsAsync`; kart ekranı (`AttendanceCards`) ve tahakkuk aynı sayımı kullanır. |
+| AD2 | Tahakkuk | n. dönemin **ilk dersi** işlendiğinde n. dönem aidatı açılır (1. ders 1. dönemi, 5. ders 2. dönemi). Tutar o günün tarifesiyle donar (fiyat snapshot'ı, aylık tarifenin tutarı: 4 ders = 1 aylık hak). Vade tahakkuk günü + 7. Her yoklama yazışında (elle, ders notundan otomatik "geldi") kart baştan sayılır ve aidatlar eşitlenir; yoklama düzeltmesi bir dönemi geri alırsa ödenmemiş aidat iptal edilir, ödenmiş olan "peşin, başlamamış" hâline döner. Her adım `audit_log`'a yazılır. |
+| AD3 | Saklama | Dönem aidatı `receivables` satırıdır; `period` kolonunda ay yerine dönem anahtarı (`D001`, `D002`…) taşır. `UNIQUE (enrollment_id, period)` böylece dönemin çift tahakkukunu da engeller. Yeni kolonlar: `accrued_on` (dönemi açan dersin günü) ve `accrued_lesson_id`. İptal edilmiş dönem yeniden dolarsa aynı satır yeniden açılır. |
+| AD4 | Geçiş | `billing_settings.cycle_billing_starts_on` (Fiyat politikası ekranından seçilir; migration 2026-11-01 yazar). Bu günden önceki dersler karta sayılmaz; bu günden itibaren başlayan aylarda birebir kayda aylık aidat açılmaz (otomatik üretim, kayıt açılışı, elle açma, peşin plan). Ekim ve önceki aylık aidatlar olduğu gibi kalır. Boşsa dönem aidatı kapalıdır. |
+| AD5 | Tahsilat | Tek ödeme penceresi (`Collections`) dönem anahtarlarını da kabul eder; birebir kayıtta pencere ay yerine dönem seçtirir. Henüz başlamamış dönem **peşin** alınabilir (satır `accrued_on` boş açılır, ilk dersi işlenince o derse bağlanır, yeni satır açılmaz). Peşin kademesi seçilen dönem sayısına göre uygulanır. |
+| AD6 | Raporlar | Kârlılık ve öğrenci analizi dönem aidatını **tahakkuk gününün ayına** sayar (`BillingCycle.AccrualMonth`); peşin, başlamamış dönem hiçbir aya düşmez. Grup dersi aylık kaldığı için `GroupLessonPay` değişmedi. Veli mesajında dönem "3. dönemi aidatı" olarak yazılır. |
+| AD7 | Telafi | Karta sayılan birebir derste Mazeretli **telafi hakkı doğurmaz** (zaten satır doldurur; iki kez hak verilmesin). Karta sayılmayan derslerde (grup, geçiş öncesi) A2'deki Mazeretli kuralı aynen geçerli. |
+| AD8 | Ekran | Yoklama → **Yoklama kartları** (yönetici): "ödeme bekleniyor" bandı (4/4 dolmuş, sonraki dönem ödenmemiş), durum sayaçları, öğrenci tablosu (bu dönemin 4 kutusu), seçili öğrencinin kartı ve oradan aynı ödeme penceresiyle tahsilat. Öğretmen eski ders dökümünü görmeye devam eder. Aidatlar → Çizelge: "Birebir · dönemler" ve "Aylar". |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

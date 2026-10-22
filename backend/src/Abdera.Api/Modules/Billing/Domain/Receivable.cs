@@ -34,6 +34,11 @@ public class Receivable
     public ReceivableStatus Status { get; private set; } = ReceivableStatus.Unpaid;
     // Yıl başı toplu ödeme kampanyasında birlikte üretilen ayları birbirine bağlar.
     public Guid? PrepayPlanId { get; private set; }
+    // Yalnızca dönem aidatında (BillingCycle): dönemi açan dersin günü ve kendisi. Peşin
+    // ödenmiş, henüz başlamamış dönemde ikisi de boştur - aidat ancak dönemin ilk dersi
+    // işlendiğinde tahakkuk etmiş sayılır (kârlılık ve gelir raporları bu tarihe bakar).
+    public DateOnly? AccruedOn { get; private set; }
+    public Guid? AccruedLessonId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -64,6 +69,67 @@ public class Receivable
             CreatedAt = now,
             UpdatedAt = now,
         };
+    }
+
+    // Dönem aidatı. accruedOn/accruedLessonId boşsa dönem peşin tahsil ediliyordur ve henüz başlamamıştır.
+    public static Receivable CreateCycle(
+        Guid enrollmentId, Guid tuitionRateId, int cycleNumber, TuitionCalculator.Breakdown breakdown,
+        string currency, DateOnly dueDate, DateTimeOffset now,
+        DateOnly? accruedOn = null, Guid? accruedLessonId = null, Guid? prepayPlanId = null)
+    {
+        var receivable = Create(enrollmentId, tuitionRateId, BillingCycle.Key(cycleNumber), breakdown, currency, dueDate, now, prepayPlanId);
+        receivable.AccruedOn = accruedOn;
+        receivable.AccruedLessonId = accruedLessonId;
+        return receivable;
+    }
+
+    // Dönemin ilk dersi işlendi (ya da yoklama düzeltmesiyle ilk ders başka bir derse kaydı).
+    // Ödenmemiş aidatın vadesi tahakkuk gününe göre yeniden kurulur; ödenmiş olanınki değişmez.
+    public void MarkAccrued(Guid lessonId, DateOnly accruedOn, DateOnly dueDate, DateOnly today, DateTimeOffset now)
+    {
+        if (!BillingCycle.IsKey(Period))
+            throw new InvalidOperationException("Yalnızca dönem aidatı derse bağlanabilir.");
+
+        AccruedLessonId = lessonId;
+        AccruedOn = accruedOn;
+        if (Status is ReceivableStatus.Unpaid or ReceivableStatus.Overdue)
+        {
+            DueDate = dueDate;
+            // Vade ileri kaydıysa gecikme de kalkar; sweeper yalnızca ileri yönde çalışır.
+            if (Status == ReceivableStatus.Overdue && dueDate >= today) Status = ReceivableStatus.Unpaid;
+        }
+        UpdatedAt = now;
+    }
+
+    // Yoklama düzeltmesi dönemin ilk dersini geri aldı: peşin ödenmiş dönem yeniden "başlamamış" olur.
+    public void Unaccrue(DateTimeOffset now)
+    {
+        AccruedLessonId = null;
+        AccruedOn = null;
+        UpdatedAt = now;
+    }
+
+    // Yoklama düzeltmesiyle iptal edilmiş bir dönem yeniden doldu. UNIQUE (enrollment_id, period)
+    // ikinci bir satıra izin vermediği için iptal edilen satır yeni fiyatla yeniden açılır;
+    // çağıran bunu audit_log'a yazar.
+    public void ReopenCycle(
+        Guid tuitionRateId, TuitionCalculator.Breakdown breakdown, string currency,
+        Guid lessonId, DateOnly accruedOn, DateOnly dueDate, DateTimeOffset now)
+    {
+        if (Status != ReceivableStatus.Cancelled)
+            throw new InvalidOperationException("Yalnızca iptal edilmiş dönem yeniden açılabilir.");
+
+        TuitionRateId = tuitionRateId;
+        BaseAmount = breakdown.BaseAmount;
+        DiscountPercent = breakdown.DiscountPercent;
+        DiscountReason = breakdown.DiscountReason;
+        Amount = breakdown.NetAmount;
+        Currency = currency;
+        DueDate = dueDate;
+        AccruedLessonId = lessonId;
+        AccruedOn = accruedOn;
+        Status = ReceivableStatus.Unpaid;
+        UpdatedAt = now;
     }
 
     // Peşin ödeme kampanyası, daha önce normal tarifeyle açılmış bir ayı da kapsayabilir.

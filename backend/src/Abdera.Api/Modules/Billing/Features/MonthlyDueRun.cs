@@ -182,6 +182,9 @@ public static class MonthlyDueRun
             var instrumentName = InstrumentName(enrollment.InstrumentId);
             var teacherName = TeacherName(enrollment.TeacherId);
 
+            // Birebir derste geçiş tarihinden sonra aidatı yoklama kartı açar (CycleReceivableAccruer).
+            if (pricer.BillsByCycle(enrollment, period)) continue;
+
             var priced = pricer.Price(enrollment, period);
             if (priced is null)
             {

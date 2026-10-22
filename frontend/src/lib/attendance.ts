@@ -44,7 +44,70 @@ export function useMarkAttendance(lessonId: string) {
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       // "Mazeretli" telafi hakkı doğurur, ondan çıkan düzeltme hakkı geri alır.
       queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
+      // Birebir derste yoklama kartın satırını doldurur; dönemin ilk dersi aidatı açar.
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
     },
+  });
+}
+
+// Yönetici yoklama ekranı (AttendanceCards.cs, docs/10-decisions.md AD): birebir kayıt başına
+// okulun kâğıt "Yoklama Listesi"nin dijital hali. 4 satır bir dönemdir; Geldi ve Mazeretli satır
+// doldurur, Gelmedi kartın altına not düşer. Kartı ve durumu sunucu kurar, ekran yalnızca çizer.
+export type CardState = "NotStarted" | "InProgress" | "LastLesson" | "AwaitingPayment" | "NextPrepaid" | "Unpaid";
+
+export interface CardLesson {
+  lessonId: string;
+  startAt: string;
+  date: string;
+  status: AttendanceStatus;
+}
+
+export interface CycleReceivable {
+  id: string;
+  status: "Unpaid" | "Partial" | "Paid" | "Overdue" | "Cancelled";
+  amount: number;
+  paid: number;
+  currency: string;
+  dueDate: string;
+  accruedOn: string | null;
+}
+
+export interface CardCycle {
+  number: number;
+  filled: CardLesson[];
+  misses: CardLesson[];
+  receivable: CycleReceivable | null;
+}
+
+export interface AttendanceCard {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentName: string;
+  startedAt: string;
+  countingFrom: string;
+  currentCycle: number;
+  filledInCurrent: number;
+  state: CardState;
+  unpaidAmount: number;
+  currency: string;
+  lastLessonDate: string | null;
+  cycles: CardCycle[];
+}
+
+export interface AttendanceCardsResponse {
+  cycleBillingStartsOn: string | null;
+  cards: AttendanceCard[];
+}
+
+export function useAttendanceCards(enabled = true) {
+  return useQuery({
+    queryKey: ["attendance-cards"],
+    queryFn: () => api.get<AttendanceCardsResponse>("/api/attendance/cards"),
+    enabled,
   });
 }
 

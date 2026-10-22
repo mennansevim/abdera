@@ -21,10 +21,13 @@ public class ReceivableConfiguration : IEntityTypeConfiguration<Receivable>
         builder.Property(r => r.PrepayPlanId).HasColumnName("prepay_plan_id");
         builder.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3).HasDefaultValue("TRY");
         builder.Property(r => r.DueDate).HasColumnName("due_date");
+        builder.Property(r => r.AccruedOn).HasColumnName("accrued_on");
+        builder.Property(r => r.AccruedLessonId).HasColumnName("accrued_lesson_id");
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
 
+        // Aylık aidatta "2026-10", dönem aidatında "D003" - ikisinde de çift tahakkuk engeli (BillingCycle).
         builder.HasIndex(r => new { r.EnrollmentId, r.Period }).IsUnique();
         builder.HasIndex(r => r.Status);
 

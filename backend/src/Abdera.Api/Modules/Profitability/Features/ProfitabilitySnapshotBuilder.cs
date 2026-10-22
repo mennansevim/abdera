@@ -30,10 +30,17 @@ public static class ProfitabilitySnapshotBuilder
         var windowEnd = LessonGenerator.ToUtcInstant(currentMonth.AddMonths(1), TimeOnly.MinValue, clock.SchoolTimeZone);
 
         // --- Gelir: dönemin iptal edilmemiş aidatları (tahakkuk) ---
-        var receivables = await db.Receivables.AsNoTracking()
-            .Where(receivable => periods.Contains(receivable.Period) && receivable.Status != ReceivableStatus.Cancelled)
-            .Select(receivable => new { receivable.Period, receivable.EnrollmentId, receivable.BaseAmount, receivable.Amount })
-            .ToListAsync(cancellationToken);
+        // Dönem aidatı ("D003") tahakkuk gününün ayına düşer (BillingCycle.AccrualMonth).
+        var windowFirstDay = months[0];
+        var windowLastDay = currentMonth.AddMonths(1).AddDays(-1);
+        var receivables = (await db.Receivables.AsNoTracking()
+                .Where(receivable => receivable.Status != ReceivableStatus.Cancelled
+                    && (periods.Contains(receivable.Period)
+                        || (receivable.AccruedOn != null && receivable.AccruedOn >= windowFirstDay && receivable.AccruedOn <= windowLastDay)))
+                .Select(receivable => new { receivable.Period, receivable.AccruedOn, receivable.EnrollmentId, receivable.BaseAmount, receivable.Amount })
+                .ToListAsync(cancellationToken))
+            .Select(row => new { Period = BillingCycle.AccrualMonth(row.Period, row.AccruedOn)!, row.EnrollmentId, row.BaseAmount, row.Amount })
+            .ToList();
         var revenueByPeriod = receivables.GroupBy(row => row.Period).ToDictionary(group => group.Key, group => group.Sum(row => row.Amount));
         var currentReceivables = receivables.Where(row => row.Period == currentPeriod).ToList();
         var currentBase = currentReceivables.Sum(row => row.BaseAmount);

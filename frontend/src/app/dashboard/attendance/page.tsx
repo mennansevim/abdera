@@ -11,6 +11,7 @@ import {
 } from "@/lib/attendance";
 import { useStudents, useTeachers } from "@/lib/people";
 import { useMe } from "@/lib/use-auth";
+import { AttendanceCards } from "./attendance-cards";
 
 const PAGE_SIZE = 50;
 
@@ -84,10 +85,41 @@ const RANGE_PRESETS = [
   { label: "3 ay", from: () => shiftDays(-89) },
 ];
 
+type AdminView = "cards" | "history";
+
+// Yönetici iki görünüm arasında geçer: yoklama kartları (4 derslik dönem, docs/10-decisions.md AD)
+// ve geriye dönük ders dökümü. Öğretmen yalnızca kendi ders dökümünü görür.
+export default function AttendancePage() {
+  const { data: me } = useMe();
+  const isAdmin = me?.role === "Admin";
+  const [view, setView] = useState<AdminView>("cards");
+
+  if (!me) return null;
+  if (!isAdmin) return <AttendanceHistory />;
+
+  return (
+    <div className="space-y-3">
+      <PageHeader
+        title="Yoklama"
+        description={view === "cards"
+          ? "Her birebir öğrencinin yoklama kartı: 4 ders bir dönemdir. 4. dersten sonra ödeme beklenir, sonraki derste yeni dönem aidatı açılır."
+          : "Tamamlanan dersleri geriye dönük, öğretmen kırılımıyla incele; öğrencinin derse gelip gelmediğini gör."}
+        actions={<Segmented
+          label="Görünüm"
+          options={[{ value: "cards", label: "Yoklama kartları" }, { value: "history", label: "Ders dökümü" }]}
+          value={view}
+          onChange={setView}
+        />}
+      />
+      {view === "cards" ? <AttendanceCards /> : <AttendanceHistory header={false} />}
+    </div>
+  );
+}
+
 // Geriye dönük yoklama dökümü: hangi ders işlendi, öğrenci geldi mi, hangi öğretmende.
 // Yoklama GİRME işi burada değil - o, dersin öğretmeninin "Bugün" ekranındaki akışı
 // (teacher-today-lessons.tsx). Bu ekran salt okunur bir geçmiş görünümüdür.
-export default function AttendancePage() {
+function AttendanceHistory({ header = true }: { header?: boolean }) {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
 
@@ -152,12 +184,12 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader
+      {header && <PageHeader
         title="Yoklama"
         description={isAdmin
           ? "Tamamlanan dersleri geriye dönük, öğretmen kırılımıyla incele; öğrencinin derse gelip gelmediğini gör."
           : "Kendi tamamladığın dersleri geriye dönük incele; öğrencinin derse gelip gelmediğini gör."}
-      />
+      />}
 
       {/* Filtre çubuğu: tarih aralığı + hızlı aralık + kişi seçimleri tek satırda. */}
       <section className="app-card p-3">

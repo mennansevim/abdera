@@ -1,3 +1,4 @@
+using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
@@ -145,7 +146,7 @@ public static class NotificationMessageBuilder
         {
             ["guardian_name"] = guardian.FirstName,
             ["student_name"] = $"{student.FirstName} {student.LastName}",
-            ["period"] = receivable.Period,
+            ["period"] = BillingCycle.MessageLabel(receivable.Period),
             ["amount"] = receivable.Amount.ToString("N2", turkishCulture),
             ["currency"] = receivable.Currency,
             ["due_date"] = receivable.DueDate.ToString("dd MMMM yyyy", turkishCulture),

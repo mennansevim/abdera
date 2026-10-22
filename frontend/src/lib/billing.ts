@@ -55,6 +55,8 @@ export interface BillingPolicy {
   siblingDiscountPercent: number;
   dueDayOfMonth: number;
   prepayTiers: PrepayTier[];
+  // Birebir derslerde dönem (4 ders) aidatının başladığı gün ("2026-11-01"); null: kapalı.
+  cycleBillingStartsOn: string | null;
 }
 
 export function useBillingPolicy() {
@@ -67,6 +69,8 @@ export function useUpdateBillingPolicy() {
     mutationFn: (body: BillingPolicy) => api.put<BillingPolicy>("/api/billing-policy", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["billing-policy"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
       queryClient.invalidateQueries({ queryKey: ["monthly-due-run"] });
       queryClient.invalidateQueries({ queryKey: ["prepay-preview"] });
     },
@@ -452,6 +456,8 @@ export interface BoardCell {
   discountReason: string | null;
   currency: string;
   lastPaymentDate: string | null;
+  // Dönem aidatında ("D003") dönemi açan dersin günü; null: peşin ödenmiş, henüz başlamamış.
+  accruedOn: string | null;
 }
 
 export interface BoardRow {
@@ -471,6 +477,10 @@ export interface BoardRow {
   endedAt: string | null;
   enrollmentStatus: "Active" | "Ended";
   cells: BoardCell[];
+  // Birebir kayıt bu günden itibaren dönem (4 ders) aidatıyla faturalanıyor; null: aylık.
+  cycleBillingStartsOn: string | null;
+  // Ödeme penceresinin peşin tahsilat için önereceği ilk dönem numarası.
+  nextCycleNumber: number;
 }
 
 export function useBillingBoard(year: number) {
@@ -557,10 +567,20 @@ export function useCollect() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+      // Yoklama kartındaki dönemin ödendi/ödenmedi durumu.
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
       queryClient.invalidateQueries({ queryKey: ["collection-preview"] });
       queryClient.invalidateQueries({ queryKey: ["student-billing"] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
     },
+  });
+}
+
+// Ödenmemiş aidat için veliye WhatsApp hatırlatması (SendPaymentReminder.cs) - sessiz saat ve
+// rıza kuralları sunucuda uygulanır.
+export function useSendPaymentReminder() {
+  return useMutation({
+    mutationFn: (receivableId: string) => api.post<{ scheduled: boolean }>(`/api/receivables/${receivableId}/send-reminder`, {}),
   });
 }

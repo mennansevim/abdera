@@ -113,9 +113,15 @@ public sealed class TuitionPricer
 
     // Tek ayın aidatı. prepayPercent 0 ise yalnızca öğrenci indirimi uygulanır.
     public (TuitionRate Rate, TuitionCalculator.Breakdown Breakdown)? Price(
-        Enrollment enrollment, string period, decimal prepayPercent = 0m)
+        Enrollment enrollment, string period, decimal prepayPercent = 0m) =>
+        PriceOn(enrollment, BillingPeriod.FirstDay(period), prepayPercent);
+
+    // Tek dönemin (ya da ayın) aidatı, verilen günde yürürlükteki tarifeyle. Dönem aidatı
+    // (BillingCycle) aylık tarifenin tutarını taşır: 4 ders bir aylık hak.
+    public (TuitionRate Rate, TuitionCalculator.Breakdown Breakdown)? PriceOn(
+        Enrollment enrollment, DateOnly on, decimal prepayPercent = 0m)
     {
-        var rate = RateFor(enrollment.CourseKind, BillingPeriod.FirstDay(period));
+        var rate = RateFor(enrollment.CourseKind, on);
         if (rate is null) return null;
 
         var context = ContextFor(enrollment);
@@ -125,6 +131,20 @@ public sealed class TuitionPricer
 
         return (rate, breakdown);
     }
+
+    // Dönem aidatında "tarife yok" metni - ay yerine gün üzerinden.
+    public string MissingRateMessageOn(CourseKind courseKind, DateOnly on)
+    {
+        var kindLabel = courseKind == CourseKind.Group ? "Grup" : "Birebir";
+        return $"{on:dd.MM.yyyy}: {kindLabel} dersi için bu günü kapsayan ücret tarifesi yok. Fiyat politikası ekranından tarife tanımlayın.";
+    }
+
+    // Bu ayın aidatı yerine dönem aidatı mı geçerli (birebir ders + geçiş tarihi sonrası, BillingCycle).
+    public bool BillsByCycle(Enrollment enrollment, string period) =>
+        BillingCycle.ReplacesMonthly(enrollment.CourseKind, Settings.CycleBillingStartsOn, period);
+
+    public const string CycleBilledMessage =
+        "Birebir derslerde bu aydan itibaren aidat aylık değil, yoklama kartındaki 4 dersin dolmasıyla açılır.";
 
     public DateOnly DueDateFor(string period) => BillingPeriod.DueDate(period, Settings.DueDayOfMonth);
 }

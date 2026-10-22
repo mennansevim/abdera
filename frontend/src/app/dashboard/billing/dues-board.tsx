@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { SearchInput, Segmented } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useBillingBoard, useCollect, useCorrectPayment, type BoardRow } from "@/lib/billing";
-import { currentPeriod, formatMoney, formatPeriod, todayInput } from "@/lib/billing-format";
+import { currentPeriod, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
 import { useSessionState } from "@/lib/use-session-state";
 import {
   MONTHS_SHORT,
@@ -16,12 +16,16 @@ import {
   initials,
   isOwed,
   isSelectable,
+  GRID_CLASS,
+  GRID_SYMBOL,
   lateCount,
   matchesQuery,
+  monthEntry,
   periodOf,
-  remainingOf,
+  remainingOfAll,
   type CellState,
 } from "./board-model";
+import { CycleGrid } from "./cycle-grid";
 import { CollectSheet } from "./collect-sheet";
 
 // Aidatlar ekranı (docs/10-decisions.md H17): iki görünüm, bir ödeme penceresi.
@@ -138,8 +142,9 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
 }) {
   const year = Number(month.slice(0, 4));
   const { inMonth, paid, waiting, waitingAmount, shown } = useMemo(() => {
+    // Dönemle faturalanan birebir kayıtta ayın satırı, o ay başlamış dönemlerdir (monthEntry).
     const all = rows
-      .map((row) => ({ row, state: cellState(row, month, today) }))
+      .map((row) => ({ row, ...monthEntry(row, month, today) }))
       .filter((item) => item.state !== "none" && item.state !== "cancelled");
     const paidRows = all.filter((item) => item.state === "paid");
     const waitingRows = all.filter((item) => item.state !== "paid");
@@ -151,7 +156,7 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
       inMonth: all,
       paid: paidRows,
       waiting: waitingRows,
-      waitingAmount: waitingRows.reduce((sum, item) => sum + (remainingOf(item.row, month) ?? 0), 0),
+      waitingAmount: waitingRows.reduce((sum, item) => sum + (remainingOfAll(item.row, item.periods) ?? 0), 0),
       shown: visible,
     };
   }, [rows, month, today, filter, year]);
@@ -196,16 +201,17 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
 
     {!shown.length && <p className="text-meta border-t border-[var(--line)] px-3 py-6 text-center">{inMonth.length ? "Bu filtrede kimse yok." : "Bu ay için kurs kaydı yok."}</p>}
     <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
-      {shown.map(({ row, state }) => <ListRow key={row.enrollmentId} row={row} state={state} month={month} onOpen={onOpen} onToast={onToast} />)}
+      {shown.map(({ row, state, periods }) => <ListRow key={row.enrollmentId} row={row} state={state} periods={periods} onOpen={onOpen} onToast={onToast} />)}
     </ul>
     <p className="text-meta px-3 py-3 text-xs">&quot;Ödeme al&quot; ayın aidatını kayıttaki indirimle nakit olarak kaydeder. Birkaç ay almak, indirimi değiştirmek ya da geçmişi görmek için isme dokun.</p>
   </div>;
 }
 
-function ListRow({ row, state, month, onOpen, onToast }: {
+function ListRow({ row, state, periods, onOpen, onToast }: {
   row: BoardRow;
   state: CellState;
-  month: string;
+  // Aylık kayıtta [ay]; dönemle faturalanan kayıtta o ay başlamış dönemler ("D003").
+  periods: string[];
   onOpen: (row: BoardRow, periods: string[]) => void;
   onToast: (toast: Toast) => void;
 }) {
@@ -213,8 +219,10 @@ function ListRow({ row, state, month, onOpen, onToast }: {
   const correct = useCorrectPayment(row.studentId);
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const remaining = remainingOf(row, month);
-  const cell = row.cells.find((item) => item.period === month);
+  const remaining = remainingOfAll(row, periods);
+  const cell = row.cells.filter((item) => periods.includes(item.period)).sort((a, b) => (b.lastPaymentDate ?? "").localeCompare(a.lastPaymentDate ?? ""))[0];
+  const unpaid = periods.filter((period) => isOwed(cellState(row, period)) || cellState(row, period) === "open");
+  const label = periods.map(formatPeriod).join(", ");
   const tags = [
     row.siblingDiscount && "kardeş",
     row.multiCourse && "çoklu kurs",
@@ -228,7 +236,7 @@ function ListRow({ row, state, month, onOpen, onToast }: {
     try {
       const result = await collect.mutateAsync({
         enrollmentId: row.enrollmentId,
-        periods: [month],
+        periods: unpaid,
         discounts: null,
         paymentDate: todayInput(),
         method: "Cash",
@@ -241,7 +249,7 @@ function ListRow({ row, state, month, onOpen, onToast }: {
         return latest ? [latest.id] : [];
       });
       onToast({
-        message: `${row.studentName} · ${formatPeriod(month)}: ${formatMoney(result.total, result.currency)} alındı`,
+        message: `${row.studentName} · ${label}: ${formatMoney(result.total, result.currency)} alındı`,
         undo: paymentIds.length ? async () => {
           for (const paymentId of paymentIds)
             await correct.mutateAsync({ paymentId, correctedAmount: 0, reason: "Ödeme al'a yanlışlıkla basıldı, hemen geri alındı" });
@@ -256,11 +264,11 @@ function ListRow({ row, state, month, onOpen, onToast }: {
 
   return <li className="px-3 py-2.5">
     <div className="flex items-center gap-3">
-      <button type="button" onClick={() => onOpen(row, isSelectable(state) ? [month] : [])} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+      <button type="button" onClick={() => onOpen(row, isSelectable(state) ? unpaid : [])} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-xs font-extrabold text-[var(--brand-strong)]">{initials(row.studentName)}</span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold">{row.studentName}</span>
-          <span className="text-meta line-clamp-2 text-xs">{row.instrumentName} · {row.teacherName}{tags.length ? ` · ${tags.join(" · ")}` : ""}</span>
+          <span className="text-meta line-clamp-2 text-xs">{row.instrumentName} · {row.teacherName}{periods.some(isCyclePeriod) ? ` · ${label}` : ""}{tags.length ? ` · ${tags.join(" · ")}` : ""}</span>
         </span>
       </button>
       {state === "paid"
@@ -271,7 +279,7 @@ function ListRow({ row, state, month, onOpen, onToast }: {
           {remaining !== null && <span className={`shrink-0 text-right text-sm font-bold tabular-nums ${state === "late" || state === "partial" ? "text-[var(--danger-strong)]" : ""}`}>{formatMoney(remaining, cell?.currency ?? "TRY")}</span>}
           {remaining !== null && remaining > 0
             ? <button type="button" onClick={quickPay} disabled={collect.isPending} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">{collect.isPending ? "Kaydediliyor…" : "Ödeme al"}</button>
-            : <button type="button" onClick={() => onOpen(row, [month])} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
+            : <button type="button" onClick={() => onOpen(row, unpaid)} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
         </span>}
     </div>
     {error && <p role="alert" className="mt-1.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
@@ -280,19 +288,8 @@ function ListRow({ row, state, month, onOpen, onToast }: {
 
 // ---- Çizelge --------------------------------------------------------------------
 
-const GRID_SYMBOL: Record<CellState, string> = { paid: "✓", late: "!", current: "•", partial: "½", open: "", future: "", none: "–", cancelled: "×" };
-const GRID_CLASS: Record<CellState, string> = {
-  paid: "bg-[var(--success-soft)] text-[var(--success-strong)]",
-  late: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
-  current: "border-[1.5px] border-[var(--brand)] text-[var(--brand-strong)]",
-  partial: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
-  open: "border border-dashed border-[var(--line)]",
-  future: "border border-dashed border-[var(--line)]",
-  none: "text-[var(--line)]",
-  cancelled: "text-[var(--muted)]",
-};
 
-function GridView({ rows, year, today, onYear, debtOnly, onDebtOnly, onOpen }: {
+type GridProps = {
   rows: BoardRow[];
   year: number;
   today: string;
@@ -300,7 +297,30 @@ function GridView({ rows, year, today, onYear, debtOnly, onDebtOnly, onOpen }: {
   debtOnly: boolean;
   onDebtOnly: (value: boolean) => void;
   onOpen: (row: BoardRow, periods: string[]) => void;
-}) {
+};
+
+// Birebir kayıtlar dönem (4 ders) aidatına geçtiyse Çizelge önce dönem sütunlarıyla açılır
+// (docs/10-decisions.md AD); grup dersleri ve geçiş öncesi aylar "Aylar"da kalır.
+function GridView(props: GridProps) {
+  const hasCycles = props.rows.some((row) => row.cycleBillingStartsOn);
+  const [mode, setMode] = useState<"cycles" | "months">("cycles");
+  const active = hasCycles ? mode : "months";
+  return <div>
+    {hasCycles && <div className="px-3 pt-3">
+      <Segmented
+        label="Sütunlar"
+        options={[{ value: "cycles", label: "Birebir · dönemler" }, { value: "months", label: "Aylar" }]}
+        value={active}
+        onChange={setMode}
+      />
+    </div>}
+    {active === "cycles"
+      ? <CycleGrid rows={props.rows.filter((row) => row.cycleBillingStartsOn)} debtOnly={props.debtOnly} onDebtOnly={props.onDebtOnly} onOpen={props.onOpen} />
+      : <MonthGrid {...props} />}
+  </div>;
+}
+
+function MonthGrid({ rows, year, today, onYear, debtOnly, onDebtOnly, onOpen }: GridProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const visible = useMemo(() => {
     const sorted = [...rows].sort(byStudentName);

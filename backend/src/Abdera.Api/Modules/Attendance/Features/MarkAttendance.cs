@@ -3,6 +3,7 @@ using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Attendance.Infrastructure;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Features;
+using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Shared;
@@ -64,11 +65,13 @@ public static class MarkAttendance
                 db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_marked_by_admin", nameof(LessonAttendance), attendance.Id, clock.UtcNow));
             }
 
-            // Mazeretli ders telafi hakkı doğurur (docs/10-decisions.md A2 altındaki satır).
-            if (request.Status == AttendanceStatus.Excused)
+            // Mazeretli ders telafi hakkı doğurur (docs/10-decisions.md A2 altındaki satır) - dönem
+            // kartına sayılan birebir ders hariç: orada Mazeretli zaten bir satır doldurur (AD).
+            if (request.Status == AttendanceStatus.Excused && !await CycleReceivableAccruer.CountsOnCardAsync(db, clock, lesson))
                 await ExcusedMakeupCredit.SyncAsync(db, lesson, isExcused: true, clock, config, actorUserId);
 
             await db.SaveChangesAsync();
+            await CycleReceivableAccruer.SyncForLessonAsync(db, clock, lesson, actorUserId);
             return Results.Created($"/api/lessons/{lessonId}/attendance", ToResponse(attendance));
         }
 
@@ -80,11 +83,14 @@ public static class MarkAttendance
         db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_corrected", nameof(LessonAttendance), existing.Id, clock.UtcNow, beforeJson: before));
 
         // Düzeltme Mazeretli'ye giriyor ya da ondan çıkıyorsa telafi hakkı da izler.
+        // Dönem kartına sayılan derste Mazeretli hak doğurmaz; çıkışta geri alınacak hak da yoktur.
         var isExcused = request.Status == AttendanceStatus.Excused;
-        if (wasExcused != isExcused)
+        if (wasExcused != isExcused && !(isExcused && await CycleReceivableAccruer.CountsOnCardAsync(db, clock, lesson)))
             await ExcusedMakeupCredit.SyncAsync(db, lesson, isExcused, clock, config, actorUserId);
 
         await db.SaveChangesAsync();
+        // Düzeltme kartın satırlarını kaydırabilir (Geldi -> Gelmedi bir dönemi geri alır).
+        await CycleReceivableAccruer.SyncForLessonAsync(db, clock, lesson, actorUserId);
         return Results.Ok(ToResponse(existing));
     }
 

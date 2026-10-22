@@ -20,6 +20,10 @@ public class BillingSettings
     // DueDay alanıydı - okul genelinde tek bir gün yeterli, plan başına sormak
     // gereksiz bir soruydu. 1-28: şubat dahil her ayda var olan bir gün.
     public int DueDayOfMonth { get; private set; } = 1;
+    // Birebir derslerde dönem (4 ders) tabanlı aidatın başladığı gün (docs/10-decisions.md AD).
+    // Bu günden önceki dersler karta sayılmaz, bu günden itibaren başlayan aylarda birebir kayda
+    // aylık aidat açılmaz. Boşsa dönem aidatı kapalıdır, herkes aylık aidatla devam eder.
+    public DateOnly? CycleBillingStartsOn { get; private set; }
     public Guid? UpdatedBy { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -42,7 +46,7 @@ public class BillingSettings
 
     public void Update(
         decimal multiCourseDiscountPercent, decimal siblingDiscountPercent, int dueDayOfMonth,
-        Guid? updatedBy, DateTimeOffset now)
+        DateOnly? cycleBillingStartsOn, Guid? updatedBy, DateTimeOffset now)
     {
         var errors = new Dictionary<string, string[]>();
         if (multiCourseDiscountPercent is < 0 or > 100)
@@ -56,6 +60,7 @@ public class BillingSettings
         MultiCourseDiscountPercent = multiCourseDiscountPercent;
         SiblingDiscountPercent = siblingDiscountPercent;
         DueDayOfMonth = dueDayOfMonth;
+        CycleBillingStartsOn = cycleBillingStartsOn;
         UpdatedBy = updatedBy;
         UpdatedAt = now;
     }

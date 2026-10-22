@@ -14,6 +14,7 @@ public class BillingSettingsConfiguration : IEntityTypeConfiguration<BillingSett
         builder.Property(s => s.MultiCourseDiscountPercent).HasColumnName("multi_course_discount_percent").HasColumnType("numeric(5,2)");
         builder.Property(s => s.SiblingDiscountPercent).HasColumnName("sibling_discount_percent").HasColumnType("numeric(5,2)");
         builder.Property(s => s.DueDayOfMonth).HasColumnName("due_day_of_month");
+        builder.Property(s => s.CycleBillingStartsOn).HasColumnName("cycle_billing_starts_on");
         builder.Property(s => s.UpdatedBy).HasColumnName("updated_by");
         builder.Property(s => s.UpdatedAt).HasColumnName("updated_at");
 
