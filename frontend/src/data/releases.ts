@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.22.4",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Yoklama kartı artık kâğıttaki yoklama listesi gibi: her öğrencide 4'er satırlık 2 tablo açık. Geçmiş dersleri boş satırlara tarih olarak yazabilirsin; sonraki dersler yoklamadan kendiliğinden gelir." },
+      { audience: "admin", text: "Elle yazılan dersler de 4'lük sayaca girer ve dönem dolunca aidat açar. Yanlış yazılan satırın tarihini değiştirebilir ya da × ile kaldırabilirsin." },
+    ],
+  },
+  {
     version: "2026.10.22.3",
     date: "2026-10-22",
     items: [
