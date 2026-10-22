@@ -57,7 +57,9 @@ export function useMarkAttendance(lessonId: string) {
 export type CardState = "NotStarted" | "InProgress" | "LastLesson" | "AwaitingPayment" | "NextPrepaid" | "Unpaid";
 
 export interface CardLesson {
-  lessonId: string;
+  // Sistemdeki yoklamalı ders; karta elle yazılmış geçmiş derste null, entryId dolu.
+  lessonId: string | null;
+  entryId: string | null;
   startAt: string;
   date: string;
   status: AttendanceStatus;
@@ -120,6 +122,33 @@ export function useSetCycleStart() {
       queryClient.invalidateQueries({ queryKey: ["billing-board"] });
     },
   });
+}
+
+// Karta elle yazılan geçmiş ders (kâğıttaki satır): eklenir, tarihi değişir ya da kaldırılır.
+// Her değişiklikte sunucu kartı yeniden sayar ve dönem aidatlarını eşitler.
+function useCardEntryMutation<T>(fn: (body: T) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+    },
+  });
+}
+
+export function useAddCardEntry() {
+  return useCardEntryMutation(({ enrollmentId, date }: { enrollmentId: string; date: string }) =>
+    api.post(`/api/attendance/cards/${enrollmentId}/entries`, { date }));
+}
+
+export function useChangeCardEntry() {
+  return useCardEntryMutation(({ entryId, date }: { entryId: string; date: string }) =>
+    api.put(`/api/attendance/cards/entries/${entryId}`, { date }));
+}
+
+export function useRemoveCardEntry() {
+  return useCardEntryMutation((entryId: string) => api.delete(`/api/attendance/cards/entries/${entryId}`));
 }
 
 export function useAttendanceCards(enabled = true) {

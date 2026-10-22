@@ -302,6 +302,58 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Hand_written_past_lessons_fill_the_card_and_open_the_first_cycle()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "Elle", 2);
+        await SetCycleStartAsync(admin, seeded.EnrollmentId, CycleStart);
+
+        // Kâğıttaki geçmiş 4 ders elle yazılır (sistem dersleri 40 gün önce başlıyor).
+        var written = new List<Guid>();
+        foreach (var daysAgo in new[] { 48, 46, 44, 42 })
+        {
+            var response = await admin.PostAsJsonAsync($"/api/attendance/cards/{seeded.EnrollmentId}/entries",
+                new AttendanceCards.EntryRequest(DateOnly.FromDateTime(Now.AddDays(-daysAgo).UtcDateTime)));
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(response.StatusCode == HttpStatusCode.Created, body);
+            written.Add(System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("id").GetGuid());
+        }
+
+        var first = Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+        Assert.Equal("D001", first.Period);
+        Assert.Null(first.AccruedLessonId);
+        Assert.Equal(DateOnly.FromDateTime(Now.AddDays(-48).UtcDateTime), first.AccruedOn);
+
+        // Sonrası yoklamadan gelir: ilk sistem dersi 5. satırdır ve 2. dönemi açar.
+        await MarkAsync(admin, seeded.LessonIds[0], AttendanceStatus.Present);
+        await MarkAsync(admin, seeded.LessonIds[1], AttendanceStatus.Present);
+        Assert.Equal(seeded.LessonIds[0], (await CyclesAsync(seeded.EnrollmentId)).Single(r => r.Period == "D002").AccruedLessonId);
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(4, card.Cycles[0].Filled.Count(lesson => lesson.EntryId is not null));
+
+        // Kurallar: ilk giriş öncesi, ileri tarih, aynı gün ve sistem dersiyle çakışan gün yazılamaz.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync($"/api/attendance/cards/{seeded.EnrollmentId}/entries",
+            new AttendanceCards.EntryRequest(CycleStart.AddDays(-1)))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync($"/api/attendance/cards/{seeded.EnrollmentId}/entries",
+            new AttendanceCards.EntryRequest(DateOnly.FromDateTime(Now.AddDays(3).UtcDateTime)))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"/api/attendance/cards/{seeded.EnrollmentId}/entries",
+            new AttendanceCards.EntryRequest(DateOnly.FromDateTime(Now.AddDays(-48).UtcDateTime)))).StatusCode);
+        var lessonDay = await LessonDateAsync(seeded.LessonIds[0]);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync($"/api/attendance/cards/{seeded.EnrollmentId}/entries",
+            new AttendanceCards.EntryRequest(lessonDay))).StatusCode);
+
+        // Bir satır silinince kart yeniden sayılır: 5 satır kaldı, 2. dönemi artık 2. sistem dersi açar.
+        (await admin.DeleteAsync($"/api/attendance/cards/entries/{written[0]}")).EnsureSuccessStatusCode();
+        var cycles = await CyclesAsync(seeded.EnrollmentId);
+        Assert.Equal(seeded.LessonIds[1], cycles.Single(r => r.Period == "D002").AccruedLessonId);
+        Assert.Equal(DateOnly.FromDateTime(Now.AddDays(-46).UtcDateTime), cycles.Single(r => r.Period == "D001").AccruedOn);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.Equal(4, await db.AuditLogs.CountAsync(log => log.Action == "attendance.manual_entry_added"));
+        Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "attendance.manual_entry_removed" && log.EntityId == written[0]));
+    }
+
+    [Fact]
     public async Task Monthly_dues_are_not_opened_for_an_individual_enrollment_after_the_cycle_start()
     {
         var admin = await AdminAsync();

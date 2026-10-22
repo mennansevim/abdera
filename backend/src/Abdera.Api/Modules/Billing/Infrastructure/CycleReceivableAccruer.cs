@@ -21,9 +21,11 @@ namespace Abdera.Api.Modules.Billing.Infrastructure;
 // ödenmemiş aidat iptal edilir, ödenmiş olan "peşin, henüz başlamamış" hâline döner.
 public static class CycleReceivableAccruer
 {
-    public record CountedLesson(Guid LessonId, DateTimeOffset StartAt, DateOnly Date, AttendanceStatus Status);
+    // Kart satırı: sistemdeki yoklamalı bir ders (LessonId) ya da karta elle yazılmış geçmiş ders (EntryId, AD10).
+    public record CountedLesson(Guid? LessonId, DateTimeOffset StartAt, DateOnly Date, AttendanceStatus Status, Guid? EntryId = null);
 
-    // Kartta sayılan (Geldi + Mazeretli) ve sayılmayan (Gelmedi) dersler, tarih sırasıyla.
+    // Kartta sayılan (Geldi + Mazeretli) ve sayılmayan (Gelmedi) dersler, tarih sırasıyla. Elle yazılan
+    // geçmiş dersler "Geldi" sayılır; aynı güne sistemde ders varsa o esas alınır, elle satır sayılmaz.
     public static async Task<List<CountedLesson>> LoadCardLessonsAsync(
         AbderaDbContext db, IClock clock, Enrollment enrollment, DateOnly countingFrom)
     {
@@ -42,9 +44,22 @@ public static class CycleReceivableAccruer
             .OrderBy(row => row.StartAt).ThenBy(row => row.Id)
             .ToListAsync();
 
-        return rows
+        var lessons = rows
             .Select(row => new CountedLesson(row.Id, row.StartAt, DateOnly.FromDateTime(clock.ToSchoolLocal(row.StartAt).Date), row.Status))
             .ToList();
+        var lessonDays = lessons.Select(lesson => lesson.Date).ToHashSet();
+
+        var entries = await db.ManualAttendanceEntries.AsNoTracking()
+            .Where(entry => entry.EnrollmentId == enrollment.Id && entry.Date >= countingFrom
+                && (enrollment.EndedAt == null || entry.Date <= enrollment.EndedAt))
+            .ToListAsync();
+        lessons.AddRange(entries
+            .Where(entry => !lessonDays.Contains(entry.Date))
+            .Select(entry => new CountedLesson(
+                null, LessonGenerator.ToUtcInstant(entry.Date, TimeOnly.MinValue, clock.SchoolTimeZone), entry.Date,
+                AttendanceStatus.Present, entry.Id)));
+
+        return lessons.OrderBy(lesson => lesson.StartAt).ThenBy(lesson => lesson.LessonId ?? lesson.EntryId).ToList();
     }
 
     public static bool Fills(AttendanceStatus status) => status is AttendanceStatus.Present or AttendanceStatus.Excused;
@@ -130,8 +145,9 @@ public static class CycleReceivableAccruer
 
             if (receivable is not null && receivable.Status != ReceivableStatus.Cancelled)
             {
-                if (receivable.AccruedLessonId == opening.LessonId) continue;
-                var wasPrepaid = receivable.AccruedLessonId is null;
+                if (receivable.AccruedOn == opening.Date && receivable.AccruedLessonId == opening.LessonId) continue;
+                // Tahakkuk işareti AccruedOn: elle yazılmış ders dönemi açtıysa AccruedLessonId boş kalır.
+                var wasPrepaid = receivable.AccruedOn is null;
                 receivable.MarkAccrued(opening.LessonId, opening.Date, dueDate, today, now);
                 db.AuditLogs.Add(AuditLog.Record(
                     actorId, wasPrepaid ? "receivable.cycle_accrued_prepaid" : "receivable.cycle_reaccrued",
@@ -141,6 +157,7 @@ public static class CycleReceivableAccruer
                         period = receivable.Period,
                         accruedOn = opening.Date,
                         lessonId = opening.LessonId,
+                        manualEntryId = opening.EntryId,
                         dueDate = receivable.DueDate,
                     })));
                 continue;
@@ -176,7 +193,7 @@ public static class CycleReceivableAccruer
         }
 
         // Kartta artık var olmayan dönemler (yoklama Geldi'den Gelmedi'ye düzeltildi).
-        var stale = cycles.Where(pair => (pair.Key > required || (firstCovered && pair.Key == 1)) && pair.Value.AccruedLessonId is not null
+        var stale = cycles.Where(pair => (pair.Key > required || (firstCovered && pair.Key == 1)) && pair.Value.AccruedOn is not null
             && pair.Value.Status != ReceivableStatus.Cancelled).Select(pair => pair.Value).ToList();
         if (stale.Count > 0)
         {
@@ -212,6 +229,7 @@ public static class CycleReceivableAccruer
         period = receivable.Period,
         accruedOn = opening.Date,
         lessonId = opening.LessonId,
+        manualEntryId = opening.EntryId,
         baseAmount = receivable.BaseAmount,
         discountPercent = receivable.DiscountPercent,
         discountReason = receivable.DiscountReason,

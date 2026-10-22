@@ -34,7 +34,8 @@ public static class AttendanceCards
         Unpaid,
     }
 
-    public record CardLesson(Guid LessonId, DateTimeOffset StartAt, DateOnly Date, AttendanceStatus Status);
+    // EntryId doluysa satır karta elle yazılmış geçmiş derstir (AD10); düzenlenip silinebilir.
+    public record CardLesson(Guid? LessonId, DateTimeOffset StartAt, DateOnly Date, AttendanceStatus Status, Guid? EntryId = null);
 
     public record CycleReceivable(
         Guid Id, ReceivableStatus Status, decimal Amount, decimal Paid, string Currency, DateOnly DueDate, DateOnly? AccruedOn);
@@ -57,6 +58,112 @@ public static class AttendanceCards
     {
         app.MapGet("/api/attendance/cards", HandleAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         app.MapPut("/api/attendance/cards/{enrollmentId:guid}/cycle-start", SetCycleStartAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        app.MapPost("/api/attendance/cards/{enrollmentId:guid}/entries", AddEntryAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        app.MapPut("/api/attendance/cards/entries/{entryId:guid}", ChangeEntryAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        app.MapDelete("/api/attendance/cards/entries/{entryId:guid}", RemoveEntryAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+    }
+
+    public record EntryRequest(DateOnly Date);
+
+    // Karta elle yazılan geçmiş ders (AD10): yönetici ilk giriş gününden sonraki geçmiş dersleri
+    // tarih olarak girer, sonrasını sistemdeki yoklama doldurur. Her değişiklikten sonra kart
+    // baştan sayılır ve dönem aidatları eşitlenir.
+    private static async Task<IResult> AddEntryAsync(
+        Guid enrollmentId, EntryRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == enrollmentId)
+            ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
+        await ValidateEntryDateAsync(db, clock, enrollment, request.Date, exceptEntryId: null);
+
+        var now = clock.UtcNow;
+        var actorId = AuthContext.GetUserId(principal);
+        var entry = Attendance.Domain.ManualAttendanceEntry.Create(enrollment.Id, request.Date, actorId, now);
+        db.ManualAttendanceEntries.Add(entry);
+        db.AuditLogs.Add(AuditLog.Record(
+            actorId, "attendance.manual_entry_added", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
+            afterJson: JsonSerializer.Serialize(new { enrollmentId = enrollment.Id, date = request.Date })));
+        await SaveEntryAsync(db);
+
+        await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
+        return Results.Created($"/api/attendance/cards/entries/{entry.Id}", new { entry.Id, entry.Date });
+    }
+
+    private static async Task<IResult> ChangeEntryAsync(
+        Guid entryId, EntryRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var entry = await db.ManualAttendanceEntries.SingleOrDefaultAsync(e => e.Id == entryId)
+            ?? throw new NotFoundException("Elle yazılmış ders bulunamadı.");
+        var enrollment = await db.Enrollments.SingleAsync(e => e.Id == entry.EnrollmentId);
+        if (entry.Date == request.Date) return Results.NoContent();
+        await ValidateEntryDateAsync(db, clock, enrollment, request.Date, exceptEntryId: entry.Id);
+
+        var now = clock.UtcNow;
+        var actorId = AuthContext.GetUserId(principal);
+        var before = entry.Date;
+        entry.ChangeDate(request.Date, now);
+        db.AuditLogs.Add(AuditLog.Record(
+            actorId, "attendance.manual_entry_changed", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
+            beforeJson: JsonSerializer.Serialize(new { date = before }),
+            afterJson: JsonSerializer.Serialize(new { date = request.Date })));
+        await SaveEntryAsync(db);
+
+        await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
+        return Results.NoContent();
+    }
+
+    // Yanlış yazılmış satırı kaldırır; ne kaldırıldığı audit_log'da kalır (yoklama verisi, mali kayıt değil).
+    private static async Task<IResult> RemoveEntryAsync(Guid entryId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var entry = await db.ManualAttendanceEntries.SingleOrDefaultAsync(e => e.Id == entryId)
+            ?? throw new NotFoundException("Elle yazılmış ders bulunamadı.");
+        var enrollment = await db.Enrollments.SingleAsync(e => e.Id == entry.EnrollmentId);
+
+        var now = clock.UtcNow;
+        var actorId = AuthContext.GetUserId(principal);
+        db.ManualAttendanceEntries.Remove(entry);
+        db.AuditLogs.Add(AuditLog.Record(
+            actorId, "attendance.manual_entry_removed", nameof(Attendance.Domain.ManualAttendanceEntry), entry.Id, now,
+            beforeJson: JsonSerializer.Serialize(new { enrollmentId = enrollment.Id, date = entry.Date })));
+        await db.SaveChangesAsync();
+
+        await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
+        return Results.NoContent();
+    }
+
+    private static async Task ValidateEntryDateAsync(
+        AbderaDbContext db, IClock clock, Enrollment enrollment, DateOnly date, Guid? exceptEntryId)
+    {
+        static ValidationFailedException Invalid(string message) =>
+            new(new Dictionary<string, string[]> { ["date"] = [message] });
+
+        if (!BillingCycle.AppliesTo(enrollment.CourseKind))
+            throw Invalid("Yoklama kartı yalnızca birebir derslerde tutulur.");
+        var settings = await BillingSettings.GetCurrentAsync(db);
+        if (CycleReceivableAccruer.CountingFrom(enrollment, settings) is not { } start)
+            throw Invalid("Önce öğrencinin ilk giriş gününü seçin.");
+        if (date < start)
+            throw Invalid($"İlk giriş gününden ({start:dd.MM.yyyy}) önce ders yazılamaz.");
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        if (date > today)
+            throw Invalid("İleri bir tarihe ders yazılamaz; gelecek dersler yoklamadan gelir.");
+        if (await db.ManualAttendanceEntries.AnyAsync(e => e.EnrollmentId == enrollment.Id && e.Date == date && e.Id != exceptEntryId))
+            throw new ConflictException($"{date:dd.MM.yyyy} tarihine zaten bir ders yazılı.");
+
+        var lessons = await CycleReceivableAccruer.LoadCardLessonsAsync(db, clock, enrollment, date);
+        if (lessons.Any(lesson => lesson.LessonId is not null && lesson.Date == date))
+            throw new ConflictException($"{date:dd.MM.yyyy} tarihinde sistemde yoklaması girilmiş bir ders var; kartta o görünür.");
+    }
+
+    private static async Task SaveEntryAsync(AbderaDbContext db)
+    {
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            throw new ConflictException("Bu tarihe az önce bir ders yazıldı. Kartı yenileyip tekrar deneyin.");
+        }
     }
 
     public record CycleStartRequest(DateOnly? CycleStartsOn);
@@ -164,7 +271,7 @@ public static class AttendanceCards
         var filledCount = 0;
         foreach (var lesson in lessons)
         {
-            var item = new CardLesson(lesson.LessonId, lesson.StartAt, lesson.Date, lesson.Status);
+            var item = new CardLesson(lesson.LessonId, lesson.StartAt, lesson.Date, lesson.Status, lesson.EntryId);
             if (CycleReceivableAccruer.Fills(lesson.Status))
             {
                 var cycle = BillingCycle.CycleOf(filledCount);

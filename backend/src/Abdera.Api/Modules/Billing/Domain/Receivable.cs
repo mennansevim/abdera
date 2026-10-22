@@ -34,7 +34,8 @@ public class Receivable
     public ReceivableStatus Status { get; private set; } = ReceivableStatus.Unpaid;
     // Yıl başı toplu ödeme kampanyasında birlikte üretilen ayları birbirine bağlar.
     public Guid? PrepayPlanId { get; private set; }
-    // Yalnızca dönem aidatında (BillingCycle): dönemi açan dersin günü ve kendisi. Peşin
+    // Yalnızca dönem aidatında (BillingCycle): dönemi açan dersin günü ve kendisi. Dönemi karta elle
+    // yazılmış bir ders açtıysa AccruedLessonId boştur (AD10) - tahakkuk işareti AccruedOn'dur. Peşin
     // ödenmiş, henüz başlamamış dönemde ikisi de boştur - aidat ancak dönemin ilk dersi
     // işlendiğinde tahakkuk etmiş sayılır (kârlılık ve gelir raporları bu tarihe bakar).
     public DateOnly? AccruedOn { get; private set; }
@@ -85,7 +86,7 @@ public class Receivable
 
     // Dönemin ilk dersi işlendi (ya da yoklama düzeltmesiyle ilk ders başka bir derse kaydı).
     // Ödenmemiş aidatın vadesi tahakkuk gününe göre yeniden kurulur; ödenmiş olanınki değişmez.
-    public void MarkAccrued(Guid lessonId, DateOnly accruedOn, DateOnly dueDate, DateOnly today, DateTimeOffset now)
+    public void MarkAccrued(Guid? lessonId, DateOnly accruedOn, DateOnly dueDate, DateOnly today, DateTimeOffset now)
     {
         if (!BillingCycle.IsKey(Period))
             throw new InvalidOperationException("Yalnızca dönem aidatı derse bağlanabilir.");
@@ -114,7 +115,7 @@ public class Receivable
     // çağıran bunu audit_log'a yazar.
     public void ReopenCycle(
         Guid tuitionRateId, TuitionCalculator.Breakdown breakdown, string currency,
-        Guid lessonId, DateOnly accruedOn, DateOnly dueDate, DateTimeOffset now)
+        Guid? lessonId, DateOnly accruedOn, DateOnly dueDate, DateTimeOffset now)
     {
         if (Status != ReceivableStatus.Cancelled)
             throw new InvalidOperationException("Yalnızca iptal edilmiş dönem yeniden açılabilir.");

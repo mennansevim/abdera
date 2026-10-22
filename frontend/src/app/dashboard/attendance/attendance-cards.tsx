@@ -4,9 +4,9 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState, FilterField, Modal, SearchInput, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useAttendanceCards, useSetCycleStart, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
+import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, useSetCycleStart, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
-import { cycleKey, formatMoney } from "@/lib/billing-format";
+import { cycleKey, formatMoney, todayInput } from "@/lib/billing-format";
 import { CollectSheet } from "../billing/collect-sheet";
 
 // Yönetici yoklama ekranı (docs/10-decisions.md AD): okulun kâğıt "Yoklama Listesi"nin dijital
@@ -273,7 +273,17 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
     }
   }
 
-  const cycles = [...card.cycles].reverse();
+  // Kâğıt şablonu: her öğrencide en az 2 tablo (4 + 4 satır) açık. Gösterilen son tablo bir sonraki
+  // boş satırın düştüğü dönemdir; ondan öncekiler "Önceki dönemler"de durur.
+  const [showOlder, setShowOlder] = useState(false);
+  const filledTotal = card.cycles.reduce((sum, cycle) => sum + cycle.filled.length, 0);
+  const nextBlock = Math.floor(filledTotal / 4) + 1;
+  const lastShown = Math.max(nextBlock, 2, ...card.cycles.map((cycle) => cycle.number));
+  const blocks: CardCycle[] = Array.from({ length: lastShown }, (_, index) =>
+    card.cycles.find((cycle) => cycle.number === index + 1) ?? { number: index + 1, filled: [], misses: [], receivable: null });
+  const firstShown = Math.max(1, Math.min(nextBlock, lastShown) - 1);
+  const older = blocks.filter((cycle) => cycle.number < firstShown);
+  const recent = blocks.filter((cycle) => cycle.number >= firstShown);
   return <article aria-label={`${card.studentName} yoklama kartı`} className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)] 2xl:sticky 2xl:top-4">
     <div className="flex items-baseline justify-between gap-2 border-b-2 border-[var(--foreground)] px-4 py-3">
       <span className="text-xs font-extrabold uppercase tracking-[.08em]">Abdera Sanat Akademi</span>
@@ -308,16 +318,25 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    {!cycles.length && <p className="text-meta px-4 py-6 text-center">{card.countingFrom
-      ? `${longDate.format(dayOf(card.countingFrom))} itibarıyla henüz işlenmiş ders yok. O günden itibaren ilk ders 1. dönemi açar.`
-      : "Öğrencinin ilk giriş gününü gir: o günden itibaren her 4 derste bir aidat açılır."}</p>}
-    {!!cycles.length && <div className="grid max-h-[34rem] grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] overflow-y-auto">
-      {cycles.map((cycle) => <CycleBlock key={cycle.number} cycle={cycle} current={cycle.number === card.currentCycle} awaiting={card.state === "AwaitingPayment" && cycle.number === card.currentCycle} />)}
-    </div>}
+    {!card.countingFrom && <p className="text-meta px-4 py-6 text-center">Öğrencinin ilk giriş gününü seç: o günden itibaren her 4 derste bir aidat açılır, geçmiş dersleri aşağıdaki satırlara yazabilirsin.</p>}
+    {card.countingFrom && <>
+      {older.length > 0 && <button type="button" onClick={() => setShowOlder((value) => !value)} className="w-full border-b border-[var(--line)] px-4 py-2 text-left text-xs font-bold text-[var(--brand-strong)]">
+        {showOlder ? "Önceki dönemleri gizle" : `Önceki ${older.length} dönemi göster`}
+      </button>}
+      <div className="grid sm:grid-cols-2">
+        {(showOlder ? [...older, ...recent] : recent).map((cycle) => <CycleBlock
+          key={cycle.number}
+          card={card}
+          cycle={cycle}
+          current={cycle.number === nextBlock}
+          awaiting={card.state === "AwaitingPayment" && cycle.number === card.currentCycle}
+        />)}
+      </div>
+    </>}
     {card.earlierLessons.length > 0 && <section aria-label="İlk giriş öncesi dersler" className="border-t border-[var(--line)] px-4 py-3">
       <p className="text-micro text-[var(--muted)]">{card.countingFrom ? `İlk giriş öncesi · ${startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz` : "İşlenen dersler · ilk giriş günü girilince karta sayılır"}</p>
       <ul className="mt-2 flex flex-wrap gap-1">
-        {[...card.earlierLessons].reverse().map((lesson) => <li key={lesson.lessonId} title={lesson.status === "Present" ? "Geldi" : lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} className={`rounded-md px-1.5 py-0.5 text-[.7rem] font-semibold tabular-nums ${MISS_CLASS[lesson.status]}`}>
+        {[...card.earlierLessons].reverse().map((lesson) => <li key={lesson.lessonId ?? lesson.entryId} title={lesson.status === "Present" ? "Geldi" : lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} className={`rounded-md px-1.5 py-0.5 text-[.7rem] font-semibold tabular-nums ${MISS_CLASS[lesson.status]}`}>
           {shortDate.format(dayOf(lesson.date))}{lesson.status === "Present" ? " ✓" : lesson.status === "Excused" ? " M" : " ✗"}
         </li>)}
       </ul>
@@ -325,7 +344,7 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
     <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[.72rem]">
       <span>✓ Geldi ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satırı doldurur</span>
       <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> satır doldurmaz</span>
-      <span>En yeni dönem en üstte{card.countingFrom ? ` · ${longDate.format(dayOf(card.countingFrom))} itibarıyla` : ""}</span>
+      <span>Boş satıra tarih yazarak geçmiş dersi ekle; sonrası yoklamadan gelir{card.countingFrom ? ` · ${longDate.format(dayOf(card.countingFrom))} itibarıyla` : ""}</span>
     </p>
 
     {collecting && row && <CollectSheet
@@ -338,7 +357,8 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
   </article>;
 }
 
-function CycleBlock({ cycle, current, awaiting }: { cycle: CardCycle; current: boolean; awaiting: boolean }) {
+function CycleBlock({ card, cycle, current, awaiting }: { card: AttendanceCard; cycle: CardCycle; current: boolean; awaiting: boolean }) {
+  const [error, setError] = useState<string | null>(null);
   const receivable = cycle.receivable;
   const tag = awaiting
     ? { tone: "warning" as const, text: "Ödeme bekleniyor" }
@@ -356,18 +376,66 @@ function CycleBlock({ cycle, current, awaiting }: { cycle: CardCycle; current: b
     {[0, 1, 2, 3].map((index) => {
       const lesson = cycle.filled[index];
       const next = current && !lesson && index === cycle.filled.length;
-      return <div key={index} className={`grid min-h-8 grid-cols-[1.2rem_1fr_1.8rem] items-center border-t border-[var(--line)] px-2.5 ${next ? "bg-[var(--brand-soft)]" : ""}`}>
+      return <div key={lesson ? lesson.lessonId ?? lesson.entryId : `empty-${index}`} className={`grid min-h-9 grid-cols-[1.2rem_1fr_1.8rem] items-center border-t border-[var(--line)] px-2.5 ${next ? "bg-[var(--brand-soft)]" : ""}`}>
         <span className="text-[.66rem] font-bold text-[var(--muted)]">{index + 1}</span>
-        {lesson
-          ? <span className="flex min-w-0 items-center gap-1.5 font-serif italic tabular-nums">{longDate.format(dayOf(lesson.date)).replace(/\./g, " / ")}{lesson.status === "Excused" && <span className="rounded-md bg-[var(--warning-soft)] px-1.5 font-sans text-[.66rem] font-semibold not-italic text-[var(--warning-strong)]">Mazeretli</span>}</span>
-          : <span className={`text-xs ${next ? "font-semibold text-[var(--brand-strong)]" : "tracking-[.3em] text-[var(--line)]"}`}>{next ? "Sıradaki ders" : "__ / __ / ____"}</span>}
+        {lesson && !lesson.entryId && <span className="flex min-w-0 items-center gap-1.5 font-serif italic tabular-nums" title="Sistemdeki yoklamadan">
+          {longDate.format(dayOf(lesson.date)).replace(/\./g, " / ")}
+          {lesson.status === "Excused" && <span className="rounded-md bg-[var(--warning-soft)] px-1.5 font-sans text-[.66rem] font-semibold not-italic text-[var(--warning-strong)]">Mazeretli</span>}
+        </span>}
+        {lesson?.entryId && <EntryInput key={lesson.entryId} card={card} entryId={lesson.entryId} date={lesson.date} onError={setError} />}
+        {!lesson && <EntryInput card={card} entryId={null} date={null} onError={setError} />}
         <span className={`grid h-full place-items-center border-l border-[var(--line)] text-base font-bold ${lesson?.status === "Excused" ? "text-[var(--warning-strong)]" : "text-[var(--success-strong)]"}`}>{lesson ? "✓" : ""}</span>
       </div>;
     })}
     {cycle.misses.length > 0 && <div className="flex flex-wrap gap-1 border-t border-dashed border-[var(--line)] px-2.5 py-1.5">
-      {cycle.misses.map((lesson) => <span key={lesson.lessonId} className="rounded-md bg-[var(--danger-soft)] px-1.5 text-[.68rem] font-semibold text-[var(--danger-strong)]">Gelmedi {shortDate.format(dayOf(lesson.date))}</span>)}
+      {cycle.misses.map((lesson) => <span key={lesson.lessonId ?? lesson.entryId} className="rounded-md bg-[var(--danger-soft)] px-1.5 text-[.68rem] font-semibold text-[var(--danger-strong)]">Gelmedi {shortDate.format(dayOf(lesson.date))}</span>)}
     </div>}
+    {error && <p role="alert" className="border-t border-[var(--line)] px-2.5 py-1.5 text-[.72rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
   </section>;
+}
+
+// Kâğıttaki gibi elle yazılan satır (AD10): boş satıra tarih seçilince geçmiş ders eklenir; elle
+// yazılmış satırın tarihi değiştirilebilir ya da × ile kaldırılır. Sistemdeki yoklama satırları
+// salt okunur. Tarih ilk giriş ile bugün arasında olmalı; kuralları sunucu da denetler.
+function EntryInput({ card, entryId, date, onError }: { card: AttendanceCard; entryId: string | null; date: string | null; onError: (message: string | null) => void }) {
+  const add = useAddCardEntry();
+  const change = useChangeCardEntry();
+  const remove = useRemoveCardEntry();
+  const [value, setValue] = useState(date ?? "");
+  const busy = add.isPending || change.isPending || remove.isPending;
+
+  async function run(action: () => Promise<unknown>) {
+    onError(null);
+    try {
+      await action();
+    } catch (err) {
+      onError(err instanceof ApiError ? (err.errors?.date?.[0] ?? err.detail ?? err.title) : "Kaydedilemedi.");
+      setValue(date ?? "");
+    }
+  }
+
+  function commit() {
+    if (!value || value === date) return;
+    void run(() => entryId
+      ? change.mutateAsync({ entryId, date: value })
+      : add.mutateAsync({ enrollmentId: card.enrollmentId, date: value }).then(() => setValue("")));
+  }
+
+  return <span className="flex min-w-0 items-center gap-1">
+    <input
+      type="date"
+      value={value}
+      min={card.countingFrom ?? undefined}
+      max={todayInput()}
+      disabled={busy}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
+      aria-label={entryId ? "Elle yazılmış ders tarihi" : "Geçmiş ders tarihi ekle"}
+      className={`min-w-0 flex-1 rounded-md border bg-transparent px-1.5 py-0.5 font-serif text-sm italic tabular-nums ${entryId ? "border-transparent text-[var(--foreground)] hover:border-[var(--line)]" : "border-dashed border-[var(--line)] text-[var(--muted)]"}`}
+    />
+    {entryId && <button type="button" disabled={busy} onClick={() => void run(() => remove.mutateAsync(entryId))} aria-label="Elle yazılmış dersi kaldır" title="Kaldır" className="shrink-0 rounded px-1 text-sm font-bold text-[var(--muted)] hover:text-[var(--danger-strong)]">×</button>}
+  </span>;
 }
 
 // Kartın "İlk giriş" alanı: öğrencinin dönem sayacının başladığı gün (ay ortası olabilir). Boşsa okul
