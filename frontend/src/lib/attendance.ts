@@ -88,7 +88,8 @@ export interface AttendanceCard {
   teacherName: string;
   instrumentName: string;
   startedAt: string;
-  countingFrom: string;
+  // Dönem sayacının başladığı gün; null: kayda başlangıç girilmedi ve okul geneli geçiş kapalı.
+  countingFrom: string | null;
   currentCycle: number;
   filledInCurrent: number;
   state: CardState;
@@ -98,11 +99,27 @@ export interface AttendanceCard {
   cycles: CardCycle[];
   // Geçiş gününden önce işlenmiş dersler: yalnızca bilgi, karta sayılmaz ve aidat açmaz.
   earlierLessons: CardLesson[];
+  // Sayaç başlangıcı kayda özel girilmiş mi (öğrencinin ilk giriş günü).
+  hasOwnCycleStart: boolean;
 }
 
 export interface AttendanceCardsResponse {
   cycleBillingStartsOn: string | null;
   cards: AttendanceCard[];
+}
+
+// Öğrencinin ilk giriş günü: bu günden itibaren her 4 derste bir aidat açılır (ay ortası olabilir).
+// Sunucu kartı yeniden sayar ve dönem aidatlarını yeni başlangıca göre eşitler.
+export function useSetCycleStart() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ enrollmentId, cycleStartsOn }: { enrollmentId: string; cycleStartsOn: string | null }) =>
+      api.put(`/api/attendance/cards/${enrollmentId}/cycle-start`, { cycleStartsOn }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+    },
+  });
 }
 
 export function useAttendanceCards(enabled = true) {

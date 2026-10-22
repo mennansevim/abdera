@@ -333,7 +333,7 @@ public static class Collections
 
             var isCycle = BillingCycle.IsKey(period);
             string? notCollectable = isCycle
-                ? (BillingCycle.AppliesTo(enrollment.CourseKind) && pricer.Settings.CycleBillingStartsOn is not null
+                ? (pricer.CycleStartFor(enrollment) is not null
                     ? null : "Bu kurs kaydı dönemle (4 ders) faturalanmıyor.")
                 : receivable is null && pricer.BillsByCycle(enrollment, period) ? TuitionPricer.CycleBilledMessage : null;
             if (notCollectable is not null)

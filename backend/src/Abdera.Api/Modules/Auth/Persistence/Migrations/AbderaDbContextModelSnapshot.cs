@@ -1848,6 +1848,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateOnly?>("CycleStartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("cycle_starts_on");
+
                     b.Property<string>("EndNote")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")

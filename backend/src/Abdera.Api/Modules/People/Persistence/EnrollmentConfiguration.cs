@@ -26,6 +26,7 @@ public class EnrollmentConfiguration : IEntityTypeConfiguration<Enrollment>
         builder.Property(e => e.ManualDiscountReason).HasColumnName("manual_discount_reason").HasMaxLength(200);
         builder.Property(e => e.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.StartedAt).HasColumnName("started_at");
+        builder.Property(e => e.CycleStartsOn).HasColumnName("cycle_starts_on");
         builder.Property(e => e.EndedAt).HasColumnName("ended_at");
         builder.Property(e => e.EndReason).HasColumnName("end_reason").HasConversion<string>().HasMaxLength(30);
         builder.Property(e => e.EndNote).HasColumnName("end_note").HasMaxLength(Enrollment.EndNoteMaxLength);

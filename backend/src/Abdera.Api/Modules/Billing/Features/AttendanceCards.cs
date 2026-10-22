@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using System.Text.Json;
 using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Domain;
@@ -41,22 +43,56 @@ public static class AttendanceCards
 
     public record Card(
         Guid EnrollmentId, Guid StudentId, string StudentName, Guid TeacherId, string TeacherName, string InstrumentName,
-        DateOnly StartedAt, DateOnly CountingFrom, int CurrentCycle, int FilledInCurrent, CardState State,
+        // Dönem sayacının başladığı gün; null: kayda başlangıç girilmedi ve okul geneli geçiş kapalı.
+        DateOnly StartedAt, DateOnly? CountingFrom, int CurrentCycle, int FilledInCurrent, CardState State,
         decimal UnpaidAmount, string Currency, DateOnly? LastLessonDate, List<CardCycle> Cycles,
         // Geçiş gününden önce işlenmiş dersler: yalnızca bilgi, karta sayılmaz ve aidat açmaz.
-        List<CardLesson> EarlierLessons);
+        List<CardLesson> EarlierLessons,
+        // Sayaç başlangıcı kayda özel girilmiş mi (öğrencinin ilk giriş günü, AD9).
+        bool HasOwnCycleStart = false);
 
     public record CardsResponse(DateOnly? CycleBillingStartsOn, List<Card> Cards);
 
     public static void MapAttendanceCards(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/attendance/cards", HandleAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        app.MapPut("/api/attendance/cards/{enrollmentId:guid}/cycle-start", SetCycleStartAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+    }
+
+    public record CycleStartRequest(DateOnly? CycleStartsOn);
+
+    // Öğrencinin dönem sayacının başladığı gün (ilk giriş, ay ortası olabilir - AD9). Değişince kart
+    // baştan sayılır ve dönem aidatları yeni başlangıca göre eşitlenir (CycleReceivableAccruer).
+    private static async Task<IResult> SetCycleStartAsync(
+        Guid enrollmentId, CycleStartRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == enrollmentId)
+            ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
+        if (!BillingCycle.AppliesTo(enrollment.CourseKind))
+            throw new ValidationFailedException(new Dictionary<string, string[]>
+            {
+                ["cycleStartsOn"] = ["Dönem başlangıcı yalnızca birebir derslerde girilir; grup dersi aylık aidatla devam eder."],
+            });
+
+        var now = clock.UtcNow;
+        var actorId = AuthContext.GetUserId(principal);
+        var before = enrollment.CycleStartsOn;
+        if (before == request.CycleStartsOn) return Results.NoContent();
+
+        enrollment.SetCycleStart(request.CycleStartsOn, now);
+        db.AuditLogs.Add(AuditLog.Record(
+            actorId, "enrollment.cycle_start_set", nameof(Enrollment), enrollment.Id, now,
+            beforeJson: JsonSerializer.Serialize(new { cycleStartsOn = before }),
+            afterJson: JsonSerializer.Serialize(new { cycleStartsOn = request.CycleStartsOn })));
+        await db.SaveChangesAsync();
+
+        await CycleReceivableAccruer.SyncAsync(db, clock, enrollment, actorId);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> HandleAsync(AbderaDbContext db, IClock clock)
     {
         var settings = await BillingSettings.GetCurrentAsync(db);
-        if (settings.CycleBillingStartsOn is null) return Results.Ok(new CardsResponse(null, []));
 
         var enrollments = await db.Enrollments.AsNoTracking()
             .Where(e => e.Status == EnrollmentStatus.Active && e.CourseKind == CourseKind.Individual)
@@ -75,26 +111,35 @@ public static class AttendanceCards
                 .ToListAsync())
             .Where(r => BillingCycle.IsKey(r.Period))
             .ToList();
-        var paid = await Receivables.ComputeTotalsPaidAsync(cycleReceivables.Select(r => r.Id), db);
+        // Sayacın başladığı ayın aylık aidatı 1. dönemi karşılar (AD9) - kartta 1. dönemin aidatı olarak görünür.
+        var coveringMonthly = new Dictionary<Guid, Receivable>();
+        foreach (var enrollment in enrollments)
+        {
+            if (CycleReceivableAccruer.CountingFrom(enrollment, settings) is { } start
+                && await CycleReceivableAccruer.FindCoveringMonthlyAsync(db, enrollment.Id, start) is { } monthly)
+                coveringMonthly[enrollment.Id] = monthly;
+        }
+        var paid = await Receivables.ComputeTotalsPaidAsync(
+            cycleReceivables.Select(r => r.Id).Concat(coveringMonthly.Values.Select(r => r.Id)), db);
         var receivablesByEnrollment = cycleReceivables.ToLookup(r => r.EnrollmentId);
 
         var cards = new List<Card>();
         foreach (var enrollment in enrollments)
         {
             if (!students.TryGetValue(enrollment.StudentId, out var student)) continue;
-            var countingFrom = CycleReceivableAccruer.CountingFrom(enrollment, settings)!.Value;
-            // Tek sorgu: kayıt başından itibaren; geçiş öncesi kısım karttan ayrılıp bilgi olarak döner.
-            var all = await CycleReceivableAccruer.LoadCardLessonsAsync(
-                db, clock, enrollment, enrollment.StartedAt < countingFrom ? enrollment.StartedAt : countingFrom);
-            var lessons = all.Where(lesson => lesson.Date >= countingFrom).ToList();
-            var earlier = all.Where(lesson => lesson.Date < countingFrom).ToList();
+            var countingFrom = CycleReceivableAccruer.CountingFrom(enrollment, settings);
+            // Tek sorgu: kayıt başından itibaren; sayaç öncesi kısım karttan ayrılıp bilgi olarak döner.
+            var loadFrom = countingFrom is { } c && c < enrollment.StartedAt ? c : enrollment.StartedAt;
+            var all = await CycleReceivableAccruer.LoadCardLessonsAsync(db, clock, enrollment, loadFrom);
+            var lessons = countingFrom is { } from ? all.Where(lesson => lesson.Date >= from).ToList() : [];
+            var earlier = countingFrom is { } until ? all.Where(lesson => lesson.Date < until).ToList() : all;
             var receivables = receivablesByEnrollment[enrollment.Id].ToDictionary(r => BillingCycle.Number(r.Period));
 
             cards.Add(Build(
                 enrollment, $"{student.FirstName} {student.LastName}",
                 teachers.TryGetValue(enrollment.TeacherId, out var teacher) ? $"{teacher.FirstName} {teacher.LastName}" : "Öğretmen",
                 instruments.TryGetValue(enrollment.InstrumentId, out var instrument) ? instrument.Name : "Ders",
-                countingFrom, lessons, receivables, paid, earlier));
+                countingFrom, lessons, receivables, paid, earlier, coveringMonthly.GetValueOrDefault(enrollment.Id)));
         }
 
         // Türkçe alfabetik sıra istemcide (localeCompare "tr") - BillingBoard ile aynı gerekçe.
@@ -103,12 +148,17 @@ public static class AttendanceCards
 
     // Saf hesap: dersleri dönemlere dağıtır ve kartın durumunu çıkarır (birim testlenir).
     public static Card Build(
-        Enrollment enrollment, string studentName, string teacherName, string instrumentName, DateOnly countingFrom,
+        Enrollment enrollment, string studentName, string teacherName, string instrumentName, DateOnly? countingFrom,
         IReadOnlyList<CycleReceivableAccruer.CountedLesson> lessons,
         IReadOnlyDictionary<int, Receivable> receivables,
         IReadOnlyDictionary<Guid, decimal> paid,
-        IReadOnlyList<CycleReceivableAccruer.CountedLesson>? earlierLessons = null)
+        IReadOnlyList<CycleReceivableAccruer.CountedLesson>? earlierLessons = null,
+        Receivable? coveringMonthly = null)
     {
+        // Sayacın başladığı ayın aylık aidatı 1. dönemin aidatıdır (AD9).
+        if (coveringMonthly is not null && !receivables.ContainsKey(1))
+            receivables = new Dictionary<int, Receivable>(receivables) { [1] = coveringMonthly };
+
         var filled = new List<List<CardLesson>>();
         var misses = new Dictionary<int, List<CardLesson>>();
         var filledCount = 0;
@@ -137,7 +187,8 @@ public static class AttendanceCards
 
         CycleReceivable? ToCycleReceivable(int number) =>
             receivables.TryGetValue(number, out var r)
-                ? new CycleReceivable(r.Id, r.Status, r.Amount, paid.GetValueOrDefault(r.Id), r.Currency, r.DueDate, r.AccruedOn)
+                ? new CycleReceivable(r.Id, r.Status, r.Amount, paid.GetValueOrDefault(r.Id), r.Currency, r.DueDate,
+                    r == coveringMonthly ? countingFrom : r.AccruedOn)
                 : null;
 
         var cycles = Enumerable.Range(1, lastNumber)
@@ -150,7 +201,7 @@ public static class AttendanceCards
 
         // Ödenmemiş: başlamış (tahakkuk etmiş) dönemlerin kalan borcu.
         var unpaid = receivables.Values
-            .Where(r => r.AccruedOn is not null && r.Status is not (ReceivableStatus.Paid or ReceivableStatus.Cancelled))
+            .Where(r => (r.AccruedOn is not null || r == coveringMonthly) && r.Status is not (ReceivableStatus.Paid or ReceivableStatus.Cancelled))
             .Sum(r => r.Amount - paid.GetValueOrDefault(r.Id));
 
         var state = unpaid > 0 ? CardState.Unpaid
@@ -166,6 +217,7 @@ public static class AttendanceCards
             receivables.Values.Select(r => r.Currency).FirstOrDefault() ?? "TRY",
             lessons.Count > 0 ? lessons[^1].Date : earlierLessons is { Count: > 0 } ? earlierLessons[^1].Date : null,
             cycles,
-            (earlierLessons ?? []).Select(lesson => new CardLesson(lesson.LessonId, lesson.StartAt, lesson.Date, lesson.Status)).ToList());
+            (earlierLessons ?? []).Select(lesson => new CardLesson(lesson.LessonId, lesson.StartAt, lesson.Date, lesson.Status)).ToList(),
+            enrollment.CycleStartsOn is not null);
     }
 }

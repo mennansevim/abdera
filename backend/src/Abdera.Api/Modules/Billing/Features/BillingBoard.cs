@@ -115,7 +115,7 @@ public static class BillingBoard
                     instruments[e.InstrumentId].Name, e.CourseKind, guardianNames.GetValueOrDefault(student.Id, ""),
                     facts.HasSibling, facts.AttendsMultipleCourses, e.ManualDiscountPercent, e.ManualDiscountReason,
                     e.StartedAt, e.EndedAt, e.Status, cells,
-                    BillingCycle.AppliesTo(e.CourseKind) ? pricer.Settings.CycleBillingStartsOn : null,
+                    pricer.CycleStartFor(e),
                     lastCycle.GetValueOrDefault(e.Id) + 1);
             })
             // Türkçe alfabetik sıra istemcide (localeCompare "tr") - burada named culture

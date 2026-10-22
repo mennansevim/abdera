@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState, FilterField, SearchInput, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useAttendanceCards, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
+import { useAttendanceCards, useSetCycleStart, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
 import { cycleKey, formatMoney } from "@/lib/billing-format";
 import { CollectSheet } from "../billing/collect-sheet";
@@ -37,7 +36,7 @@ const PILL_CLASS: Record<Tone, string> = {
 
 function stateLabel(card: AttendanceCard) {
   switch (card.state) {
-    case "NotStarted": return dayOf(card.countingFrom) > new Date() ? `Başlangıç ${startLabel.format(dayOf(card.countingFrom))}` : "Henüz ders yok";
+    case "NotStarted": return !card.countingFrom ? "İlk giriş girilmedi" : dayOf(card.countingFrom) > new Date() ? `Başlangıç ${startLabel.format(dayOf(card.countingFrom))}` : "Henüz ders yok";
     case "InProgress": return `Devam ediyor · ${card.filledInCurrent}/4`;
     case "LastLesson": return "Son derse 1 kaldı";
     case "AwaitingPayment": return "Ödeme bekleniyor";
@@ -97,17 +96,6 @@ export function AttendanceCards() {
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-20 rounded-2xl" />)}</div>;
   if (isError || !data) return <div className="app-card p-6 text-center"><p className="text-sm font-bold">Yoklama kartları yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>;
 
-  if (!data.cycleBillingStartsOn) {
-    return <div className="app-card">
-      <EmptyState
-        icon="calendar"
-        title="4 derslik dönem kapalı"
-        description="Birebir derslerde aidat hâlâ aylık açılıyor. Yoklama kartları için Aidatlar > Fiyat politikası ekranından dönem başlangıç tarihini seç."
-        action={<Link href="/dashboard/billing" className="btn btn-primary">Fiyat politikasına git</Link>}
-      />
-    </div>;
-  }
-
   const toggle = (next: Filter) => setFilter((current) => (current === next ? "all" : next));
 
   return <div className="space-y-3">
@@ -154,7 +142,7 @@ export function AttendanceCards() {
             <thead>
               <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
                 <th className="px-3 py-2.5">Öğrenci</th>
-                <th className="px-3 py-2.5">Başlangıç</th>
+                <th className="px-3 py-2.5">İlk giriş</th>
                 <th className="px-3 py-2.5">Dönem</th>
                 <th className="px-3 py-2.5">Bu dönem (4 ders)</th>
                 <th className="px-3 py-2.5">Durum</th>
@@ -176,9 +164,11 @@ export function AttendanceCards() {
                   <td className="px-3 py-2.5">
                     <span className="block font-bold">{card.studentName}</span>
                     <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
-                    {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">Geçiş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
+                    {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">İlk giriş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
                   </td>
-                  <td className="text-meta px-3 py-2.5 tabular-nums whitespace-nowrap">{longDate.format(dayOf(card.startedAt))}</td>
+                  <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">
+                    {card.countingFrom ? <span className={card.hasOwnCycleStart ? "" : "text-[var(--muted)]"} title={card.hasOwnCycleStart ? "Öğrenciye girilen ilk giriş günü" : "Okul geneli geçiş günü - öğrencinin ilk giriş günü girilmedi"}>{longDate.format(dayOf(card.countingFrom))}</span> : <span className="text-[var(--muted)]">—</span>}
+                  </td>
                   <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
                   <td className="px-3 py-2.5">
                     <span className="inline-grid grid-cols-4 gap-1">
@@ -246,10 +236,7 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
         <dt className="text-[.66rem] font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">Branşı</dt>
         <dd className="font-serif text-lg italic">{card.instrumentName}</dd>
       </div>
-      <div className="px-4 py-2">
-        <dt className="text-[.66rem] font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">Baş. tarihi</dt>
-        <dd className="font-serif text-lg italic tabular-nums">{longDate.format(dayOf(card.startedAt))}</dd>
-      </div>
+      <CycleStartField card={card} />
     </dl>
 
     <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5">
@@ -269,12 +256,14 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    {!cycles.length && <p className="text-meta px-4 py-6 text-center">{longDate.format(dayOf(card.countingFrom))} sonrasında henüz işlenmiş ders yok. O günden sonraki ilk ders 1. dönemi açar.</p>}
+    {!cycles.length && <p className="text-meta px-4 py-6 text-center">{card.countingFrom
+      ? `${longDate.format(dayOf(card.countingFrom))} itibarıyla henüz işlenmiş ders yok. O günden itibaren ilk ders 1. dönemi açar.`
+      : "Öğrencinin ilk giriş gününü gir: o günden itibaren her 4 derste bir aidat açılır."}</p>}
     {!!cycles.length && <div className="grid max-h-[34rem] grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] overflow-y-auto">
       {cycles.map((cycle) => <CycleBlock key={cycle.number} cycle={cycle} current={cycle.number === card.currentCycle} awaiting={card.state === "AwaitingPayment" && cycle.number === card.currentCycle} />)}
     </div>}
-    {card.earlierLessons.length > 0 && <section aria-label="Geçiş öncesi dersler" className="border-t border-[var(--line)] px-4 py-3">
-      <p className="text-micro text-[var(--muted)]">Geçiş öncesi · {startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz</p>
+    {card.earlierLessons.length > 0 && <section aria-label="İlk giriş öncesi dersler" className="border-t border-[var(--line)] px-4 py-3">
+      <p className="text-micro text-[var(--muted)]">{card.countingFrom ? `İlk giriş öncesi · ${startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz` : "İşlenen dersler · ilk giriş günü girilince karta sayılır"}</p>
       <ul className="mt-2 flex flex-wrap gap-1">
         {[...card.earlierLessons].reverse().map((lesson) => <li key={lesson.lessonId} title={lesson.status === "Present" ? "Geldi" : lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} className={`rounded-md px-1.5 py-0.5 text-[.7rem] font-semibold tabular-nums ${MISS_CLASS[lesson.status]}`}>
           {shortDate.format(dayOf(lesson.date))}{lesson.status === "Present" ? " ✓" : lesson.status === "Excused" ? " M" : " ✗"}
@@ -284,7 +273,7 @@ function AttendanceSheet({ card }: { card: AttendanceCard }) {
     <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[.72rem]">
       <span>✓ Geldi ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satırı doldurur</span>
       <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> satır doldurmaz</span>
-      <span>En yeni dönem en üstte · {longDate.format(dayOf(card.countingFrom))} itibarıyla</span>
+      <span>En yeni dönem en üstte{card.countingFrom ? ` · ${longDate.format(dayOf(card.countingFrom))} itibarıyla` : ""}</span>
     </p>
 
     {collecting && row && <CollectSheet
@@ -327,4 +316,44 @@ function CycleBlock({ cycle, current, awaiting }: { cycle: CardCycle; current: b
       {cycle.misses.map((lesson) => <span key={lesson.lessonId} className="rounded-md bg-[var(--danger-soft)] px-1.5 text-[.68rem] font-semibold text-[var(--danger-strong)]">Gelmedi {shortDate.format(dayOf(lesson.date))}</span>)}
     </div>}
   </section>;
+}
+
+// Kartın "İlk giriş" alanı: öğrencinin dönem sayacının başladığı gün (ay ortası olabilir). Boşsa okul
+// geneli geçiş günü kullanılır. Değişince kart baştan sayılır, dönem aidatları yeni güne göre eşitlenir.
+function CycleStartField({ card }: { card: AttendanceCard }) {
+  const setCycleStart = useSetCycleStart();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(card.countingFrom ?? "");
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(next: string | null) {
+    setError(null);
+    try {
+      await setCycleStart.mutateAsync({ enrollmentId: card.enrollmentId, cycleStartsOn: next });
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "İlk giriş günü kaydedilemedi.");
+    }
+  }
+
+  return <div className="px-4 py-2">
+    <dt className="flex items-center justify-between gap-2 text-[.66rem] font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">
+      İlk giriş
+      {!editing && <button type="button" onClick={() => { setValue(card.countingFrom ?? ""); setEditing(true); }} className="text-[.7rem] font-bold normal-case tracking-normal text-[var(--brand-strong)] underline underline-offset-2">Değiştir</button>}
+    </dt>
+    {!editing && <dd className="font-serif text-lg italic tabular-nums">
+      {card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : "—"}
+      {card.countingFrom && !card.hasOwnCycleStart && <span className="text-meta block font-sans text-[.68rem] not-italic">okul geneli geçiş günü</span>}
+    </dd>}
+    {editing && <dd className="mt-1 space-y-1.5">
+      <input type="date" value={value} onChange={(event) => setValue(event.target.value)} aria-label="İlk giriş günü" className="field !min-h-9 w-full text-sm" />
+      <span className="flex flex-wrap gap-1.5">
+        <button type="button" disabled={!value || setCycleStart.isPending} onClick={() => save(value)} className="btn btn-primary !min-h-8 text-xs">{setCycleStart.isPending ? "Kaydediliyor…" : "Kaydet"}</button>
+        <button type="button" onClick={() => setEditing(false)} className="btn btn-quiet !min-h-8 text-xs">Vazgeç</button>
+        {card.hasOwnCycleStart && <button type="button" disabled={setCycleStart.isPending} onClick={() => save(null)} className="btn btn-quiet !min-h-8 text-xs">Okul genelini kullan</button>}
+      </span>
+      <span className="text-meta block text-[.7rem]">Bu günden itibaren her 4 derste bir aidat açılır. O ayın aylık aidatı varsa 1. dönem sayılır.</span>
+      {error && <span role="alert" className="block text-xs font-semibold text-[var(--danger-strong)]">{error}</span>}
+    </dd>}
+  </div>;
 }

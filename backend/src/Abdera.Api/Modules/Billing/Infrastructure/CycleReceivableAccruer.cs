@@ -49,12 +49,17 @@ public static class CycleReceivableAccruer
 
     public static bool Fills(AttendanceStatus status) => status is AttendanceStatus.Present or AttendanceStatus.Excused;
 
-    // Kartın saymaya başladığı gün: geçiş tarihi ile kaydın başlangıcının geç olanı. Null: bu kayıt
-    // dönemle faturalanmıyor (grup dersi ya da dönem aidatı kapalı).
+    // Kartın saymaya başladığı gün (BillingCycle.StartFor). Null: bu kayıt dönemle faturalanmıyor.
     public static DateOnly? CountingFrom(Enrollment enrollment, BillingSettings settings) =>
-        BillingCycle.AppliesTo(enrollment.CourseKind) && settings.CycleBillingStartsOn is { } start
-            ? (enrollment.StartedAt > start ? enrollment.StartedAt : start)
-            : null;
+        BillingCycle.StartFor(enrollment.CourseKind, enrollment.CycleStartsOn, enrollment.StartedAt, settings.CycleBillingStartsOn);
+
+    // Sayacın başladığı ayın aylık aidatı (geçiş öncesi açılmış): varsa 1. dönemin ücreti sayılır.
+    public static async Task<Receivable?> FindCoveringMonthlyAsync(AbderaDbContext db, Guid enrollmentId, DateOnly countingFrom)
+    {
+        var month = BillingPeriod.Format(countingFrom.Year, countingFrom.Month);
+        return await db.Receivables.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.EnrollmentId == enrollmentId && r.Period == month && r.Status != ReceivableStatus.Cancelled);
+    }
 
     // Bu dersin yoklaması bir dönem kartına mı sayılıyor - Mazeretli ders kartta satır doldurduğu
     // için ayrıca telafi hakkı doğurmaz (ExcusedMakeupCredit'i çağıran MarkAttendance buna bakar).
@@ -104,6 +109,8 @@ public static class CycleReceivableAccruer
             .Where(lesson => Fills(lesson.Status))
             .ToList();
         var required = BillingCycle.RequiredCycles(counted.Count);
+        // Sayacın başladığı ayın aylık aidatı 1. dönemi karşılar (AD9): D001 açılmaz.
+        var firstCovered = await FindCoveringMonthlyAsync(db, enrollment.Id, countingFrom) is not null;
 
         var cycles = (await db.Receivables
                 .Where(r => r.EnrollmentId == enrollment.Id && r.Period.StartsWith("D"))
@@ -115,7 +122,7 @@ public static class CycleReceivableAccruer
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
         TuitionPricer? pricer = null;
 
-        for (var number = 1; number <= required; number++)
+        for (var number = firstCovered ? 2 : 1; number <= required; number++)
         {
             var opening = counted[BillingCycle.OpeningLessonIndex(number)];
             var dueDate = opening.Date.AddDays(BillingCycle.DueDays);
@@ -169,7 +176,7 @@ public static class CycleReceivableAccruer
         }
 
         // Kartta artık var olmayan dönemler (yoklama Geldi'den Gelmedi'ye düzeltildi).
-        var stale = cycles.Where(pair => pair.Key > required && pair.Value.AccruedLessonId is not null
+        var stale = cycles.Where(pair => (pair.Key > required || (firstCovered && pair.Key == 1)) && pair.Value.AccruedLessonId is not null
             && pair.Value.Status != ReceivableStatus.Cancelled).Select(pair => pair.Value).ToList();
         if (stale.Count > 0)
         {
@@ -192,7 +199,7 @@ public static class CycleReceivableAccruer
                     afterJson: JsonSerializer.Serialize(new
                     {
                         status = receivable.Status.ToString(),
-                        reason = "Yoklama düzeltmesi dönemi geri aldı.",
+                        reason = "Yoklama düzeltmesi ya da dönem başlangıcı değişikliği dönemi geri aldı.",
                     })));
             }
         }

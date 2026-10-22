@@ -225,6 +225,82 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal("D001", Assert.Single(await CyclesAsync(seeded.EnrollmentId)).Period);
     }
 
+    private static async Task SetCycleStartAsync(HttpClient admin, Guid enrollmentId, DateOnly? on) =>
+        (await admin.PutAsJsonAsync($"/api/attendance/cards/{enrollmentId}/cycle-start", new AttendanceCards.CycleStartRequest(on)))
+            .EnsureSuccessStatusCode();
+
+    private async Task<DateOnly> LessonDateAsync(Guid lessonId)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var lesson = await db.Lessons.AsNoTracking().SingleAsync(l => l.Id == lessonId);
+        var clock = _factory.Services.GetRequiredService<Abdera.Api.Shared.IClock>();
+        return DateOnly.FromDateTime(clock.ToSchoolLocal(lesson.StartAt).Date);
+    }
+
+    [Fact]
+    public async Task A_mid_month_first_entry_starts_the_count_and_moving_it_re_syncs_the_cycles()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "Ilkgiris", 5);
+        foreach (var lessonId in seeded.LessonIds) await MarkAsync(admin, lessonId, AttendanceStatus.Present);
+        Assert.Equal(["D001", "D002"], (await CyclesAsync(seeded.EnrollmentId)).Select(r => r.Period));
+
+        // İlk giriş 2. ders: 1. ders sayılmaz, 4 ders = tek dönem; ödenmemiş D002 iptal olur.
+        var firstEntry = await LessonDateAsync(seeded.LessonIds[1]);
+        await SetCycleStartAsync(admin, seeded.EnrollmentId, firstEntry);
+
+        var cycles = await CyclesAsync(seeded.EnrollmentId);
+        Assert.Equal(seeded.LessonIds[1], cycles.Single(r => r.Period == "D001").AccruedLessonId);
+        Assert.Equal(ReceivableStatus.Cancelled, cycles.Single(r => r.Period == "D002").Status);
+
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.True(card.HasOwnCycleStart);
+        Assert.Equal(firstEntry, card.CountingFrom);
+        Assert.Equal(4, card.FilledInCurrent);
+        Assert.Single(card.EarlierLessons);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "enrollment.cycle_start_set" && log.EntityId == seeded.EnrollmentId));
+    }
+
+    [Fact]
+    public async Task The_monthly_due_of_the_first_entry_month_counts_as_the_first_cycle()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "Ekimaidat", 5);
+        var firstEntry = await LessonDateAsync(seeded.LessonIds[0]);
+        var month = Abdera.Api.Modules.Billing.Domain.BillingPeriod.Format(firstEntry.Year, firstEntry.Month);
+
+        // Geçiş öncesi açılmış aylık aidat (eski kayıt) - doğrudan yazılır, dokunulmadan kalmalı.
+        Guid monthlyId;
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var rate = await db.TuitionRates.AsNoTracking().FirstAsync(r => r.CourseKind == CourseKind.Individual);
+            var monthly = Receivable.Create(seeded.EnrollmentId, rate.Id, month,
+                new TuitionCalculator.Breakdown(6000m, 0m, null, 6000m), "TRY", firstEntry, Now);
+            db.Receivables.Add(monthly);
+            await db.SaveChangesAsync();
+            monthlyId = monthly.Id;
+        }
+
+        await SetCycleStartAsync(admin, seeded.EnrollmentId, firstEntry);
+        foreach (var lessonId in seeded.LessonIds) await MarkAsync(admin, lessonId, AttendanceStatus.Present);
+
+        // 1. dönem aylık aidatla karşılandı: yalnızca 5. ders 2. dönemi açtı.
+        var cycles = await CyclesAsync(seeded.EnrollmentId);
+        Assert.Equal("D002", Assert.Single(cycles).Period);
+        Assert.Equal(seeded.LessonIds[4], cycles[0].AccruedLessonId);
+
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(monthlyId, card.Cycles.Single(cycle => cycle.Number == 1).Receivable!.Id);
+        Assert.Equal(12000m, card.UnpaidAmount);
+
+        await using var check = await _factory.CreateDbContextAsync();
+        var untouched = await check.Receivables.AsNoTracking().SingleAsync(r => r.Id == monthlyId);
+        Assert.Equal(month, untouched.Period);
+        Assert.Null(untouched.AccruedOn);
+    }
+
     [Fact]
     public async Task Monthly_dues_are_not_opened_for_an_individual_enrollment_after_the_cycle_start()
     {

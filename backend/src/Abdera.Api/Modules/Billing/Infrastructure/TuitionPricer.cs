@@ -141,7 +141,10 @@ public sealed class TuitionPricer
 
     // Bu ayın aidatı yerine dönem aidatı mı geçerli (birebir ders + geçiş tarihi sonrası, BillingCycle).
     public bool BillsByCycle(Enrollment enrollment, string period) =>
-        BillingCycle.ReplacesMonthly(enrollment.CourseKind, Settings.CycleBillingStartsOn, period);
+        BillingCycle.ReplacesMonthly(enrollment.CourseKind, CycleStartFor(enrollment), period);
+
+    public DateOnly? CycleStartFor(Enrollment enrollment) =>
+        BillingCycle.StartFor(enrollment.CourseKind, enrollment.CycleStartsOn, enrollment.StartedAt, Settings.CycleBillingStartsOn);
 
     public const string CycleBilledMessage =
         "Birebir derslerde bu aydan itibaren aidat aylık değil, yoklama kartındaki 4 dersin dolmasıyla açılır.";

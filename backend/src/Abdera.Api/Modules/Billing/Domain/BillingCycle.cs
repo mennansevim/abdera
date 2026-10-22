@@ -41,10 +41,19 @@ public static class BillingCycle
     // (grup öğretmeninin %40 payı aylık aidattan hesaplanıyor - GroupLessonPay).
     public static bool AppliesTo(CourseKind courseKind) => courseKind == CourseKind.Individual;
 
-    // Geçiş tarihinde ya da sonrasında başlayan aylarda birebir kayda aylık aidat açılmaz.
-    // Geçiş ay ortasına konursa o ayın aylık aidatı yine açılır; ayın 1'i önerilir.
+    // Dönem sayacının başladığı ay ve sonrasında birebir kayda aylık aidat açılmaz. Sayaç ay ortasında
+    // başlayabilir (öğrencinin ilk giriş günü, AD9); o ayın daha önce açılmış aylık aidatı varsa
+    // 1. dönemin ücreti sayılır (CycleReceivableAccruer), ikinci kez borç yazılmaz.
     public static bool ReplacesMonthly(CourseKind courseKind, DateOnly? startsOn, string period) =>
-        AppliesTo(courseKind) && startsOn is { } start && BillingPeriod.FirstDay(period) >= start;
+        AppliesTo(courseKind) && startsOn is { } start && BillingPeriod.FirstDay(period) >= new DateOnly(start.Year, start.Month, 1);
+
+    // Kaydın dönem sayacının başladığı gün: kayda girilen ilk giriş günü, yoksa okul geneli geçiş
+    // günü ile kaydın başlangıcının geç olanı. Null: bu kayıt dönemle faturalanmıyor.
+    public static DateOnly? StartFor(CourseKind courseKind, DateOnly? enrollmentCycleStart, DateOnly enrollmentStartedAt, DateOnly? schoolStart) =>
+        !AppliesTo(courseKind) ? null
+        : enrollmentCycleStart is { } own ? own
+        : schoolStart is { } school ? (enrollmentStartedAt > school ? enrollmentStartedAt : school)
+        : null;
 
     // Kaç dönemin tahakkuk etmiş olması gerektiği: 1 sayılan ders 1. dönemi açar, 5. ders 2.'yi.
     public static int RequiredCycles(int countedLessons) =>
