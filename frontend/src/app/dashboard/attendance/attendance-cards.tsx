@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
-import { EmptyState, FilterField, SearchInput, StatStrip, type Tone } from "@/components/ui";
+import { EmptyState, FilterField, Modal, SearchInput, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useAttendanceCards, useSetCycleStart, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
@@ -62,6 +62,18 @@ function StatePill({ card }: { card: AttendanceCard }) {
   </span>;
 }
 
+// Kart yalnızca çok geniş ekranda tablonun yanında durur; daha darda uzun listenin en altına
+// düşüyordu (77 öğrencide görünmez oluyordu), orada satıra basınca açılır pencerede gelir.
+const WIDE_QUERY = "(min-width: 1536px)";
+function subscribeWide(onChange: () => void) {
+  const media = window.matchMedia(WIDE_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+function useWideScreen() {
+  return useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_QUERY).matches, () => false);
+}
+
 export function AttendanceCards() {
   const { data, isLoading, isError, refetch } = useAttendanceCards();
   const [filter, setFilter] = useState<Filter>("all");
@@ -91,7 +103,8 @@ export function AttendanceCards() {
       && (filter === "all" || card.state === filter));
   }, [cards, query, instrument, teacher, filter]);
 
-  const selected = cards.find((card) => card.enrollmentId === selectedId) ?? visible[0] ?? null;
+  const wide = useWideScreen();
+  const selected = cards.find((card) => card.enrollmentId === selectedId) ?? (wide ? visible[0] ?? null : null);
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-20 rounded-2xl" />)}</div>;
   if (isError || !data) return <div className="app-card p-6 text-center"><p className="text-sm font-bold">Yoklama kartları yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>;
@@ -166,8 +179,8 @@ export function AttendanceCards() {
                     <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
                     {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">İlk giriş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
                   </td>
-                  <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">
-                    {card.countingFrom ? <span className={card.hasOwnCycleStart ? "" : "text-[var(--muted)]"} title={card.hasOwnCycleStart ? "Öğrenciye girilen ilk giriş günü" : "Okul geneli geçiş günü - öğrencinin ilk giriş günü girilmedi"}>{longDate.format(dayOf(card.countingFrom))}</span> : <span className="text-[var(--muted)]">—</span>}
+                  <td className="px-3 py-2" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                    <FirstEntryCell card={card} />
                   </td>
                   <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
                   <td className="px-3 py-2.5">
@@ -188,9 +201,48 @@ export function AttendanceCards() {
         </div>}
       </section>
 
-      {selected && <AttendanceSheet key={selected.enrollmentId} card={selected} />}
+      {selected && wide && <AttendanceSheet key={selected.enrollmentId} card={selected} />}
     </div>
+
+    {selected && !wide && <Modal open size="lg" title={selected.studentName} description={`${selected.instrumentName} · ${selected.teacherName}`} onClose={() => setSelectedId(null)}>
+      <AttendanceSheet key={selected.enrollmentId} card={selected} />
+    </Modal>}
   </div>;
+}
+
+// Tablodaki "İlk giriş" hücresi: 77 öğrencinin günü kartı tek tek açmadan buradan girilir. Gün
+// seçilip alandan çıkınca (ya da Enter) kaydedilir; okul geneli gün soluk görünür.
+function FirstEntryCell({ card }: { card: AttendanceCard }) {
+  const setCycleStart = useSetCycleStart();
+  const [value, setValue] = useState(card.countingFrom ?? "");
+  const [state, setState] = useState<"idle" | "saved" | "error">("idle");
+  const own = card.hasOwnCycleStart;
+
+  async function commit() {
+    if (!value || value === card.countingFrom && own) return;
+    try {
+      await setCycleStart.mutateAsync({ enrollmentId: card.enrollmentId, cycleStartsOn: value });
+      setState("saved");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return <span className="flex items-center gap-1.5">
+    <input
+      type="date"
+      value={value}
+      onChange={(event) => { setValue(event.target.value); setState("idle"); }}
+      onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") void commit(); }}
+      aria-label={`${card.studentName} ilk giriş günü`}
+      title={own ? "Öğrenciye girilen ilk giriş günü" : "Okul geneli geçiş günü - öğrencinin ilk giriş gününü seç"}
+      className={`field !min-h-8 w-[9.5rem] px-2 text-xs tabular-nums ${own ? "" : "text-[var(--muted)]"}`}
+    />
+    <span aria-live="polite" className="w-4 text-xs font-bold">
+      {setCycleStart.isPending ? "…" : state === "saved" ? <span className="text-[var(--success-strong)]" title="Kaydedildi">✓</span> : state === "error" ? <span className="text-[var(--danger-strong)]" title="Kaydedilemedi">!</span> : null}
+    </span>
+  </span>;
 }
 
 // ---- Kart ----------------------------------------------------------------------
