@@ -296,7 +296,7 @@ public static class AttendanceCards
                 enrollment, $"{student.FirstName} {student.LastName}",
                 teachers.TryGetValue(enrollment.TeacherId, out var teacher) ? $"{teacher.FirstName} {teacher.LastName}" : "Öğretmen",
                 instruments.TryGetValue(enrollment.InstrumentId, out var instrument) ? instrument.Name : "Ders",
-                countingFrom, lessons, receivables, paid, earlier, coverages.GetValueOrDefault(enrollment.Id), paidOn));
+                countingFrom, lessons, receivables, paid, earlier, coverages.GetValueOrDefault(enrollment.Id), paidOn, today));
         }
 
         // Türkçe alfabetik sıra istemcide (localeCompare "tr") - BillingBoard ile aynı gerekçe.
@@ -327,7 +327,8 @@ public static class AttendanceCards
         IReadOnlyDictionary<Guid, decimal> paid,
         IReadOnlyList<CycleReceivableAccruer.CountedLesson>? earlierLessons = null,
         IReadOnlyDictionary<int, Receivable>? coverage = null,
-        IReadOnlyDictionary<Guid, DateOnly>? paidOn = null)
+        IReadOnlyDictionary<Guid, DateOnly>? paidOn = null,
+        DateOnly today = default)
     {
         // Aylık aidatın karşıladığı dönemde kartta o aidat görünür (AD14, AssignCoverage). O dönem için
         // kalmış ödenmemiş bir D00n eşitlemede geri alınır.
@@ -371,13 +372,32 @@ public static class AttendanceCards
             number <= filled.Count && filled[number - 1].Count > 0 ? filled[number - 1][0].Date
             : number == 1 ? countingFrom : null;
 
-        CycleReceivable? ToCycleReceivable(int number) =>
-            receivables.TryGetValue(number, out var r)
-                ? new CycleReceivable(r.Id, r.Status, r.Amount, paid.GetValueOrDefault(r.Id), r.Currency, r.DueDate,
-                    covering.Contains(r) ? StartedOn(number) : r.AccruedOn,
-                    paidOn?.TryGetValue(r.Id, out var on) == true ? on : null,
-                    r.Period)
-                : null;
+        // Aylık aidatın vadesi ayın başıdır (eylül aidatı 01.09); dönemi karşılarken kartta vade dönem
+        // aidatı gibi dönemin ilk dersinden 7 gün sonradır - 25.09'da başlayan kart 01.09'dan "Gecikti"
+        // görünmesin (AD16). Kayıt değişmez, yalnızca kartta böyle okunur.
+        CycleReceivable? ToCycleReceivable(int number)
+        {
+            if (!receivables.TryGetValue(number, out var r)) return null;
+            var status = r.Status;
+            var dueDate = r.DueDate;
+            var accruedOn = r.AccruedOn;
+            if (covering.Contains(r))
+            {
+                accruedOn = StartedOn(number);
+                if (accruedOn is { } started)
+                {
+                    dueDate = started.AddDays(BillingCycle.DueDays);
+                    if (status == ReceivableStatus.Overdue && dueDate >= today)
+                        status = paid.GetValueOrDefault(r.Id) > 0m ? ReceivableStatus.Partial : ReceivableStatus.Unpaid;
+                }
+                else if (status == ReceivableStatus.Overdue)
+                {
+                    status = paid.GetValueOrDefault(r.Id) > 0m ? ReceivableStatus.Partial : ReceivableStatus.Unpaid;
+                }
+            }
+            return new CycleReceivable(r.Id, status, r.Amount, paid.GetValueOrDefault(r.Id), r.Currency, dueDate, accruedOn,
+                paidOn?.TryGetValue(r.Id, out var on) == true ? on : null, r.Period);
+        }
 
         var cycles = Enumerable.Range(1, lastNumber)
             .Select(number => new CardCycle(

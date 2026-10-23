@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icons";
 import { FormMessage, Modal } from "@/components/ui";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import {
   COURSE_KIND_LABEL,
   useBillingBoard,
@@ -15,6 +16,7 @@ import {
   useUpdateEnrollmentBilling,
   type CourseKind,
   type BoardRow,
+  type CollectionQuote,
   type DiscountChoice,
   type PaymentMethod,
   type PaymentRecord,
@@ -459,4 +461,91 @@ function EnrollmentDiscountBlock({
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
+}
+
+// Yoklama kartının sade tahsilat penceresi: tarih ve tutar, o kadar. Aynı tek tahsilat yolunu
+// (POST /collections) kullanır, yalnızca seçenekleri gizler: dönemler karttan gelir, indirim
+// öğrencinin kayıtlı varsayılanıdır (peşin kademesi yok), ödeme şekli sorulmaz (Nakit yazılır).
+// Tutar sunucunun hesabıyla dolar ve değiştirilebilir: tek dönemde azı kısmi ödemedir (kalan borç
+// kalır), birden çok dönemde azı anlaşılan toplamdır (dönemler ödendi sayılır, M2). Fazlası alınmaz.
+export function QuickCollect({ enrollmentId, studentName, periods, periodLabels, onClose, onCollected }: {
+  enrollmentId: string;
+  studentName: string;
+  periods: string[];
+  periodLabels?: Record<string, string>;
+  onClose: () => void;
+  onCollected: (message: string) => void;
+}) {
+  const sorted = useMemo(() => [...periods].sort(), [periods]);
+  const params = new URLSearchParams();
+  for (const period of sorted) params.append("periods", period);
+  params.set("prepay", "false");
+  const preview = useQuery({
+    queryKey: ["collection-preview", enrollmentId, params.toString()],
+    queryFn: () => api.get<CollectionQuote>(`/api/enrollments/${enrollmentId}/collection-preview?${params.toString()}`),
+  });
+  const quote = preview.data;
+  const collect = useCollect();
+  const [paymentDate, setPaymentDate] = useState(todayInput);
+  const [amountText, setAmountText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const total = quote?.total ?? 0;
+  const text = amountText ?? (quote ? String(total) : "");
+  const amount = Number(text.replace(",", "."));
+  const valid = Number.isFinite(amount) && amount > 0 && amount <= total;
+  const less = valid && amount < total;
+  const blocked = !!quote && quote.blockers.length > 0;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!quote || !valid || blocked) return;
+    setError(null);
+    try {
+      const result = await collect.mutateAsync({
+        enrollmentId,
+        periods: sorted,
+        discounts: { sibling: quote.defaults.sibling, multiCourse: quote.defaults.multiCourse, prepay: false, manualPercent: quote.defaults.manualPercent },
+        paymentDate,
+        method: "Cash",
+        expectedTotal: quote.total,
+        partialAmount: less && sorted.length === 1 ? amount : undefined,
+        agreedTotal: less && sorted.length > 1 ? amount : undefined,
+      });
+      onCollected(`${studentName}: ${formatMoney(result.total, result.currency)} tahsil edildi`);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Tahsilat kaydedilemedi.");
+    }
+  }
+
+  return <Modal open size="sm" title="Tahsil et" description={studentName} onClose={onClose}>
+    <form onSubmit={submit} className="space-y-4">
+      <ul className="space-y-1 text-sm tabular-nums">
+        {(quote?.rows ?? sorted.map((period) => ({ period, due: 0, blockedReason: null }))).map((row) => <li key={row.period} className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 font-semibold">{periodLabels?.[row.period] ?? formatPeriod(row.period)}</span>
+          {row.blockedReason ? <span className="text-xs font-bold text-[var(--danger-strong)]">{row.blockedReason}</span> : quote && <span>{formatMoney(row.due, quote.currency)}</span>}
+        </li>)}
+      </ul>
+      <label className="block space-y-1">
+        <span className="form-label">Tarih</span>
+        <input type="date" required value={paymentDate} max={todayInput()} onChange={(event) => setPaymentDate(event.target.value)} className="field" />
+      </label>
+      <label className="block space-y-1">
+        <span className="form-label">Tutar</span>
+        <span className="flex items-center gap-2">
+          <input inputMode="decimal" required value={text} disabled={!quote} onChange={(event) => setAmountText(event.target.value)} aria-label="Alınan tutar" className="field text-lg font-bold tabular-nums" />
+          <span className="text-sm font-bold text-[var(--muted)]">{quote?.currency === "TRY" || !quote ? "₺" : quote.currency}</span>
+        </span>
+        {quote && amount > total && <span className="block text-xs font-semibold text-[var(--danger-strong)]">Tutar {formatMoney(total, quote.currency)} değerini aşamaz.</span>}
+        {quote && less && <span className="text-meta block text-xs">{sorted.length === 1
+          ? `Kalan ${formatMoney(total - amount, quote.currency)} borç olarak kalır.`
+          : `Dönemler ödendi sayılır; ${formatMoney(total - amount, quote.currency)} fark indirim olarak yazılır.`}</span>}
+      </label>
+      {blocked && <FormMessage tone="error">{quote!.blockers.join(" ")}</FormMessage>}
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <button type="submit" disabled={!quote || !valid || blocked || collect.isPending} className="btn btn-primary w-full">
+        {collect.isPending ? "Kaydediliyor…" : quote && valid ? `${formatMoney(amount, quote.currency)} tahsil et` : "Tahsil et"}
+      </button>
+    </form>
+  </Modal>;
 }

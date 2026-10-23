@@ -5,9 +5,9 @@ import { Icon } from "@/components/icons";
 import { EmptyState, FilterField, Modal, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
-import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
+import { useSendPaymentReminder } from "@/lib/billing";
 import { cycleKey, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
-import { CollectSheet } from "./collect-sheet";
+import { QuickCollect } from "./collect-sheet";
 
 // Yönetici yoklama ekranı (docs/10-decisions.md AD): okulun kâğıt "Yoklama Listesi"nin dijital
 // hali. Birebir kayıt başına bir kart; 4 satır bir dönemdir. Yalnızca Geldi satır doldurur (telafi
@@ -16,7 +16,7 @@ import { CollectSheet } from "./collect-sheet";
 // Aidatlar ekranının "Kartlar" görünümüdür (Liste | Çizelge | Kartlar); arama Aidatlar'ın ortak
 // arama kutusundan gelir. Satıra basınca öğrencinin kartı tam ekran açılır; her dönemin yanında
 // ödeme tarihi durur.
-// Tahsilat buradan da aidat ekranının tek ödeme penceresiyle (CollectSheet) alınır.
+// Tahsilat sade pencereyle (QuickCollect: tarih + tutar) aynı tek tahsilat yolundan alınır.
 
 type Filter = "all" | "AwaitingPayment" | "LastLesson" | "Unpaid";
 
@@ -68,11 +68,11 @@ function useWideScreen() {
   return useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_QUERY).matches, () => false);
 }
 
-// Dönemin ders aralığı: "17.09 – 15.10"; dolmamış dönemde "22.10 –".
+// Dönemin ders aralığı: "17.09 – 15.10"; dolmamış dönemde "22.10 – …".
 function cycleRange(cycle: CardCycle) {
   if (!cycle.filled.length) return null;
   const first = shortDate.format(dayOf(cycle.filled[0].date));
-  return cycle.filled.length === 4 ? `${first} – ${shortDate.format(dayOf(cycle.filled[3].date))}` : `${first} –`;
+  return cycle.filled.length === 4 ? `${first} – ${shortDate.format(dayOf(cycle.filled[3].date))}` : `${first} – …`;
 }
 
 // Dönemi geçiş öncesi açılmış bir aylık aidat karşılıyorsa (AD14) hangisi olduğu: "Eylül 2026 aidatı".
@@ -215,12 +215,9 @@ export function AttendanceCards({ query }: { query: string }) {
 // ---- Kart ----------------------------------------------------------------------
 
 function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesFrom: string }) {
-  const year = new Date().getFullYear();
-  const { data: board } = useBillingBoard(year);
   const reminder = useSendPaymentReminder();
   const [collecting, setCollecting] = useState<string[] | null>(null);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
-  const row = board?.find((item) => item.enrollmentId === card.enrollmentId);
 
   // Ödenmemiş başlamış dönemler; "ödeme bekleniyor"da sıradaki dönem peşin alınır. Tahsilat dönemin
   // gerçek aidatıyla yapılır: aylık aidatın karşıladığı dönemde o ay (AD14), yoksa "D00n".
@@ -275,7 +272,7 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       <StatePill card={card} />
       <span className="flex-1" />
       {remindTarget && <button type="button" onClick={remind} disabled={reminder.isPending} className="btn btn-quiet text-xs">{reminder.isPending ? "Gönderiliyor…" : "Hatırlatma gönder"}</button>}
-      {collectPeriods.length > 0 && <button type="button" onClick={() => setCollecting(collectPeriods)} disabled={!row} className="btn btn-primary text-xs">Tahsil et</button>}
+      {collectPeriods.length > 0 && <button type="button" onClick={() => setCollecting(collectPeriods)} className="btn btn-primary text-xs">Tahsil et</button>}
     </div>
     {message && <p role="status" className={`border-b border-[var(--line)] px-4 py-2 text-xs font-semibold ${message.tone === "success" ? "text-[var(--success-strong)]" : "text-[var(--danger-strong)]"}`}>{message.text}</p>}
 
@@ -288,7 +285,7 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    <div className="columns-[17rem] gap-0">
+    <div className="columns-[19.5rem] gap-0">
       {blocks.map((cycle) => <CycleBlock
         key={cycle.number}
         card={card}
@@ -313,10 +310,10 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       <span>Boş satıra tarih yazarak geçmiş dersi ekle (en erken {longDate.format(dayOf(entriesFrom))}); ilk satır kartın başlangıcıdır, sonrası yoklamadan gelir</span>
     </p>
 
-    {collecting && row && <CollectSheet
-      row={row}
-      year={year}
-      initialPeriods={collecting}
+    {collecting && <QuickCollect
+      enrollmentId={card.enrollmentId}
+      studentName={card.studentName}
+      periods={collecting}
       periodLabels={periodLabels}
       onClose={() => setCollecting(null)}
       onCollected={(text) => { setCollecting(null); setMessage({ tone: "success", text }); }}
@@ -347,7 +344,7 @@ function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: Att
       </span>
       <span className={`shrink-0 rounded-full px-2 py-0.5 ${PILL_CLASS[tag.tone]}`}>{tag.text}</span>
     </header>
-    <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] sm:grid-cols-[minmax(0,1fr)_6rem]">
+    <div className="grid grid-cols-[minmax(0,1fr)_4.75rem]">
       <div>
         {[0, 1, 2, 3].map((index) => {
           const lesson = cycle.filled[index];

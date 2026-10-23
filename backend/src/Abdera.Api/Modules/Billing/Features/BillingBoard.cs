@@ -105,7 +105,7 @@ public static class BillingBoard
         var startReceivables = await db.Receivables.AsNoTracking()
             .Where(r => startIds.Contains(r.EnrollmentId) && r.Status != ReceivableStatus.Cancelled)
             .ToListAsync();
-        var startPaid = await Receivables.ComputeTotalsPaidAsync(startReceivables.Where(r => BillingCycle.IsKey(r.Period)).Select(r => r.Id), db);
+        var startPaid = await Receivables.ComputeTotalsPaidAsync(startReceivables.Select(r => r.Id), db);
         var byEnrollment = startReceivables.ToLookup(r => r.EnrollmentId);
         var coveredCycles = cycleStarts.ToDictionary(pair => pair.Key, pair =>
         {

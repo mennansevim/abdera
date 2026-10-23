@@ -92,16 +92,21 @@ public static class CycleReceivableAccruer
         return CoveringMonthlies(candidates, countingFrom, today);
     }
 
-    // Hangi dönemi hangi aylık aidat karşılıyor (AD14). Aylık aidatlar sırayla dönemlere dağılır; ödeme
-    // görmüş bir D00n kendi dönemini korur ve aylık aidat bir sonrakine kayar. Eylül, ekim ve D002'si
-    // ödenmiş öğrencide eylül 1., D002 2., ekim 3. dönemi (peşin) karşılar - para ne kaybolur ne de
-    // 3. dönem başlayınca ikinci kez istenir. Ödenmemiş D00n'nin yerini aylık aidat alır (geri alınır).
+    // Hangi dönemi hangi aylık aidat karşılıyor (AD14). Her 4 ders bir ödeme: alınmış ödemeler en
+    // erken dönemleri karşılar - önce ödeme görmüş aylık aidatlar (ay sırasıyla), sonra ödenmemişler.
+    // Ekimi ödenmiş, eylülü açık öğrencide ekim 1., eylül 2. dönemdir (AD16). Ödeme görmüş bir D00n
+    // kendi dönemini korur ve aylık aidat bir sonrakine kayar: eylül, ekim ve D002'si ödenmiş öğrencide
+    // eylül 1., D002 2., ekim 3. dönemi (peşin) karşılar - para ne kaybolur ne de 3. dönem başlayınca
+    // ikinci kez istenir. Ödenmemiş D00n'nin yerini aylık aidat alır (geri alınır).
     public static Dictionary<int, Receivable> AssignCoverage(
         IReadOnlyList<Receivable> monthlies, IReadOnlyDictionary<int, Receivable> cycleDues, IReadOnlyDictionary<Guid, decimal> paid)
     {
         var coverage = new Dictionary<int, Receivable>();
         var number = 1;
-        foreach (var monthly in monthlies)
+        var ordered = monthlies
+            .OrderBy(monthly => paid.GetValueOrDefault(monthly.Id) > 0m ? 0 : 1)
+            .ThenBy(monthly => monthly.Period, StringComparer.Ordinal);
+        foreach (var monthly in ordered)
         {
             while (cycleDues.TryGetValue(number, out var due) && due.Status != ReceivableStatus.Cancelled && paid.GetValueOrDefault(due.Id) > 0m)
                 number++;
@@ -119,7 +124,7 @@ public static class CycleReceivableAccruer
                 .ToListAsync())
             .Where(r => BillingCycle.IsKey(r.Period))
             .ToDictionary(r => BillingCycle.Number(r.Period));
-        var paid = await Features.Receivables.ComputeTotalsPaidAsync(dues.Values.Select(r => r.Id), db);
+        var paid = await Features.Receivables.ComputeTotalsPaidAsync(dues.Values.Concat(monthlies).Select(r => r.Id), db);
         return AssignCoverage(monthlies, dues, paid);
     }
 
