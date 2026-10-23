@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.7",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Aidatlar artık Kartlar görünümüyle açılıyor; öğrenci listesi ve kart sayfanın tamamını kullanıyor, süzgeçler tek satırda." },
+      { audience: "admin", text: "\"Tahsil et\" kartın üstünde hep görünür; borcu olmayan öğrencide sıradaki dönemi peşin alır." },
+    ],
+  },
+  {
     version: "2026.10.23.6",
     date: "2026-10-23",
     items: [
