@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.8",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "\"Ödeme al\" Liste'de ve Kartlar'da aynı: tarih ve tutar soran sade pencere." },
+      { audience: "admin", text: "Kartlar'da isimlerin altında bu dönemin 4 dersi kutucuk olarak görünür. Çizelge görünümü şimdilik kapalı." },
+    ],
+  },
+  {
     version: "2026.10.23.7",
     date: "2026-10-23",
     items: [
