@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.3",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartında her 4 ders bir ödeme: kart başladıktan sonra alınan aylık aidatlar sırayla 1., 2. dönemi karşılar. Eylülü ödenmiş öğrencide 1. dönem artık \"Ödendi\" görünür, aynı derslere ikinci borç yazılmaz." },
+      { audience: "admin", text: "Karttaki \"Tahsil et\" dönemin gerçek aidatını açar (ör. Ekim 2026 aidatı); aynı dönem için yeni bir borç açılmaz." },
+      { audience: "admin", text: "Kartta her dönemin yanında derslerin tarih aralığı (17.09 – 15.10) ve onu karşılayan aidat yazar." },
+    ],
+  },
+  {
     version: "2026.10.23.2",
     date: "2026-10-23",
     items: [
