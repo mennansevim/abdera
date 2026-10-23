@@ -518,7 +518,7 @@ export function QuickCollect({ enrollmentId, studentName, periods, periodLabels,
     }
   }
 
-  return <Modal open size="sm" title="Tahsil et" description={studentName} onClose={onClose}>
+  return <Modal open size="sm" title="Ödeme al" description={studentName} onClose={onClose}>
     <form onSubmit={submit} className="space-y-4">
       <ul className="space-y-1 text-sm tabular-nums">
         {(quote?.rows ?? sorted.map((period) => ({ period, due: 0, blockedReason: null }))).map((row) => <li key={row.period} className="flex items-baseline justify-between gap-3">
@@ -544,7 +544,7 @@ export function QuickCollect({ enrollmentId, studentName, periods, periodLabels,
       {blocked && <FormMessage tone="error">{quote!.blockers.join(" ")}</FormMessage>}
       {error && <FormMessage tone="error">{error}</FormMessage>}
       <button type="submit" disabled={!quote || !valid || blocked || collect.isPending} className="btn btn-primary w-full">
-        {collect.isPending ? "Kaydediliyor…" : quote && valid ? `${formatMoney(amount, quote.currency)} tahsil et` : "Tahsil et"}
+        {collect.isPending ? "Kaydediliyor…" : quote && valid ? `${formatMoney(amount, quote.currency)} al` : "Ödeme al"}
       </button>
     </form>
   </Modal>;

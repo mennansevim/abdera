@@ -178,8 +178,8 @@ export function AttendanceCards({ query }: { query: string }) {
                 </span>
                 <span className="text-meta truncate text-xs">{card.instrumentName} · {card.teacherName}</span>
                 <span className="flex items-center justify-between gap-2">
-                  <span aria-label={`Bu dönem ${current?.filled.length ?? 0}/4`} className="flex gap-1">
-                    {[0, 1, 2, 3].map((index) => <span key={index} className={`h-1.5 w-5 rounded-full ${index < (current?.filled.length ?? 0) ? (card.filledInCurrent === 4 ? "bg-[var(--warning)]" : "bg-[var(--success-strong)]") : "bg-[var(--line)]"}`} />)}
+                  <span aria-label={`Bu dönem ${current?.filled.length ?? 0}/4 ders`} className="flex gap-1">
+                    {[0, 1, 2, 3].map((index) => <span key={index} className={`size-4 rounded border-[1.5px] ${index < (current?.filled.length ?? 0) ? "border-[var(--success-strong)] bg-[var(--success-strong)]" : "border-[var(--line)] bg-transparent"}`} />)}
                   </span>
                   <StatePill card={card} />
                 </span>
@@ -252,7 +252,7 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
     <StatePill card={card} />
     <span className="flex-1" />
     {remindTarget && <button type="button" onClick={remind} disabled={reminder.isPending} className="btn btn-quiet text-xs">{reminder.isPending ? "Gönderiliyor…" : "Hatırlatma gönder"}</button>}
-    <button type="button" onClick={() => setCollecting(collectPeriods)} className="btn btn-primary">Tahsil et</button>
+    <button type="button" onClick={() => setCollecting(collectPeriods)} className="btn btn-primary">Ödeme al</button>
   </div>
   <article aria-label={`${card.studentName} yoklama kartı`} className="mx-auto min-w-0 max-w-7xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)]">
     <div className="flex items-baseline justify-between gap-2 border-b-2 border-[var(--foreground)] px-4 py-3">
@@ -273,15 +273,6 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
 
     {message && <p role="status" className={`border-b border-[var(--line)] px-4 py-2 text-xs font-semibold ${message.tone === "success" ? "text-[var(--success-strong)]" : "text-[var(--danger-strong)]"}`}>{message.text}</p>}
 
-    {card.state === "AwaitingPayment" && <p className="border-b border-[var(--line)] bg-[var(--warning-soft)] px-4 py-2.5 text-xs text-[var(--warning-strong)]">
-      <strong className="block text-sm">Bu dönemin 4 dersi tamamlandı.</strong>
-      Sıradaki derste {card.currentCycle + 1}. dönem aidatı tahakkuk eder. Ödemeyi şimdiden almak için &quot;Tahsil et&quot;.
-    </p>}
-    {card.state === "Unpaid" && <p className="border-b border-[var(--line)] bg-[var(--danger-soft)] px-4 py-2.5 text-xs text-[var(--danger-strong)]">
-      <strong className="block text-sm">Başlamış dönemin ödemesi alınmadı.</strong>
-      Kalan {formatMoney(card.unpaidAmount, card.currency)}.
-    </p>}
-
     <div className="columns-[19.5rem] gap-0">
       {blocks.map((cycle) => <CycleBlock
         key={cycle.number}
@@ -293,19 +284,13 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       />)}
     </div>
     {card.earlierLessons.length > 0 && <section aria-label="İlk giriş öncesi dersler" className="border-t border-[var(--line)] px-4 py-3">
-      <p className="text-micro text-[var(--muted)]">{card.countingFrom ? `İlk giriş öncesi · ${startLabel.format(dayOf(card.countingFrom))} öncesi, karta sayılmaz ve aidat açmaz` : "İşlenen dersler · tarihini 1. satıra yazınca kart o dersten başlar"}</p>
+      <p className="text-micro text-[var(--muted)]">{card.countingFrom ? "İlk giriş öncesi" : "İşlenen dersler"}</p>
       <ul className="mt-2 flex flex-wrap gap-1">
         {[...card.earlierLessons].reverse().map((lesson) => <li key={lesson.lessonId ?? lesson.entryId} title={lesson.status === "Present" ? "Geldi" : lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} className={`rounded-md px-1.5 py-0.5 text-[.7rem] font-semibold tabular-nums ${MISS_CLASS[lesson.status]}`}>
           {shortDate.format(dayOf(lesson.date))}{lesson.status === "Present" ? " ✓" : lesson.status === "Excused" ? " M" : " ✗"}
         </li>)}
       </ul>
     </section>}
-    <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[.72rem]">
-      <span>Sağdaki sütun dönemin ödeme tarihi; aidatlardan tahsilat alınınca kendiliğinden yazılır</span>
-      <span>Yalnızca ✓ Geldi satır doldurur; telafi dersi de Geldi olunca yazılır</span>
-      <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satır doldurmaz, altına not düşer</span>
-      <span>Boş satıra tarih yazarak geçmiş dersi ekle (en erken {longDate.format(dayOf(entriesFrom))}); ilk satır kartın başlangıcıdır, sonrası yoklamadan gelir</span>
-    </p>
 
     {collecting && <QuickCollect
       enrollmentId={card.enrollmentId}

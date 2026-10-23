@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icons";
 import { SearchInput, Segmented } from "@/components/ui";
-import { ApiError } from "@/lib/api";
-import { useBillingBoard, useCollect, useCorrectPayment, type BoardRow } from "@/lib/billing";
-import { currentPeriod, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
+import { useBillingBoard, type BoardRow } from "@/lib/billing";
+import { currentPeriod, formatMoney, formatPeriod, isCyclePeriod } from "@/lib/billing-format";
 import { useSessionState } from "@/lib/use-session-state";
 import {
   MONTHS_SHORT,
@@ -27,10 +25,10 @@ import {
 } from "./board-model";
 import { AttendanceCards } from "./attendance-cards";
 import { CycleGrid } from "./cycle-grid";
-import { CollectSheet } from "./collect-sheet";
+import { CollectSheet, QuickCollect } from "./collect-sheet";
 
 // Aidatlar ekranı (docs/10-decisions.md H17, AD15): üç görünüm, bir ödeme penceresi.
-//   Liste   - seçili ayın bekleyenleri; "Ödeme al" tek dokunuşla ayı kapatır.
+//   Liste   - seçili ayın bekleyenleri; "Ödeme al" kartlardakiyle aynı sade pencereyi açar.
 //   Çizelge - öğrenci × ay; yılın resmi ve geçmiş.
 //   Kartlar - birebir öğrencinin yoklama kartı (4 ders bir dönem), tam ekran kart ve tahsilat.
 // Görünüm seçimi sayfada durur ve hatırlanır (ilk açılışta Kartlar). Arama üç görünümde ortak:
@@ -58,7 +56,8 @@ export function DuesBoard() {
     let initial: View = "cards";
     try {
       const stored = window.localStorage.getItem(VIEW_KEY);
-      if (stored === "list" || stored === "grid" || stored === "cards") initial = stored;
+      // Çizelge geçici olarak kapalı (kullanıcı talebi); hatırlanan "grid" Kartlar'a düşer.
+      if (stored === "list" || stored === "cards") initial = stored;
     } catch {
       // Depolama kapalıysa ekran genişliğine göre başlar.
     }
@@ -96,7 +95,7 @@ export function DuesBoard() {
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
         <Segmented
           label="Görünüm"
-          options={[{ value: "cards", label: "Kartlar" }, { value: "list", label: "Liste" }, { value: "grid", label: "Çizelge" }]}
+          options={[{ value: "cards", label: "Kartlar" }, { value: "list", label: "Liste" }]}
           value={view}
           onChange={changeView}
         />
@@ -206,7 +205,6 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
     <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
       {shown.map(({ row, state, periods }) => <ListRow key={row.enrollmentId} row={row} state={state} periods={periods} onOpen={onOpen} onToast={onToast} />)}
     </ul>
-    <p className="text-meta px-3 py-3 text-xs">&quot;Ödeme al&quot; ayın aidatını kayıttaki indirimle nakit olarak kaydeder. Birkaç ay almak, indirimi değiştirmek ya da geçmişi görmek için isme dokun.</p>
   </div>;
 }
 
@@ -218,10 +216,8 @@ function ListRow({ row, state, periods, onOpen, onToast }: {
   onOpen: (row: BoardRow, periods: string[]) => void;
   onToast: (toast: Toast) => void;
 }) {
-  const collect = useCollect();
-  const correct = useCorrectPayment(row.studentId);
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
+  // "Ödeme al" kartlardaki ile aynı sade pencereyi açar (QuickCollect: tarih + tutar).
+  const [quick, setQuick] = useState(false);
   const remaining = remainingOfAll(row, periods);
   const cell = row.cells.filter((item) => periods.includes(item.period)).sort((a, b) => (b.lastPaymentDate ?? "").localeCompare(a.lastPaymentDate ?? ""))[0];
   const unpaid = periods.filter((period) => isOwed(cellState(row, period)) || cellState(row, period) === "open");
@@ -232,38 +228,6 @@ function ListRow({ row, state, periods, onOpen, onToast }: {
     row.manualDiscountPercent ? `özel %${row.manualDiscountPercent}` : null,
     state === "partial" && "kısmi ödendi",
   ].filter(Boolean);
-
-  async function quickPay() {
-    if (remaining === null) return;
-    setError(null);
-    try {
-      const result = await collect.mutateAsync({
-        enrollmentId: row.enrollmentId,
-        periods: unpaid,
-        discounts: null,
-        paymentDate: todayInput(),
-        method: "Cash",
-        expectedTotal: remaining,
-      });
-      const paymentIds = result.receivables.flatMap((receivable) => {
-        const latest = receivable.payments
-          .filter((payment) => payment.kind === "Payment")
-          .sort((a, b) => (b.recordedAt ?? "").localeCompare(a.recordedAt ?? ""))[0];
-        return latest ? [latest.id] : [];
-      });
-      onToast({
-        message: `${row.studentName} · ${label}: ${formatMoney(result.total, result.currency)} alındı`,
-        undo: paymentIds.length ? async () => {
-          for (const paymentId of paymentIds)
-            await correct.mutateAsync({ paymentId, correctedAmount: 0, reason: "Ödeme al'a yanlışlıkla basıldı, hemen geri alındı" });
-          await queryClient.invalidateQueries({ queryKey: ["billing-board"] });
-          onToast({ message: "Ödeme geri alındı" });
-        } : undefined,
-      });
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ödeme kaydedilemedi.");
-    }
-  }
 
   return <li className="px-3 py-2.5">
     <div className="flex items-center gap-3">
@@ -280,12 +244,18 @@ function ListRow({ row, state, periods, onOpen, onToast }: {
         // ~55px kalıyordu.
         : <span className="flex shrink-0 flex-col items-end gap-1 min-[400px]:flex-row min-[400px]:items-center min-[400px]:gap-3">
           {remaining !== null && <span className={`shrink-0 text-right text-sm font-bold tabular-nums ${state === "late" || state === "partial" ? "text-[var(--danger-strong)]" : ""}`}>{formatMoney(remaining, cell?.currency ?? "TRY")}</span>}
-          {remaining !== null && remaining > 0
-            ? <button type="button" onClick={quickPay} disabled={collect.isPending} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">{collect.isPending ? "Kaydediliyor…" : "Ödeme al"}</button>
+          {unpaid.length > 0
+            ? <button type="button" onClick={() => setQuick(true)} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>
             : <button type="button" onClick={() => onOpen(row, unpaid)} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
         </span>}
     </div>
-    {error && <p role="alert" className="mt-1.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+    {quick && <QuickCollect
+      enrollmentId={row.enrollmentId}
+      studentName={row.studentName}
+      periods={unpaid}
+      onClose={() => setQuick(false)}
+      onCollected={(message) => { setQuick(false); onToast({ message }); }}
+    />}
   </li>;
 }
 
