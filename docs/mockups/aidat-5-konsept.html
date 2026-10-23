@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aidat Konseptleri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Lora:ital,wght@1,500;1,600&display=swap">
+<style>
+/* Beş alternatif aidat ekranı. Hepsi aynı veriyi ve aynı tek kuralı gösterir: 4 "Geldi" = 1 aidat. */
+:root {
+  --bg: #fdf3e7; --fg: #3a2a1f; --surface: #ffffff; --surface-muted: #fbeadb; --line: #f0ddc4; --muted: #74604f;
+  --brand: #d9662a; --brand-strong: #a84e1f; --brand-soft: #fce4d0;
+  --success: #3f9142; --success-soft: #e3f3df; --success-strong: #2f6f30;
+  --danger: #c94f3f; --danger-soft: #fce2dc; --danger-strong: #a13c2f;
+  --warning: #c98a1f; --warning-soft: #fbeed0; --warning-strong: #96660f;
+  --shadow: 0 2px 4px rgba(120,70,30,.05), 0 14px 34px rgba(120,70,30,.08);
+  --f-body: "Figtree", system-ui, sans-serif; --f-display: "Lora", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1d1612; --fg: #f3e6d8; --surface: #271e18; --surface-muted: #31251d; --line: #44352a; --muted: #b9a28d;
+  --brand: #ec8a52; --brand-strong: #f4a574; --brand-soft: #4a2d1c;
+  --success: #6cbf6f; --success-soft: #1f3420; --success-strong: #8fd492;
+  --danger: #e57b6c; --danger-soft: #42221d; --danger-strong: #f19d90;
+  --warning: #e3ac4a; --warning-soft: #3d2f15; --warning-strong: #f1c674;
+  --shadow: 0 2px 4px rgba(0,0,0,.3), 0 14px 34px rgba(0,0,0,.35); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1d1612; --fg: #f3e6d8; --surface: #271e18; --surface-muted: #31251d; --line: #44352a; --muted: #b9a28d;
+  --brand: #ec8a52; --brand-strong: #f4a574; --brand-soft: #4a2d1c;
+  --success: #6cbf6f; --success-soft: #1f3420; --success-strong: #8fd492;
+  --danger: #e57b6c; --danger-soft: #42221d; --danger-strong: #f19d90;
+  --warning: #e3ac4a; --warning-soft: #3d2f15; --warning-strong: #f1c674;
+  --shadow: 0 2px 4px rgba(0,0,0,.3), 0 14px 34px rgba(0,0,0,.35); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: .875rem; line-height: 1.45; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; display: grid; gap: 20px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+h1, h2 { font-family: var(--f-display); font-style: italic; font-weight: 600; margin: 0; }
+h1 { font-size: 1.75rem; }
+h2 { font-size: 1.25rem; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+
+/* Teşhis */
+.diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.diag div { padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.diag b { display: block; margin-bottom: 2px; }
+.rule { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 14px 16px; }
+.rule .eq { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 1rem; }
+
+/* Sekmeler */
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px; background: var(--surface-muted); border-radius: 14px; position: sticky; top: 8px; z-index: 5; }
+.tab { flex: 1 0 auto; border: 0; background: none; border-radius: 10px; padding: 9px 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tab[aria-selected="true"] { background: var(--surface); color: var(--brand-strong); box-shadow: var(--shadow); }
+.tab small { display: block; font-weight: 500; font-size: .7rem; }
+
+.concept { display: none; gap: 14px; }
+.concept.on { display: grid; }
+.why { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.why div { padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--line); font-size: .8125rem; }
+.why b:first-child { display: block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.frame { padding: 16px; display: grid; gap: 14px; }
+
+/* Ortak parçalar */
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 7px 12px; font-size: .8125rem; font-weight: 600; white-space: nowrap; }
+.btn:hover { background: var(--surface-muted); }
+.btn.primary { background: var(--brand-strong); border-color: var(--brand-strong); color: #fff; }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.s-owed { background: var(--danger-soft); color: var(--danger-strong); }
+.s-soon { background: var(--warning-soft); color: var(--warning-strong); }
+.s-ok { background: var(--success-soft); color: var(--success-strong); }
+.s-new { background: var(--surface-muted); color: var(--muted); }
+.who b { display: block; font-size: .9rem; }
+.who span { color: var(--muted); font-size: .8rem; }
+.dots { display: inline-flex; gap: 4px; align-items: center; }
+.dot { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--line); }
+.dot.on { background: var(--success); border-color: var(--success); }
+.coin { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: .65rem; font-weight: 800; margin-left: 4px; border: 1.5px dashed var(--muted); color: var(--muted); }
+.coin.paid { background: var(--success); border: 0; color: #fff; }
+.coin.owed { background: var(--danger); border: 0; color: #fff; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.search { flex: 1 1 220px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; color: var(--muted); background: var(--surface); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.kpi { border-radius: 12px; padding: 10px 14px; border: 1px solid var(--line); background: var(--surface); text-align: left; }
+.kpi strong { display: block; font-size: 1.35rem; }
+.kpi.owed strong { color: var(--danger-strong); }
+.kpi.soon strong { color: var(--warning-strong); }
+.kpi.ok strong { color: var(--success-strong); }
+
+/* 1 - Delikli kart */
+.tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.ticket { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 10px; background: var(--surface); position: relative; }
+.ticket.owed { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.ticket .top { display: flex; justify-content: space-between; gap: 8px; }
+.ticket .per { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.punch { display: flex; align-items: center; gap: 8px; }
+.hole { width: 30px; height: 30px; border-radius: 50%; border: 2px dashed var(--line); display: grid; place-items: center; font-size: .7rem; color: var(--muted); }
+.hole.on { border: 0; background: var(--success); color: #fff; font-size: .9rem; }
+.punch .sep { flex: 1; border-top: 2px dotted var(--line); }
+.punch .money { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; border: 2px dashed var(--muted); color: var(--muted); }
+.punch .money.paid { background: var(--success-soft); color: var(--success-strong); border: 2px solid var(--success); }
+.punch .money.owed { background: var(--danger); color: #fff; border: 0; }
+.ticket .bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
+
+.ticket { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.ticket:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+
+/* 1 - Geçmiş penceresi: aynı delikli kart, her delikte ders tarihi, para yuvasında ödeme tarihi */
+dialog.hist { border: 0; padding: 0; border-radius: 18px; background: var(--bg); color: var(--fg); width: min(560px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); box-shadow: 0 30px 80px rgba(0,0,0,.3); }
+dialog.hist::backdrop { background: rgba(40,25,15,.45); }
+.hist .hh { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: start; gap: 10px; padding: 16px 18px 12px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.hist .sum { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); margin-top: 6px; }
+.hist .sum b { color: var(--fg); }
+.hist .body { padding: 14px 18px 18px; display: grid; gap: 10px; }
+.hcard { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 12px 14px; display: grid; gap: 12px; }
+.hcard.owed { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.hcard.next { background: none; border-style: dashed; }
+.hcard .hrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hcard .ttl { font-weight: 700; }
+.hcard .ttl span { font-weight: 500; color: var(--muted); font-size: .8rem; margin-left: 6px; }
+.hpunch { display: grid; grid-template-columns: repeat(4, 1fr) 14px 1.3fr; align-items: start; gap: 6px; }
+.hslot { display: grid; justify-items: center; gap: 4px; font-size: .72rem; color: var(--muted); text-align: center; }
+.hslot .hole { width: 38px; height: 38px; }
+.hslot .money { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; border: 2px dashed var(--muted); color: var(--muted); }
+.hslot .money.paid { background: var(--success-soft); color: var(--success-strong); border: 2px solid var(--success); }
+.hslot .money.owed { background: var(--danger); color: #fff; border: 0; }
+.hslot b { color: var(--fg); font-size: .78rem; }
+.hslot.pay b { font-size: .8rem; }
+.hpunch .sep { border-top: 2px dotted var(--line); margin-top: 19px; }
+.xbtn { border: 1px solid var(--line); background: var(--surface); width: 34px; height: 34px; border-radius: 10px; flex: none; }
+button.hslot { border: 0; background: none; padding: 4px 2px 6px; border-radius: 10px; cursor: pointer; }
+button.hslot:hover, button.hslot[aria-expanded] { background: var(--brand-soft); }
+button.hslot b { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+.hslot b.ed { color: var(--brand-strong); }
+.hslot b.ed::after { content: " ✎"; font-size: .7rem; }
+.hole.add { border-color: var(--brand); color: var(--brand-strong); font-size: 1.1rem; font-weight: 700; }
+.hist .tip { margin-top: 6px; font-size: .75rem; color: var(--muted); }
+.hedit { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--brand-soft); }
+.hedit label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-weight: 700; font-size: .8125rem; }
+.hedit input { font: inherit; font-weight: 500; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
+.hedit .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.hedit .hint { font-size: .72rem; color: var(--muted); }
+.hedit .err { font-size: .78rem; color: var(--danger-strong); font-weight: 600; }
+
+/* 2 - Gelen kutusu */
+.group { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.group > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 10px 14px; background: var(--surface-muted); }
+.group > header b { font-size: .95rem; }
+.irow { display: grid; grid-template-columns: minmax(0, 1.3fr) auto minmax(0, 1.6fr) auto; align-items: center; gap: 14px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--surface); }
+.irow .reason { color: var(--muted); font-size: .8125rem; }
+.irow .reason b { color: var(--fg); }
+.collapsed { padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); background: var(--surface); }
+
+/* 3 - Ders bakiyesi */
+.brow { display: grid; grid-template-columns: minmax(0, 1.2fr) 90px minmax(160px, 1.6fr) auto; align-items: center; gap: 14px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.brow:first-child { border-top: 0; }
+.bal { font-size: 1.25rem; font-weight: 800; text-align: right; }
+.bal small { display: block; font-size: .7rem; font-weight: 600; color: var(--muted); }
+.bal.neg { color: var(--danger-strong); } .bal.low { color: var(--warning-strong); } .bal.pos { color: var(--success-strong); }
+.meter { position: relative; height: 12px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; }
+.meter i { border-radius: 3px; background: var(--surface-muted); }
+.meter i.neg { background: var(--danger); } .meter i.low { background: var(--warning); } .meter i.pos { background: var(--success); }
+.meter::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--fg); opacity: .5; }
+.axis { display: flex; justify-content: space-between; font-size: .68rem; color: var(--muted); }
+
+/* 4 - Şerit */
+.srow { display: grid; grid-template-columns: minmax(0, 220px) 1fr auto; align-items: center; gap: 14px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.srow:first-child { border-top: 0; }
+.strip { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.strip .blk { display: flex; align-items: center; gap: 3px; padding: 4px 6px; border-radius: 8px; }
+.strip .blk.cur { background: var(--brand-soft); outline: 1.5px solid var(--brand); }
+.strip .sq { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line); }
+.strip .sq.on { background: var(--success); border-color: var(--success); }
+.strip .sq.ex { background: repeating-linear-gradient(45deg, var(--surface-muted) 0 3px, var(--line) 3px 5px); }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .75rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* 5 - Tablo + hareket çekmecesi */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 14px; align-items: start; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr.sel td { background: var(--brand-soft); }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--surface-muted); }
+.right { text-align: right; }
+.drawer { padding: 14px; display: grid; gap: 12px; position: sticky; top: 72px; }
+.drawer .hd { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+.ledger { list-style: none; margin: 0; padding: 0; display: grid; }
+.ledger li { display: grid; grid-template-columns: 52px 18px 1fr auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: .8125rem; }
+.ledger li:first-child { border-top: 0; }
+.ledger .d { color: var(--muted); }
+.ledger .ic { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: .6rem; color: #fff; }
+.ledger .ic.l { background: var(--success); }
+.ledger .ic.p { background: var(--brand-strong); }
+.ledger .ic.a { background: var(--danger); }
+.ledger .ic.x { background: var(--muted); }
+.ledger li.period { grid-template-columns: 1fr; padding: 6px 0 4px; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+
+/* Karşılaştırma */
+.cmp th, .cmp td { font-size: .8125rem; }
+.cmp td:first-child { font-weight: 600; }
+.score { letter-spacing: 2px; color: var(--brand); }
+.reco { padding: 16px 18px; display: grid; gap: 10px; border-left: 4px solid var(--brand); }
+.reco ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.vocab { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.vocab div { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: .8125rem; }
+.scroll { overflow-x: auto; }
+
+@media (max-width: 820px) {
+  .irow { grid-template-columns: 1fr auto; }
+  .irow .reason { grid-column: 1 / -1; order: 3; }
+  .irow .dots { display: none; }
+  .brow { grid-template-columns: 1fr auto; }
+  .brow .mwrap { grid-column: 1 / -1; }
+  .srow { grid-template-columns: 1fr auto; }
+  .srow .strip { grid-column: 1 / -1; order: 3; }
+  .split { grid-template-columns: 1fr; }
+  .drawer { position: static; }
+  .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header style="display:grid;gap:6px">
+  <h1>Aidat ekranı · 5 konsept</h1>
+  <p class="muted">Aynı 11 öğrenci, aynı veri, beş farklı ekran. Hepsi tek bir kuralı anlatıyor.</p>
+</header>
+
+<section class="card rule">
+  <div class="eq"><span class="dots"><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i><i class="dot on"></i></span> 4 ders = <span class="coin paid" style="width:22px;height:22px">₺</span> 1 aidat</div>
+  <p class="muted" style="flex:1 1 380px">Bu ekranın yöneticiye cevaplaması gereken tek soru: <b style="color:var(--fg)">"Kimden para almam gerekiyor, kim yakında ödeyecek?"</b> Gerisi (hangi gün geldi, hangi ay aidatı) ancak sorulunca görünmeli.</p>
+</section>
+
+<section style="display:grid;gap:10px">
+  <h2>Şu anki ekranda neden karışıyor</h2>
+  <div class="diag">
+    <div><b>Aynı bilgi üç kez</b>Ad listede, başlıkta ve kâğıtta; branş da iki kez. Göz neyin yeni olduğunu arıyor.</div>
+    <div><b>Altı ayrı durum dili</b>"Ödendi", "Son derse 1 kaldı", "Ödeme bekleniyor", "Ödenmemiş", "Başlamadı", "1. dönem". Biri ödemeyi, biri dersi, biri dönemi anlatıyor. Kart aynı anda hem "Ödendi" hem "Son derse 1 kaldı" diyor.</div>
+    <div><b>Kâğıt taklidi</b>El yazısı fontu, "/ /" yer tutucuları, boş 2. dönem. Kâğıtta işe yarayan şey ekranda yalnızca yer kaplıyor: kartın yarısı boş gelecek.</div>
+    <div><b>İç terim dışarı sızıyor</b>"1. dönem 05/10 – ..." ile "Ekim 2026 aidatı" yan yana. Kullanıcı "D001 hangi aya düştü" sorusunu düşünmek zorunda kalıyor.</div>
+    <div><b>Filtreler örtüşüyor</b>"Ödeme bekleniyor" ile "Ödenmemiş" farkı belli değil; "Son derse 1 kaldı" ödenmiş biri için de çıkıyor.</div>
+    <div><b>Aksiyon yeri belirsiz</b>"Ödeme al" ödenmiş öğrencide de duruyor. Asıl ödemesi gereken kişi listede sıradan bir satır.</div>
+  </div>
+</section>
+
+<section style="display:grid;gap:10px">
+  <h2>Rakipler bu sorunu nasıl çözüyor</h2>
+  <div class="diag">
+    <div><b>Pike13 · Mindbody (ders paketi)</b>"10'luk paket, 3 hak kaldı." Ödeme bir paket satın almaktır, ders bir hak düşürür. Kâğıt yok, tek sayı var.</div>
+    <div><b>TutorBird · My Music Staff · Teachworks</b>Aile hesabında tek bakiye: ödeme bakiyeyi artırır, ders düşürür, eksi bakiye = borç. Detay "hareketler" listesinde, banka ekstresi gibi.</div>
+    <div><b>Jackrabbit Class</b>Yoğun tablo + aile defteri (ledger). Güçlü ama ilk bakışta ağır; yönetici filtreyle çalışır.</div>
+    <div><b>Stripe · Linear (gelen kutusu)</b>Açılış ekranı "dikkat gerektirenler". Sorunsuz kayıtlar katlanır, sayı olarak durur.</div>
+    <div><b>Kahve sadakat kartı</b>Delik delik kart: kaç tane doldu, ödül nerede. Herkesin bildiği görsel dil, öğretmen de veli de anında okur.</div>
+  </div>
+</section>
+
+<nav class="tabs" role="tablist" aria-label="Konseptler">
+  <button class="tab" role="tab" aria-selected="true" data-k="c1">1 · Delikli kart<small>sadakat kartı</small></button>
+  <button class="tab" role="tab" aria-selected="false" data-k="c2">2 · Yapılacaklar<small>gelen kutusu</small></button>
+  <button class="tab" role="tab" aria-selected="false" data-k="c3">3 · Ders bakiyesi<small>kontör</small></button>
+  <button class="tab" role="tab" aria-selected="false" data-k="c4">4 · Şerit<small>zaman çizgisi</small></button>
+  <button class="tab" role="tab" aria-selected="false" data-k="c5">5 · Tablo + hareketler<small>ekstre</small></button>
+</nav>
+
+<section class="concept on" id="c1">
+  <div class="why">
+    <div><b>Fikir</b>Her öğrenci bir sadakat kartı: 4 delik + 1 para yuvası. Kart dolunca para yuvası yanar.</div>
+    <div><b>İlham</b>Kahve kartı, Pike13/Mindbody paketleri.</div>
+    <div><b>Güçlü</b>Okuması sıfır öğrenme ister. Tek durum, tek düğme (yalnızca borçluda).</div>
+    <div><b>Zayıf</b>77 öğrencide ızgara uzun; ödeme geçmişi görünmez.</div>
+  </div>
+  <div class="card frame">
+    <div class="toolbar"><div class="search">⌕ Öğrenci veya öğretmen ara</div><button class="btn">Tüm branşlar ▾</button><button class="btn">Tüm öğretmenler ▾</button></div>
+    <div class="kpis" data-kpis></div>
+    <div class="tickets" id="t1"></div>
+  </div>
+  <dialog class="hist" id="h1" aria-labelledby="h1-name"></dialog>
+</section>
+
+<section class="concept" id="c2">
+  <div class="why">
+    <div><b>Fikir</b>Ekran bir liste değil, bir iş listesi. Üç kutu: şimdi tahsil et, bu hafta dolacak, sorunsuz (katlı).</div>
+    <div><b>İlham</b>Stripe "Needs attention", Linear Inbox.</div>
+    <div><b>Güçlü</b>Yönetici ekranı açınca ne yapacağını görür. Her satır neden orada olduğunu cümleyle söyler.</div>
+    <div><b>Zayıf</b>"Herkese göz atma" için ikinci bir görünüm gerekir.</div>
+  </div>
+  <div class="card frame">
+    <div class="toolbar"><div class="search">⌕ Öğrenci veya öğretmen ara</div><button class="btn">Tüm öğretmenler ▾</button></div>
+    <div id="t2" style="display:grid;gap:12px"></div>
+  </div>
+</section>
+
+<section class="concept" id="c3">
+  <div class="why">
+    <div><b>Fikir</b>Dönem yok, tek sayı: <b>ödenmiş ders hakkı − işlenen ders</b>. Eksi = borç, 0–1 = yaklaşıyor, 2+ = rahat.</div>
+    <div><b>İlham</b>TutorBird/Teachworks aile bakiyesi, telefon kontörü.</div>
+    <div><b>Güçlü</b>Peşin ödeme, kısmi dönem, telafi hepsi aynı sayıya iner. "−2 ders" cümleye gerek bırakmaz.</div>
+    <div><b>Zayıf</b>Tutar (₺) ikinci planda; ders sayısı ile para arasında bir dönüşüm adımı var.</div>
+  </div>
+  <div class="card frame">
+    <div class="toolbar"><div class="search">⌕ Öğrenci veya öğretmen ara</div><button class="btn">Bakiyeye göre ▾</button></div>
+    <div><div id="t3"></div></div>
+  </div>
+</section>
+
+<section class="concept" id="c4">
+  <div class="why">
+    <div><b>Fikir</b>Her öğrenci bir şerit: dörtlü ders blokları, her bloğun sonunda para jetonu. Turuncu çerçeve = şu anki dönem.</div>
+    <div><b>İlham</b>GitHub katkı ızgarası, Gantt şeridi.</div>
+    <div><b>Güçlü</b>Geçmiş tek bakışta: kim hep geç ödüyor, kim peşin, kim devamsız. Kâğıdın tüm bilgisini satır yüksekliğinde verir.</div>
+    <div><b>Zayıf</b>Simge dili öğrenilmeli (gösterge gerekli). Telefonda şerit alta kayar.</div>
+  </div>
+  <div class="card frame">
+    <div class="legend"><span><i class="sq on" style="width:14px;height:14px;border-radius:4px;background:var(--success);display:inline-block"></i>Geldi</span><span><i style="width:14px;height:14px;border-radius:4px;border:1.5px solid var(--line);display:inline-block"></i>Henüz yok</span><span><i class="coin paid" style="margin:0">₺</i>Ödendi</span><span><i class="coin owed" style="margin:0">₺</i>Ödenmedi</span><span><i class="coin" style="margin:0">₺</i>Henüz açılmadı</span></div>
+    <div id="t4"></div>
+  </div>
+</section>
+
+<section class="concept" id="c5">
+  <div class="why">
+    <div><b>Fikir</b>Sade, sıralanabilir tablo (tek durum kolonu). Satıra tıklayınca sağda kâğıt değil <b>hareket listesi</b>: ders, ders, ödeme… banka ekstresi gibi.</div>
+    <div><b>İlham</b>Jackrabbit aile defteri, Teachworks ledger, Notion veritabanı.</div>
+    <div><b>Güçlü</b>77 öğrencide en hızlı tarama. "Bu para nereden geldi" sorusu ekstrede cevaplanır.</div>
+    <div><b>Zayıf</b>Görsel olarak en az "sıcak" olanı; öğretmenler için ağır gelebilir.</div>
+  </div>
+  <div class="card frame">
+    <div class="toolbar"><div class="search">⌕ Öğrenci veya öğretmen ara</div><button class="btn">Durum: Tümü ▾</button></div>
+    <div class="split">
+      <div class="scroll"><table id="t5"></table></div>
+      <aside class="card drawer" id="d5"></aside>
+    </div>
+  </div>
+</section>
+
+<section style="display:grid;gap:10px">
+  <h2>Karşılaştırma</h2>
+  <div class="card scroll">
+    <table class="cmp">
+      <thead><tr><th></th><th>1 Delikli kart</th><th>2 Yapılacaklar</th><th>3 Bakiye</th><th>4 Şerit</th><th>5 Tablo</th></tr></thead>
+      <tbody>
+        <tr><td>"Kimden para alacağım?"</td><td class="score">●●●○</td><td class="score">●●●●</td><td class="score">●●●○</td><td class="score">●●○○</td><td class="score">●●●○</td></tr>
+        <tr><td>Öğrenme gerektirmez</td><td class="score">●●●●</td><td class="score">●●●●</td><td class="score">●●●○</td><td class="score">●●○○</td><td class="score">●●●○</td></tr>
+        <tr><td>77 öğrencide tarama</td><td class="score">●●○○</td><td class="score">●●●○</td><td class="score">●●●○</td><td class="score">●●●○</td><td class="score">●●●●</td></tr>
+        <tr><td>Geçmiş / "neden bu tutar"</td><td class="score">●○○○</td><td class="score">●●○○</td><td class="score">●●○○</td><td class="score">●●●●</td><td class="score">●●●●</td></tr>
+        <tr><td>Telefonda</td><td class="score">●●●●</td><td class="score">●●●●</td><td class="score">●●●○</td><td class="score">●●○○</td><td class="score">●●○○</td></tr>
+        <tr><td>Bugünkü koddan uzaklık</td><td>Küçük (liste satırı zaten 4 kutu)</td><td>Küçük (gruplama + sıralama)</td><td>Orta (yeni hesap, aynı veri)</td><td>Orta</td><td>Küçük (Liste görünümü var)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card reco">
+  <h2>Önerim: 2 + 1 + 5'in ekstresi, tek ekran</h2>
+  <ol>
+    <li><b>Açılış = Yapılacaklar (2).</b> Üç grup: <i>Ödenmedi</i>, <i>Bu hafta dolacak</i>, <i>Sorunsuz (katlı)</i>. Ayrı "Kartlar / Liste" seçimi kalkar, tek görünüm olur.</li>
+    <li><b>Her satırda delikli kart (1).</b> 4 kutu + para jetonu; satırın neden orada olduğunu tek cümle söyler ("2 ders işlendi · 9 gündür ödenmedi").</li>
+    <li><b>İsme dokununca kâğıt değil ekstre (5).</b> Ders ✓, ders ✓, ödeme 4.800 ₺… dönem başlıklarıyla. Kâğıt görüntüsü yalnızca "Yazdır" çıktısı olarak kalır.</li>
+    <li><b>Tek durum dili, dört kelime:</b> Ödenmedi · Yaklaşıyor · Tamam · Başlamadı. "Dönem", "D001", "Ekim aidatı" ana ekrandan kalkar, ekstrede durur.</li>
+    <li><b>Tek düğme:</b> "Ödeme al" yalnızca borçlu satırda dolu; yaklaşanlarda "Hatırlat" (WhatsApp), tamamda düğme yok.</li>
+  </ol>
+  <p class="muted">Arka uçta değişiklik gerekmez: <code>/api/attendance/cards</code> durum, ders sayısı, aidat ve vade bilgisini zaten veriyor; iş ön yüzde gruplama ve sunum.</p>
+  <div class="vocab">
+    <div><span class="pill s-owed">Ödenmedi</span>Dönem açıldı, aidat ödenmedi. Vadesi geçtiyse "9 gün gecikti".</div>
+    <div><span class="pill s-soon">Yaklaşıyor</span>Ödenmiş dönemde 0–1 ders kaldı; sıradaki ders yeni aidat açacak.</div>
+    <div><span class="pill s-ok">Tamam</span>Ödenmiş dönemde 2+ ders hakkı var (peşin dahil).</div>
+    <div><span class="pill s-new">Başlamadı</span>Karta henüz ders yazılmadı.</div>
+  </div>
+</section>
+
+</main>
+
+<script>
+// Örnek veri. done: içinde bulunulan dönemde işlenen ders; bal: ödenmiş hak − işlenen ders.
+const FEE = 4800;
+const S = [
+  { n: "Defne Aksoy", b: "Keman", t: "Selin Er", per: 3, done: 3, bal: -3, st: "owed", late: 11, hist: [[4,1],[4,1]] },
+  { n: "Atlas Nizamoğlu", b: "Piyano", t: "Mehmet Yalçın", per: 1, done: 2, bal: -2, st: "owed", late: 9, hist: [] },
+  { n: "Çınar Kertmen", b: "Gitar", t: "Tarık Altun", per: 2, done: 1, bal: -1, st: "owed", dueIn: 5, hist: [[4,1]] },
+  { n: "Atlas Çağan Karavel", b: "Bateri", t: "Orhan Konur", per: 1, done: 4, bal: 0, st: "soon", hist: [] },
+  { n: "Ahmet Altan Karadağ", b: "Piyano", t: "Deren Demirtaş", per: 1, done: 3, bal: 1, st: "soon", hist: [] },
+  { n: "Bedir Çınar Batmaz", b: "Bateri", t: "Orhan Konur", per: 1, done: 3, bal: 1, st: "soon", hist: [] },
+  { n: "Ceren Taylak", b: "Piyano", t: "Mehmet Yalçın", per: 2, done: 3, bal: 1, st: "soon", hist: [[4,1]] },
+  { n: "Kerem Uysal", b: "Piyano", t: "Deren Demirtaş", per: 2, done: 2, bal: 2, st: "ok", hist: [[4,1]] },
+  { n: "Ela Yıldız", b: "Şan", t: "Selin Er", per: 1, done: 1, bal: 3, st: "ok", hist: [] },
+  { n: "Ayten İslim Gürel", b: "Gitar", t: "Tarık Altun", per: 1, done: 4, bal: 4, st: "ok", prepaid: true, hist: [] },
+  { n: "Cesur Göksel", b: "Bateri", t: "Orhan Konur", per: 0, done: 0, bal: 0, st: "new", hist: [] },
+];
+const LABEL = { owed: "Ödenmedi", soon: "Yaklaşıyor", ok: "Tamam", new: "Başlamadı" };
+const tl = v => v.toLocaleString("tr-TR") + " ₺";
+const left = s => Math.max(0, 4 - s.done);
+const reason = s => {
+  if (s.st === "owed") return s.late ? `<b>${s.done} ders işlendi</b> · ${s.late} gündür ödenmedi` : `<b>${s.done} ders işlendi</b> · vadesi ${s.dueIn} gün sonra`;
+  if (s.st === "soon") return s.done === 4 ? "<b>Dönem doldu</b> · sıradaki ders yeni aidat açar" : `<b>Son ders kaldı</b> · ${s.done}/4 işlendi, ödendi`;
+  if (s.st === "ok") return s.prepaid ? "<b>Sonraki dönem peşin ödendi</b>" : `<b>${left(s)} ders hakkı var</b> · ödendi`;
+  return "Karta henüz ders yazılmadı";
+};
+const dots = s => `<span class="dots">${[0,1,2,3].map(i => `<i class="dot ${i < s.done ? "on" : ""}"></i>`).join("")}<i class="coin ${s.st === "owed" ? "owed" : s.st === "new" ? "" : "paid"}">₺</i></span>`;
+const who = s => `<div class="who"><b>${s.n}</b><span>${s.b} · ${s.t}</span></div>`;
+const pill = s => `<span class="pill s-${s.st}">${LABEL[s.st]}</span>`;
+const by = st => S.filter(s => s.st === st);
+
+// KPI şeridi (konsept 1)
+document.querySelectorAll("[data-kpis]").forEach(el => {
+  const o = by("owed");
+  el.innerHTML = `
+    <button class="kpi owed"><strong class="num">${tl(o.length * FEE)}</strong>${o.length} öğrenciden alınacak</button>
+    <button class="kpi soon"><strong class="num">${by("soon").length}</strong>öğrencinin ödemesi yaklaşıyor</button>
+    <button class="kpi ok"><strong class="num">${by("ok").length}</strong>öğrenci tamam</button>`;
+});
+
+// 1 - Delikli kart
+document.getElementById("t1").innerHTML = S.map((s, i) => `
+  <article class="ticket ${s.st}" data-i="${i}" tabindex="0" role="button" aria-label="${s.n} geçmişi">
+    <div class="top">${who(s)}<span class="per">${s.per ? s.per + ". kart" : ""}</span></div>
+    <div class="punch">
+      ${[0,1,2,3].map(i => `<span class="hole ${i < s.done ? "on" : ""}">${i < s.done ? "✓" : i + 1}</span>`).join("")}
+      <span class="sep"></span>
+      <span class="money ${s.st === "owed" ? "owed" : s.st === "new" ? "" : "paid"}">₺</span>
+    </div>
+    <div class="bottom">${pill(s)}${s.st === "owed" ? `<button class="btn primary">Ödeme al · ${tl(FEE)}</button>` : `<span class="muted" style="font-size:.78rem">${s.st === "soon" ? (s.done === 4 ? "yeni kart başlıyor" : "1 ders kaldı") : s.st === "ok" ? (s.prepaid ? "peşin" : left(s) + " ders hakkı") : ""}</span>`}</div>
+  </article>`).join("");
+
+// 1 - Geçmiş: haftalık derslerin tarihleri bugünden (19.10) geriye doğru, ödeme kartın ilk dersinden 1 gün sonra.
+const day = d => `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const cardsFor = s => {
+  const blocks = [...s.hist.map(h => ({ done: h[0], paid: !!h[1] })), { done: s.done, paid: s.st !== "owed" && s.st !== "new", cur: true }];
+  const total = blocks.reduce((a, b) => a + b.done, 0);
+  let d = addDays(new Date(2026, 9, 19), -7 * (total - 1));
+  const cards = blocks.map((b, k) => {
+    const dates = Array.from({ length: b.done }, () => { const x = d; d = addDays(d, 7); return x; });
+    return { no: k + 1, dates, done: b.done, paid: b.paid, cur: b.cur, payOn: b.paid && dates[0] ? addDays(dates[0], 1) : null, due: dates[0] ? addDays(dates[0], 7) : null };
+  });
+  if (s.prepaid) cards.push({ no: cards.length + 1, dates: [], done: 0, paid: true, next: true, payOn: new Date(2026, 9, 15) });
+  return cards.reverse();
+};
+// Geçmiş penceresinde tarih düzenleme: deliğe ya da para yuvasına dokununca altında tarih kutusu açılır.
+// Geriye dönük yazım penceresi geçen ayın 1'i → bugün (AttendanceCards.EntriesFrom, AD11).
+const TODAY = new Date(2026, 9, 23), FROM = new Date(2026, 8, 1);
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const parseIso = v => { const [y, m, d] = v.split("-").map(Number); return new Date(y, m - 1, d); };
+const HIST = new Map();
+let edit = null;
+const slotBtn = (k, slot, inner, cls, label) =>
+  `<button class="hslot ${cls}" data-c="${k}" data-s="${slot}" aria-label="${label}" ${edit && edit.c === k && edit.s === String(slot) ? 'aria-expanded="true"' : ""}>${inner}</button>`;
+const editor = (c, k) => {
+  if (!edit || edit.c !== k) return "";
+  const pay = edit.s === "pay";
+  const i = Number(edit.s);
+  const cur = pay ? c.payOn : c.dates[i];
+  return `<form class="hedit" data-c="${k}">
+    <label>${pay ? "Ödeme tarihi" : cur ? `${i + 1}. ders tarihi` : `${c.done + 1}. dersi ekle`}
+      <input type="date" name="d" required min="${iso(FROM)}" max="${iso(TODAY)}" value="${cur ? iso(cur) : ""}"></label>
+    <div class="acts"><button class="btn primary" type="submit">Kaydet</button>${!pay && cur ? `<button class="btn" type="button" data-act="del">Dersi kaldır</button>` : ""}<button class="btn ghost" type="button" data-act="cancel">Vazgeç</button></div>
+    <p class="hint">Geçen ayın 1'inden bugüne kadar bir gün seçilebilir.</p>
+    <p class="err" hidden></p>
+  </form>`;
+};
+const histCard = (c, k) => {
+  const owed = !c.paid && c.done > 0;
+  const head = c.next ? "Peşin ödendi" : c.done === 0 ? "Başlamadı" : `${day(c.dates[0])} – ${c.done === 4 ? day(c.dates[3]) : "…"}`;
+  const status = c.paid ? `<span class="pill s-ok">Ödendi</span>` : owed ? `<span class="pill s-owed">Ödenmedi</span>` : `<span class="pill s-new">Açılmadı</span>`;
+  const holes = [0,1,2,3].map(i => {
+    if (i < c.done) return slotBtn(k, i, `<span class="hole on">✓</span><b class="num ${c.edited?.has(i) ? "ed" : ""}">${day(c.dates[i])}</b>`, "", `${i + 1}. ders tarihini değiştir`);
+    if (i === c.done && !c.next) return slotBtn(k, i, `<span class="hole add">+</span><span>tarih ekle</span>`, "", "Geçmiş ders ekle");
+    return `<div class="hslot"><span class="hole">${i + 1}</span>—</div>`;
+  }).join("");
+  const pay = c.paid
+    ? slotBtn(k, "pay", `<span class="money paid">₺</span><b class="num ${c.payEdited ? "ed" : ""}">${day(c.payOn)}</b><span class="num">${tl(FEE)}</span>`, "pay", "Ödeme tarihini değiştir")
+    : `<div class="hslot pay">${owed ? `<span class="money owed">₺</span><b class="num">vade ${day(c.due)}</b><span class="num">${tl(FEE)}</span>` : `<span class="money">₺</span>—`}</div>`;
+  return `<section class="hcard ${owed ? "owed" : ""} ${c.next ? "next" : ""}">
+    <div class="hrow"><span class="ttl">${c.no}. kart<span class="num">${head}</span></span>${status}</div>
+    <div class="hpunch">${holes}<span class="sep"></span>${pay}</div>
+    ${editor(c, k)}
+    ${owed ? `<button class="btn primary">Ödeme al · ${tl(FEE)}</button>` : ""}
+  </section>`;
+};
+const save = (s, cards, k, slot, date) => {
+  const c = cards[k];
+  if (date < FROM || date > TODAY) return "Bu tarih geriye dönük yazım penceresinin dışında.";
+  if (slot === "pay") { c.payOn = date; c.payEdited = true; return null; }
+  const i = Number(slot);
+  const taken = cards.some((x, j) => x.dates.some((d, n) => +d === +date && !(j === k && n === i)));
+  if (taken) return "Bu güne zaten bir ders yazılı.";
+  c.dates[i] = date;
+  c.dates.sort((a, b) => a - b);
+  c.edited = new Set(c.dates.map((d, n) => (+d === +date ? n : -1)).filter(n => n >= 0).concat([...(c.edited || [])]));
+  c.done = c.dates.length;
+  if (!c.due && c.dates[0]) c.due = addDays(c.dates[0], 7);
+  return null;
+};
+const openHist = s => {
+  if (!HIST.has(s.n)) HIST.set(s.n, cardsFor(s));
+  const cards = HIST.get(s.n);
+  const paid = cards.filter(c => c.paid);
+  const lessons = cards.reduce((a, c) => a + c.done, 0);
+  const owed = cards.some(c => !c.paid && c.done > 0);
+  const dlg = document.getElementById("h1");
+  dlg.innerHTML = `
+    <div class="hh"><div>${who(s).replace("<b>", '<b id="h1-name">')}
+      <div class="sum"><span><b>${lessons}</b> ders</span><span><b>${paid.length}</b> ödeme · <b class="num">${tl(paid.length * FEE)}</b></span>${owed ? `<span style="color:var(--danger-strong)"><b style="color:inherit">${tl(FEE)}</b> açık</span>` : ""}</div>
+      <p class="tip">Tarihi değiştirmek için deliğe ya da ödemeye dokun.</p></div>
+      <button class="xbtn" aria-label="Kapat">✕</button></div>
+    <div class="body">${cards.map((c, k) => histCard(c, k)).join("")}</div>`;
+  dlg.querySelector(".xbtn").onclick = () => { edit = null; dlg.close(); };
+  dlg.onclick = e => { if (e.target === dlg) { edit = null; dlg.close(); } };
+  dlg.querySelectorAll("button.hslot").forEach(b => b.onclick = () => {
+    edit = edit && edit.c === +b.dataset.c && edit.s === b.dataset.s ? null : { c: +b.dataset.c, s: b.dataset.s };
+    openHist(s);
+    dlg.querySelector(".hedit input")?.focus();
+  });
+  const f = dlg.querySelector(".hedit");
+  if (f) {
+    f.onsubmit = e => {
+      e.preventDefault();
+      const err = save(s, cards, edit.c, edit.s, parseIso(f.d.value));
+      if (err) { const p = f.querySelector(".err"); p.textContent = err; p.hidden = false; return; }
+      edit = null; openHist(s);
+    };
+    f.querySelector("[data-act=cancel]").onclick = () => { edit = null; openHist(s); };
+    const del = f.querySelector("[data-act=del]");
+    if (del) del.onclick = () => {
+      const c = cards[edit.c];
+      c.dates.splice(Number(edit.s), 1); c.done = c.dates.length; c.edited = new Set();
+      edit = null; openHist(s);
+    };
+  }
+  if (!dlg.open) dlg.showModal();
+};
+document.querySelectorAll("#t1 .ticket").forEach(t => {
+  t.onclick = e => { if (!e.target.closest("button")) openHist(S[t.dataset.i]); };
+  t.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openHist(S[t.dataset.i]); } };
+});
+
+// 2 - Yapılacaklar
+const group = (title, sub, list, action) => `
+  <section class="group">
+    <header><b>${title} <span class="muted">· ${list.length}</span></b><span class="muted num">${sub}</span></header>
+    ${list.map(s => `<div class="irow">${who(s)}${dots(s)}<span class="reason">${reason(s)}</span>${action(s)}</div>`).join("")}
+  </section>`;
+const o2 = by("owed");
+document.getElementById("t2").innerHTML =
+  group("Ödenmedi", tl(o2.length * FEE) + " bekliyor", o2, () => `<button class="btn primary">Ödeme al</button>`) +
+  group("Bu hafta dolacak", "sıradaki derste yeni aidat", by("soon"), () => `<button class="btn">Hatırlat</button>`) +
+  `<section class="group"><header><b>Tamam <span class="muted">· ${by("ok").length + 66}</span></b><button class="btn ghost">Göster ▾</button></header></section>
+   <section class="group"><header><b>Başlamadı <span class="muted">· ${by("new").length}</span></b><button class="btn ghost">Göster ▾</button></header></section>`;
+
+// 3 - Bakiye
+const meter = b => [-4,-3,-2,-1,1,2,3,4].map(x => {
+  const on = (b < 0 && x < 0 && x >= b) || (b > 0 && x > 0 && x <= b);
+  const cls = !on ? "" : b < 0 ? "neg" : b <= 1 ? "low" : "pos";
+  return `<i class="${cls}"></i>`;
+}).join("");
+document.getElementById("t3").innerHTML = [...S].sort((a, b) => a.bal - b.bal).map(s => {
+  const cls = s.st === "new" ? "" : s.bal < 0 ? "neg" : s.bal <= 1 ? "low" : "pos";
+  const txt = s.st === "new" ? "—" : (s.bal > 0 ? "+" : s.bal < 0 ? "−" : "") + Math.abs(s.bal);
+  return `<div class="brow">${who(s)}
+    <div class="bal num ${cls}">${txt}<small>ders</small></div>
+    <div class="mwrap"><div class="meter">${meter(s.bal)}</div><div class="axis"><span>borç</span><span>0</span><span>ödenmiş hak</span></div></div>
+    ${s.bal < 0 || s.bal === 0 && s.st === "soon" ? `<button class="btn ${s.bal < 0 ? "primary" : ""}">+4 ders · ${tl(FEE)}</button>` : `<span></span>`}
+  </div>`;
+}).join("");
+
+// 4 - Şerit
+const blk = (done, coin, cur) => `<span class="blk ${cur ? "cur" : ""}">${[0,1,2,3].map(i => `<i class="sq ${i < done ? "on" : ""}"></i>`).join("")}<i class="coin ${coin}">₺</i></span>`;
+document.getElementById("t4").innerHTML = S.map(s => {
+  const past = s.hist.map(h => blk(h[0], h[1] ? "paid" : "owed", false)).join("");
+  const cur = s.st === "new" ? blk(0, "", true) : blk(s.done, s.st === "owed" ? "owed" : "paid", true);
+  const next = s.prepaid ? blk(0, "paid", false) : blk(0, "", false);
+  return `<div class="srow">${who(s)}<div class="strip">${past}${cur}${next}</div>${pill(s)}</div>`;
+}).join("");
+
+// 5 - Tablo + ekstre
+const LEDGER = {
+  "Ahmet Altan Karadağ": [
+    ["period", "1. dönem · ödendi"],
+    ["19.10", "l", "Ders · Geldi", "3/4"],
+    ["12.10", "l", "Ders · Geldi", "2/4"],
+    ["06.10", "p", "Ödeme alındı · Nakit", tl(FEE)],
+    ["05.10", "l", "Ders · Geldi", "1/4"],
+    ["05.10", "a", "Aidat açıldı · vade 12.10", tl(FEE)],
+  ],
+};
+const ledgerFor = s => LEDGER[s.n] || [
+  ["period", `${s.per || 1}. dönem · ${LABEL[s.st].toLowerCase()}`],
+  ...Array.from({ length: s.done }, (_, i) => [`${String(19 - i * 7).padStart(2, "0")}.10`, "l", "Ders · Geldi", `${s.done - i}/4`]),
+  ...(s.st === "owed" ? [["", "a", "Aidat açıldı · ödenmedi", tl(FEE)]] : s.st === "new" ? [] : [["", "p", "Ödeme alındı", tl(FEE)]]),
+];
+let sel = "Ahmet Altan Karadağ";
+const drawTable = () => {
+  document.getElementById("t5").innerHTML = `
+    <thead><tr><th>Öğrenci</th><th class="hide-sm">Dersler</th><th>Durum</th><th class="right hide-sm">Açık borç</th><th></th></tr></thead>
+    <tbody>${S.map(s => `<tr class="${s.n === sel ? "sel" : ""}" data-n="${s.n}">
+      <td>${who(s)}</td><td class="hide-sm">${dots(s)}</td><td>${pill(s)}</td>
+      <td class="right num hide-sm">${s.st === "owed" ? tl(FEE) : "—"}</td>
+      <td class="right">${s.st === "owed" ? `<button class="btn primary">Ödeme al</button>` : ""}</td></tr>`).join("")}</tbody>`;
+  const s = S.find(x => x.n === sel);
+  document.getElementById("d5").innerHTML = `
+    <div class="hd">${who(s)}${pill(s)}</div>
+    ${dots(s)}
+    <ul class="ledger">${ledgerFor(s).map(r => r[0] === "period"
+      ? `<li class="period">${r[1]}</li>`
+      : `<li><span class="d num">${r[0]}</span><span class="ic ${r[1]}">${r[1] === "l" ? "✓" : "₺"}</span><span>${r[2]}</span><span class="num muted">${r[3]}</span></li>`).join("")}</ul>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${s.st === "owed" ? `<button class="btn primary">Ödeme al · ${tl(FEE)}</button>` : ""}<button class="btn">Geçmiş ders ekle</button><button class="btn ghost">Kâğıt kartı yazdır</button></div>`;
+  document.querySelectorAll("#t5 tbody tr").forEach(tr => tr.onclick = () => { sel = tr.dataset.n; drawTable(); });
+};
+drawTable();
+
+// Sekmeler
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll(".concept").forEach(c => c.classList.toggle("on", c.id === b.dataset.k));
+});
+</script>
+</body>
+</html>

@@ -134,13 +134,6 @@ export function lateCount(row: BoardRow, year: number, today = currentPeriod()) 
   return count;
 }
 
-export function hasDebt(row: BoardRow, year: number, today = currentPeriod()) {
-  for (let index = 0; index < 12; index++) {
-    if (isOwed(cellState(row, periodOf(year, index), today))) return true;
-  }
-  return cyclePeriods(row).some((period) => isOwed(cycleCellState(row, period)));
-}
-
 const normalize = (value: string) => value.toLocaleLowerCase("tr-TR");
 
 export function matchesQuery(row: BoardRow, query: string) {
@@ -156,16 +149,3 @@ export function byStudentName(a: BoardRow, b: BoardRow) {
 export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).map((part) => part[0]).join("").slice(0, 2).toLocaleUpperCase("tr-TR");
 }
-
-// Çizelge hücresinin işareti ve rengi - ay ve dönem sütunları aynı dili konuşur.
-export const GRID_SYMBOL: Record<CellState, string> = { paid: "✓", late: "!", current: "•", partial: "½", open: "", future: "", none: "–", cancelled: "×" };
-export const GRID_CLASS: Record<CellState, string> = {
-  paid: "bg-[var(--success-soft)] text-[var(--success-strong)]",
-  late: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
-  current: "border-[1.5px] border-[var(--brand)] text-[var(--brand-strong)]",
-  partial: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
-  open: "border border-dashed border-[var(--line)]",
-  future: "border border-dashed border-[var(--line)]",
-  none: "text-[var(--line)]",
-  cancelled: "text-[var(--muted)]",
-};

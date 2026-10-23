@@ -24,6 +24,7 @@ async function createBillingFixture(page: Page) {
     data: { enrollmentId: enrollment.id, period: "2026-09" },
   });
   expect([201, 409]).toContain(created.status());
+  return `${student.firstName} ${student.lastName}`;
 }
 
 test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
@@ -36,15 +37,23 @@ test.describe.serial("Ödeme takvimi ve hafta navigasyonu", () => {
   test("ödeme penceresi yıl değiştirince çökmez ve tahsilat açık kalır", async ({ page }) => {
     const browserErrors: Error[] = [];
     page.on("pageerror", (error) => browserErrors.push(error));
-    await createBillingFixture(page);
+    const name = await createBillingFixture(page);
 
+    // Tek görünüm (AD18): birebir öğrencinin kartı geçmişi açar, oradan "Ayrıntılı ödeme" tam
+    // pencereyi açar; grup dersi alt bölümde, adına dokununca doğrudan açılır.
     await page.goto("/dashboard/billing");
-    await page.getByRole("button", { name: "Çizelge", exact: true }).click();
-    // İlk öğrencinin adına dokun: pencere hiçbir ay seçili olmadan açılır.
-    await page.locator("table tbody th button").first().click();
-    const dialog = page.getByRole("dialog").first();
-    await expect(dialog.getByText("Hangi aylar?")).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Önce ay seç" })).toBeDisabled();
+    await page.getByLabel("Öğrenci, öğretmen veya veli ara").fill(name);
+    const card = page.getByRole("button", { name: `${name} kartlarını aç` });
+    const monthly = page.locator("#monthly-dues ~ div li button", { hasText: name });
+    await expect(card.or(monthly).first()).toBeVisible();
+    if (await card.count()) {
+      await card.first().click();
+      await page.getByRole("button", { name: "Ayrıntılı ödeme" }).click();
+    } else {
+      await monthly.first().click();
+    }
+    const dialog = page.getByRole("dialog").last();
+    await expect(dialog.getByText(/Hangi aylar\?|Geçiş öncesi aylar/)).toBeVisible();
 
     // Aralık + Ocak gibi yıl aşan peşin ödeme için pencere kendi yılını değiştirebilir.
     const year = new Date().getFullYear();

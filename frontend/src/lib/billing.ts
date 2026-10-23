@@ -365,6 +365,8 @@ export function useCorrectPaymentDates() {
     mutationFn: (body: { paymentIds: string[]; paymentDate: string; reason: string }) =>
       api.post<{ paymentId: string; previousDate: string; correctedDate: string }[]>("/api/payments/date-corrections", body),
     onSuccess: () => {
+      // Yoklama kartı dönemin yanında son ödemenin gününü gösterir.
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
       queryClient.invalidateQueries({ queryKey: ["student-billing"] });
       queryClient.invalidateQueries({ queryKey: ["billing-dues"] });
       queryClient.invalidateQueries({ queryKey: ["receivables"] });
