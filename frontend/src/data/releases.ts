@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.9",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Aidatlar tek ekran oldu: her öğrenci 4 delikli bir kart, sonunda ödeme yuvası. Ödemesi gerekenler en üstte, \"Ödeme al\" yalnızca onlarda." },
+      { audience: "admin", text: "Karta dokununca öğrencinin tüm kartları ders ve ödeme tarihleriyle açılır. Tarihe dokunup düzeltebilir, boş deliğe geçmiş ders ekleyebilirsin." },
+      { audience: "admin", text: "İndirimli ya da peşin ödeme için kartın içindeki \"Ayrıntılı ödeme\"yi kullan. Grup dersleri sayfanın altında aylık listede." },
+    ],
+  },
+  {
     version: "2026.10.23.8",
     date: "2026-10-23",
     items: [
