@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.5",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Aidatlar → Kartlar: solda öğrenci listesi, sağda seçtiğin öğrencinin kartı. Listeden öğrenci değiştirdikçe kart yerinde değişir." },
+      { audience: "admin", text: "Kartta tüm tarihler aynı biçimde yazılıyor; boş satıra tıklayınca tarih seçebilirsin. Dönem başlıkları hizalı." },
+    ],
+  },
+  {
     version: "2026.10.23.4",
     date: "2026-10-23",
     items: [
