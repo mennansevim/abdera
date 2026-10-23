@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.4",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartları Aidatlar ekranına taşındı: Aidatlar'da artık Liste, Çizelge ve Kartlar görünümü var. Ödemeyi, ödeme tarihini ve 4'lü dönemleri tek yerden takip edersin; arama kutusu kartları da süzer." },
+      { audience: "admin", text: "Yoklama ekranında yalnızca ders dökümü kaldı." },
+    ],
+  },
+  {
     version: "2026.10.23.3",
     date: "2026-10-23",
     items: [
