@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState, FilterField, Modal, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -52,6 +52,21 @@ const shortDate = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-d
 const longDate = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
 const startLabel = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long" });
 const dayOf = (iso: string) => new Date(`${iso}T00:00:00`);
+
+// Kâğıttaki gibi tek tarih biçimi: sistem yoklaması da elle yazılan satır da "19 / 09 / 2026".
+const PAPER_DATE = "font-serif text-[.95rem] italic tabular-nums";
+const paperDate = (iso: string) => longDate.format(dayOf(iso)).replace(/\./g, " / ");
+
+// Geniş ekranda solda öğrenci listesi, sağda seçili kart; daha darda kart tam ekran açılır.
+const WIDE_QUERY = "(min-width: 1024px)";
+function subscribeWide(onChange: () => void) {
+  const media = window.matchMedia(WIDE_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+function useWideScreen() {
+  return useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_QUERY).matches, () => false);
+}
 
 // Dönemin ders aralığı: "17.09 – 15.10"; dolmamış dönemde "22.10 –".
 function cycleRange(cycle: CardCycle) {
@@ -110,7 +125,8 @@ export function AttendanceCards({ query }: { query: string }) {
       && (filter === "all" || card.state === filter));
   }, [cards, query, instrument, teacher, filter]);
 
-  const selected = cards.find((card) => card.enrollmentId === selectedId) ?? null;
+  const wide = useWideScreen();
+  const selected = cards.find((card) => card.enrollmentId === selectedId) ?? (wide ? visible[0] ?? null : null);
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-20 rounded-2xl" />)}</div>;
   if (isError || !data) return <div className="app-card p-6 text-center"><p className="text-sm font-bold">Yoklama kartları yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>;
@@ -152,58 +168,45 @@ export function AttendanceCards({ query }: { query: string }) {
       </FilterField>
     </section>
 
-    <section className="app-card min-w-0 overflow-hidden">
-      {!visible.length && <EmptyState title="Bu filtrede öğrenci yok" description="Filtreyi kaldırmayı ya da aramayı temizlemeyi dene." />}
-      {!!visible.length && <div className="overflow-x-auto">
-        <table className="w-full min-w-[40rem] text-sm">
-          <thead>
-            <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
-              <th className="px-3 py-2.5">Öğrenci</th>
-              <th className="px-3 py-2.5">İlk giriş</th>
-              <th className="px-3 py-2.5">Dönem</th>
-              <th className="px-3 py-2.5">Bu dönem (4 ders)</th>
-              <th className="px-3 py-2.5">Durum</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--line)]">
-            {visible.map((card) => {
-              const current = card.cycles.find((cycle) => cycle.number === card.currentCycle);
-              const isSelected = selected?.enrollmentId === card.enrollmentId;
-              const full = card.filledInCurrent === 4;
-              return <tr
-                key={card.enrollmentId}
-                tabIndex={0}
-                aria-selected={isSelected}
+    <div className="grid gap-3 lg:h-[calc(100dvh-21rem)] lg:min-h-[28rem] lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <section aria-label="Öğrenciler" className="app-card min-h-0 overflow-y-auto lg:h-full">
+        {!visible.length && <EmptyState title="Bu filtrede öğrenci yok" description="Filtreyi kaldırmayı ya da aramayı temizlemeyi dene." />}
+        <ul className="divide-y divide-[var(--line)]">
+          {visible.map((card) => {
+            const current = card.cycles.find((cycle) => cycle.number === card.currentCycle);
+            const isSelected = selected?.enrollmentId === card.enrollmentId;
+            return <li key={card.enrollmentId}>
+              <button
+                type="button"
+                aria-current={isSelected}
                 onClick={() => setSelectedId(card.enrollmentId)}
-                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(card.enrollmentId); } }}
-                className={`cursor-pointer ${isSelected ? "bg-[var(--brand-soft)]" : "hover:bg-[var(--surface-muted)]"}`}
+                className={`flex w-full flex-col gap-1.5 px-3 py-2.5 text-left ${isSelected ? "bg-[var(--brand-soft)] shadow-[inset_3px_0_0_var(--brand)]" : "hover:bg-[var(--surface-muted)]"}`}
               >
-                <td className="px-3 py-2.5">
-                  <span className="block font-bold">{card.studentName}</span>
-                  <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
-                  {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">İlk giriş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
-                </td>
-                <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.hasOwnCycleStart && card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : <span className="text-[var(--muted)]">—</span>}</td>
-                <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
-                <td className="px-3 py-2.5">
-                  <span className="inline-grid grid-cols-4 gap-1">
-                    {[0, 1, 2, 3].map((index) => {
-                      const lesson = current?.filled[index];
-                      return lesson
-                        ? <span key={index} title="Geldi" className={`grid h-7 w-11 place-items-center rounded-lg text-[.68rem] font-bold tabular-nums ${full ? "bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "bg-[var(--success-soft)] text-[var(--success-strong)]"}`}>{shortDate.format(dayOf(lesson.date))}</span>
-                        : <span key={index} className="grid h-7 w-11 place-items-center rounded-lg border-[1.5px] border-dashed border-[var(--line)] text-[.68rem] font-bold text-[var(--muted)]">{index + 1}</span>;
-                    })}
+                <span className="flex w-full items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm font-bold">{card.studentName}</span>
+                  <span className="shrink-0 text-xs font-semibold tabular-nums text-[var(--muted)]">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</span>
+                </span>
+                <span className="text-meta truncate text-xs">{card.instrumentName} · {card.teacherName}</span>
+                <span className="flex items-center justify-between gap-2">
+                  <span aria-label={`Bu dönem ${current?.filled.length ?? 0}/4`} className="flex gap-1">
+                    {[0, 1, 2, 3].map((index) => <span key={index} className={`h-1.5 w-5 rounded-full ${index < (current?.filled.length ?? 0) ? (card.filledInCurrent === 4 ? "bg-[var(--warning)]" : "bg-[var(--success-strong)]") : "bg-[var(--line)]"}`} />)}
                   </span>
-                </td>
-                <td className="px-3 py-2.5 whitespace-nowrap"><StatePill card={card} /></td>
-              </tr>;
-            })}
-          </tbody>
-        </table>
-      </div>}
-    </section>
+                  <StatePill card={card} />
+                </span>
+              </button>
+            </li>;
+          })}
+        </ul>
+      </section>
 
-    {selected && <Modal open size="full" title={selected.studentName} description={`${selected.instrumentName} · ${selected.teacherName}`} onClose={() => setSelectedId(null)}>
+      {wide && <div className="min-h-0 overflow-y-auto lg:h-full">
+        {selected
+          ? <AttendanceSheet key={selected.enrollmentId} card={selected} entriesFrom={data.entriesFrom} />
+          : <div className="app-card"><EmptyState title="Öğrenci seç" description="Soldaki listeden bir öğrenci seçince kartı burada açılır." /></div>}
+      </div>}
+    </div>
+
+    {selected && !wide && <Modal open size="full" title={selected.studentName} description={`${selected.instrumentName} · ${selected.teacherName}`} onClose={() => setSelectedId(null)}>
       <AttendanceSheet key={selected.enrollmentId} card={selected} entriesFrom={data.entriesFrom} />
     </Modal>}
   </div>;
@@ -285,7 +288,7 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    <div className="gap-0 md:columns-2 xl:columns-3">
+    <div className="columns-[17rem] gap-0">
       {blocks.map((cycle) => <CycleBlock
         key={cycle.number}
         card={card}
@@ -333,11 +336,14 @@ function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: Att
     : { tone: "danger" as const, text: "Ödenmedi" };
 
   return <section className={`break-inside-avoid border-r border-b-2 border-[var(--line)] border-b-[var(--foreground)] ${awaiting ? "shadow-[inset_0_0_0_2px_var(--warning)]" : ""}`}>
-    <header className="flex items-center justify-between gap-1.5 bg-[var(--surface-muted)] px-2.5 py-1.5 text-[.72rem] font-bold">
+    {/* Başlık her blokta iki satır yüksekliğinde: aylık aidat satırı olan ve olmayan bloklar hizalı kalır. */}
+    <header className="flex h-12 items-center justify-between gap-1.5 bg-[var(--surface-muted)] px-2.5 text-[.72rem] font-bold leading-tight">
       <span className="min-w-0">
-        <span className="uppercase tracking-[.04em] text-[var(--muted)]">{cycle.number}. dönem</span>
-        {cycleRange(cycle) && <span className="ml-1.5 font-semibold tabular-nums text-[var(--muted)]">{cycleRange(cycle)}</span>}
-        {coveringLabel(cycle) && <span className="block font-semibold text-[var(--foreground)]">{coveringLabel(cycle)}</span>}
+        <span className="block truncate">
+          <span className="uppercase tracking-[.04em] text-[var(--muted)]">{cycle.number}. dönem</span>
+          {cycleRange(cycle) && <span className="ml-1.5 font-semibold tabular-nums text-[var(--muted)]">{cycleRange(cycle)}</span>}
+        </span>
+        {coveringLabel(cycle) && <span className="block truncate font-semibold text-[var(--foreground)]">{coveringLabel(cycle)}</span>}
       </span>
       <span className={`shrink-0 rounded-full px-2 py-0.5 ${PILL_CLASS[tag.tone]}`}>{tag.text}</span>
     </header>
@@ -346,11 +352,9 @@ function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: Att
         {[0, 1, 2, 3].map((index) => {
           const lesson = cycle.filled[index];
           const next = current && !lesson && index === cycle.filled.length;
-          return <div key={lesson ? lesson.lessonId ?? lesson.entryId : `empty-${index}`} className={`grid min-h-9 grid-cols-[1.2rem_1fr_1.8rem] items-center border-t border-[var(--line)] px-2.5 ${next ? "bg-[var(--brand-soft)]" : ""}`}>
+          return <div key={lesson ? lesson.lessonId ?? lesson.entryId : `empty-${index}`} className={`grid h-10 grid-cols-[1.2rem_1fr_1.8rem] items-center border-t border-[var(--line)] px-2.5 ${next ? "bg-[var(--brand-soft)]" : ""}`}>
             <span className="text-[.66rem] font-bold text-[var(--muted)]">{index + 1}</span>
-            {lesson && !lesson.entryId && <span className="flex min-w-0 items-center gap-1.5 font-serif italic tabular-nums" title="Sistemdeki yoklamadan">
-              {longDate.format(dayOf(lesson.date)).replace(/\./g, " / ")}
-            </span>}
+            {lesson && !lesson.entryId && <span className={`min-w-0 truncate px-1.5 ${PAPER_DATE}`} title="Sistemdeki yoklamadan">{paperDate(lesson.date)}</span>}
             {lesson?.entryId && <EntryInput key={lesson.entryId} card={card} entriesFrom={entriesFrom} entryId={lesson.entryId} date={lesson.date} onError={setError} />}
             {!lesson && <EntryInput card={card} entriesFrom={entriesFrom} entryId={null} date={null} onError={setError} />}
             <span className={`grid h-full place-items-center border-l border-[var(--line)] text-base font-bold text-[var(--success-strong)]`}>{lesson ? "✓" : ""}</span>
@@ -391,6 +395,8 @@ function EntryInput({ card, entriesFrom, entryId, date, onError }: { card: Atten
   const add = useAddCardEntry();
   const change = useChangeCardEntry();
   const remove = useRemoveCardEntry();
+  // Satır kâğıttaki gibi düz yazı görünür; tıklayınca tarih kutusuna döner (boş satırda "/ /").
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(date ?? "");
   const busy = add.isPending || change.isPending || remove.isPending;
 
@@ -405,27 +411,41 @@ function EntryInput({ card, entriesFrom, entryId, date, onError }: { card: Atten
   }
 
   function commit() {
-    if (!value || value === date) return;
+    setEditing(false);
+    if (!value || value === date) { setValue(date ?? ""); return; }
     void run(() => entryId
       ? change.mutateAsync({ entryId, date: value })
       : add.mutateAsync({ enrollmentId: card.enrollmentId, date: value }).then(() => setValue("")));
   }
 
-  return <span className="flex min-w-0 items-center gap-1">
-    <input
-      type="date"
-      value={value}
-      min={entriesFrom}
-      max={todayInput()}
+  if (!editing) return <span className="flex min-w-0 items-center gap-1">
+    <button
+      type="button"
       disabled={busy}
-      onChange={(event) => setValue(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => { if (event.key === "Enter") commit(); }}
-      aria-label={entryId ? "Elle yazılmış ders tarihi" : "Geçmiş ders tarihi ekle"}
-      className={`min-w-0 flex-1 rounded-md border bg-transparent px-1.5 py-0.5 font-serif text-sm italic tabular-nums ${entryId ? "border-transparent text-[var(--foreground)] hover:border-[var(--line)]" : "border-dashed border-[var(--line)] text-[var(--muted)]"}`}
-    />
+      onClick={() => setEditing(true)}
+      aria-label={entryId ? "Elle yazılmış ders tarihini değiştir" : "Geçmiş ders tarihi ekle"}
+      title={entryId ? "Elle yazıldı · değiştirmek için tıkla" : "Geçmiş ders eklemek için tıkla"}
+      className={`min-w-0 flex-1 truncate rounded-md px-1.5 py-0.5 text-left hover:bg-[var(--surface-muted)] ${PAPER_DATE} ${date ? "" : "text-[var(--line)] hover:text-[var(--muted)]"}`}
+    >{date ? paperDate(date) : "/  /"}</button>
     {entryId && <button type="button" disabled={busy} onClick={() => void run(() => remove.mutateAsync(entryId))} aria-label="Elle yazılmış dersi kaldır" title="Kaldır" className="shrink-0 rounded px-1 text-sm font-bold text-[var(--muted)] hover:text-[var(--danger-strong)]">×</button>}
   </span>;
+
+  return <input
+    type="date"
+    autoFocus
+    value={value}
+    min={entriesFrom}
+    max={todayInput()}
+    disabled={busy}
+    onChange={(event) => setValue(event.target.value)}
+    onBlur={commit}
+    onKeyDown={(event) => {
+      if (event.key === "Enter") commit();
+      if (event.key === "Escape") { event.stopPropagation(); setValue(date ?? ""); setEditing(false); }
+    }}
+    aria-label={entryId ? "Elle yazılmış ders tarihi" : "Geçmiş ders tarihi ekle"}
+    className={`min-w-0 rounded-md border border-[var(--line)] bg-[var(--surface)] px-1.5 py-0.5 ${PAPER_DATE}`}
+  />;
 }
 
 // Kartın "İlk giriş" alanı salt okunur: ayrı seçilmez, karta yazılan ilk satırın günüdür (AD11).
