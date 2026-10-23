@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { Icon } from "@/components/icons";
-import { EmptyState, FilterField, Modal, StatStrip, type Tone } from "@/components/ui";
+import { EmptyState, Modal, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useSendPaymentReminder } from "@/lib/billing";
@@ -134,41 +133,32 @@ export function AttendanceCards({ query }: { query: string }) {
   const toggle = (next: Filter) => setFilter((current) => (current === next ? "all" : next));
 
   return <div className="space-y-3">
-    {counts.awaiting.length > 0 && <section aria-live="polite" className="flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-2xl border border-[color-mix(in_srgb,var(--warning)_35%,transparent)] bg-[var(--warning-soft)] px-3.5 py-3 text-[var(--warning-strong)]">
-      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--surface)]"><Icon name="bell" className="h-4 w-4" /></span>
-      <span className="min-w-0 flex-[1_1_16rem]">
-        <strong className="block text-sm">{counts.awaiting.length} öğrenci 4 dersini tamamladı, ödeme bekleniyor</strong>
-        <span className="block text-xs">{counts.awaiting.map((card) => card.studentName).join(", ")} · bir sonraki derslerinde yeni dönem aidatı tahakkuk edecek.</span>
-      </span>
-      <button type="button" onClick={() => toggle("AwaitingPayment")} className="btn shrink-0 border-transparent bg-[var(--warning)] text-white hover:opacity-90">{filter === "AwaitingPayment" ? "Tümünü göster" : "Listele"}</button>
-    </section>}
-
-    <StatStrip
-      label="Duruma göre filtrele"
-      items={[
-        { key: "all", label: "Birebir öğrenci", value: cards.length, active: filter === "all", onClick: () => setFilter("all") },
-        { key: "AwaitingPayment", label: "Ödeme bekleniyor", value: counts.awaiting.length, tone: "warning", active: filter === "AwaitingPayment", onClick: () => toggle("AwaitingPayment") },
-        { key: "LastLesson", label: "Son derse 1 kaldı", value: counts.last, active: filter === "LastLesson", onClick: () => toggle("LastLesson") },
-        { key: "Unpaid", label: "Ödenmemiş dönem", value: counts.unpaid, tone: "danger", active: filter === "Unpaid", onClick: () => toggle("Unpaid") },
-      ]}
-    />
-
-    <section className="app-card flex flex-wrap items-end gap-x-3 gap-y-2 p-3">
-      <FilterField label="Branş" className="min-w-[9rem] flex-1">
-        <select value={instrument} onChange={(event) => setInstrument(event.target.value)} className="field text-sm">
-          <option value="">Tüm branşlar</option>
-          {instruments.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
-      </FilterField>
-      <FilterField label="Öğretmen" className="min-w-[9rem] flex-1">
-        <select value={teacher} onChange={(event) => setTeacher(event.target.value)} className="field text-sm">
-          <option value="">Tüm öğretmenler</option>
-          {teachers.map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
-      </FilterField>
+    {/* Tek satırlık araç çubuğu: durum süzgeçleri + branş/öğretmen. Kartlar sayfanın kalanını doldurur. */}
+    <section className="flex flex-wrap items-center gap-1.5">
+      {([
+        { key: "all", label: "Tümü", value: cards.length, tone: "muted" },
+        { key: "AwaitingPayment", label: "Ödeme bekleniyor", value: counts.awaiting.length, tone: "warning" },
+        { key: "LastLesson", label: "Son derse 1 kaldı", value: counts.last, tone: "brand" },
+        { key: "Unpaid", label: "Ödenmemiş", value: counts.unpaid, tone: "danger" },
+      ] as const).map((item) => <button
+        key={item.key}
+        type="button"
+        aria-pressed={filter === item.key}
+        onClick={() => item.key === "all" ? setFilter("all") : toggle(item.key)}
+        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${filter === item.key ? "border-[var(--foreground)] bg-[var(--foreground)] text-white" : `border-transparent ${PILL_CLASS[item.tone]}`}`}
+      >{item.label}<span className="tabular-nums">{item.value}</span></button>)}
+      <span className="flex-1" />
+      <select value={instrument} onChange={(event) => setInstrument(event.target.value)} aria-label="Branş" className="field !min-h-8 w-auto py-1 text-xs">
+        <option value="">Tüm branşlar</option>
+        {instruments.map((name) => <option key={name} value={name}>{name}</option>)}
+      </select>
+      <select value={teacher} onChange={(event) => setTeacher(event.target.value)} aria-label="Öğretmen" className="field !min-h-8 w-auto py-1 text-xs">
+        <option value="">Tüm öğretmenler</option>
+        {teachers.map((name) => <option key={name} value={name}>{name}</option>)}
+      </select>
     </section>
 
-    <div className="grid gap-3 lg:h-[calc(100dvh-21rem)] lg:min-h-[28rem] lg:grid-cols-[19rem_minmax(0,1fr)]">
+    <div className="grid gap-2 lg:h-[calc(100dvh-12.5rem)] lg:min-h-[28rem] lg:grid-cols-[19rem_minmax(0,1fr)]">
       <section aria-label="Öğrenciler" className="app-card min-h-0 overflow-y-auto lg:h-full">
         {!visible.length && <EmptyState title="Bu filtrede öğrenci yok" description="Filtreyi kaldırmayı ya da aramayı temizlemeyi dene." />}
         <ul className="divide-y divide-[var(--line)]">
@@ -224,7 +214,8 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
   const unpaid = card.cycles.filter((cycle) => cycle.receivable?.accruedOn && !["Paid", "Cancelled"].includes(cycle.receivable.status));
   const nextCycle = card.cycles.find((cycle) => cycle.number === card.currentCycle + 1);
   const nextPeriod = nextCycle?.receivable && nextCycle.receivable.status !== "Cancelled" ? nextCycle.receivable.period : cycleKey(card.currentCycle + 1);
-  const collectPeriods = card.state === "AwaitingPayment" ? [nextPeriod] : unpaid.map((cycle) => cycle.receivable!.period);
+  // Borç yoksa da Tahsil et görünür: sıradaki dönem peşin alınır.
+  const collectPeriods = unpaid.length && card.state !== "AwaitingPayment" ? unpaid.map((cycle) => cycle.receivable!.period) : [nextPeriod];
   const remindTarget = unpaid.at(-1)?.receivable ?? null;
   const periodLabels: Record<string, string> = Object.fromEntries(card.cycles
     .filter((cycle) => cycle.receivable)
@@ -251,7 +242,19 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
   const lastShown = Math.max(nextBlock, 2, ...card.cycles.map((cycle) => cycle.number));
   const blocks: CardCycle[] = Array.from({ length: lastShown }, (_, index) =>
     card.cycles.find((cycle) => cycle.number === index + 1) ?? { number: index + 1, filled: [], misses: [], receivable: null });
-  return <article aria-label={`${card.studentName} yoklama kartı`} className="mx-auto min-w-0 max-w-7xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)]">
+  return <>
+  {/* Eylem çubuğu kartın üstünde sabit durur: kart aşağı kaydırılsa da Tahsil et görünür. */}
+  <div className="sticky top-0 z-10 mx-auto mb-2 flex max-w-7xl flex-wrap items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 shadow-[var(--shadow-card)]">
+    <span className="min-w-0">
+      <strong className="block truncate text-sm">{card.studentName}</strong>
+      <span className="text-meta block truncate text-xs">{card.instrumentName} · {card.teacherName}</span>
+    </span>
+    <StatePill card={card} />
+    <span className="flex-1" />
+    {remindTarget && <button type="button" onClick={remind} disabled={reminder.isPending} className="btn btn-quiet text-xs">{reminder.isPending ? "Gönderiliyor…" : "Hatırlatma gönder"}</button>}
+    <button type="button" onClick={() => setCollecting(collectPeriods)} className="btn btn-primary">Tahsil et</button>
+  </div>
+  <article aria-label={`${card.studentName} yoklama kartı`} className="mx-auto min-w-0 max-w-7xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)]">
     <div className="flex items-baseline justify-between gap-2 border-b-2 border-[var(--foreground)] px-4 py-3">
       <span className="text-xs font-extrabold uppercase tracking-[.08em]">Abdera Sanat Akademi</span>
       <span className="text-xs font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">Yoklama listesi</span>
@@ -268,12 +271,6 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       <CycleStartField card={card} />
     </dl>
 
-    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5">
-      <StatePill card={card} />
-      <span className="flex-1" />
-      {remindTarget && <button type="button" onClick={remind} disabled={reminder.isPending} className="btn btn-quiet text-xs">{reminder.isPending ? "Gönderiliyor…" : "Hatırlatma gönder"}</button>}
-      {collectPeriods.length > 0 && <button type="button" onClick={() => setCollecting(collectPeriods)} className="btn btn-primary text-xs">Tahsil et</button>}
-    </div>
     {message && <p role="status" className={`border-b border-[var(--line)] px-4 py-2 text-xs font-semibold ${message.tone === "success" ? "text-[var(--success-strong)]" : "text-[var(--danger-strong)]"}`}>{message.text}</p>}
 
     {card.state === "AwaitingPayment" && <p className="border-b border-[var(--line)] bg-[var(--warning-soft)] px-4 py-2.5 text-xs text-[var(--warning-strong)]">
@@ -318,7 +315,8 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       onClose={() => setCollecting(null)}
       onCollected={(text) => { setCollecting(null); setMessage({ tone: "success", text }); }}
     />}
-  </article>;
+  </article>
+  </>;
 }
 
 function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: AttendanceCard; entriesFrom: string; cycle: CardCycle; current: boolean; awaiting: boolean }) {
