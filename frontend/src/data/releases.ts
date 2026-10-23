@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.6",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Kartta \"Tahsil et\" artık sade bir pencere açıyor: tarih ve tutar. Tutar kendiliğinden dolar, istersen değiştirirsin; daha az alırsan kalanı borç olarak kalır." },
+      { audience: "admin", text: "Her 4 ders bir ödeme: alınmış ödeme kartın ilk dönemini karşılar. Ekimi ödenmiş, eylülü açık öğrencide 1. dönem \"Ödendi\" görünür; dönem başlamadan \"Gecikti\" yazmaz." },
+      { audience: "admin", text: "Kartta tarihler artık kesilmeden tam görünür." },
+    ],
+  },
+  {
     version: "2026.10.23.5",
     date: "2026-10-23",
     items: [
