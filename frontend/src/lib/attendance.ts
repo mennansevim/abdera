@@ -75,6 +75,9 @@ export interface CycleReceivable {
   accruedOn: string | null;
   // Son ödemenin günü (tarih düzeltmesi dahil); kartta dönemin yanındaki ödeme sütununa yazılır.
   paidOn: string | null;
+  // Dönemin gerçek aidatı: "D002" ya da dönemi karşılayan aylık aidatın ayı "2026-09" (AD14).
+  // Tahsilat bu anahtarla yapılır.
+  period: string;
 }
 
 export interface CardCycle {

@@ -278,6 +278,11 @@ public static class Collections
             .Where(receivable => receivable.EnrollmentId == enrollment.Id && periods.Contains(receivable.Period))
             .ToDictionaryAsync(receivable => receivable.Period);
         var paid = await Receivables.ComputeTotalsPaidAsync(existing.Values.Select(receivable => receivable.Id), db);
+        // Aylık aidatın karşıladığı dönem (AD14) "D00n" olarak tahsil edilemez - o dönemin borcu aylık
+        // aidattır; yeni bir D00n açmak aynı derslere ikinci borç yazardı.
+        var coverage = pricer.CycleStartFor(enrollment) is { } cycleStart
+            ? await CycleReceivableAccruer.FindCoverageAsync(db, enrollment.Id, cycleStart, today)
+            : [];
 
         // Peşin kademesi yeniden fiyatlanabilecek aylar üzerinden sayılır - kısmi ödenmiş ay
         // tutarı değişmeyeceği için "peşin" sayılmaz.
@@ -332,7 +337,10 @@ public static class Collections
             }
 
             var isCycle = BillingCycle.IsKey(period);
-            string? notCollectable = isCycle
+            var coveredBy = isCycle ? coverage.GetValueOrDefault(BillingCycle.Number(period)) : null;
+            string? notCollectable = coveredBy is not null
+                ? $"{BillingCycle.Number(period)}. dönem {coveredBy.Period} aylık aidatıyla karşılanıyor; o ayı tahsil et."
+                : isCycle
                 ? (pricer.CycleStartFor(enrollment) is not null
                     ? null : "Bu kurs kaydı dönemle (4 ders) faturalanmıyor.")
                 : receivable is null && pricer.BillsByCycle(enrollment, period) ? TuitionPricer.CycleBilledMessage : null;

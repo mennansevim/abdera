@@ -386,13 +386,15 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(lesson27, (await CyclesAsync(seeded.EnrollmentId)).Single(r => r.Period == "D001").AccruedLessonId);
 
         await using var db = await _factory.CreateDbContextAsync();
-        Assert.Equal(2, await db.AuditLogs.CountAsync(log => log.Action == "attendance.manual_entry_added"));
+        // Veritabanı testler arasında ortak: yalnızca bu kaydın satırları sayılır.
+        var added = await db.AuditLogs.Where(log => log.Action == "attendance.manual_entry_added").Select(log => log.AfterJson).ToListAsync();
+        Assert.Equal(2, added.Count(json => json != null && json.Contains(seeded.EnrollmentId.ToString())));
         Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "attendance.manual_entry_removed" && log.EntityId == first));
         Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "enrollment.cycle_start_set" && log.EntityId == seeded.EnrollmentId));
     }
 
     [Fact]
-    public async Task A_card_started_last_month_is_covered_by_the_latest_earlier_monthly_due()
+    public async Task Monthly_dues_since_the_card_start_cover_the_cycles_in_order()
     {
         var admin = await AdminAsync();
         var seeded = await SeedAsync(admin, "Gecenay", 0);
@@ -400,25 +402,94 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var lastMonth = BillingPeriod.Format(start.Year, start.Month);
         var thisMonth = BillingPeriod.Format(LocalDay(0).Year, LocalDay(0).Month);
 
-        // Geçiş öncesi iki ayın aylık aidatı açılmış (geçen ay + bu ay).
-        Guid currentMonthlyId;
+        // Geçiş öncesi geçen ayın aylık aidatı açılmış ve ödenmiş (canlıdaki Eylül aidatı gibi).
+        Guid lastMonthlyId;
         await using (var db = await _factory.CreateDbContextAsync())
         {
             var rate = await db.TuitionRates.AsNoTracking().FirstAsync(r => r.CourseKind == CourseKind.Individual);
-            var breakdown = new TuitionCalculator.Breakdown(6000m, 0m, null, 6000m);
-            db.Receivables.Add(Receivable.Create(seeded.EnrollmentId, rate.Id, lastMonth, breakdown, "TRY", start, Now));
-            var current = Receivable.Create(seeded.EnrollmentId, rate.Id, thisMonth, breakdown, "TRY", LocalDay(0), Now);
-            db.Receivables.Add(current);
+            var monthly = Receivable.Create(seeded.EnrollmentId, rate.Id, lastMonth, new TuitionCalculator.Breakdown(6000m, 0m, null, 6000m), "TRY", start, Now);
+            db.Receivables.Add(monthly);
             await db.SaveChangesAsync();
-            currentMonthlyId = current.Id;
+            lastMonthlyId = monthly.Id;
         }
+        await PayAsync(admin, seeded.EnrollmentId, lastMonth, 6000m);
 
-        await WrittenIdAsync(await WriteAsync(admin, seeded.EnrollmentId, start));
+        // 5 ders: 1. dönemi geçen ayın aidatı karşılar, 5. ders 2. dönemi açar.
+        for (var day = 0; day < 5; day++) await WrittenIdAsync(await WriteAsync(admin, seeded.EnrollmentId, start.AddDays(day)));
+        var second = Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+        Assert.Equal("D002", second.Period);
 
-        // Sayaç geçen ayda başladı ama 1. dönemi bu ayın aidatı karşılar: ikinci borç açılmaz.
-        Assert.Empty(await CyclesAsync(seeded.EnrollmentId));
+        // Sonradan bu ayın aylık aidatı da bulunursa (aylık üretim önceden açmıştı) 2. dönemi o karşılar:
+        // bir sonraki eşitlemede D002 iptal olur, aynı derslere ikinci borç kalmaz.
+        Guid thisMonthlyId;
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            var rate = await db.TuitionRates.AsNoTracking().FirstAsync(r => r.CourseKind == CourseKind.Individual);
+            var monthly = Receivable.Create(seeded.EnrollmentId, rate.Id, thisMonth, new TuitionCalculator.Breakdown(6000m, 0m, null, 6000m), "TRY", LocalDay(0), Now);
+            db.Receivables.Add(monthly);
+            await db.SaveChangesAsync();
+            thisMonthlyId = monthly.Id;
+        }
+        await WrittenIdAsync(await WriteAsync(admin, seeded.EnrollmentId, start.AddDays(5)));
+        Assert.Equal(ReceivableStatus.Cancelled, Assert.Single(await CyclesAsync(seeded.EnrollmentId)).Status);
+
         var card = await CardAsync(admin, seeded.EnrollmentId);
-        Assert.Equal(currentMonthlyId, card.Cycles.Single(cycle => cycle.Number == 1).Receivable!.Id);
+        var first = card.Cycles.Single(cycle => cycle.Number == 1).Receivable!;
+        Assert.Equal(lastMonthlyId, first.Id);
+        Assert.Equal(lastMonth, first.Period);
+        Assert.NotNull(first.PaidOn);
+        Assert.Equal(thisMonthlyId, card.Cycles.Single(cycle => cycle.Number == 2).Receivable!.Id);
+        Assert.Equal(6000m, card.UnpaidAmount);
+
+        // Karşılanan dönem "D001" olarak tahsil edilemez; sıradaki dönem 3'tür.
+        var quote = await ReadAsync<Collections.Quote>(await admin.GetAsync(
+            $"/api/enrollments/{seeded.EnrollmentId}/collection-preview?periods=D001&prepay=false&sibling=false&multiCourse=false"));
+        Assert.NotEmpty(quote.Blockers);
+        var board = await ReadAsync<List<BillingBoard.BoardRow>>(await admin.GetAsync($"/api/billing/board?year={LocalDay(0).Year}"));
+        Assert.Equal(3, board.Single(row => row.EnrollmentId == seeded.EnrollmentId).NextCycleNumber);
+    }
+
+    [Fact]
+    public async Task A_paid_cycle_due_keeps_its_cycle_and_the_monthly_due_moves_to_the_next()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "Odenmis", 0);
+        var start = AttendanceCards.EntriesFrom(LocalDay(0)).AddDays(14);
+        var lastMonth = BillingPeriod.Format(start.Year, start.Month);
+        var thisMonth = BillingPeriod.Format(LocalDay(0).Year, LocalDay(0).Month);
+
+        // Geçen ayın aidatı ödenmiş; 5 ders 2. dönemi açtı ve D002 de ödendi (eski kuralla).
+        await AddMonthlyAsync(seeded.EnrollmentId, lastMonth, start);
+        await PayAsync(admin, seeded.EnrollmentId, lastMonth, 6000m);
+        for (var day = 0; day < 5; day++) await WrittenIdAsync(await WriteAsync(admin, seeded.EnrollmentId, start.AddDays(day)));
+        await PayAsync(admin, seeded.EnrollmentId, "D002", 6000m);
+
+        // Bu ayın aidatı da açılıp ödenmiş: her 4 ders bir ödeme - üç ödeme 1., 2. ve (peşin) 3. dönemdir.
+        var thisMonthlyId = await AddMonthlyAsync(seeded.EnrollmentId, thisMonth, LocalDay(0));
+        await PayAsync(admin, seeded.EnrollmentId, thisMonth, 6000m);
+        await WrittenIdAsync(await WriteAsync(admin, seeded.EnrollmentId, start.AddDays(5)));
+
+        var d002 = Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+        Assert.Equal(ReceivableStatus.Paid, d002.Status);
+        Assert.NotNull(d002.AccruedOn);
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(d002.Id, card.Cycles.Single(cycle => cycle.Number == 2).Receivable!.Id);
+        Assert.Equal(thisMonthlyId, card.Cycles.Single(cycle => cycle.Number == 3).Receivable!.Id);
+        Assert.Equal(0m, card.UnpaidAmount);
+
+        // 3. dönemin ilk dersi yeni borç açmaz: o dönem bu ayın ödenmiş aidatıdır.
+        for (var day = 6; day < 9; day++) await WrittenIdAsync(await WriteAsync(admin, seeded.EnrollmentId, start.AddDays(day)));
+        Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+    }
+
+    private async Task<Guid> AddMonthlyAsync(Guid enrollmentId, string period, DateOnly dueDate)
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var rate = await db.TuitionRates.AsNoTracking().FirstAsync(r => r.CourseKind == CourseKind.Individual);
+        var monthly = Receivable.Create(enrollmentId, rate.Id, period, new TuitionCalculator.Breakdown(6000m, 0m, null, 6000m), "TRY", dueDate, Now);
+        db.Receivables.Add(monthly);
+        await db.SaveChangesAsync();
+        return monthly.Id;
     }
 
     [Fact]

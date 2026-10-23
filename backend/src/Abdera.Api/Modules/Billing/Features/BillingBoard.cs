@@ -94,6 +94,26 @@ public static class BillingBoard
             .ToDictionary(g => g.Key, g => g.Max(p => paymentDates[p.Id]));
 
         var pricer = await TuitionPricer.LoadAsync(db);
+        // Aylık aidatın karşıladığı dönemler de numara tüketir (AD14): eylül ve ekim aidatı 1. ve 2.
+        // dönemi karşılıyorsa sıradaki dönem 3'tür. Tek sorgu, eşleme bellekte.
+        var todayLocal = DateOnly.FromDateTime(today.Date);
+        var cycleStarts = enrollments
+            .Select(e => (e.Id, Start: pricer.CycleStartFor(e)))
+            .Where(item => item.Start is not null)
+            .ToDictionary(item => item.Id, item => item.Start!.Value);
+        var startIds = cycleStarts.Keys.ToList();
+        var startReceivables = await db.Receivables.AsNoTracking()
+            .Where(r => startIds.Contains(r.EnrollmentId) && r.Status != ReceivableStatus.Cancelled)
+            .ToListAsync();
+        var startPaid = await Receivables.ComputeTotalsPaidAsync(startReceivables.Where(r => BillingCycle.IsKey(r.Period)).Select(r => r.Id), db);
+        var byEnrollment = startReceivables.ToLookup(r => r.EnrollmentId);
+        var coveredCycles = cycleStarts.ToDictionary(pair => pair.Key, pair =>
+        {
+            var dues = byEnrollment[pair.Key].Where(r => BillingCycle.IsKey(r.Period)).ToDictionary(r => BillingCycle.Number(r.Period));
+            var coverage = CycleReceivableAccruer.AssignCoverage(
+                CycleReceivableAccruer.CoveringMonthlies(byEnrollment[pair.Key], pair.Value, todayLocal), dues, startPaid);
+            return coverage.Keys.DefaultIfEmpty(0).Max();
+        });
 
         var rows = enrollments
             .Where(e => students.ContainsKey(e.StudentId) && teachers.ContainsKey(e.TeacherId) && instruments.ContainsKey(e.InstrumentId))
@@ -116,7 +136,7 @@ public static class BillingBoard
                     facts.HasSibling, facts.AttendsMultipleCourses, e.ManualDiscountPercent, e.ManualDiscountReason,
                     e.StartedAt, e.EndedAt, e.Status, cells,
                     pricer.CycleStartFor(e),
-                    lastCycle.GetValueOrDefault(e.Id) + 1);
+                    Math.Max(lastCycle.GetValueOrDefault(e.Id), coveredCycles.GetValueOrDefault(e.Id)) + 1);
             })
             // Türkçe alfabetik sıra istemcide (localeCompare "tr") - burada named culture
             // kullanmak Alpine imajında ICU'ya bağımlılık demek (CLAUDE.md).

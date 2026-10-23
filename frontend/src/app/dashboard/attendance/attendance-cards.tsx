@@ -6,7 +6,7 @@ import { EmptyState, FilterField, Modal, SearchInput, StatStrip, type Tone } fro
 import { ApiError } from "@/lib/api";
 import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
-import { cycleKey, formatMoney, todayInput } from "@/lib/billing-format";
+import { cycleKey, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
 import { CollectSheet } from "../billing/collect-sheet";
 
 // Yönetici yoklama ekranı (docs/10-decisions.md AD): okulun kâğıt "Yoklama Listesi"nin dijital
@@ -50,6 +50,23 @@ const shortDate = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-d
 const longDate = new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" });
 const startLabel = new Intl.DateTimeFormat("tr-TR", { day: "numeric", month: "long" });
 const dayOf = (iso: string) => new Date(`${iso}T00:00:00`);
+
+// Dönemin ders aralığı: "17.09 – 15.10"; dolmamış dönemde "22.10 –".
+function cycleRange(cycle: CardCycle) {
+  if (!cycle.filled.length) return null;
+  const first = shortDate.format(dayOf(cycle.filled[0].date));
+  return cycle.filled.length === 4 ? `${first} – ${shortDate.format(dayOf(cycle.filled[3].date))}` : `${first} –`;
+}
+
+// Dönemi geçiş öncesi açılmış bir aylık aidat karşılıyorsa (AD14) hangisi olduğu: "Eylül 2026 aidatı".
+function coveringLabel(cycle: CardCycle) {
+  const period = cycle.receivable?.period;
+  return period && !isCyclePeriod(period) ? `${formatPeriod(period)} aidatı` : null;
+}
+
+function cycleTitle(cycle: CardCycle) {
+  return [`${cycle.number}. dönem`, cycleRange(cycle), coveringLabel(cycle)].filter(Boolean).join(" · ");
+}
 
 const MISS_CLASS = {
   Present: "bg-[var(--surface-muted)] text-[var(--foreground)]",
@@ -202,10 +219,17 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const row = board?.find((item) => item.enrollmentId === card.enrollmentId);
 
-  // Ödenmemiş başlamış dönemler; "ödeme bekleniyor"da sıradaki dönem peşin alınır.
+  // Ödenmemiş başlamış dönemler; "ödeme bekleniyor"da sıradaki dönem peşin alınır. Tahsilat dönemin
+  // gerçek aidatıyla yapılır: aylık aidatın karşıladığı dönemde o ay (AD14), yoksa "D00n".
   const unpaid = card.cycles.filter((cycle) => cycle.receivable?.accruedOn && !["Paid", "Cancelled"].includes(cycle.receivable.status));
-  const collectPeriods = card.state === "AwaitingPayment" ? [cycleKey(card.currentCycle + 1)] : unpaid.map((cycle) => cycleKey(cycle.number));
+  const nextCycle = card.cycles.find((cycle) => cycle.number === card.currentCycle + 1);
+  const nextPeriod = nextCycle?.receivable && nextCycle.receivable.status !== "Cancelled" ? nextCycle.receivable.period : cycleKey(card.currentCycle + 1);
+  const collectPeriods = card.state === "AwaitingPayment" ? [nextPeriod] : unpaid.map((cycle) => cycle.receivable!.period);
   const remindTarget = unpaid.at(-1)?.receivable ?? null;
+  const periodLabels: Record<string, string> = Object.fromEntries(card.cycles
+    .filter((cycle) => cycle.receivable)
+    .map((cycle) => [cycle.receivable!.period, cycleTitle(cycle)]));
+  if (!periodLabels[nextPeriod]) periodLabels[nextPeriod] = `${card.currentCycle + 1}. dönem · sıradaki 4 ders`;
 
   async function remind() {
     if (!remindTarget) return;
@@ -290,6 +314,7 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       row={row}
       year={year}
       initialPeriods={collecting}
+      periodLabels={periodLabels}
       onClose={() => setCollecting(null)}
       onCollected={(text) => { setCollecting(null); setMessage({ tone: "success", text }); }}
     />}
@@ -309,8 +334,12 @@ function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: Att
 
   return <section className={`break-inside-avoid border-r border-b-2 border-[var(--line)] border-b-[var(--foreground)] ${awaiting ? "shadow-[inset_0_0_0_2px_var(--warning)]" : ""}`}>
     <header className="flex items-center justify-between gap-1.5 bg-[var(--surface-muted)] px-2.5 py-1.5 text-[.72rem] font-bold">
-      <span className="uppercase tracking-[.04em] text-[var(--muted)]">{cycle.number}. dönem</span>
-      <span className={`rounded-full px-2 py-0.5 ${PILL_CLASS[tag.tone]}`}>{tag.text}</span>
+      <span className="min-w-0">
+        <span className="uppercase tracking-[.04em] text-[var(--muted)]">{cycle.number}. dönem</span>
+        {cycleRange(cycle) && <span className="ml-1.5 font-semibold tabular-nums text-[var(--muted)]">{cycleRange(cycle)}</span>}
+        {coveringLabel(cycle) && <span className="block font-semibold text-[var(--foreground)]">{coveringLabel(cycle)}</span>}
+      </span>
+      <span className={`shrink-0 rounded-full px-2 py-0.5 ${PILL_CLASS[tag.tone]}`}>{tag.text}</span>
     </header>
     <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] sm:grid-cols-[minmax(0,1fr)_6rem]">
       <div>

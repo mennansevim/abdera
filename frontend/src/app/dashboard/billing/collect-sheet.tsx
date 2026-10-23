@@ -26,10 +26,12 @@ import { MONTHS_SHORT, cellState, CELL_LABEL, CYCLE_LABEL, cycleCellState, cycle
 // pencereyi açar: aylar → isteğe bağlı indirimler → tahsil et; altında öğrencinin geçmişi.
 // Toplu ödeme ayrı bir akış değil, birden fazla ay seçmek. Tutarı sunucu hesaplar
 // (collection-preview); düğme yalnızca sunucunun gösterdiği toplamı teyit ederek tahsil eder.
-export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }: {
+export function CollectSheet({ row, year, initialPeriods, periodLabels, onClose, onCollected }: {
   row: BoardRow;
   year: number;
   initialPeriods: string[];
+  // Yoklama kartından açılınca özet satırları kartın diliyle yazılır ("2. dönem · Ekim 2026 aidatı").
+  periodLabels?: Record<string, string>;
   onClose: () => void;
   onCollected: (message: string) => void;
 }) {
@@ -209,7 +211,7 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
           <ul className="space-y-1 text-sm tabular-nums">
             {quote.rows.map((item) => <li key={item.period} className="flex items-baseline justify-between gap-3">
               <span className="min-w-0">
-                <span className="font-semibold">{formatPeriod(item.period)}</span>
+                <span className="font-semibold">{periodLabels?.[item.period] ?? formatPeriod(item.period)}</span>
                 {item.blockedReason && <span className="ml-1.5 text-xs font-bold text-[var(--danger-strong)]">{item.blockedReason}</span>}
                 {!item.blockedReason && item.alreadyPaid > 0 && <span className="text-meta ml-1.5">kalan</span>}
                 {!item.blockedReason && item.discountReason && <span className="text-meta block truncate text-xs">{item.discountReason}</span>}

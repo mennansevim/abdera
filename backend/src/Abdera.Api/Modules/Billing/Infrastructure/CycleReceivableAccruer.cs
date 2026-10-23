@@ -70,19 +70,65 @@ public static class CycleReceivableAccruer
     public static DateOnly? CountingFrom(Enrollment enrollment, BillingSettings settings) =>
         BillingCycle.StartFor(enrollment.CourseKind, enrollment.CycleStartsOn, enrollment.StartedAt, settings.CycleBillingStartsOn);
 
-    // Sayaç başladıktan sonra açılmış (geçiş öncesi) aylık aidat: varsa 1. dönemin ücreti sayılır.
-    // Sayaç geçen aya geri alınabildiği için (AD11) aralıkta iki ay olabilir - eylül ortasında başlayan
-    // kartın 4 dersi çoğunlukla ekimdedir; en yeni ay 1. dönemi karşılar, öncekiler o ayın dersleridir.
-    public static async Task<Receivable?> FindCoveringMonthlyAsync(AbderaDbContext db, IClock clock, Guid enrollmentId, DateOnly countingFrom)
+    // Sayaç başladıktan sonra açılmış (geçiş öncesi) aylık aidatlar dönemleri SIRAYLA karşılar (AD14):
+    // sayaç ayından bugüne açılmış ilk aylık aidat 1. dönemin, ikincisi 2. dönemin ücretidir; bu
+    // dönemler için D00n açılmaz. Eylül ortasında başlayıp eylülü ödenmiş, ekimi açık kalmış öğrencide
+    // eylül 1. dönemi, ekim 2. dönemi karşılar - aynı derslere ikinci borç yazılmaz.
+    public static List<Receivable> CoveringMonthlies(IEnumerable<Receivable> receivables, DateOnly countingFrom, DateOnly today)
     {
-        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var months = CoverableMonths(countingFrom, today);
+        return receivables
+            .Where(r => months.Contains(r.Period) && r.Status != ReceivableStatus.Cancelled)
+            .OrderBy(r => r.Period, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    public static async Task<List<Receivable>> FindCoveringMonthliesAsync(AbderaDbContext db, Guid enrollmentId, DateOnly countingFrom, DateOnly today)
+    {
+        var months = CoverableMonths(countingFrom, today);
+        var candidates = await db.Receivables.AsNoTracking()
+            .Where(r => r.EnrollmentId == enrollmentId && months.Contains(r.Period))
+            .ToListAsync();
+        return CoveringMonthlies(candidates, countingFrom, today);
+    }
+
+    // Hangi dönemi hangi aylık aidat karşılıyor (AD14). Aylık aidatlar sırayla dönemlere dağılır; ödeme
+    // görmüş bir D00n kendi dönemini korur ve aylık aidat bir sonrakine kayar. Eylül, ekim ve D002'si
+    // ödenmiş öğrencide eylül 1., D002 2., ekim 3. dönemi (peşin) karşılar - para ne kaybolur ne de
+    // 3. dönem başlayınca ikinci kez istenir. Ödenmemiş D00n'nin yerini aylık aidat alır (geri alınır).
+    public static Dictionary<int, Receivable> AssignCoverage(
+        IReadOnlyList<Receivable> monthlies, IReadOnlyDictionary<int, Receivable> cycleDues, IReadOnlyDictionary<Guid, decimal> paid)
+    {
+        var coverage = new Dictionary<int, Receivable>();
+        var number = 1;
+        foreach (var monthly in monthlies)
+        {
+            while (cycleDues.TryGetValue(number, out var due) && due.Status != ReceivableStatus.Cancelled && paid.GetValueOrDefault(due.Id) > 0m)
+                number++;
+            coverage[number++] = monthly;
+        }
+        return coverage;
+    }
+
+    public static async Task<Dictionary<int, Receivable>> FindCoverageAsync(AbderaDbContext db, Guid enrollmentId, DateOnly countingFrom, DateOnly today)
+    {
+        var monthlies = await FindCoveringMonthliesAsync(db, enrollmentId, countingFrom, today);
+        if (monthlies.Count == 0) return [];
+        var dues = (await db.Receivables.AsNoTracking()
+                .Where(r => r.EnrollmentId == enrollmentId && r.Period.StartsWith("D") && r.Status != ReceivableStatus.Cancelled)
+                .ToListAsync())
+            .Where(r => BillingCycle.IsKey(r.Period))
+            .ToDictionary(r => BillingCycle.Number(r.Period));
+        var paid = await Features.Receivables.ComputeTotalsPaidAsync(dues.Values.Select(r => r.Id), db);
+        return AssignCoverage(monthlies, dues, paid);
+    }
+
+    private static List<string> CoverableMonths(DateOnly countingFrom, DateOnly today)
+    {
         var months = new List<string>();
         for (var month = new DateOnly(countingFrom.Year, countingFrom.Month, 1); month <= today || months.Count == 0; month = month.AddMonths(1))
             months.Add(BillingPeriod.Format(month.Year, month.Month));
-        var candidates = await db.Receivables.AsNoTracking()
-            .Where(r => r.EnrollmentId == enrollmentId && months.Contains(r.Period) && r.Status != ReceivableStatus.Cancelled)
-            .ToListAsync();
-        return candidates.MaxBy(r => r.Period);
+        return months;
     }
 
     // Yoklaması yazılan dersin kurs kaydını bulur ve kartını eşitler. Yoklama zaten kaydedilmiş olmalı.
@@ -123,8 +169,10 @@ public static class CycleReceivableAccruer
             .Where(lesson => Fills(lesson.Status))
             .ToList();
         var required = BillingCycle.RequiredCycles(counted.Count);
-        // Sayacın başladığı ayın aylık aidatı 1. dönemi karşılar (AD9): D001 açılmaz.
-        var firstCovered = await FindCoveringMonthlyAsync(db, clock, enrollment.Id, countingFrom) is not null;
+        // Sayaç ayından beri açılmış aylık aidatlar dönemleri sırayla karşılar (AD14): onlara D00n açılmaz.
+        var now = clock.UtcNow;
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
+        var coverage = await FindCoverageAsync(db, enrollment.Id, countingFrom, today);
 
         var cycles = (await db.Receivables
                 .Where(r => r.EnrollmentId == enrollment.Id && r.Period.StartsWith("D"))
@@ -132,12 +180,11 @@ public static class CycleReceivableAccruer
             .Where(r => BillingCycle.IsKey(r.Period))
             .ToDictionary(r => BillingCycle.Number(r.Period));
 
-        var now = clock.UtcNow;
-        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
         TuitionPricer? pricer = null;
 
-        for (var number = firstCovered ? 2 : 1; number <= required; number++)
+        for (var number = 1; number <= required; number++)
         {
+            if (coverage.ContainsKey(number)) continue;
             var opening = counted[BillingCycle.OpeningLessonIndex(number)];
             var dueDate = opening.Date.AddDays(BillingCycle.DueDays);
             cycles.TryGetValue(number, out var receivable);
@@ -191,8 +238,9 @@ public static class CycleReceivableAccruer
                 afterJson: CycleJson(created, opening)));
         }
 
-        // Kartta artık var olmayan dönemler (yoklama Geldi'den Gelmedi'ye düzeltildi).
-        var stale = cycles.Where(pair => (pair.Key > required || (firstCovered && pair.Key == 1)) && pair.Value.AccruedOn is not null
+        // Kartta artık var olmayan dönemler (yoklama Geldi'den Gelmedi'ye düzeltildi) ve aylık aidatın
+        // karşıladığı dönem için açılmış D00n.
+        var stale = cycles.Where(pair => (pair.Key > required || coverage.ContainsKey(pair.Key)) && pair.Value.AccruedOn is not null
             && pair.Value.Status != ReceivableStatus.Cancelled).Select(pair => pair.Value).ToList();
         if (stale.Count > 0)
         {
@@ -215,7 +263,7 @@ public static class CycleReceivableAccruer
                     afterJson: JsonSerializer.Serialize(new
                     {
                         status = receivable.Status.ToString(),
-                        reason = "Yoklama düzeltmesi ya da dönem başlangıcı değişikliği dönemi geri aldı.",
+                        reason = "Yoklama düzeltmesi, dönem başlangıcı değişikliği ya da dönemi karşılayan aylık aidat dönemi geri aldı.",
                     })));
             }
         }
