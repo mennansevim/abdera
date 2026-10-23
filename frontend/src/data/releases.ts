@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.23.2",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartı artık tam ekran açılıyor: öğrencinin tüm dönemleri kâğıttaki gibi 4'erli bloklar halinde, yan yana sütunlarda görünür." },
+      { audience: "admin", text: "Her bloğun sağında ödeme tarihi var: Aidatlar ekranından tahsilat alındığı an o dönemin yanına tarih kendiliğinden düşer. Ödenmemiş dönemde boş kalır." },
+      { audience: "admin", text: "Karta artık yalnızca \"Geldi\" işaretlenen dersler yazılıyor. Mazeretli ders satır doldurmaz, telafi hakkı doğurur; telafi dersi yapılıp Geldi denince karta o yazılır." },
+    ],
+  },
+  {
     version: "2026.10.23",
     date: "2026-10-23",
     items: [
