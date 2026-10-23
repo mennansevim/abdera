@@ -25,15 +25,17 @@ import {
   remainingOfAll,
   type CellState,
 } from "./board-model";
+import { AttendanceCards } from "./attendance-cards";
 import { CycleGrid } from "./cycle-grid";
 import { CollectSheet } from "./collect-sheet";
 
-// Aidatlar ekranı (docs/10-decisions.md H17): iki görünüm, bir ödeme penceresi.
+// Aidatlar ekranı (docs/10-decisions.md H17, AD15): üç görünüm, bir ödeme penceresi.
 //   Liste   - seçili ayın bekleyenleri; "Ödeme al" tek dokunuşla ayı kapatır.
 //   Çizelge - öğrenci × ay; yılın resmi ve geçmiş.
+//   Kartlar - birebir öğrencinin yoklama kartı (4 ders bir dönem), tam ekran kart ve tahsilat.
 // Görünüm seçimi sayfada durur ve hatırlanır (ilk açılışta telefonda Liste, geniş ekranda
-// Çizelge). Arama iki görünümde ortak: öğrenci, öğretmen, veli veya enstrüman adı.
-type View = "list" | "grid";
+// Çizelge). Arama üç görünümde ortak: öğrenci, öğretmen, veli veya enstrüman adı.
+type View = "list" | "grid" | "cards";
 type ListFilter = "wait" | "paid" | "all";
 type SheetState = { row: BoardRow; periods: string[] } | null;
 type Toast = { message: string; undo?: () => Promise<void> } | null;
@@ -56,7 +58,7 @@ export function DuesBoard() {
     let initial: View = window.matchMedia("(min-width: 1024px)").matches ? "grid" : "list";
     try {
       const stored = window.localStorage.getItem(VIEW_KEY);
-      if (stored === "list" || stored === "grid") initial = stored;
+      if (stored === "list" || stored === "grid" || stored === "cards") initial = stored;
     } catch {
       // Depolama kapalıysa ekran genişliğine göre başlar.
     }
@@ -94,19 +96,20 @@ export function DuesBoard() {
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
         <Segmented
           label="Görünüm"
-          options={[{ value: "list", label: "Liste" }, { value: "grid", label: "Çizelge" }]}
+          options={[{ value: "list", label: "Liste" }, { value: "grid", label: "Çizelge" }, { value: "cards", label: "Kartlar" }]}
           value={view}
           onChange={changeView}
         />
         <SearchInput value={query} onChange={setQuery} label="Öğrenci, öğretmen veya veli ara" placeholder="Öğrenci, öğretmen veya veli ara…" />
       </div>
-      {query.trim() && <p className="text-meta border-b border-[var(--line)] px-3 py-1.5 text-xs">
+      {query.trim() && view !== "cards" && <p className="text-meta border-b border-[var(--line)] px-3 py-1.5 text-xs">
         {teacherHit && <><strong className="text-[var(--foreground)]">{teacherHit}</strong> öğrencileri · </>}{studentCount} öğrenci
       </p>}
 
-      {isLoading && <p className="text-meta px-3 py-6 text-center">Aidatlar yükleniyor…</p>}
-      {isError && <div className="px-3 py-6 text-center"><p className="text-meta">Aidatlar yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>}
-      {board && (view === "list"
+      {view === "cards" && <div className="bg-[var(--background)] p-3"><AttendanceCards query={query} /></div>}
+      {view !== "cards" && isLoading && <p className="text-meta px-3 py-6 text-center">Aidatlar yükleniyor…</p>}
+      {view !== "cards" && isError && <div className="px-3 py-6 text-center"><p className="text-meta">Aidatlar yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>}
+      {board && view !== "cards" && (view === "list"
         ? <ListView rows={rows} month={month} today={today} onMonth={setMonth} filter={listFilter} onFilter={setListFilter} onOpen={(row, periods) => setSheet({ row, periods })} onToast={setToast} />
         : <GridView rows={rows} year={year} today={today} onYear={(next) => setMonth(next === Number(today.slice(0, 4)) ? today : `${next}-12`)} debtOnly={debtOnly} onDebtOnly={setDebtOnly} onOpen={(row, periods) => setSheet({ row, periods })} />)}
     </section>

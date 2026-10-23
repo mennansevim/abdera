@@ -2,18 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
-import { EmptyState, FilterField, Modal, SearchInput, StatStrip, type Tone } from "@/components/ui";
+import { EmptyState, FilterField, Modal, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardState } from "@/lib/attendance";
 import { useBillingBoard, useSendPaymentReminder } from "@/lib/billing";
 import { cycleKey, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
-import { CollectSheet } from "../billing/collect-sheet";
+import { CollectSheet } from "./collect-sheet";
 
 // Yönetici yoklama ekranı (docs/10-decisions.md AD): okulun kâğıt "Yoklama Listesi"nin dijital
 // hali. Birebir kayıt başına bir kart; 4 satır bir dönemdir. Yalnızca Geldi satır doldurur (telafi
 // dersi de Geldi olunca), Gelmedi ve Mazeretli kartın altına not düşer. 4. satır dolunca "ödeme bekleniyor" uyarısı çıkar; sonraki
 // derste yeni dönemin aidatı tahakkuk eder. Kartı ve durumu sunucu kurar (AttendanceCards.cs).
-// Satıra basınca öğrencinin kartı tam ekran açılır; her dönemin yanında ödeme tarihi durur.
+// Aidatlar ekranının "Kartlar" görünümüdür (Liste | Çizelge | Kartlar); arama Aidatlar'ın ortak
+// arama kutusundan gelir. Satıra basınca öğrencinin kartı tam ekran açılır; her dönemin yanında
+// ödeme tarihi durur.
 // Tahsilat buradan da aidat ekranının tek ödeme penceresiyle (CollectSheet) alınır.
 
 type Filter = "all" | "AwaitingPayment" | "LastLesson" | "Unpaid";
@@ -80,10 +82,9 @@ function StatePill({ card }: { card: AttendanceCard }) {
   </span>;
 }
 
-export function AttendanceCards() {
+export function AttendanceCards({ query }: { query: string }) {
   const { data, isLoading, isError, refetch } = useAttendanceCards();
   const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
   const [instrument, setInstrument] = useState("");
   const [teacher, setTeacher] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -103,7 +104,7 @@ export function AttendanceCards() {
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase("tr-TR");
     return cards.filter((card) =>
-      (!q || card.studentName.toLocaleLowerCase("tr-TR").includes(q))
+      (!q || [card.studentName, card.teacherName, card.instrumentName].some((name) => name.toLocaleLowerCase("tr-TR").includes(q)))
       && (!instrument || card.instrumentName === instrument)
       && (!teacher || card.teacherName === teacher)
       && (filter === "all" || card.state === filter));
@@ -137,7 +138,6 @@ export function AttendanceCards() {
     />
 
     <section className="app-card flex flex-wrap items-end gap-x-3 gap-y-2 p-3">
-      <FilterField label="Öğrenci" className="min-w-[11rem] flex-1"><SearchInput value={query} onChange={setQuery} label="Öğrenci ara" placeholder="Öğrenci ara…" /></FilterField>
       <FilterField label="Branş" className="min-w-[9rem] flex-1">
         <select value={instrument} onChange={(event) => setInstrument(event.target.value)} className="field text-sm">
           <option value="">Tüm branşlar</option>
