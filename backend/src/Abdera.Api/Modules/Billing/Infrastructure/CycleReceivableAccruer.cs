@@ -11,7 +11,7 @@ using Npgsql;
 namespace Abdera.Api.Modules.Billing.Infrastructure;
 
 // Dönem aidatının tek tahakkuk yeri (docs/10-decisions.md AD, BillingCycle). Attendance modülü
-// her yoklama yazışından sonra bu açık servisi çağırır; kart (Geldi + Mazeretli) baştan sayılır
+// her yoklama yazışından sonra bu açık servisi çağırır; kart (yalnızca Geldi) baştan sayılır
 // ve olması gereken dönem aidatları ile mevcutlar eşitlenir. Yeniden saymak, "bu yoklama kaçıncı
 // satır" diye artımlı tutmaktan sağlam: geçmiş bir dersin yoklaması düzeltildiğinde de doğru sonuç
 // çıkar ve günde kaç kez çağrılırsa çağrılsın aynı yere varır.
@@ -24,7 +24,7 @@ public static class CycleReceivableAccruer
     // Kart satırı: sistemdeki yoklamalı bir ders (LessonId) ya da karta elle yazılmış geçmiş ders (EntryId, AD10).
     public record CountedLesson(Guid? LessonId, DateTimeOffset StartAt, DateOnly Date, AttendanceStatus Status, Guid? EntryId = null);
 
-    // Kartta sayılan (Geldi + Mazeretli) ve sayılmayan (Gelmedi) dersler, tarih sırasıyla. Elle yazılan
+    // Kartta sayılan (Geldi) ve sayılmayan (Gelmedi, Mazeretli) dersler, tarih sırasıyla. Elle yazılan
     // geçmiş dersler "Geldi" sayılır; aynı güne sistemde ders varsa o esas alınır, elle satır sayılmaz.
     public static async Task<List<CountedLesson>> LoadCardLessonsAsync(
         AbderaDbContext db, IClock clock, Enrollment enrollment, DateOnly countingFrom)
@@ -62,7 +62,9 @@ public static class CycleReceivableAccruer
         return lessons.OrderBy(lesson => lesson.StartAt).ThenBy(lesson => lesson.LessonId ?? lesson.EntryId).ToList();
     }
 
-    public static bool Fills(AttendanceStatus status) => status is AttendanceStatus.Present or AttendanceStatus.Excused;
+    // Yalnızca Geldi satır doldurur (AD13). Mazeretli telafi hakkı doğurur; telafi dersi Geldi
+    // işaretlenince satırı o doldurur - aynı ders iki kez sayılmasın.
+    public static bool Fills(AttendanceStatus status) => status is AttendanceStatus.Present;
 
     // Kartın saymaya başladığı gün (BillingCycle.StartFor). Null: bu kayıt dönemle faturalanmıyor.
     public static DateOnly? CountingFrom(Enrollment enrollment, BillingSettings settings) =>
@@ -81,16 +83,6 @@ public static class CycleReceivableAccruer
             .Where(r => r.EnrollmentId == enrollmentId && months.Contains(r.Period) && r.Status != ReceivableStatus.Cancelled)
             .ToListAsync();
         return candidates.MaxBy(r => r.Period);
-    }
-
-    // Bu dersin yoklaması bir dönem kartına mı sayılıyor - Mazeretli ders kartta satır doldurduğu
-    // için ayrıca telafi hakkı doğurmaz (ExcusedMakeupCredit'i çağıran MarkAttendance buna bakar).
-    public static async Task<bool> CountsOnCardAsync(AbderaDbContext db, IClock clock, Lesson lesson)
-    {
-        var enrollment = await FindEnrollmentAsync(db, lesson.StudentId, lesson.InstrumentId);
-        if (enrollment is null) return false;
-        var from = CountingFrom(enrollment, await BillingSettings.GetCurrentAsync(db));
-        return from is { } start && DateOnly.FromDateTime(clock.ToSchoolLocal(lesson.StartAt).Date) >= start;
     }
 
     // Yoklaması yazılan dersin kurs kaydını bulur ve kartını eşitler. Yoklama zaten kaydedilmiş olmalı.

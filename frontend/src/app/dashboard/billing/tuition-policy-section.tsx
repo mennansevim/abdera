@@ -241,7 +241,7 @@ function DiscountPolicyCard() {
           <input type="date" value={draft.cycleStart} onChange={(event) => patch({ cycleStart: event.target.value })} className="field text-sm" />
         </label>
         <p className="text-meta mt-1.5">{draft.cycleStart
-          ? "Birebir derste her 4 ders (Geldi ya da Mazeretli) bir dönemdir; dönemin ilk dersi işlenince aidatı açılır. Ayın 1'ini seç: o aydan itibaren birebir kayda aylık aidat açılmaz."
+          ? "Birebir derste her 4 Geldi (telafi dersi dahil) bir dönemdir; dönemin ilk dersi işlenince aidatı açılır. Ayın 1'ini seç: o aydan itibaren birebir kayda aylık aidat açılmaz."
           : "Boş: birebir dersler de aylık aidatla devam eder."}</p>
       </div>
 

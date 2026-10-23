@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { EmptyState, FilterField, Modal, SearchInput, StatStrip, type Tone } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -10,9 +10,10 @@ import { cycleKey, formatMoney, todayInput } from "@/lib/billing-format";
 import { CollectSheet } from "../billing/collect-sheet";
 
 // Yönetici yoklama ekranı (docs/10-decisions.md AD): okulun kâğıt "Yoklama Listesi"nin dijital
-// hali. Birebir kayıt başına bir kart; 4 satır bir dönemdir. Geldi ve Mazeretli satır doldurur,
-// Gelmedi kartın altına not düşer. 4. satır dolunca "ödeme bekleniyor" uyarısı çıkar; sonraki
+// hali. Birebir kayıt başına bir kart; 4 satır bir dönemdir. Yalnızca Geldi satır doldurur (telafi
+// dersi de Geldi olunca), Gelmedi ve Mazeretli kartın altına not düşer. 4. satır dolunca "ödeme bekleniyor" uyarısı çıkar; sonraki
 // derste yeni dönemin aidatı tahakkuk eder. Kartı ve durumu sunucu kurar (AttendanceCards.cs).
+// Satıra basınca öğrencinin kartı tam ekran açılır; her dönemin yanında ödeme tarihi durur.
 // Tahsilat buradan da aidat ekranının tek ödeme penceresiyle (CollectSheet) alınır.
 
 type Filter = "all" | "AwaitingPayment" | "LastLesson" | "Unpaid";
@@ -62,18 +63,6 @@ function StatePill({ card }: { card: AttendanceCard }) {
   </span>;
 }
 
-// Kart yalnızca çok geniş ekranda tablonun yanında durur; daha darda uzun listenin en altına
-// düşüyordu (77 öğrencide görünmez oluyordu), orada satıra basınca açılır pencerede gelir.
-const WIDE_QUERY = "(min-width: 1536px)";
-function subscribeWide(onChange: () => void) {
-  const media = window.matchMedia(WIDE_QUERY);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-}
-function useWideScreen() {
-  return useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_QUERY).matches, () => false);
-}
-
 export function AttendanceCards() {
   const { data, isLoading, isError, refetch } = useAttendanceCards();
   const [filter, setFilter] = useState<Filter>("all");
@@ -103,8 +92,7 @@ export function AttendanceCards() {
       && (filter === "all" || card.state === filter));
   }, [cards, query, instrument, teacher, filter]);
 
-  const wide = useWideScreen();
-  const selected = cards.find((card) => card.enrollmentId === selectedId) ?? (wide ? visible[0] ?? null : null);
+  const selected = cards.find((card) => card.enrollmentId === selectedId) ?? null;
 
   if (isLoading) return <div className="space-y-3">{Array.from({ length: 3 }, (_, index) => <div key={index} className="skeleton h-20 rounded-2xl" />)}</div>;
   if (isError || !data) return <div className="app-card p-6 text-center"><p className="text-sm font-bold">Yoklama kartları yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>;
@@ -147,62 +135,58 @@ export function AttendanceCards() {
       </FilterField>
     </section>
 
-    <div className="grid items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_31rem]">
-      <section className="app-card min-w-0 overflow-hidden">
-        {!visible.length && <EmptyState title="Bu filtrede öğrenci yok" description="Filtreyi kaldırmayı ya da aramayı temizlemeyi dene." />}
-        {!!visible.length && <div className="overflow-x-auto">
-          <table className="w-full min-w-[40rem] text-sm">
-            <thead>
-              <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
-                <th className="px-3 py-2.5">Öğrenci</th>
-                <th className="px-3 py-2.5">İlk giriş</th>
-                <th className="px-3 py-2.5">Dönem</th>
-                <th className="px-3 py-2.5">Bu dönem (4 ders)</th>
-                <th className="px-3 py-2.5">Durum</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {visible.map((card) => {
-                const current = card.cycles.find((cycle) => cycle.number === card.currentCycle);
-                const isSelected = selected?.enrollmentId === card.enrollmentId;
-                const full = card.filledInCurrent === 4;
-                return <tr
-                  key={card.enrollmentId}
-                  tabIndex={0}
-                  aria-selected={isSelected}
-                  onClick={() => setSelectedId(card.enrollmentId)}
-                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(card.enrollmentId); } }}
-                  className={`cursor-pointer ${isSelected ? "bg-[var(--brand-soft)]" : "hover:bg-[var(--surface-muted)]"}`}
-                >
-                  <td className="px-3 py-2.5">
-                    <span className="block font-bold">{card.studentName}</span>
-                    <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
-                    {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">İlk giriş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
-                  </td>
-                  <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.hasOwnCycleStart && card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : <span className="text-[var(--muted)]">—</span>}</td>
-                  <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
-                  <td className="px-3 py-2.5">
-                    <span className="inline-grid grid-cols-4 gap-1">
-                      {[0, 1, 2, 3].map((index) => {
-                        const lesson = current?.filled[index];
-                        return lesson
-                          ? <span key={index} title={lesson.status === "Excused" ? "Mazeretli" : "Geldi"} className={`grid h-7 w-11 place-items-center rounded-lg text-[.68rem] font-bold tabular-nums ${full ? "bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "bg-[var(--success-soft)] text-[var(--success-strong)]"} ${lesson.status === "Excused" ? "ring-[1.5px] ring-inset ring-[var(--warning)]" : ""}`}>{shortDate.format(dayOf(lesson.date))}</span>
-                          : <span key={index} className="grid h-7 w-11 place-items-center rounded-lg border-[1.5px] border-dashed border-[var(--line)] text-[.68rem] font-bold text-[var(--muted)]">{index + 1}</span>;
-                      })}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap"><StatePill card={card} /></td>
-                </tr>;
-              })}
-            </tbody>
-          </table>
-        </div>}
-      </section>
+    <section className="app-card min-w-0 overflow-hidden">
+      {!visible.length && <EmptyState title="Bu filtrede öğrenci yok" description="Filtreyi kaldırmayı ya da aramayı temizlemeyi dene." />}
+      {!!visible.length && <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-sm">
+          <thead>
+            <tr className="text-micro border-b border-[var(--line)] text-left text-[var(--muted)]">
+              <th className="px-3 py-2.5">Öğrenci</th>
+              <th className="px-3 py-2.5">İlk giriş</th>
+              <th className="px-3 py-2.5">Dönem</th>
+              <th className="px-3 py-2.5">Bu dönem (4 ders)</th>
+              <th className="px-3 py-2.5">Durum</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--line)]">
+            {visible.map((card) => {
+              const current = card.cycles.find((cycle) => cycle.number === card.currentCycle);
+              const isSelected = selected?.enrollmentId === card.enrollmentId;
+              const full = card.filledInCurrent === 4;
+              return <tr
+                key={card.enrollmentId}
+                tabIndex={0}
+                aria-selected={isSelected}
+                onClick={() => setSelectedId(card.enrollmentId)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedId(card.enrollmentId); } }}
+                className={`cursor-pointer ${isSelected ? "bg-[var(--brand-soft)]" : "hover:bg-[var(--surface-muted)]"}`}
+              >
+                <td className="px-3 py-2.5">
+                  <span className="block font-bold">{card.studentName}</span>
+                  <span className="text-meta block text-xs">{card.instrumentName} · {card.teacherName}</span>
+                  {card.currentCycle === 0 && card.earlierLessons.length > 0 && <span className="text-meta block text-[.7rem]">İlk giriş öncesi {card.earlierLessons.filter((lesson) => lesson.status !== "Absent").length} ders işlendi</span>}
+                </td>
+                <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.hasOwnCycleStart && card.countingFrom ? longDate.format(dayOf(card.countingFrom)) : <span className="text-[var(--muted)]">—</span>}</td>
+                <td className="px-3 py-2.5 tabular-nums whitespace-nowrap">{card.currentCycle ? `${card.currentCycle}. dönem` : "—"}</td>
+                <td className="px-3 py-2.5">
+                  <span className="inline-grid grid-cols-4 gap-1">
+                    {[0, 1, 2, 3].map((index) => {
+                      const lesson = current?.filled[index];
+                      return lesson
+                        ? <span key={index} title="Geldi" className={`grid h-7 w-11 place-items-center rounded-lg text-[.68rem] font-bold tabular-nums ${full ? "bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "bg-[var(--success-soft)] text-[var(--success-strong)]"}`}>{shortDate.format(dayOf(lesson.date))}</span>
+                        : <span key={index} className="grid h-7 w-11 place-items-center rounded-lg border-[1.5px] border-dashed border-[var(--line)] text-[.68rem] font-bold text-[var(--muted)]">{index + 1}</span>;
+                    })}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap"><StatePill card={card} /></td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>}
+    </section>
 
-      {selected && wide && <AttendanceSheet key={selected.enrollmentId} card={selected} entriesFrom={data.entriesFrom} />}
-    </div>
-
-    {selected && !wide && <Modal open size="lg" title={selected.studentName} description={`${selected.instrumentName} · ${selected.teacherName}`} onClose={() => setSelectedId(null)}>
+    {selected && <Modal open size="full" title={selected.studentName} description={`${selected.instrumentName} · ${selected.teacherName}`} onClose={() => setSelectedId(null)}>
       <AttendanceSheet key={selected.enrollmentId} card={selected} entriesFrom={data.entriesFrom} />
     </Modal>}
   </div>;
@@ -236,18 +220,14 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
     }
   }
 
-  // Kâğıt şablonu: her öğrencide en az 2 tablo (4 + 4 satır) açık. Gösterilen son tablo bir sonraki
-  // boş satırın düştüğü dönemdir; ondan öncekiler "Önceki dönemler"de durur.
-  const [showOlder, setShowOlder] = useState(false);
+  // Kâğıt şablonu: tüm dönemler 4'er satırlık bloklar halinde, sütun sütun akar (en az 2 blok).
+  // Son blok bir sonraki boş satırın düştüğü dönemdir.
   const filledTotal = card.cycles.reduce((sum, cycle) => sum + cycle.filled.length, 0);
   const nextBlock = Math.floor(filledTotal / 4) + 1;
   const lastShown = Math.max(nextBlock, 2, ...card.cycles.map((cycle) => cycle.number));
   const blocks: CardCycle[] = Array.from({ length: lastShown }, (_, index) =>
     card.cycles.find((cycle) => cycle.number === index + 1) ?? { number: index + 1, filled: [], misses: [], receivable: null });
-  const firstShown = Math.max(1, Math.min(nextBlock, lastShown) - 1);
-  const older = blocks.filter((cycle) => cycle.number < firstShown);
-  const recent = blocks.filter((cycle) => cycle.number >= firstShown);
-  return <article aria-label={`${card.studentName} yoklama kartı`} className="min-w-0 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)] 2xl:sticky 2xl:top-4">
+  return <article aria-label={`${card.studentName} yoklama kartı`} className="mx-auto min-w-0 max-w-7xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-card)]">
     <div className="flex items-baseline justify-between gap-2 border-b-2 border-[var(--foreground)] px-4 py-3">
       <span className="text-xs font-extrabold uppercase tracking-[.08em]">Abdera Sanat Akademi</span>
       <span className="text-xs font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">Yoklama listesi</span>
@@ -281,11 +261,8 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       Kalan {formatMoney(card.unpaidAmount, card.currency)}.
     </p>}
 
-    {older.length > 0 && <button type="button" onClick={() => setShowOlder((value) => !value)} className="w-full border-b border-[var(--line)] px-4 py-2 text-left text-xs font-bold text-[var(--brand-strong)]">
-      {showOlder ? "Önceki dönemleri gizle" : `Önceki ${older.length} dönemi göster`}
-    </button>}
-    <div className="grid sm:grid-cols-2">
-      {(showOlder ? [...older, ...recent] : recent).map((cycle) => <CycleBlock
+    <div className="gap-0 md:columns-2 xl:columns-3">
+      {blocks.map((cycle) => <CycleBlock
         key={cycle.number}
         card={card}
         entriesFrom={entriesFrom}
@@ -303,8 +280,9 @@ function AttendanceSheet({ card, entriesFrom }: { card: AttendanceCard; entriesF
       </ul>
     </section>}
     <p className="text-meta flex flex-wrap gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[.72rem]">
-      <span>✓ Geldi ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satırı doldurur</span>
-      <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> satır doldurmaz</span>
+      <span>Sağdaki sütun dönemin ödeme tarihi; aidatlardan tahsilat alınınca kendiliğinden yazılır</span>
+      <span>Yalnızca ✓ Geldi satır doldurur; telafi dersi de Geldi olunca yazılır</span>
+      <span><span className="font-bold text-[var(--danger-strong)]">Gelmedi</span> ve <span className="font-bold text-[var(--warning-strong)]">Mazeretli</span> satır doldurmaz, altına not düşer</span>
       <span>Boş satıra tarih yazarak geçmiş dersi ekle (en erken {longDate.format(dayOf(entriesFrom))}); ilk satır kartın başlangıcıdır, sonrası yoklamadan gelir</span>
     </p>
 
@@ -329,30 +307,51 @@ function CycleBlock({ card, entriesFrom, cycle, current, awaiting }: { card: Att
     : receivable.status === "Overdue" ? { tone: "danger" as const, text: "Gecikti" }
     : { tone: "danger" as const, text: "Ödenmedi" };
 
-  return <section className={`border-r border-b-2 border-[var(--line)] border-b-[var(--foreground)] ${awaiting ? "shadow-[inset_0_0_0_2px_var(--warning)]" : ""}`}>
+  return <section className={`break-inside-avoid border-r border-b-2 border-[var(--line)] border-b-[var(--foreground)] ${awaiting ? "shadow-[inset_0_0_0_2px_var(--warning)]" : ""}`}>
     <header className="flex items-center justify-between gap-1.5 bg-[var(--surface-muted)] px-2.5 py-1.5 text-[.72rem] font-bold">
       <span className="uppercase tracking-[.04em] text-[var(--muted)]">{cycle.number}. dönem</span>
       <span className={`rounded-full px-2 py-0.5 ${PILL_CLASS[tag.tone]}`}>{tag.text}</span>
     </header>
-    {[0, 1, 2, 3].map((index) => {
-      const lesson = cycle.filled[index];
-      const next = current && !lesson && index === cycle.filled.length;
-      return <div key={lesson ? lesson.lessonId ?? lesson.entryId : `empty-${index}`} className={`grid min-h-9 grid-cols-[1.2rem_1fr_1.8rem] items-center border-t border-[var(--line)] px-2.5 ${next ? "bg-[var(--brand-soft)]" : ""}`}>
-        <span className="text-[.66rem] font-bold text-[var(--muted)]">{index + 1}</span>
-        {lesson && !lesson.entryId && <span className="flex min-w-0 items-center gap-1.5 font-serif italic tabular-nums" title="Sistemdeki yoklamadan">
-          {longDate.format(dayOf(lesson.date)).replace(/\./g, " / ")}
-          {lesson.status === "Excused" && <span className="rounded-md bg-[var(--warning-soft)] px-1.5 font-sans text-[.66rem] font-semibold not-italic text-[var(--warning-strong)]">Mazeretli</span>}
-        </span>}
-        {lesson?.entryId && <EntryInput key={lesson.entryId} card={card} entriesFrom={entriesFrom} entryId={lesson.entryId} date={lesson.date} onError={setError} />}
-        {!lesson && <EntryInput card={card} entriesFrom={entriesFrom} entryId={null} date={null} onError={setError} />}
-        <span className={`grid h-full place-items-center border-l border-[var(--line)] text-base font-bold ${lesson?.status === "Excused" ? "text-[var(--warning-strong)]" : "text-[var(--success-strong)]"}`}>{lesson ? "✓" : ""}</span>
-      </div>;
-    })}
+    <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] sm:grid-cols-[minmax(0,1fr)_6rem]">
+      <div>
+        {[0, 1, 2, 3].map((index) => {
+          const lesson = cycle.filled[index];
+          const next = current && !lesson && index === cycle.filled.length;
+          return <div key={lesson ? lesson.lessonId ?? lesson.entryId : `empty-${index}`} className={`grid min-h-9 grid-cols-[1.2rem_1fr_1.8rem] items-center border-t border-[var(--line)] px-2.5 ${next ? "bg-[var(--brand-soft)]" : ""}`}>
+            <span className="text-[.66rem] font-bold text-[var(--muted)]">{index + 1}</span>
+            {lesson && !lesson.entryId && <span className="flex min-w-0 items-center gap-1.5 font-serif italic tabular-nums" title="Sistemdeki yoklamadan">
+              {longDate.format(dayOf(lesson.date)).replace(/\./g, " / ")}
+            </span>}
+            {lesson?.entryId && <EntryInput key={lesson.entryId} card={card} entriesFrom={entriesFrom} entryId={lesson.entryId} date={lesson.date} onError={setError} />}
+            {!lesson && <EntryInput card={card} entriesFrom={entriesFrom} entryId={null} date={null} onError={setError} />}
+            <span className={`grid h-full place-items-center border-l border-[var(--line)] text-base font-bold text-[var(--success-strong)]`}>{lesson ? "✓" : ""}</span>
+          </div>;
+        })}
+      </div>
+      <PaymentCell receivable={receivable} />
+    </div>
     {cycle.misses.length > 0 && <div className="flex flex-wrap gap-1 border-t border-dashed border-[var(--line)] px-2.5 py-1.5">
-      {cycle.misses.map((lesson) => <span key={lesson.lessonId ?? lesson.entryId} className="rounded-md bg-[var(--danger-soft)] px-1.5 text-[.68rem] font-semibold text-[var(--danger-strong)]">Gelmedi {shortDate.format(dayOf(lesson.date))}</span>)}
+      {cycle.misses.map((lesson) => <span key={lesson.lessonId ?? lesson.entryId} className={`rounded-md px-1.5 text-[.68rem] font-semibold ${MISS_CLASS[lesson.status]}`}>{lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} {shortDate.format(dayOf(lesson.date))}</span>)}
     </div>}
     {error && <p role="alert" className="border-t border-[var(--line)] px-2.5 py-1.5 text-[.72rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
   </section>;
+}
+
+// Kâğıttaki sağ sütun: dönemin ödeme tarihi. Tahsilat aidat ekranından alınınca sunucunun
+// gönderdiği son ödeme günü buraya düşer; ödeme yoksa kâğıttaki gibi boş "/ /" kalır.
+function PaymentCell({ receivable }: { receivable: CardCycle["receivable"] }) {
+  const paidOn = receivable?.paidOn;
+  const partial = !!paidOn && receivable?.status !== "Paid";
+  const owed = !paidOn && !!receivable?.accruedOn && receivable.status !== "Cancelled";
+  const tone = paidOn ? (partial ? "text-[var(--warning-strong)]" : "text-[var(--success-strong)]") : owed ? "text-[var(--danger-strong)]" : "text-[var(--muted)]";
+  return <div className={`flex flex-col items-center justify-center gap-0.5 border-t border-l border-[var(--line)] px-1 py-2 text-center ${owed ? "bg-[var(--danger-soft)]" : ""}`}>
+    <span className="text-[.6rem] font-extrabold uppercase tracking-[.08em] text-[var(--muted)]">Ödeme</span>
+    {paidOn
+      ? <span className={`font-serif text-sm italic leading-tight tabular-nums ${tone}`}>{shortDate.format(dayOf(paidOn)).replace(/\./g, " / ")}<span className="block text-xs">{dayOf(paidOn).getFullYear()}</span></span>
+      : <span className={`font-serif text-sm italic ${tone}`} aria-label={owed ? "Ödenmedi" : "Ödeme yok"}>/ &nbsp;/</span>}
+    {partial && <span className="text-[.62rem] font-bold text-[var(--warning-strong)]">Kısmi</span>}
+    {paidOn && !receivable?.accruedOn && <span className="text-[.62rem] font-bold text-[var(--success-strong)]">Peşin</span>}
+  </div>;
 }
 
 // Kâğıttaki gibi elle yazılan satır (AD10): boş satıra tarih seçilince geçmiş ders eklenir; elle

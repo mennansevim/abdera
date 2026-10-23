@@ -100,10 +100,10 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
-    public async Task Each_cycle_accrues_on_its_first_lesson_and_excused_fills_a_row_without_a_makeup_credit()
+    public async Task Each_cycle_accrues_on_its_first_lesson_and_only_present_fills_a_row()
     {
         var admin = await AdminAsync();
-        var seeded = await SeedAsync(admin, "Dongu", 6);
+        var seeded = await SeedAsync(admin, "Dongu", 7);
 
         // Kayıt açılınca bu ayın aylık aidatı açılmadı - birebir ders geçiş sonrası dönemle faturalanır.
         await using (var db = await _factory.CreateDbContextAsync())
@@ -117,21 +117,24 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(seeded.LessonIds[0], first.AccruedLessonId);
         Assert.Equal(first.AccruedOn!.Value.AddDays(BillingCycle.DueDays), first.DueDate);
 
-        // Gelmedi satır doldurmaz; Mazeretli doldurur ve telafi hakkı doğurmaz.
+        // Yalnızca Geldi satır doldurur: Gelmedi ve Mazeretli kartın altına not düşer (AD13).
+        // Mazeretli telafi hakkı doğurur; telafi dersi Geldi işaretlenince o da bir satır doldurur.
         await MarkAsync(admin, seeded.LessonIds[1], AttendanceStatus.Absent);
         await MarkAsync(admin, seeded.LessonIds[2], AttendanceStatus.Excused);
         await MarkAsync(admin, seeded.LessonIds[3], AttendanceStatus.Present);
         await MarkAsync(admin, seeded.LessonIds[4], AttendanceStatus.Present);
+        Assert.Equal(3, (await CardAsync(admin, seeded.EnrollmentId)).FilledInCurrent);
+        await MarkAsync(admin, seeded.LessonIds[5], AttendanceStatus.Present);
         Assert.Single(await CyclesAsync(seeded.EnrollmentId));
         await using (var db = await _factory.CreateDbContextAsync())
-            Assert.False(await db.MakeupCredits.AnyAsync(credit => credit.StudentId == seeded.StudentId));
+            Assert.True(await db.MakeupCredits.AnyAsync(credit => credit.StudentId == seeded.StudentId));
 
         // 4/4 doldu ama 1. dönem ödenmedi: kart borcu öne alır.
         var card = await CardAsync(admin, seeded.EnrollmentId);
         Assert.Equal(1, card.CurrentCycle);
         Assert.Equal(4, card.FilledInCurrent);
         Assert.Equal(AttendanceCards.CardState.Unpaid, card.State);
-        Assert.Single(card.Cycles[0].Misses);
+        Assert.Equal(2, card.Cycles[0].Misses.Count);
 
         // 1. dönem ödenince durum "ödeme bekleniyor" olur.
         await PayAsync(admin, seeded.EnrollmentId, "D001", 6000m);
@@ -139,10 +142,10 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(AttendanceCards.CardState.AwaitingPayment, card.State);
 
         // Sonraki ders 2. dönemi açar.
-        await MarkAsync(admin, seeded.LessonIds[5], AttendanceStatus.Present);
+        await MarkAsync(admin, seeded.LessonIds[6], AttendanceStatus.Present);
         var cycles = await CyclesAsync(seeded.EnrollmentId);
         Assert.Equal(["D001", "D002"], cycles.Select(r => r.Period));
-        Assert.Equal(seeded.LessonIds[5], cycles[1].AccruedLessonId);
+        Assert.Equal(seeded.LessonIds[6], cycles[1].AccruedLessonId);
         await using (var db = await _factory.CreateDbContextAsync())
             Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "receivable.cycle_accrued" && log.EntityId == cycles[1].Id));
     }
@@ -184,7 +187,11 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var prepaid = (await CyclesAsync(seeded.EnrollmentId)).Single(r => r.Period == "D002");
         Assert.Null(prepaid.AccruedOn);
         Assert.Equal(ReceivableStatus.Paid, prepaid.Status);
-        Assert.Equal(AttendanceCards.CardState.NextPrepaid, (await CardAsync(admin, seeded.EnrollmentId)).State);
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(AttendanceCards.CardState.NextPrepaid, card.State);
+        // Tahsilat günü iki dönemin de satırına yazılır; ödeme görmemiş dönemde tarih yok.
+        var today = DateOnly.FromDateTime(Now.UtcDateTime);
+        Assert.All(card.Cycles.Where(cycle => cycle.Number <= 2), cycle => Assert.Equal(today, cycle.Receivable!.PaidOn));
 
         await MarkAsync(admin, seeded.LessonIds[4], AttendanceStatus.Present);
         var cycles = await CyclesAsync(seeded.EnrollmentId);

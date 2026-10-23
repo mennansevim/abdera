@@ -369,7 +369,7 @@ export function Modal({
   description?: string;
   onClose: () => void;
   children: ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "full";
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -403,10 +403,11 @@ export function Modal({
 
   if (!open || typeof document === "undefined") return null;
 
-  const width = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl" }[size];
+  const full = size === "full";
+  const width = { sm: "max-w-md", md: "max-w-2xl", lg: "max-w-4xl", full: "h-dvh max-h-dvh rounded-none border-0" }[size];
 
   return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-4">
+    <div className={`fixed inset-0 z-50 grid place-items-center ${full ? "" : "p-3 sm:p-4"}`}>
       <button type="button" onClick={onClose} aria-label={`${title} penceresini kapat`} className="absolute inset-0 bg-[#2a1c14]/35 backdrop-blur-[2px]" />
       <div
         ref={panelRef}
@@ -414,7 +415,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`app-card relative z-10 flex max-h-[calc(100dvh-1.5rem)] w-full ${width} flex-col overflow-hidden focus:outline-none`}
+        className={`app-card relative z-10 flex w-full ${full ? "" : "max-h-[calc(100dvh-1.5rem)]"} ${width} flex-col overflow-hidden focus:outline-none`}
       >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-4 sm:px-5">
           <div className="min-w-0">

@@ -52,8 +52,8 @@ export function useMarkAttendance(lessonId: string) {
 }
 
 // Yönetici yoklama ekranı (AttendanceCards.cs, docs/10-decisions.md AD): birebir kayıt başına
-// okulun kâğıt "Yoklama Listesi"nin dijital hali. 4 satır bir dönemdir; Geldi ve Mazeretli satır
-// doldurur, Gelmedi kartın altına not düşer. Kartı ve durumu sunucu kurar, ekran yalnızca çizer.
+// okulun kâğıt "Yoklama Listesi"nin dijital hali. 4 satır bir dönemdir; yalnızca Geldi satır
+// doldurur (AD13), Gelmedi ve Mazeretli kartın altına not düşer. Kartı ve durumu sunucu kurar, ekran yalnızca çizer.
 export type CardState = "NotStarted" | "InProgress" | "LastLesson" | "AwaitingPayment" | "NextPrepaid" | "Unpaid";
 
 export interface CardLesson {
@@ -73,6 +73,8 @@ export interface CycleReceivable {
   currency: string;
   dueDate: string;
   accruedOn: string | null;
+  // Son ödemenin günü (tarih düzeltmesi dahil); kartta dönemin yanındaki ödeme sütununa yazılır.
+  paidOn: string | null;
 }
 
 export interface CardCycle {

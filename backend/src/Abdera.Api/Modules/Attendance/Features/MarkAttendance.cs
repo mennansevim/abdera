@@ -65,9 +65,9 @@ public static class MarkAttendance
                 db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_marked_by_admin", nameof(LessonAttendance), attendance.Id, clock.UtcNow));
             }
 
-            // Mazeretli ders telafi hakkı doğurur (docs/10-decisions.md A2 altındaki satır) - dönem
-            // kartına sayılan birebir ders hariç: orada Mazeretli zaten bir satır doldurur (AD).
-            if (request.Status == AttendanceStatus.Excused && !await CycleReceivableAccruer.CountsOnCardAsync(db, clock, lesson))
+            // Mazeretli ders telafi hakkı doğurur (docs/10-decisions.md A2 altındaki satır); dönem
+            // kartında satır doldurmaz, telafi dersi Geldi olunca o doldurur (AD13).
+            if (request.Status == AttendanceStatus.Excused)
                 await ExcusedMakeupCredit.SyncAsync(db, lesson, isExcused: true, clock, config, actorUserId);
 
             await db.SaveChangesAsync();
@@ -83,9 +83,8 @@ public static class MarkAttendance
         db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_corrected", nameof(LessonAttendance), existing.Id, clock.UtcNow, beforeJson: before));
 
         // Düzeltme Mazeretli'ye giriyor ya da ondan çıkıyorsa telafi hakkı da izler.
-        // Dönem kartına sayılan derste Mazeretli hak doğurmaz; çıkışta geri alınacak hak da yoktur.
         var isExcused = request.Status == AttendanceStatus.Excused;
-        if (wasExcused != isExcused && !(isExcused && await CycleReceivableAccruer.CountsOnCardAsync(db, clock, lesson)))
+        if (wasExcused != isExcused)
             await ExcusedMakeupCredit.SyncAsync(db, lesson, isExcused, clock, config, actorUserId);
 
         await db.SaveChangesAsync();

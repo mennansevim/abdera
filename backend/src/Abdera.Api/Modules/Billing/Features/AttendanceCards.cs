@@ -12,7 +12,7 @@ namespace Abdera.Api.Modules.Billing.Features;
 
 // Yoklama ekranının yönetici görünümü (docs/10-decisions.md AD): her birebir kurs kaydının
 // yoklama kartı - okulun kâğıt "Yoklama Listesi"nin dijital hali. Kart 4'er satırlık dönemlerden
-// oluşur; Geldi ve Mazeretli satır doldurur, Gelmedi kartın altına not düşer. Her dönemin
+// oluşur; yalnızca Geldi satır doldurur, Gelmedi ve Mazeretli kartın altına not düşer. Her dönemin
 // yanında o dönemin aidatı (ödendi/ödenmedi) durur.
 //
 // Kart her istekte yoklamadan yeniden kurulur; hangi dersin hangi döneme düştüğü tahakkuku yapan
@@ -37,8 +37,10 @@ public static class AttendanceCards
     // EntryId doluysa satır karta elle yazılmış geçmiş derstir (AD10); düzenlenip silinebilir.
     public record CardLesson(Guid? LessonId, DateTimeOffset StartAt, DateOnly Date, AttendanceStatus Status, Guid? EntryId = null);
 
+    // PaidOn: tutarı sıfıra düzeltilmemiş en son ödemenin etkin tarihi - kartta dönemin yanına yazılır.
     public record CycleReceivable(
-        Guid Id, ReceivableStatus Status, decimal Amount, decimal Paid, string Currency, DateOnly DueDate, DateOnly? AccruedOn);
+        Guid Id, ReceivableStatus Status, decimal Amount, decimal Paid, string Currency, DateOnly DueDate, DateOnly? AccruedOn,
+        DateOnly? PaidOn = null);
 
     public record CardCycle(int Number, List<CardLesson> Filled, List<CardLesson> Misses, CycleReceivable? Receivable);
 
@@ -270,8 +272,9 @@ public static class AttendanceCards
                 && await CycleReceivableAccruer.FindCoveringMonthlyAsync(db, clock, enrollment.Id, start) is { } monthly)
                 coveringMonthly[enrollment.Id] = monthly;
         }
-        var paid = await Receivables.ComputeTotalsPaidAsync(
-            cycleReceivables.Select(r => r.Id).Concat(coveringMonthly.Values.Select(r => r.Id)), db);
+        var cardReceivableIds = cycleReceivables.Select(r => r.Id).Concat(coveringMonthly.Values.Select(r => r.Id)).ToList();
+        var paid = await Receivables.ComputeTotalsPaidAsync(cardReceivableIds, db);
+        var paidOn = await LastPaymentDatesAsync(cardReceivableIds, db);
         var receivablesByEnrollment = cycleReceivables.ToLookup(r => r.EnrollmentId);
 
         var cards = new List<Card>();
@@ -290,12 +293,28 @@ public static class AttendanceCards
                 enrollment, $"{student.FirstName} {student.LastName}",
                 teachers.TryGetValue(enrollment.TeacherId, out var teacher) ? $"{teacher.FirstName} {teacher.LastName}" : "Öğretmen",
                 instruments.TryGetValue(enrollment.InstrumentId, out var instrument) ? instrument.Name : "Ders",
-                countingFrom, lessons, receivables, paid, earlier, coveringMonthly.GetValueOrDefault(enrollment.Id)));
+                countingFrom, lessons, receivables, paid, earlier, coveringMonthly.GetValueOrDefault(enrollment.Id), paidOn));
         }
 
         // Türkçe alfabetik sıra istemcide (localeCompare "tr") - BillingBoard ile aynı gerekçe.
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
         return Results.Ok(new CardsResponse(settings.CycleBillingStartsOn, cards, EntriesFrom(today)));
+    }
+
+    // Etkin tutarı sıfıra düzeltilen ödeme sayılmaz; tarih düzeltmesi varsa o esas alınır.
+    private static async Task<Dictionary<Guid, DateOnly>> LastPaymentDatesAsync(List<Guid> receivableIds, AbderaDbContext db)
+    {
+        var payments = await db.Payments.AsNoTracking()
+            .Where(payment => receivableIds.Contains(payment.ReceivableId))
+            .Select(payment => new { payment.Id, payment.ReceivableId })
+            .ToListAsync();
+        var paymentIds = payments.Select(payment => payment.Id).ToList();
+        var amounts = await Receivables.ComputeEffectivePaymentAmountsAsync(paymentIds, db);
+        var dates = await Receivables.ComputeEffectivePaymentDatesAsync(paymentIds, db);
+        return payments
+            .Where(payment => amounts.GetValueOrDefault(payment.Id) > 0)
+            .GroupBy(payment => payment.ReceivableId)
+            .ToDictionary(group => group.Key, group => group.Max(payment => dates[payment.Id]));
     }
 
     // Saf hesap: dersleri dönemlere dağıtır ve kartın durumunu çıkarır (birim testlenir).
@@ -305,7 +324,8 @@ public static class AttendanceCards
         IReadOnlyDictionary<int, Receivable> receivables,
         IReadOnlyDictionary<Guid, decimal> paid,
         IReadOnlyList<CycleReceivableAccruer.CountedLesson>? earlierLessons = null,
-        Receivable? coveringMonthly = null)
+        Receivable? coveringMonthly = null,
+        IReadOnlyDictionary<Guid, DateOnly>? paidOn = null)
     {
         // Sayacın başladığı ayın aylık aidatı 1. dönemin aidatıdır (AD9).
         if (coveringMonthly is not null && !receivables.ContainsKey(1))
@@ -326,7 +346,7 @@ public static class AttendanceCards
             }
             else
             {
-                // Gelmedi, o an süren dönemin altına yazılır (4/4 dolmuşsa da o dönemde kalır).
+                // Gelmedi ve Mazeretli, o an süren dönemin altına yazılır (4/4 dolmuşsa da o dönemde kalır).
                 var cycle = filledCount == 0 ? 1 : BillingCycle.CycleOf(filledCount - 1);
                 if (!misses.TryGetValue(cycle, out var list)) misses[cycle] = list = [];
                 list.Add(item);
@@ -340,7 +360,8 @@ public static class AttendanceCards
         CycleReceivable? ToCycleReceivable(int number) =>
             receivables.TryGetValue(number, out var r)
                 ? new CycleReceivable(r.Id, r.Status, r.Amount, paid.GetValueOrDefault(r.Id), r.Currency, r.DueDate,
-                    r == coveringMonthly ? countingFrom : r.AccruedOn)
+                    r == coveringMonthly ? countingFrom : r.AccruedOn,
+                    paidOn?.TryGetValue(r.Id, out var on) == true ? on : null)
                 : null;
 
         var cycles = Enumerable.Range(1, lastNumber)
