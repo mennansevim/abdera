@@ -27,7 +27,15 @@ public static class ResolveIntent
     public record LessonMove(
         DateOnly? SourceDate, TimeOnly? SourceTime,
         DateOnly? TargetDate, TimeOnly? TargetTime,
-        RescheduleScope Scope);
+        RescheduleScope Scope,
+        // Dersin kendi saatine göre dakika ("yarım saat ileri al" → 30).
+        int? ShiftMinutes = null,
+        // Hedef yalnızca gün adıysa ("cumaya al") gün adı da döner: TargetDate bugünden sonraki
+        // ilk cumadır, ama tek seferlik taşımada kastedilen taşınan dersin haftasındaki cumadır
+        // ("4 Kasım dersini cumaya al" → 6 Kasım). O haftayı yalnızca dersi bulan istemci bilir.
+        // "haftaya cuma" bugüne göredir (TargetNextWeek) ve TargetDate kullanılır.
+        DayOfWeek? TargetWeekday = null,
+        bool TargetNextWeek = false);
 
     public record NavigationItem(string Key, string Label, string Path);
 
@@ -75,7 +83,17 @@ public static class ResolveIntent
         var candidates = await visibleStudents
             .Select(s => new StudentNameMatcher.Candidate(s.Id, s.FirstName, s.LastName))
             .ToListAsync(cancellationToken);
-        var match = StudentNameMatcher.Match(tokens, candidates);
+
+        // Ad + soyadıyla anılan öğretmen öğrenci sayılmaz: soyadı ortak bir öğrenciye
+        // ("Onur Koç'un dersleri" → Aras Koç) düşmesin. Öğrenciyle aynı ad-soyadı taşıyan
+        // öğretmen maskelenmez - o durumda öğrenci kastedilmiş olabilir.
+        var studentNames = candidates.Select(c => $"{c.FirstName} {c.LastName}").ToHashSet();
+        var teachers = await db.Teachers
+            .Select(t => new StudentNameMatcher.Candidate(t.Id, t.FirstName, t.LastName))
+            .ToListAsync(cancellationToken);
+        var teacherIndexes = StudentNameMatcher.FullNameIndexes(tokens, teachers.Where(t => !studentNames.Contains($"{t.FirstName} {t.LastName}")));
+        var studentTokens = tokens.Select((token, index) => teacherIndexes.Contains(index) ? "" : token).ToArray();
+        var match = StudentNameMatcher.Match(studentTokens, candidates);
 
         // Öğrenci satırındaki kısayoldan gelen istek: metinde ad yoksa bağlamdaki öğrenci
         // kullanılır. Görünmeyen bir öğrenci bağlam olarak verilirse yok sayılır.
@@ -84,10 +102,14 @@ public static class ResolveIntent
             studentIds.Add(contextId);
 
         var students = await LoadStudentsAsync(studentIds, teacherScope, db, cancellationToken);
+        if (parsed.ProgressIfStudent && students.Count > 0) parsed = parsed with { Kind = AssistantIntentKind.Progress };
 
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
         var move = parsed.Kind == AssistantIntentKind.Reschedule
-            ? new LessonMove(parsed.SourceDay?.Resolve(today), parsed.SourceTime, parsed.TargetDay?.Resolve(today), parsed.TargetTime, parsed.Scope)
+            ? new LessonMove(
+                parsed.SourceDay?.Resolve(today), parsed.SourceTime, parsed.TargetDay?.Resolve(today), parsed.TargetTime, parsed.Scope, parsed.ShiftMinutes,
+                parsed.TargetDay is { Month: null, Weekday: { } weekday } ? weekday : null,
+                parsed.TargetDay?.NextWeek ?? false)
             : null;
         var navigation = parsed.Navigation is { } target ? new NavigationItem(target.Key, target.Label, target.Path) : null;
 

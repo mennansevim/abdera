@@ -126,6 +126,38 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task A_teacher_named_with_full_name_is_not_matched_as_the_student_sharing_the_surname()
+    {
+        // Piyano öğretmeni "Selin Arslan" (SeedAsync); soyadı ortak bir öğrenci açılır.
+        var school = await SeedAsync("Tuna");
+        var arslan = await ReadAsync<Students.StudentResponse>(await school.Admin.PostAsJsonAsync("/api/students",
+            new Students.CreateRequest("Kuzey", "Arslan", new DateOnly(2014, 1, 1))));
+
+        var byTeacher = await ResolveAsync(school.Admin, "Selin Arslan'ın dersleri");
+        Assert.DoesNotContain(byTeacher.Students, s => s.StudentId == arslan.Id);
+
+        var byStudent = await ResolveAsync(school.Admin, "Arslan'ın dersleri");
+        Assert.Contains(byStudent.Students, s => s.StudentId == arslan.Id);
+    }
+
+    [Fact]
+    public async Task A_weekday_target_is_returned_with_its_weekday_and_a_shift_in_minutes()
+    {
+        var school = await SeedAsync("Umut");
+
+        var weekday = await ResolveAsync(school.Admin, "Umut Sevim'in dersini cumaya taşı");
+        Assert.Equal(DayOfWeek.Friday, weekday.Move?.TargetWeekday);
+        Assert.False(weekday.Move?.TargetNextWeek);
+
+        var date = await ResolveAsync(school.Admin, "Umut Sevim'in dersini 6 Kasım'a taşı");
+        Assert.Null(date.Move?.TargetWeekday);
+        Assert.Equal((11, 6), (date.Move?.TargetDate?.Month, date.Move?.TargetDate?.Day));
+
+        var shift = await ResolveAsync(school.Admin, "Umut Sevim'in dersini yarım saat ileri al");
+        Assert.Equal(30, shift.Move?.ShiftMinutes);
+    }
+
+    [Fact]
     public async Task Context_student_is_used_only_when_the_text_names_nobody_and_the_student_is_visible()
     {
         var school = await SeedAsync("Pelin");

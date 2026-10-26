@@ -48,7 +48,7 @@ export function DuesCard({ student }: { student: AssistantStudent | null }) {
     setConfirming(null);
     setResult(delivered === target.ids.length
       ? `${delivered} hatırlatma sıraya alındı.`
-      : `${delivered}/${target.ids.length} hatırlatma sıraya alındı. Velisi kayıtlı olmayan ya da hatırlatması daha önce sıraya alınmış aidatlar atlandı.`);
+      : `${delivered}/${target.ids.length} hatırlatma sıraya alındı. Diğerleri gönderilmedi: velinin WhatsApp bildirim izni yok, veli kayıtlı değil ya da bu aidat için hatırlatma zaten sırada.`);
   }
 
   if (lines.length === 0) {
@@ -144,7 +144,7 @@ function DueRow({ line, state, busy, onRemind }: { line: DueLine; state?: "sent"
       </div>
       <div className="flex flex-wrap gap-2">
         {state
-          ? <span className="text-meta text-xs font-semibold">{state === "sent" ? "Hatırlatma sıraya alındı" : "Atlandı: velisi kayıtlı değil ya da hatırlatma zaten sırada"}</span>
+          ? <span className="text-meta text-xs font-semibold">{state === "sent" ? "Hatırlatma sıraya alındı" : "Gönderilmedi: velinin WhatsApp izni yok ya da hatırlatma zaten sırada"}</span>
           : <button type="button" onClick={onRemind} disabled={busy} className="pressable inline-flex min-h-9 items-center rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--brand-strong)] hover:border-[var(--brand)] disabled:opacity-50">Hatırlatma gönder</button>}
         <GoLink href={collectHref}>Ödeme al</GoLink>
       </div>

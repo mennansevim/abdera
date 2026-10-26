@@ -69,10 +69,16 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
 
   const source = findSource(lessonsOfSeries(schedule, series), move, schedule.holidays);
   if (!source) {
+    // Kullanıcı bir gün söylediyse cevap o günü anmalı; genel "ders yok" yanıltıcı.
+    const asked = move?.sourceDate ? dayLabel(new Date(`${move.sourceDate}T00:00:00`)) : null;
     return (
       <AssistantCard>
         <StudentHeading student={student} />
-        <p className="text-sm">{series.instrumentName} için önümüzdeki 5 haftada planlı ders görünmüyor.</p>
+        <p className="text-sm">
+          {asked
+            ? `${asked} günü ${series.instrumentName} dersi yok; sonrasında da planlı ders görünmüyor.`
+            : `${series.instrumentName} için önümüzdeki 5 haftada planlı ders görünmüyor.`}
+        </p>
         <Actions><GoLink href="/dashboard/calendar">Takvim</GoLink></Actions>
       </AssistantCard>
     );
@@ -213,7 +219,10 @@ function findSource(lessons: CalendarLesson[], move: AssistantMove | null, holid
   const sameDay = lessons.filter((lesson) => localDateKey(new Date(lesson.startAt)) === sourceDate);
   const sourceTime = move?.sourceTime?.slice(0, 5);
   const exact = sameDay.find((lesson) => !sourceTime || hhmm(new Date(lesson.startAt)) === sourceTime) ?? sameDay[0];
-  if (exact) return { lesson: exact, notice: null };
+  if (exact) {
+    const holidayOfLesson = holidays.get(sourceDate);
+    return { lesson: exact, notice: holidayOfLesson ? `${dayLabel(new Date(`${sourceDate}T00:00:00`))} resmi tatil (${holidayOfLesson}) ama bu ders planlı görünüyor.` : null };
+  }
 
   const next = lessons.find((lesson) => localDateKey(new Date(lesson.startAt)) > sourceDate);
   if (!next) return null;
@@ -227,9 +236,10 @@ function findSource(lessons: CalendarLesson[], move: AssistantMove | null, holid
   };
 }
 
-// Cümledeki hedef ("cumaya", "17:00'ye") ders tarihine uygulanır. Hedef hiç yoksa null:
-// akış boş saat önerir.
+// Cümledeki hedef ("cumaya", "17:00'ye", "yarım saat ileri") ders tarihine uygulanır. Hedef
+// hiç yoksa null: akış boş saat önerir.
 function desiredFromMove(move: AssistantMove | null, scope: Scope | null, lessonStart: Date): Date | null {
+  if (move?.shiftMinutes) return new Date(lessonStart.getTime() + move.shiftMinutes * 60_000);
   if (!move || (!move.targetDate && !move.targetTime)) return null;
   let date = new Date(lessonStart);
   if (move.targetDate) {
@@ -238,6 +248,14 @@ function desiredFromMove(move: AssistantMove | null, scope: Scope | null, lesson
       // Her hafta: hedef günün ders haftasındaki (ya da sonraki) karşılığı.
       const offset = (target.getDay() - lessonStart.getDay() + 7) % 7;
       date = addDays(lessonStart, offset);
+    } else if (move.targetWeekday && !move.targetNextWeek) {
+      // Bir kerelik: taşınan dersin haftasındaki (pazartesi-pazar) o gün; geçmişte kaldıysa
+      // sonraki hafta.
+      const mondayOffset = (lessonStart.getDay() + 6) % 7;
+      const targetOffset = (DAY_KEYS.indexOf(move.targetWeekday) + 6) % 7;
+      date = addDays(lessonStart, targetOffset - mondayOffset);
+      const [hour, minute] = (move.targetTime ?? `${hhmm(lessonStart)}:00`).split(":").map(Number);
+      if (new Date(date).setHours(hour ?? 0, minute ?? 0, 0, 0) <= Date.now()) date = addDays(date, 7);
     } else {
       date = target;
     }

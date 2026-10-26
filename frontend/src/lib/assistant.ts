@@ -37,6 +37,12 @@ export interface AssistantMove {
   targetDate: string | null;
   targetTime: string | null;
   scope: RescheduleScope;
+  // Dersin kendi saatine göre dakika: "yarım saat ileri al" → 30, "bir saat erkene" → -60.
+  shiftMinutes: number | null;
+  // Hedef yalnızca gün adıysa ("cumaya al"): tek seferlik taşımada taşınan dersin haftasındaki
+  // o gün kastedilir; targetDate bugünden sonraki ilk o gündür. "haftaya cuma"da targetNextWeek.
+  targetWeekday: string | null;
+  targetNextWeek: boolean;
 }
 
 export interface AssistantResolution {

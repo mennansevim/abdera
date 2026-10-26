@@ -36,6 +36,14 @@ public class AssistantIntentParserTests
     [InlineData("Kütüphane", AssistantIntentKind.Navigate)]
     [InlineData("Ders notu nasıl yazılır", AssistantIntentKind.Navigate)]
     [InlineData("Şifremi nasıl değiştiririm", AssistantIntentKind.Navigate)]
+    [InlineData("Bora Aydın'ın ders notları", AssistantIntentKind.Progress)]
+    [InlineData("Lina'nın ödevleri", AssistantIntentKind.Progress)]
+    [InlineData("Kerem'den ne kadar alacağımız var", AssistantIntentKind.Dues)]
+    [InlineData("Lara'nın dersini 17:00'ye alacağım", AssistantIntentKind.Reschedule)]
+    [InlineData("Kerem'in dersi bundan sonra pazartesi 18:00 olsun", AssistantIntentKind.Reschedule)]
+    [InlineData("Ege Kurt'un perşembe dersini yarım saat ileri al", AssistantIntentKind.Reschedule)]
+    [InlineData("Hata bildirmek istiyorum", AssistantIntentKind.Navigate)]
+    [InlineData("Yıl sonu gösterisi ekranı", AssistantIntentKind.Navigate)]
     [InlineData("Merhaba", AssistantIntentKind.Unknown)]
     [InlineData("hava nasıl", AssistantIntentKind.Unknown)]
     [InlineData("Bu ay en çok devamsızlık yapan öğrenciler kim?", AssistantIntentKind.Unknown)]
@@ -157,6 +165,48 @@ public class AssistantIntentParserTests
         Assert.Equal(new TimeOnly(18, 0), parsed.TargetTime);
     }
 
+    [Theory]
+    [InlineData("Ege'nin dersini yarım saat ileri al", 30)]
+    [InlineData("Bora'nın dersini bir saat erkene çek", -60)]
+    [InlineData("dersi 15 dakika geri al", -15)]
+    [InlineData("dersi bir buçuk saat sonraya al", 90)]
+    public void Relative_shift_is_read_in_minutes(string text, int minutes)
+    {
+        var parsed = IntentParser.Parse(text);
+
+        Assert.Equal(AssistantIntentKind.Reschedule, parsed.Kind);
+        Assert.Equal(minutes, parsed.ShiftMinutes);
+    }
+
+    [Fact]
+    public void Day_and_month_names_are_dates_with_source_and_target_roles()
+    {
+        var parsed = IntentParser.Parse("Ada Çetin'in 4 Kasım dersini 6 Kasım'a al");
+
+        Assert.Equal((11, 4), (parsed.SourceDay?.Month, parsed.SourceDay?.DayOfMonth));
+        Assert.Equal((11, 6), (parsed.TargetDay?.Month, parsed.TargetDay?.DayOfMonth));
+        Assert.Null(parsed.SourceTime);
+        Assert.Null(parsed.TargetTime);
+    }
+
+    [Fact]
+    public void A_bare_number_before_a_month_is_not_a_time_and_an_invalid_date_is_ignored()
+    {
+        Assert.Null(IntentParser.Parse("Bora'nın dersini 3 Kasım'a taşı").TargetTime);
+        Assert.Null(IntentParser.Parse("dersi 31 Şubat'a al").TargetDay);
+    }
+
+    [Theory]
+    [InlineData("Emir Aydın nasıl", true)]
+    [InlineData("Ada Çetin hakkında bilgi ver", true)]
+    [InlineData("Defne'nin son durumu nedir", true)]
+    [InlineData("aidat durumu", false)]
+    [InlineData("Deniz'in gelişimi", false)]
+    public void Vague_questions_become_progress_only_when_a_student_is_named(string text, bool progressIfStudent)
+    {
+        Assert.Equal(progressIfStudent, IntentParser.Parse(text).ProgressIfStudent);
+    }
+
     [Fact]
     public void Text_is_normalized_to_ascii_with_time_separators_kept()
     {
@@ -174,6 +224,18 @@ public class AssistantIntentParserTests
         var monday = new DateOnly(2026, 10, 26);
 
         Assert.Equal(DateOnly.Parse(expected), new DayReference(weekday, null, nextWeek).Resolve(monday));
+    }
+
+    [Theory]
+    [InlineData(11, 4, "2026-11-04")]
+    [InlineData(10, 26, "2026-10-26")]
+    [InlineData(3, 1, "2027-03-01")]
+    [InlineData(10, 1, "2027-10-01")]
+    public void A_calendar_date_resolves_to_its_nearest_future_occurrence(int month, int day, string expected)
+    {
+        var monday = new DateOnly(2026, 10, 26);
+
+        Assert.Equal(DateOnly.Parse(expected), new DayReference(null, null, false, month, day).Resolve(monday));
     }
 
     [Fact]

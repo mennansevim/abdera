@@ -454,6 +454,7 @@ Kullanıcı kuralı (okulun kâğıt "Yoklama Listesi"nden): öğrenci her başa
 | AE5 | Rol | Öğretmen yalnızca kendi öğrencileriyle eşleşir ve yalnızca kendi kurs kayıtlarını görür (`GET /api/students` ile aynı kapsam). Yöneticiye özel bir şey (aidat, yönetici ekranı) soran öğretmene hata değil `allowed: false` döner. Yönetici ekranları listesi frontend menüsüyle (`ADMIN_LINKS`) aynı tutulur. |
 | AE6 | Gizlilik | Eşleşmeyen cümle LLM fazının ihtiyaç listesi olarak loglanır; eşleşen öğrenci adı `<ogrenci>` ile maskelenir. Tablo yok. |
 | AE7 | Kademeli açılış | İlk etapta yalnızca yönetici kullanır: düğmeler, ⌘K ve öğrenci satırı kısayolları öğretmen oturumunda çizilmez (`canUseAssistant`, `frontend/src/lib/assistant.ts`). Sunucu ucu öğretmen kapsamını zaten desteklediği için öğretmenlere açmak tek satırlık değişikliktir; bir hafta yönetici kullanımından sonra karar verilir. |
+| AE8 | Benchmark'tan çıkan kurallar (27 Ekim) | Ad + soyadıyla anılan öğretmen öğrenci eşlemesine girmez ("Onur Koç'un dersleri" öğrenci Koç'ları getirmez). Gün adı hedefi ("cumaya al") tek seferlik taşımada taşınan dersin haftasına çözülür; "haftaya cuma" ve açık tarih ("6 Kasım") bugüne göre. "4 Kasım", "yarım saat ileri" gibi ifadeler desteklenir. "X nasıl / hakkında bilgi" yalnızca bir öğrenci adı varsa gelişimdir. Ölçüm ve simülasyon `tools/assistant-benchmark/` (REPORT.md). |
 
 ## Master prompt'un "Required First Response" listesiyle eşleme
 

@@ -35,7 +35,13 @@ public static partial class IntentParser
         DayReference? TargetDay,
         TimeOnly? TargetTime,
         RescheduleScope Scope,
-        NavigationTargets.Target? Navigation);
+        NavigationTargets.Target? Navigation,
+        // "yarım saat ileri al" (+30), "bir saat erkene al" (-60): dersin kendi saatine göre.
+        int? ShiftMinutes = null,
+        // "Emir Aydın nasıl", "Ada hakkında bilgi": niyet tek başına belirsiz ama cümlede bir
+        // öğrenci varsa sorulan onun genel durumudur (gelişim kartı). Öğrenciyi bilen çağıran
+        // (ResolveIntent) karar verir; "hava nasıl" öğrencisiz kaldığı için Unknown kalır.
+        bool ProgressIfStudent = false);
 
     private enum Role { Undecided, Source, Target }
 
@@ -53,6 +59,8 @@ public static partial class IntentParser
 
     private static readonly (string Stem, int Offset)[] RelativeDays = [("bugun", 0), ("yarin", 1)];
 
+    private static readonly string[] Months = ["ocak", "subat", "mart", "nisan", "mayis", "haziran", "temmuz", "agustos", "eylul", "ekim", "kasim", "aralik"];
+
     // Yönelme eki ("cumaya", "17:00'ye") hedefi, "-ki"/"-den" eki ("perşembeki", "16'daki",
     // "perşembeden") kaynağı gösterir.
     private static readonly HashSet<string> TargetSuffixes = ["a", "e", "ya", "ye"];
@@ -60,12 +68,23 @@ public static partial class IntentParser
     private static readonly HashSet<string> NeutralDaySuffixes = ["", "i", "u", "yi", "nin", "in", "gunu", "da", "de"];
     private static readonly HashSet<string> DayFillers = ["gunu", "gunku", "gunki", "saat", "saatteki", "saatindeki"];
 
-    private static readonly string[] RecurringPhrases = ["her hafta", "surekli", "kalici", "bundan sonra", "artik", "tum ders", "butun ders"];
+    private static readonly string[] RecurringPhrases = ["her hafta", "surekli", "kalici", "bundan sonra", "artik", "tum ders", "butun ders", "itibaren"];
     private static readonly string[] OncePhrases = ["bir kerelik", "tek seferlik", "bu seferlik", "seferlik", "sadece bu", "yalniz bu", "bu hafta"];
 
     private static readonly string[] MovePrefixes = ["tasi", "ertele", "kaydir", "degistir", "guncelle", "oynat"];
-    private static readonly HashSet<string> MoveWords = ["al", "alalim", "alin", "alsin", "alir", "alabilir", "aliver", "cek", "cekelim", "cekin", "yap", "yapalim", "yapin"];
-    private static readonly HashSet<string> NavigateWords = ["git", "gidelim", "gotur", "ac", "acar", "acsana", "acin"];
+    private static readonly HashSet<string> MoveWords = ["al", "alalim", "alin", "alsin", "alir", "alabilir", "aliver", "alacagim", "alacagiz", "cek", "cekelim", "cekin", "yap", "yapalim", "yapin", "koy", "olsun", "olacak"];
+    // Ekran adıyla birlikte geldiğinde yönlendirme isteğidir: "takvimi aç", "gider eklemek
+    // istiyorum", "yıl sonu gösterisi ekranı".
+    private static readonly HashSet<string> NavigateWords = ["git", "gidelim", "gotur", "ac", "acar", "acsana", "acin", "istiyorum", "istiyoruz", "isterim"];
+    private static readonly string[] NavigatePrefixes = ["ekran", "sayfa"];
+
+    // Göreli kaydırma: miktar + birim + yön. "ileri/sonra/geç" dersi geç saate, "geri/erken/önce"
+    // erken saate alır.
+    private static readonly HashSet<string> LaterWords = ["ileri", "sonra", "sonraya", "gec", "gece"];
+    private static readonly HashSet<string> EarlierWords = ["geri", "erken", "erkene", "once", "oneye"];
+    private static readonly Dictionary<string, int> NumberWords = new() { ["bir"] = 1, ["iki"] = 2, ["uc"] = 3 };
+
+    private static readonly HashSet<string> WeakProgressWords = ["nasil", "hakkinda", "bilgi"];
     private static readonly HashSet<string> WhereWords = ["nerede", "nereden", "nerden", "nereye", "neresi", "nerde"];
 
     public static ParsedRequest Parse(string text)
@@ -78,24 +97,29 @@ public static partial class IntentParser
             : HasAnyPhrase(tokens, OncePhrases) ? RescheduleScope.Once
             : RescheduleScope.Unspecified;
         var navigation = NavigationTargets.Find(tokens);
+        var shift = ExtractShift(tokens);
 
-        var kind = DetectKind(tokens, navigation, targetDay, targetTime);
+        var kind = DetectKind(tokens, navigation, targetDay, targetTime, shift);
+        var progressIfStudent = kind == AssistantIntentKind.Unknown
+            && (tokens.Any(WeakProgressWords.Contains) || HasPrefix(tokens, "durum"));
         return new ParsedRequest(kind, sourceDay, sourceTime, targetDay, targetTime, scope,
-            kind == AssistantIntentKind.Navigate ? navigation : null);
+            kind == AssistantIntentKind.Navigate ? navigation : null, shift, progressIfStudent);
     }
 
-    private static AssistantIntentKind DetectKind(string[] tokens, NavigationTargets.Target? navigation, DayReference? targetDay, TimeOnly? targetTime)
+    private static AssistantIntentKind DetectKind(string[] tokens, NavigationTargets.Target? navigation, DayReference? targetDay, TimeOnly? targetTime, int? shift)
     {
         // Ekran sorusu önce: "aidatlar nerede" Aidatlar ekranıdır, aidat listesi değil.
-        if (navigation is not null && (IsWhereQuestion(tokens) || tokens.Any(NavigateWords.Contains)))
+        if (navigation is not null && (IsWhereQuestion(tokens) || tokens.Any(NavigateWords.Contains) || HasPrefix(tokens, NavigatePrefixes)))
             return AssistantIntentKind.Navigate;
 
-        if (HasPrefix(tokens, "aidat", "odeme", "borc", "vade", "tahsil")) return AssistantIntentKind.Dues;
+        var hasTarget = targetDay is not null || targetTime is not null || shift is not null;
+        // "alacağımız" aidattır; "17'ye alacağım" ise ders saatidir (hedefi var).
+        if (HasPrefix(tokens, "aidat", "odeme", "borc", "vade", "tahsil") || (HasPrefix(tokens, "alacak", "alacag") && !hasTarget))
+            return AssistantIntentKind.Dues;
         if (HasPrefix(tokens, "telafi")) return AssistantIntentKind.Makeup;
-        if (HasPrefix(tokens, "gelisim", "ilerleme", "karne", "basari") || HasPhrase(tokens, "nasil gidiyor"))
+        if (HasPrefix(tokens, "gelisim", "ilerleme", "karne", "basari", "odev") || HasPhrase(tokens, "nasil gidiyor") || tokens.Any(token => LessonNote().IsMatch(token)))
             return AssistantIntentKind.Progress;
 
-        var hasTarget = targetDay is not null || targetTime is not null;
         var mentionsLesson = HasPrefix(tokens, "ders", "saat");
         if ((HasPrefix(tokens, MovePrefixes) && (mentionsLesson || hasTarget)) || (tokens.Any(MoveWords.Contains) && hasTarget))
             return AssistantIntentKind.Reschedule;
@@ -128,6 +152,12 @@ public static partial class IntentParser
         var found = new List<(Role Role, DayReference Day)>();
         for (var i = 0; i < tokens.Length; i++)
         {
+            if (TryReadDate(tokens, i, out var date, out var dateRole))
+            {
+                found.Add((dateRole, date));
+                continue;
+            }
+
             if (!TryReadDay(tokens[i], out var day, out var suffix)) continue;
 
             var nextWeek = i > 0 && tokens[i - 1] == "haftaya";
@@ -200,6 +230,65 @@ public static partial class IntentParser
         }
 
         return (source, target);
+    }
+
+    // "4 Kasım", "3 Kasım'a" (ek ayrı kelime), "3 kasıma", "4 kasım dersini". Gün 1-31; ay adı
+    // ek alabilir. Rol gün adlarıyla aynı kuralla: yönelme eki hedef, "-ki/-den" ya da
+    // arkasından gelen "ders..." kaynak.
+    private static bool TryReadDate(string[] tokens, int index, out DayReference date, out Role role)
+    {
+        date = null!;
+        role = Role.Undecided;
+        if (index + 1 >= tokens.Length || !int.TryParse(tokens[index], out var dayOfMonth) || dayOfMonth is < 1 or > 31) return false;
+
+        var monthToken = tokens[index + 1];
+        var month = Array.FindIndex(Months, stem => monthToken.StartsWith(stem, StringComparison.Ordinal));
+        if (month < 0) return false;
+        var suffix = monthToken[Months[month].Length..];
+        if (suffix.Length > 0 && !IsDaySuffix(suffix)) return false;
+        if (dayOfMonth > DateTime.DaysInMonth(2024, month + 1)) return false;
+
+        date = new DayReference(null, null, false, month + 1, dayOfMonth);
+        var after = index + 2 < tokens.Length ? tokens[index + 2] : null;
+        if (suffix.Length == 0 && after is not null && (TargetSuffixes.Contains(after) || SourceSuffixes.Contains(after))) suffix = after;
+        role = TargetSuffixes.Contains(suffix) ? Role.Target
+            : SourceSuffixes.Contains(suffix) ? Role.Source
+            : NextMeaningfulIndex(tokens, index + 2) is { } next && tokens[next].StartsWith("ders", StringComparison.Ordinal) ? Role.Source
+            : Role.Undecided;
+        return true;
+    }
+
+    // "yarım saat ileri", "1 saat erkene", "bir buçuk saat sonraya", "15 dakika geri".
+    private static int? ExtractShift(string[] tokens)
+    {
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            int minutes;
+            int unitIndex;
+            if (tokens[i] == "yarim" && i + 1 < tokens.Length && tokens[i + 1] == "saat")
+            {
+                minutes = 30;
+                unitIndex = i + 1;
+            }
+            else if ((int.TryParse(tokens[i], out var amount) || NumberWords.TryGetValue(tokens[i], out amount)) && amount is > 0 and <= 180)
+            {
+                var half = i + 1 < tokens.Length && tokens[i + 1] == "bucuk";
+                unitIndex = half ? i + 2 : i + 1;
+                if (unitIndex >= tokens.Length) continue;
+                if (tokens[unitIndex] == "saat") minutes = amount * 60 + (half ? 30 : 0);
+                else if (tokens[unitIndex] is "dakika" or "dk") minutes = amount;
+                else continue;
+            }
+            else continue;
+
+            for (var j = unitIndex + 1; j <= unitIndex + 2 && j < tokens.Length; j++)
+            {
+                if (LaterWords.Contains(tokens[j])) return minutes;
+                if (EarlierWords.Contains(tokens[j])) return -minutes;
+            }
+        }
+
+        return null;
     }
 
     private static bool TryReadDay(string token, out DayReference day, out string suffix)
@@ -312,4 +401,8 @@ public static partial class IntentParser
 
     [GeneratedRegex(@"(ilir|inir|enir|ulur|unur|anir|irim|arim|erim|urum|iyorum)$")]
     private static partial Regex HowToVerb();
+
+    // Ders notu: "notu", "notları", "notlarını" - "nota" (kütüphane) ve "not" (tek başına) değil.
+    [GeneratedRegex(@"^not(u|unu|lar|lari|larini|larina)$")]
+    private static partial Regex LessonNote();
 }

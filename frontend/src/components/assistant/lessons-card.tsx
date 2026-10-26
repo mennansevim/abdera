@@ -30,9 +30,16 @@ export function LessonsCard({ student }: { student: AssistantStudent }) {
         ? <ul className="space-y-1 text-sm">{schedule.series.map((item) => <li key={item.id}><b>{formatWeeklySchedule(item)}</b> <span className="text-meta">· {item.instrumentName} · {item.teacherName}</span></li>)}</ul>
         : <p className="text-meta text-sm">Haftalık ders programı yok.</p>}
 
-      {missedHolidays.map(([date, label]) => (
-        <WarningLine key={date}>{dayLabel(new Date(`${date}T00:00:00`))} resmi tatil ({label}); o gün ders yok.</WarningLine>
-      ))}
+      {missedHolidays.map(([date, label]) => {
+        // Tatil sonradan eklendiyse o güne önceden üretilmiş ders takvimde kalır; "ders yok"
+        // demek yanlış olur.
+        const planned = schedule.upcoming.some((lesson) => localDateKey(new Date(lesson.startAt)) === date);
+        return (
+          <WarningLine key={date}>
+            {dayLabel(new Date(`${date}T00:00:00`))} resmi tatil ({label}){planned ? " ama o gün planlı dersi görünüyor; taşımak ya da iptal etmek gerekebilir." : "; o gün ders yok."}
+          </WarningLine>
+        );
+      })}
 
       {lessons.length > 0
         ? (
