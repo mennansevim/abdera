@@ -4,8 +4,14 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, type UserRole } from "./api";
 import type { BillingDue, CourseKind } from "./billing";
+
+// İlk etapta yalnız yönetici kullanır (docs/10-decisions.md AE7): öğretmenlere bir hafta sonra
+// açılacak. Sunucu ucu öğretmen kapsamını zaten destekliyor; kapı yalnızca arayüzde.
+export function canUseAssistant(role: UserRole | undefined) {
+  return role === "Admin";
+}
 
 export type AssistantIntentKind = "Unknown" | "Progress" | "Dues" | "Reschedule" | "Makeup" | "Lessons" | "Navigate";
 export type RescheduleScope = "Unspecified" | "Once" | "Recurring";

@@ -13,6 +13,8 @@ export interface AssistantRequest {
 }
 
 interface AssistantContextValue {
+  // Rol asistanı kullanamıyorsa (AE7) düğmeler ve kısayollar hiç çizilmez.
+  enabled: boolean;
   isOpen: boolean;
   open: () => void;
   close: () => void;
@@ -27,18 +29,20 @@ export function useAssistant() {
   return value;
 }
 
-export function AssistantProvider({ children }: { children: ReactNode }) {
+export function AssistantProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [request, setRequest] = useState<AssistantRequest | null>(null);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
   const ask = useCallback((text: string, studentId?: string) => {
+    if (!enabled) return;
     setRequest((current) => ({ id: (current?.id ?? 0) + 1, text, studentId }));
     setIsOpen(true);
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -47,14 +51,14 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [enabled]);
 
-  const value = useMemo(() => ({ isOpen, open, close, ask }), [isOpen, open, close, ask]);
+  const value = useMemo(() => ({ enabled, isOpen, open, close, ask }), [enabled, isOpen, open, close, ask]);
 
   return (
     <AssistantContext.Provider value={value}>
       {children}
-      <AssistantPanel open={isOpen} onClose={close} request={request} />
+      {enabled && <AssistantPanel open={isOpen} onClose={close} request={request} />}
     </AssistantContext.Provider>
   );
 }

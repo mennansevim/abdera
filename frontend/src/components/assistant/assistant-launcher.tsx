@@ -5,7 +5,8 @@ import { useAssistant } from "./assistant-provider";
 
 // Masaüstünde kenar menüsünün başında, ⌘K kısayolunu da gösteren düğme.
 export function SidebarAssistantButton({ collapsed }: { collapsed: boolean }) {
-  const { open } = useAssistant();
+  const { enabled, open } = useAssistant();
+  if (!enabled) return null;
   return (
     <button
       type="button"
@@ -25,7 +26,8 @@ export function SidebarAssistantButton({ collapsed }: { collapsed: boolean }) {
 
 // Telefonda alt menünün üstünde duran yuvarlak düğme (alt menüde boş sekme yok).
 export function MobileAssistantButton() {
-  const { open } = useAssistant();
+  const { enabled, open } = useAssistant();
+  if (!enabled) return null;
   return (
     <button
       type="button"

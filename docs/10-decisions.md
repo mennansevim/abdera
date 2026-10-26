@@ -453,6 +453,7 @@ Kullanıcı kuralı (okulun kâğıt "Yoklama Listesi"nden): öğrenci her başa
 | AE4 | Gün ve saat | Yönelme eki ("cumaya", "17:00'ye") hedef, "-ki/-den" eki ya da arkasından gelen "ders..." kelimesi ("perşembe dersini", "16:00 dersini") kaynak. Ek olmadan yalnız sayı saat sayılmaz ("2 telafi"). 1-8 arası saat öğleden sonradır (okul günü 09:00-21:00), önünde "sabah" yoksa. Tarih okulun yerel bugününe göre çözülür, haftanın günü bugünü de kapsar. |
 | AE5 | Rol | Öğretmen yalnızca kendi öğrencileriyle eşleşir ve yalnızca kendi kurs kayıtlarını görür (`GET /api/students` ile aynı kapsam). Yöneticiye özel bir şey (aidat, yönetici ekranı) soran öğretmene hata değil `allowed: false` döner. Yönetici ekranları listesi frontend menüsüyle (`ADMIN_LINKS`) aynı tutulur. |
 | AE6 | Gizlilik | Eşleşmeyen cümle LLM fazının ihtiyaç listesi olarak loglanır; eşleşen öğrenci adı `<ogrenci>` ile maskelenir. Tablo yok. |
+| AE7 | Kademeli açılış | İlk etapta yalnızca yönetici kullanır: düğmeler, ⌘K ve öğrenci satırı kısayolları öğretmen oturumunda çizilmez (`canUseAssistant`, `frontend/src/lib/assistant.ts`). Sunucu ucu öğretmen kapsamını zaten desteklediği için öğretmenlere açmak tek satırlık değişikliktir; bir hafta yönetici kullanımından sonra karar verilir. |
 
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
