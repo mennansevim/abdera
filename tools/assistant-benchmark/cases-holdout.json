@@ -1,0 +1,30 @@
+{
+  "description": "Görülmemiş set: cases.json'daki hatalar düzeltildikten SONRA, düzeltmelere bakmadan farklı ifadelerle yazıldı. Kurallar bu sete göre ayarlanmaz; oran, kural yolunun yeni ifadelere ne kadar genellendiğini gösterir.",
+  "cases": [
+    { "id": "H01", "category": "Görülmemiş", "role": "Admin", "text": "Deniz Arslan ne durumda", "expected": { "kind": "Progress", "students": ["Deniz Arslan"] } },
+    { "id": "H02", "category": "Görülmemiş", "role": "Admin", "text": "Lara'yı merak ediyorum, gelişimi iyi mi", "expected": { "kind": "Progress", "students": ["Lara Arslan"] } },
+    { "id": "H03", "category": "Görülmemiş", "role": "Admin", "text": "ödenmemiş aidatları göster", "expected": { "kind": "Dues", "students": [] } },
+    { "id": "H04", "category": "Görülmemiş", "role": "Admin", "text": "bu ay kimler ödeme yapmadı", "expected": { "kind": "Dues", "students": [] } },
+    { "id": "H05", "category": "Görülmemiş", "role": "Admin", "text": "Mina Şahin'in ödemesi yapıldı mı", "expected": { "kind": "Dues", "students": ["Mina Şahin"] } },
+    { "id": "H06", "category": "Görülmemiş", "role": "Admin", "text": "Emir Aydın'ın dersini perşembeye alalım", "expected": { "kind": "Reschedule", "students": ["Emir Aydın"], "move": { "targetWeekday": "Thursday" } } },
+    { "id": "H07", "category": "Görülmemiş", "role": "Admin", "text": "Aras'ın cumartesi dersi 18:00'de olsun", "expected": { "kind": "Reschedule", "students": ["Aras Koç"], "move": { "sourceWeekday": "Saturday", "targetTime": "18:00" } } },
+    { "id": "H08", "category": "Görülmemiş", "role": "Admin", "text": "Bora'nın dersini bir saat erkene çek", "expected": { "kind": "Reschedule", "students": ["Bora Aydın"], "move": { "shiftMinutes": -60 } } },
+    { "id": "H09", "category": "Görülmemiş", "role": "Admin", "text": "Defne Eren'in dersi bu hafta 19:00'da olsun", "expected": { "kind": "Reschedule", "students": ["Defne Eren"], "move": { "targetTime": "19:00", "scope": "Once" } } },
+    { "id": "H10", "category": "Görülmemiş", "role": "Admin", "text": "İpek Öztürk'ün dersini kalıcı olarak salı 17:00 yap", "expected": { "kind": "Reschedule", "students": ["İpek Öztürk"], "move": { "targetWeekday": "Tuesday", "targetTime": "17:00", "scope": "Recurring" } } },
+    { "id": "H11", "category": "Görülmemiş", "role": "Admin", "text": "Lina Koç 10 Kasım dersini 11 Kasım'a taşı", "expected": { "kind": "Reschedule", "students": ["Lina Koç"], "move": { "sourceDate": "2026-11-10", "targetDate": "2026-11-11" } } },
+    { "id": "H12", "category": "Görülmemiş", "role": "Admin", "text": "Kerem gelmedi, telafi ayarlayalım", "expected": { "kind": "Makeup", "students": ["Kerem Aksoy"] } },
+    { "id": "H13", "category": "Görülmemiş", "role": "Admin", "text": "Ada Çetin'in kaç telafi hakkı kaldı", "expected": { "kind": "Makeup", "students": ["Ada Çetin"] } },
+    { "id": "H14", "category": "Görülmemiş", "role": "Admin", "text": "Ege'nin dersleri ne zaman", "expected": { "kind": "Lessons", "students": ["Ege Kurt"] } },
+    { "id": "H15", "category": "Görülmemiş", "role": "Admin", "text": "Mina'nın hangi günler dersi var", "expected": { "kind": "Lessons", "students": ["Mina Şahin"] } },
+    { "id": "H16", "category": "Görülmemiş", "role": "Admin", "text": "yeni bir öğrenci kaydetmem lazım", "expected": { "kind": "Navigate", "navigation": "students-new" } },
+    { "id": "H17", "category": "Görülmemiş", "role": "Admin", "text": "veli şifresini nereden sıfırlarım", "expected": { "kind": "Navigate", "navigation": "guardians" } },
+    { "id": "H18", "category": "Görülmemiş", "role": "Admin", "text": "takvime git", "expected": { "kind": "Navigate", "navigation": "calendar" } },
+    { "id": "H19", "category": "Görülmemiş", "role": "Admin", "text": "Selin Demir'in öğrencisi Ada'nın dersleri", "expected": { "kind": "Lessons", "students": ["Ada Çetin"] } },
+    { "id": "H20", "category": "Görülmemiş", "role": "Admin", "text": "Mert Yılmaz'ın salı dersi", "expected": { "students": [] } },
+    { "id": "H21", "category": "Görülmemiş", "role": "Admin", "text": "Aydın kardeşlerin gelişimi", "expected": { "kind": "Progress", "students": ["Emir Aydın", "Bora Aydın"] } },
+    { "id": "H22", "category": "Görülmemiş", "role": "Admin", "text": "nasılsın", "expected": { "kind": "Unknown" } },
+    { "id": "H23", "category": "Görülmemiş", "role": "Admin", "text": "okul kaçta açılıyor", "expected": { "kind": "Unknown" } },
+    { "id": "H24", "category": "Görülmemiş", "role": "Teacher:mock.ayse.kaya@abdera.local", "text": "Kerem Aksoy'un gelişimi", "expected": { "students": [] } },
+    { "id": "H25", "category": "Görülmemiş", "role": "Admin", "text": "deniz arslan perşembe 17.30 dersi iptal mi", "expected": { "kind": "Lessons", "students": ["Deniz Arslan"] } }
+  ]
+}

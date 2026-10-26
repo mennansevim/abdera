@@ -84,3 +84,6 @@ tools/bulk-seed/last-run-report.*
 
 # Tanıtım sitesi tasarım taslakları (yapay görseller, 19 MB) - yalnızca yerelde tutulur.
 /design/
+
+# Asistan benchmark ham sonuçları (md özetleri commit edilir)
+tools/assistant-benchmark/results/*.json
