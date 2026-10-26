@@ -1,3 +1,4 @@
+using Abdera.Api.Modules.Assistant;
 using Abdera.Api.Modules.Attendance;
 using Abdera.Api.Modules.Auth;
 using Abdera.Api.Modules.Auth.Domain;
@@ -521,6 +522,7 @@ app.MapLibraryModule();
 app.MapMessagingModule();
 app.MapBankingModule();
 app.MapOpsModule();
+app.MapAssistantModule();
 
 if (app.Environment.IsDevelopment())
 {

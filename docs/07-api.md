@@ -241,3 +241,9 @@ POST   /api/student-deletion-requests/{id}/reject        ✅                    
 `POST /api/students/{id}/enrollments`, `POST|GET /api/students/{id}/guardians`,
 `POST /api/guardians`, `PATCH /api/guardians/{id}`.
 `GET /api/guardians` (okul geneli liste) Admin'de kaldı.
+
+## Uygulama içi asistan (AE)
+
+```
+POST   /api/assistant/resolve                    ✅ Teacher+Admin - { text (1-300), studentId? } → { kind, allowed, students[{studentId, fullName, status, courses[]}], move?{sourceDate, sourceTime, targetDate, targetTime, scope}, navigation?{key, label, path} }. Veri değiştirmez; studentId yalnızca metinde ad yoksa ve öğrenci oturuma görünürse kullanılır
+```
