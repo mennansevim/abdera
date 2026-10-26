@@ -6,7 +6,6 @@ import { Fragment, useEffect, useState } from "react";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { NotificationBell, NotificationToasts } from "@/components/notification-bell";
 import { WhatsNewDialog } from "@/components/whats-new";
-import { AbderaAssistant } from "@/components/abdera-assistant";
 import type { Me } from "@/lib/api";
 import { useBankTransactions } from "@/lib/banking";
 import { useNotifications } from "@/lib/messaging";
@@ -216,7 +215,6 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         </header>
         <NotificationToasts />
         <WhatsNewDialog me={me} />
-        <AbderaAssistant />
 
         <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-6 lg:pb-8 lg:pt-5 xl:px-8 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
           {children}

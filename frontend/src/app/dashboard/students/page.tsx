@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHeader, SearchInput, Segmented } from "@/components/ui";
@@ -33,23 +33,6 @@ export default function StudentsPage() {
   const [instrumentId, setInstrumentId] = useSessionState("abdera:students:instrument", "");
   const [status, setStatus] = useSessionState<"all" | StudentStatus>("abdera:students:status", "Active");
   const [notice, setNotice] = useState<string | null>(null);
-
-  // Abdera Asistanı öğrenci hesabına yönlendirdiğinde ilgili satırı açıp görünür kılar.
-  // Hash kullanıldığı için normal sayfa açılışı ve mevcut filtre davranışı değişmez.
-  useEffect(() => {
-    function openLinkedStudent() {
-      const match = window.location.hash.match(/^#student-(.+)$/);
-      if (!match) return;
-      setSearch("");
-      setInstrumentId("");
-      setStatus("all");
-      setExpandedId(match[1]!);
-      window.setTimeout(() => document.getElementById(`student-${match[1]}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 0);
-    }
-    openLinkedStudent();
-    window.addEventListener("hashchange", openLinkedStudent);
-    return () => window.removeEventListener("hashchange", openLinkedStudent);
-  }, [setExpandedId, setInstrumentId, setSearch, setStatus]);
 
   function announce(text: string) {
     setNotice(text);

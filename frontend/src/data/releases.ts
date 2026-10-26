@@ -22,14 +22,6 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: "2026.10.26",
-    date: "2026-10-26",
-    items: [
-      { audience: "all", text: "Abdera Asistanı beta olarak açıldı: öğrencinin telafi hakkını sorabilir, kalan derslerine gidebilir ve ders taşıma talebi hazırlayabilirsin." },
-      { audience: "all", text: "Ders taşıma talebinde bir kerelik ya da sürekli seçimi sorulur ve senden onay alınır. Beta süresince asistan hiçbir dersi veya telafi kaydını değiştirmez." },
-    ],
-  },
-  {
     version: "2026.10.23.9",
     date: "2026-10-23",
     items: [
