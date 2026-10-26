@@ -2,6 +2,7 @@
 
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { AppLoader } from "@/components/app-loader";
+import { AssistantProvider } from "@/components/assistant/assistant-provider";
 import { AppShell } from "./app-header";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -28,5 +29,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  return <AppShell me={me}>{children}</AppShell>;
+  // Asistan her ekrandan açılır (kenar menüsü, ⌘K, öğrenci satırı) - docs/10-decisions.md AE.
+  return <AssistantProvider><AppShell me={me}>{children}</AppShell></AssistantProvider>;
 }

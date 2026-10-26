@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAssistant } from "@/components/assistant/assistant-provider";
 import { Icon } from "@/components/icons";
 import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem, RowMenuSeparator } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -51,6 +52,7 @@ export function StudentDetail({
   onDelete,
 }: { student: Student; isAdmin: boolean; canManage?: boolean; onDelete?: () => void }) {
   const studentId = student.id;
+  const assistant = useAssistant();
   const [showGuardianForm, setShowGuardianForm] = useState(false);
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(false);
@@ -108,6 +110,12 @@ export function StudentDetail({
           <RowMenuItem icon="plus" onClick={() => { close(); setShowEnrollmentForm(true); }}>Kurs ekle</RowMenuItem>
           <RowMenuItem icon="students" onClick={() => { close(); setShowGuardianForm(true); }}>Veli ekle</RowMenuItem>
           <RowMenuItem icon={student.status === "Active" ? "x" : "check"} onClick={() => { close(); toggleStatus(); }}>{student.status === "Active" ? "Pasife al" : "Yeniden aktif et"}</RowMenuItem>
+          {/* Asistan kısayolları: öğrenci zaten seçili, ad eşleme gerekmez (AE). */}
+          <RowMenuSeparator />
+          <RowMenuItem icon="sparkles" onClick={() => { close(); assistant.ask("gelişimini getir", studentId); }}>Gelişimi özetle</RowMenuItem>
+          {activeEnrollments.length > 0 && <RowMenuItem icon="sparkles" onClick={() => { close(); assistant.ask("ders saatini değiştir", studentId); }}>Ders saatini değiştir</RowMenuItem>}
+          <RowMenuItem icon="sparkles" onClick={() => { close(); assistant.ask("telafi planla", studentId); }}>Telafi planla</RowMenuItem>
+          {isAdmin && <RowMenuItem icon="sparkles" onClick={() => { close(); assistant.ask("aidat durumu", studentId); }}>Aidat durumu</RowMenuItem>}
           {onDelete && <><RowMenuSeparator /><RowMenuItem icon="x" tone="danger" onClick={() => { close(); onDelete(); }}>{isAdmin ? "Kalıcı olarak sil…" : "Silme talebi oluştur…"}</RowMenuItem></>}
         </>}</RowMenu>}
       </div>

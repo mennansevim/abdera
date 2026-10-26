@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
+import { MobileAssistantButton, SidebarAssistantButton } from "@/components/assistant/assistant-launcher";
 import { BrandMark, Icon, type IconName } from "@/components/icons";
 import { NotificationBell, NotificationToasts } from "@/components/notification-bell";
 import { WhatsNewDialog } from "@/components/whats-new";
@@ -148,6 +149,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
             <Icon name={sidebarCollapsed ? "chevrons-right" : "chevrons-left"} className="h-4 w-4" />
           </button>
         </div>
+        <SidebarAssistantButton collapsed={sidebarCollapsed} />
         <nav className="min-h-0 flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-color:rgba(255,255,255,.35)_transparent] [scrollbar-width:thin]" aria-label="Ana menü">
           {links.map((link, index) => (
             <Fragment key={link.href}>
@@ -215,6 +217,7 @@ export function AppShell({ me, children }: { me: Me; children: React.ReactNode }
         </header>
         <NotificationToasts />
         <WhatsNewDialog me={me} />
+        <MobileAssistantButton />
 
         <main className={isLibrary ? "mx-auto min-h-dvh w-full max-w-[94rem] px-3 pb-24 pt-3 lg:p-4" : `mx-auto w-full max-w-[94rem] px-4 pb-24 sm:px-6 lg:min-h-dvh lg:px-6 lg:pb-8 lg:pt-5 xl:px-8 ${me.role === "Teacher" ? "min-h-dvh pt-4" : "min-h-[calc(100dvh-4rem)] pt-5"}`}>
           {children}
