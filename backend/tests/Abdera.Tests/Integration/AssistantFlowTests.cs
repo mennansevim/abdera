@@ -38,10 +38,12 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     private static async Task<ResolveIntent.Response> ResolveAsync(HttpClient client, string text, Guid? studentId = null) =>
         await ReadAsync<ResolveIntent.Response>(await client.PostAsJsonAsync("/api/assistant/resolve", new ResolveIntent.Request(text, studentId)));
 
-    private record School(HttpClient Admin, HttpClient PianoTeacher, Guid MennanSevim, Guid MennanKaya);
+    private record School(HttpClient Admin, HttpClient PianoTeacher, Guid Sevim, Guid Kaya);
 
-    // İki "Mennan": Sevim piyano öğretmeninin, Kaya gitar öğretmeninin öğrencisi.
-    private async Task<School> SeedAsync()
+    // Aynı ilk adı taşıyan iki öğrenci: Sevim piyano öğretmeninin, Kaya gitar öğretmeninin.
+    // Sınıftaki testler tek veritabanını paylaşır; her test kendi ilk adını verir ki başka
+    // testin eklediği öğrenciler eşleşmeye karışmasın.
+    private async Task<School> SeedAsync(string firstName)
     {
         var admin = await LoginAsync("admin@test.local", "Test1234!");
         var instruments = await ReadAsync<List<Instruments.InstrumentResponse>>(await admin.GetAsync("/api/instruments"));
@@ -55,9 +57,9 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
             new Teachers.CreateRequest("Can", "Yildiz", [guitar.Id], null)));
 
         var sevim = await ReadAsync<Students.StudentResponse>(await admin.PostAsJsonAsync("/api/students",
-            new Students.CreateRequest("Mennan", "Sevim", new DateOnly(2014, 3, 3))));
+            new Students.CreateRequest(firstName, "Sevim", new DateOnly(2014, 3, 3))));
         var kaya = await ReadAsync<Students.StudentResponse>(await admin.PostAsJsonAsync("/api/students",
-            new Students.CreateRequest("Mennan", "Kaya", new DateOnly(2013, 4, 4))));
+            new Students.CreateRequest(firstName, "Kaya", new DateOnly(2013, 4, 4))));
 
         await ReadAsync<Enrollments.EnrollmentResponse>(await admin.PostAsJsonAsync($"/api/students/{sevim.Id}/enrollments",
             new Enrollments.CreateRequest(pianoTeacher.Teacher.Id, piano.Id, new DateOnly(2026, 9, 1))));
@@ -71,13 +73,13 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     [Fact]
     public async Task Admin_gets_the_intent_the_matching_students_and_their_courses()
     {
-        var school = await SeedAsync();
+        var school = await SeedAsync("Mennan");
 
         var progress = await ResolveAsync(school.Admin, "Mennan'ın gelişimini getir");
         Assert.Equal(AssistantIntentKind.Progress, progress.Kind);
         Assert.True(progress.Allowed);
         Assert.Equal(
-            new[] { school.MennanKaya, school.MennanSevim }.Order(),
+            new[] { school.Kaya, school.Sevim }.Order(),
             progress.Students.Select(s => s.StudentId).Order());
 
         var move = await ResolveAsync(school.Admin, "Mennan Sevim'in perşembe dersini 17:00'ye al");
@@ -103,13 +105,13 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     [Fact]
     public async Task Teacher_matches_only_own_students_and_is_told_when_something_is_admin_only()
     {
-        var school = await SeedAsync();
+        var school = await SeedAsync("Nehir");
 
-        var progress = await ResolveAsync(school.PianoTeacher, "Mennan'ın gelişimini getir");
-        Assert.Equal([school.MennanSevim], progress.Students.Select(s => s.StudentId));
+        var progress = await ResolveAsync(school.PianoTeacher, "Nehir'in gelişimini getir");
+        Assert.Equal([school.Sevim], progress.Students.Select(s => s.StudentId));
 
-        var otherTeachersStudent = await ResolveAsync(school.PianoTeacher, "Mennan Kaya'nın dersleri");
-        Assert.DoesNotContain(otherTeachersStudent.Students, s => s.StudentId == school.MennanKaya);
+        var otherTeachersStudent = await ResolveAsync(school.PianoTeacher, "Nehir Kaya'nın dersleri");
+        Assert.DoesNotContain(otherTeachersStudent.Students, s => s.StudentId == school.Kaya);
 
         var dues = await ResolveAsync(school.PianoTeacher, "Aidat günü gelenleri listele");
         Assert.Equal(AssistantIntentKind.Dues, dues.Kind);
@@ -126,16 +128,16 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     [Fact]
     public async Task Context_student_is_used_only_when_the_text_names_nobody_and_the_student_is_visible()
     {
-        var school = await SeedAsync();
+        var school = await SeedAsync("Pelin");
 
-        var own = await ResolveAsync(school.PianoTeacher, "gelişimini getir", school.MennanSevim);
-        Assert.Equal([school.MennanSevim], own.Students.Select(s => s.StudentId));
+        var own = await ResolveAsync(school.PianoTeacher, "gelişimini getir", school.Sevim);
+        Assert.Equal([school.Sevim], own.Students.Select(s => s.StudentId));
 
-        var hidden = await ResolveAsync(school.PianoTeacher, "gelişimini getir", school.MennanKaya);
+        var hidden = await ResolveAsync(school.PianoTeacher, "gelişimini getir", school.Kaya);
         Assert.Empty(hidden.Students);
 
-        var named = await ResolveAsync(school.Admin, "Mennan Kaya'nın gelişimi", school.MennanSevim);
-        Assert.Equal([school.MennanKaya], named.Students.Select(s => s.StudentId));
+        var named = await ResolveAsync(school.Admin, "Pelin Kaya'nın gelişimi", school.Sevim);
+        Assert.Equal([school.Kaya], named.Students.Select(s => s.StudentId));
     }
 
     [Fact]
