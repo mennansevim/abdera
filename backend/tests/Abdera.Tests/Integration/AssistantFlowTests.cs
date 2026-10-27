@@ -214,6 +214,29 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task Opened_cards_are_remembered_in_the_masked_history_but_never_shown_in_the_reply()
+    {
+        await SeedAsync("Nehir");
+        var model = new ScriptedModel((messages, call) => call switch
+        {
+            0 => ToolCall("show_card", new { kind = "reschedule", student = StudentCode(LastUser(messages)), target_weekday = "Thursday", target_time = "18:00" }),
+            // Model geçmişteki notu cevaba kopyalarsa kullanıcıya gösterilmemeli.
+            _ => Say("Kartı açtım.\n[Açılan kartlar (show_card): kind=reschedule, student=Ö-ZZZZ]"),
+        });
+        var admin = await LoginAsync(WithModel(model), "admin@test.local", "Test1234!");
+
+        var response = await ReadAsync<AssistantChat.Response>(await ChatAsync(admin, "Nehir Sevim'in dersini perşembe 18:00'e al"));
+
+        Assert.Equal("Kartı açtım.", response.Reply);
+        var remembered = response.History.Last();
+        Assert.Equal("assistant", remembered.Role);
+        Assert.Contains("kind=reschedule", remembered.Content);
+        Assert.Contains("target_weekday=Thursday", remembered.Content);
+        Assert.Contains("target_time=18:00", remembered.Content);
+        Assert.DoesNotContain("Nehir", remembered.Content);
+    }
+
+    [Fact]
     public async Task Context_student_is_offered_to_the_model_only_when_visible()
     {
         var school = await SeedAsync("Tuna");

@@ -22,6 +22,9 @@ public class OpenAiCompatibleChatModel(HttpClient httpClient, ChatbotOptions opt
             ["messages"] = new JsonArray(messages.Select(message => (JsonNode)message.DeepClone()).ToArray()),
             ["tools"] = tools.DeepClone(),
         };
+        // DeepSeek Flash'ta düşünme modu varsayılan açık: her yanıtı birkaç kat yavaşlatır ve
+        // pahalılaştırır. Asistanın işi araç çağırıp kısa yanıt yazmak; düşünme kapalı ölçüldü.
+        if (options.IsDeepSeek) payload["thinking"] = new JsonObject { ["type"] = "disabled" };
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{options.BaseUrl.TrimEnd('/')}/chat/completions")
         {
@@ -54,7 +57,14 @@ public class OpenAiCompatibleChatModel(HttpClient httpClient, ChatbotOptions opt
                 return ChatModelReply.Fail("Dil modeli beklenmeyen bir yanıt döndürdü.");
             }
 
-            return new ChatModelReply(true, (JsonObject)message.DeepClone(), null);
+            var usage = body["usage"] is JsonObject used
+                ? new ChatUsage(
+                    used["prompt_tokens"]?.GetValue<int>() ?? 0,
+                    // DeepSeek: prompt_cache_hit_tokens; OpenAI: prompt_tokens_details.cached_tokens.
+                    used["prompt_cache_hit_tokens"]?.GetValue<int>() ?? used["prompt_tokens_details"]?["cached_tokens"]?.GetValue<int>() ?? 0,
+                    used["completion_tokens"]?.GetValue<int>() ?? 0)
+                : null;
+            return new ChatModelReply(true, (JsonObject)message.DeepClone(), null, usage);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

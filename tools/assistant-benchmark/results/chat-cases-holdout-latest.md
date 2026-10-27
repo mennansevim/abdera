@@ -1,20 +1,20 @@
 # Asistan sohbet benchmark'ı (cases-holdout.json, gerçek dil modeli)
 
-Tarih: 27.10.2026 05:11:19 · API: http://localhost:8080
+Tarih: 27.10.2026 12:12:25 · API: http://localhost:8080
 
-**Toplam: 21/25 (%84)** · yanıt süresi ortanca 2906 ms, en uzun 4472 ms
+**Toplam: 22/25 (%88)** · yanıt süresi ortanca 2712 ms, en uzun 4771 ms
+
+Maliyet (yoğun saat fiyatı, üst sınır): $0.0137 · 25 istek, giriş 247146 token (önbellek 221568), çıkış 3945 · toplam $0.1422
 
 | Kategori | Geçen | Oran |
 |---|---|---|
-| Görülmemiş | 21/25 | %84 |
+| Görülmemiş | 22/25 | %88 |
 
 ## Başarısız vakalar
 
-- **H09** `Defne Eren'in dersi bu hafta 19:00'da olsun` — scope Unspecified (beklenen Once)
-  - Cevap: Defne Eren'in pazartesi 18:00 dersini bu hafta 19:00'a almak için kartı açtım; onaylarsan taşınacak.
 - **H13** `Ada Çetin'in kaç telafi hakkı kaldı` — makeup kartı yok (açılan: hiç)
-  - Cevap: Ada Çetin'in şu an kullanılabilir telafi hakkı görünmüyor.
+  - Cevap: Ada Çetin'in şu an kullanılabilir telafi hakkı görünmüyor. İstersen gelişim bilgilerine birlikte bakalım.
 - **H21** `Aydın kardeşlerin gelişimi` — Emir Aydın için progress kartı yok; Bora Aydın için progress kartı yok
-  - Cevap: Aydın soyadında iki öğrenci var: Emir Aydın (gitar) ve Bora Aydın (keman). Hangisinin ya da ikisinin birden gelişimini görmek istersin?
+  - Cevap: Aydın soyadında iki öğrenci var: Emir Aydın (gitar) ve Bora Aydın (keman). İkisinin de gelişimini açayım mı, yoksa sadece birini mi görmek istersin?
 - **H25** `deniz arslan perşembe 17.30 dersi iptal mi` — lessons kartı yok (açılan: hiç)
-  - Cevap: Hayır, iptal değil. Deniz Arslan'ın perşembe 17:30 piyano dersi (Ayşe Kaya) bu hafta 29 Ekim'de ve sonraki haftalarda görünüyor; yalnızca 19 Kasım'da saat 18:00'e kaymış.
+  - Cevap: Hayır, iptal değil. Deniz Arslan'ın perşembe 17:30 piyano dersi (Ayşe Kaya ile) 29 Ekim ve 5 Kasım'da normal görünüyor; arada tatil de yok.

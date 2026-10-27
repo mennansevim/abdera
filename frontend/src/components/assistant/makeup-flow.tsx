@@ -128,12 +128,21 @@ function CreditScheduler({ student, credit, move, onDone }: { student: Assistant
   }
 
   const requested = requestedFromMove(move);
-  const target = picked ?? (requested?.time ? requested.time : null);
+  const target = picked ?? requested?.time ?? null;
   const problem = target ? problemOf(target) : null;
-  const slots = findOpenSlots({ from: requested && !requested.time && !picked ? requested.day : range.start, days: requested && !requested.time && !picked ? 1 : SEARCH_DAYS, ...common, limit: 12 })
-    .filter((slot) => slot.start >= range.start && slot.start.getTime() < expiresAt && !holidayLabels.has(localDateKey(slot.start)))
-    .slice(0, 6);
-  const askedDayEmpty = requested && !requested.time && !picked && slots.length === 0;
+  // Yalnız gün söylendiyse o günün, yalnız saat söylendiyse o saatin boş yerleri gösterilir;
+  // bulunamazsa bu açıkça söylenir ve genel öneriler gelir.
+  const onlyDay = !picked && requested?.day && !requested.time ? requested.day : null;
+  const onlyClock = !picked && !requested?.day && move?.targetTime ? move.targetTime.slice(0, 5) : null;
+  const usable = (slot: { start: Date }) => slot.start >= range.start && slot.start.getTime() < expiresAt && !holidayLabels.has(localDateKey(slot.start));
+  const general = findOpenSlots({ from: range.start, days: SEARCH_DAYS, ...common, limit: 12 }).filter(usable).slice(0, 6);
+  const narrowed = onlyDay
+    ? findOpenSlots({ from: onlyDay, days: 1, ...common, limit: 12 }).filter(usable).slice(0, 6)
+    : onlyClock
+      ? findOpenSlots({ from: range.start, days: SEARCH_DAYS, ...common, limit: 400 }).filter((slot) => usable(slot) && hhmm(slot.start) === onlyClock).slice(0, 6)
+      : null;
+  const slots = narrowed?.length ? narrowed : general;
+  const narrowedEmpty = narrowed !== null && narrowed.length === 0;
 
   async function confirm(start: Date) {
     setError(null);
@@ -159,11 +168,13 @@ function CreditScheduler({ student, credit, move, onDone }: { student: Assistant
   return (
     <div className="space-y-3">
       {target && problem && <WarningLine>{dayLabel(target)} {hhmm(target)}: {problem}</WarningLine>}
-      {askedDayEmpty && <WarningLine>{dayLabel(requested.day)} günü {lesson.teacherName} için boş saat yok.</WarningLine>}
+      {narrowedEmpty && <WarningLine>{onlyDay ? `${dayLabel(onlyDay)} günü` : `Hakkın süresi içinde saat ${onlyClock}'da`} {lesson.teacherName} için boş yer yok.</WarningLine>}
       <p className="text-sm">
         {slots.length
-          ? requested && !requested.time && !picked
-            ? `${dayLabel(requested.day)} için boş saatler (${durationMinutes} dk, ${lesson.instrumentName}, ${lesson.teacherName}):`
+          ? narrowed?.length
+            ? onlyDay
+              ? `${dayLabel(onlyDay)} için boş saatler (${durationMinutes} dk, ${lesson.instrumentName}, ${lesson.teacherName}):`
+              : `Saat ${onlyClock} için boş günler (${durationMinutes} dk, ${lesson.instrumentName}, ${lesson.teacherName}):`
             : `${lesson.teacherName} için hakkın süresi içindeki boş saatler (${durationMinutes} dk, ${lesson.instrumentName}):`
           : "Önerecek boş saat bulamadım; günü ve saati kendin yazabilirsin."}
       </p>

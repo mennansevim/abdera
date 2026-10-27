@@ -104,7 +104,8 @@ public class PseudonymizerTests
 
         Assert.True(options.IsEnabled);
         Assert.Equal("https://api.deepseek.com", options.BaseUrl);
-        Assert.Equal("deepseek-chat", options.Model);
+        Assert.Equal("deepseek-flash", options.Model);
+        Assert.True(options.IsDeepSeek);
         Assert.False(ChatbotOptions.FromConfiguration(new ConfigurationBuilder().Build()).IsEnabled);
     }
 }

@@ -14,6 +14,8 @@ export default defineConfig({
   outputDir: ".playwright-artifacts/assistant-month",
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3001",
+    // Bulunamayan bir düğme işlemi sonsuza dek bekletmesin; o işlem başarısız sayılsın.
+    actionTimeout: 30_000,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     ...devices["Desktop Chrome"],

@@ -4,6 +4,33 @@ Asistan iki aşamada ölçüldü. Önce kural tabanlı çözümleyici (AE, AE8),
 onun yerine gelen dil modeli sohbeti (AE9, DeepSeek). Kural yolu kaldırıldı; bu rapor ikisini de
 kayıt için tutar. Koşu ayrıntıları `results/*-latest.md`; çalıştırma [README.md](README.md).
 
+## Risk turu (27 Ekim, öğleden sonra): ders saati ve telafide sıfır yanlış işlem hedefi
+
+Yeni `cases-risk.json` (46 vaka) ve sıkılaştırılmış denetim: yazma kartında kullanıcının
+söylemediği hedef gün, saat, kaydırma ya da kapsam doluysa vaka başarısız. Toplam harcama ≈ $0,24
+(DeepSeek Flash, yoğun saat fiyatıyla üst sınır; girişin ~%90'ı önbellekten).
+
+| Ölçüm | Sonuç |
+|---|---|
+| Risk seti (46 × 3 koşu) | 45-46/46; kalan tek fark K05'te güvenli kapsam seçimi (beklenti düzeltildi) |
+| Sohbet benchmark'ı (117, sıkı denetim) | 116/117; kalan X12 kayıt değiştirmiyor (ekranı açmadan soruyor) |
+| Görülmemiş set (25) | 22/25; üçü de okuma isteği, yanlış işlem yok |
+| Bir aylık simülasyon (31, ekrandan, gerçek model) | 31/31 |
+| Backend / mocked e2e | 764/764 · 12/12 |
+
+| # | Bulunan risk | Düzeltme |
+|---|---|---|
+| R1 | **Düzeltmede gün kayıyordu** ("perşembe 18:00'e al" → "aslında Lara'nınkini": perşembe taşınacak dersin günü sanıldı) | Açılan kartların parametreleri maskeli geçmişe yapısal not olarak yazılıyor; model önceki kartı metinden yeniden yorumlamıyor. Not cevaba sızarsa kodda siliniyor |
+| R2 | **Model adı eski** (`deepseek-chat` dokümandan kalktı; kalkarsa düşünme moduna geçip yavaşlar ya da durur) | Varsayılan `deepseek-flash`, düşünme modu istekte açıkça kapalı |
+| R3 | **Telafide yalnız saat söylenince kart saati yok sayıyordu** | O saatteki boş günler gösteriliyor; yoksa açıkça söyleniyor |
+| R4 | **Benchmark uydurulmuş hedefleri görmüyordu** (beklenende boş alan denetlenmiyordu) | Yazma kartlarında söylenmeyen hedef alanları başarısızlık |
+| R5 | **Simülasyonda bulunamayan düğme süresiz bekletiyordu** | `actionTimeout` 30 sn |
+
+Risk setinde hiç kaçmayan sınıflar: gün/saat dili (yarım saat erkene, beşe çeyrek kala, akşam 7
+buçuk, haftaya salı, yarın, 15 Kasım), telafi/taşıma ayrımı, öğretmen adı ve ortak soyad tuzakları
+(Onur Koç, Burak Eren, Ece, Zeynep, "Koç'un"), toplu işler ("tüm öğrencilerin", "hepsine telafi"),
+öğretmen kapsamı.
+
 ## Sonuç: dil modeliyle sohbet (geçerli tasarım)
 
 | Ölçüm | İlk koşu | Düzeltmelerden sonra |

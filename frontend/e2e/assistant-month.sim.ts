@@ -102,6 +102,11 @@ async function say(page: Page, dialog: Locator, text: string) {
   expect(response.ok(), `sohbet ucu ${response.status()}`).toBeTruthy();
 }
 
+// Tek ders "Onayla ve taşı", her hafta "Onayla, programı değiştir".
+async function confirmMove(dialog: Locator) {
+  await dialog.getByRole("button", { name: /^Onayla( ve taşı|, programı değiştir)$/ }).click();
+}
+
 async function chooseOnce(dialog: Locator) {
   await dialog.getByRole("button", { name: "Yalnız bu ders" }).click();
 }
@@ -198,7 +203,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   await op("O08", weekOf(monday), "Lara Arslan'ın pazartesi dersini 17:00'ye al (yalnız bu ders)", `${dayText(monday)} 16:00 dersi 17:00'ye taşınır; eski ders "taşındı" olur`, async () => {
     const dialog = await chat(page, "Lara Arslan'ın pazartesi dersini 17:00'ye al");
     await chooseOnce(dialog);
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/saatine taşındı/)).toBeVisible();
     const lessons = await lessonsOf(page, "Lara Arslan", monday, addDays(monday, 1));
     expect(sameInstant(lessons.find((lesson) => lesson.status === "Normal")?.startAt, at(monday, 17))).toBeTruthy();
@@ -220,7 +225,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   await op("O10", weekOf(friday), "Mina Şahin'in dersini her hafta perşembe 16:00'ya taşı", `${dayText(friday)} dersinden itibaren program her perşembe 16:00; o tarihten sonra cuma dersi kalmaz`, async () => {
     const dialog = await chat(page, "Mina Şahin'in dersini her hafta perşembe 16:00'ya taşı");
     await expect(dialog.getByText("Haftalık program değişecek")).toBeVisible();
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/programı .* oldu/)).toBeVisible();
     const lessons = (await lessonsOf(page, "Mina Şahin", friday, addDays(friday, 21))).filter((lesson) => lesson.status === "Normal");
     expect(lessons.length).toBeGreaterThanOrEqual(2);
@@ -234,7 +239,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   await op("O11", weekOf(thursday), "Ege Kurt'un perşembe dersini yarım saat erkene al", `${dayText(thursday)} 19:30 dersi 19:00'a alınır`, async () => {
     const dialog = await chat(page, "Ege Kurt'un perşembe dersini yarım saat erkene al");
     await chooseOnce(dialog);
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/saatine taşındı/)).toBeVisible();
     const lessons = (await lessonsOf(page, "Ege Kurt", thursday, addDays(thursday, 1))).filter((lesson) => lesson.status === "Normal");
     expect(sameInstant(lessons[0]?.startAt, at(thursday, 19))).toBeTruthy();
@@ -281,7 +286,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
     const dialog = await chat(page, "Ada Çetin'in 4 Kasım dersini cuma 18:00'e al");
     await chooseOnce(dialog);
     await expect(dialog.getByText("Bu ders taşınacak")).toBeVisible();
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/saatine taşındı/)).toBeVisible();
     const lessons = await lessonsOf(page, "Ada Çetin", fourNovember, addDays(sixNovember, 1));
     expect(lessons.find((lesson) => lesson.status === "Normal" && sameInstant(lesson.startAt, at(sixNovember, 18)))).toBeTruthy();
@@ -324,7 +329,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   await op("O20", weekOf(saturday), "Bora'nın dersini bir saat erkene çek", `${dayText(saturday)} 19:30 dersi 18:30'a alınır`, async () => {
     const dialog = await chat(page, "Bora'nın dersini bir saat erkene çek");
     await chooseOnce(dialog);
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/saatine taşındı/)).toBeVisible();
     const lessons = (await lessonsOf(page, "Bora Aydın", saturday, addDays(saturday, 1))).filter((lesson) => lesson.status === "Normal");
     expect(sameInstant(lessons[0]?.startAt, at(saturday, 18, 30))).toBeTruthy();
@@ -378,7 +383,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   await op("O26", weekOf(nineteenNovember), "Deniz Arslan'ın 19 Kasım dersini 18:00'e al", "19 Kasım 17:30 dersi 18:00'e; önceki perşembe değişmez", async () => {
     const dialog = await chat(page, "Deniz Arslan'ın 19 Kasım dersini 18:00'e al");
     await chooseOnce(dialog);
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/saatine taşındı/)).toBeVisible();
     const lessons = await lessonsOf(page, "Deniz Arslan", addDays(nineteenNovember, -7), addDays(nineteenNovember, 1));
     expect(lessons.filter((lesson) => lesson.status === "Normal").map((lesson) => new Date(lesson.startAt).getTime())).toEqual([at(addDays(nineteenNovember, -7), 17, 30), at(nineteenNovember, 18)].map((date) => date.getTime()));
@@ -389,7 +394,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   await op("O27", weekOf(seventeenNovember), "Emir Aydın'ın 17 Kasım dersinden itibaren her hafta çarşamba 17:00'ye al", "10 Kasım salı dersi yerinde kalır; 17 Kasım salı dersi kalkar, 18 Kasım'dan itibaren her çarşamba 17:00", async () => {
     const dialog = await chat(page, "Emir Aydın'ın 17 Kasım dersinden itibaren her hafta çarşamba 17:00'ye al");
     await expect(dialog.getByText("Haftalık program değişecek")).toBeVisible();
-    await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
+    await confirmMove(dialog);
     await expect(dialog.getByText(/programı .* oldu/)).toBeVisible();
     const lessons = (await lessonsOf(page, "Emir Aydın", addDays(seventeenNovember, -7), addDays(seventeenNovember, 9))).filter((lesson) => lesson.status === "Normal");
     expect(lessons.some((lesson) => sameInstant(lesson.startAt, at(addDays(seventeenNovember, -7), 17, 30)))).toBeTruthy();

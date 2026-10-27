@@ -19,7 +19,7 @@ namespace Abdera.Api.Modules.Assistant.Features;
 // Model kişi adlarını görmez (Pseudonymizer). Sohbet geçmişi istemcide MASKELİ tutulur ve her
 // mesajla geri gönderilir; sunucuda sohbet saklanmaz. Model yanıt veremezse kural yoluna
 // düşülmez, açık bir hata döner (kullanıcı kararı).
-public static class AssistantChat
+public static partial class AssistantChat
 {
     public const int MaxMessageLength = 1000;
     public const int MaxHistory = 16;
@@ -109,9 +109,11 @@ public static class AssistantChat
         string? answer = null;
         var rounds = 0;
         var corrected = false;
+        var usage = ChatUsage.Zero;
         for (; rounds <= options.MaxToolRounds && answer is null; rounds++)
         {
             var reply = await model.CompleteAsync(messages, tools, cancellationToken);
+            usage = usage.Add(reply.Usage);
             if (!reply.Success || reply.Message is null)
             {
                 logger.LogWarning("Asistan yanıt veremedi: {Error}", reply.Error);
@@ -152,8 +154,10 @@ public static class AssistantChat
         }
 
         answer ??= "Bu isteği tamamlayamadım. Daha kısa ya da tek bir işle yazar mısın?";
-        logger.LogInformation("Asistan yanıtladı: {Rounds} tur, araçlar {Tools}, {Cards} kart, {Elapsed} ms",
-            rounds, string.Join(",", toolbox.CalledTools), toolbox.Cards.Count, stopwatch.ElapsedMilliseconds);
+        // Geçmişteki kart notu modelin içindir; cevaba kopyalarsa kullanıcıya gösterilmez.
+        answer = CardNotePattern().Replace(answer, "").Trim();
+        logger.LogInformation("Asistan yanıtladı: {Rounds} tur, araçlar {Tools}, {Cards} kart, {Elapsed} ms, token giriş {PromptTokens} (önbellek {CacheHitTokens}) çıkış {CompletionTokens}",
+            rounds, string.Join(",", toolbox.CalledTools), toolbox.Cards.Count, stopwatch.ElapsedMilliseconds, usage.PromptTokens, usage.CacheHitTokens, usage.CompletionTokens);
 
         var cardStudentIds = toolbox.Cards.Where(card => card.StudentId is not null).Select(card => card.StudentId!.Value).Distinct().ToList();
         var students = await LoadStudentsAsync(cardStudentIds, teacherScope, db, cancellationToken);
@@ -163,13 +167,44 @@ public static class AssistantChat
             card.Move,
             card.Navigation is { } target ? new NavigationItem(target.Key, target.Label, target.Path) : null)).ToList();
 
+        // Geçmişe açılan kartların parametreleri de yazılır (kullanıcı görmez): "aslında Lara'nınkini",
+        // "yok, perşembe olsun" gibi düzeltmelerde model önceki kartı metninden yeniden yorumlarken
+        // gün/saat anlamını kaydırıyordu (benchmark K57). Kodlu kalır; ad içermez.
+        var remembered = answer + CardNote(toolbox.Cards, names);
         var newHistory = history
             .Append(new HistoryItem("user", userContent))
-            .Append(new HistoryItem("assistant", answer.Length > MaxHistoryContent ? answer[..MaxHistoryContent] : answer))
+            .Append(new HistoryItem("assistant", remembered.Length > MaxHistoryContent ? remembered[..MaxHistoryContent] : remembered))
             .TakeLast(MaxHistory)
             .ToList();
 
         return Results.Ok(new Response(names.Unmask(answer).Trim(), cards, newHistory));
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[Açılan kartlar[^\]]*\]")]
+    private static partial System.Text.RegularExpressions.Regex CardNotePattern();
+
+    internal static string CardNote(IReadOnlyList<AssistantToolbox.Card> cards, Pseudonymizer names)
+    {
+        if (cards.Count == 0) return "";
+        var parts = cards.Select(card =>
+        {
+            var fields = new List<string> { $"kind={card.Kind}" };
+            if (card.StudentId is { } id) fields.Add($"student={names.CodeFor(id)}");
+            if (card.Navigation is { } target) fields.Add($"screen={target.Key}");
+            if (card.Move is { } move)
+            {
+                if (move.SourceDate is { } sourceDate) fields.Add($"source_date={sourceDate:yyyy-MM-dd}");
+                if (move.SourceTime is { } sourceTime) fields.Add($"source_time={sourceTime:HH\\:mm}");
+                if (move.TargetWeekday is { } weekday) fields.Add($"target_weekday={weekday}");
+                else if (move.TargetDate is { } targetDate) fields.Add($"target_date={targetDate:yyyy-MM-dd}");
+                if (move.TargetNextWeek) fields.Add("target_next_week=true");
+                if (move.TargetTime is { } targetTime) fields.Add($"target_time={targetTime:HH\\:mm}");
+                if (move.ShiftMinutes is { } shift) fields.Add($"shift_minutes={shift}");
+                if (move.Scope != RescheduleScope.Unspecified) fields.Add($"scope={move.Scope}");
+            }
+            return string.Join(", ", fields);
+        });
+        return $"\n[Açılan kartlar (show_card): {string.Join(" | ", parts)}]";
     }
 
     // "kartı açtım", "kartta açıyorum", "taşıdım", "gönderdim" gibi bir eylem iddiası.

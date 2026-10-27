@@ -18,6 +18,8 @@ public class ChatbotOptions
     // Tek mesajda model en fazla bu kadar araç turu atabilir; sonsuz döngüye karşı.
     public int MaxToolRounds { get; set; } = 5;
 
+    public bool IsDeepSeek => BaseUrl.Contains("deepseek.com", StringComparison.OrdinalIgnoreCase);
+
     public bool IsEnabled => !string.IsNullOrWhiteSpace(ApiKey) && !string.Equals(Provider, "Disabled", StringComparison.OrdinalIgnoreCase);
 
     public static ChatbotOptions FromConfiguration(IConfiguration configuration)
@@ -35,7 +37,9 @@ public class ChatbotOptions
             Provider = provider,
             ApiKey = apiKey,
             BaseUrl = Read("Ai_Chatbot_BaseUrl", "BaseUrl") ?? (isOpenAi ? "https://api.openai.com/v1" : "https://api.deepseek.com"),
-            Model = Read("Ai_Chatbot_Model", "Model") ?? (isOpenAi ? "gpt-4o-mini" : "deepseek-chat"),
+            // "deepseek-chat" eski bir ad (bugün düşünmesiz deepseek-flash'a gidiyor); kalkarsa asistan
+            // durmasın diye güncel ad kullanılır, düşünme modu istekte kapatılır (IsDeepSeek).
+            Model = Read("Ai_Chatbot_Model", "Model") ?? (isOpenAi ? "gpt-4o-mini" : "deepseek-flash"),
             TimeoutSeconds = int.TryParse(Read("Ai_Chatbot_TimeoutSeconds", "TimeoutSeconds"), out var timeout) ? timeout : 45,
         };
     }

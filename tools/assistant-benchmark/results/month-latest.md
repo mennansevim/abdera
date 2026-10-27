@@ -1,10 +1,10 @@
 # Asistan - bir aylık işlem simülasyonu
 
-Tarih: 27.10.2026 04:56:28 · 30/31 işlem beklenen sonucu verdi
+Tarih: 27.10.2026 12:27:10 · 31/31 işlem beklenen sonucu verdi
 
 | # | Hafta | İstek | Beklenen | Gerçekleşen | Sonuç |
 |---|---|---|---|---|---|
-| O01 | Hafta 1 | Deniz Arslan'ın gelişimini getir | Devam oranı analiz ekranıyla aynı (%geldi/işaretli, 3 ay); çalıştığı eser görünür | expect(locator).toBeVisible() failed Locator: getByRole('dialog', { name: 'Abdera Asistanı' }).getByText('Bach - Minuet in G') Expected: visible | ✗ |
+| O01 | Hafta 1 | Deniz Arslan'ın gelişimini getir | Devam oranı analiz ekranıyla aynı (%geldi/işaretli, 3 ay); çalıştığı eser görünür | %92, Bach - Minuet in G | ✓ |
 | O02 | Hafta 1 | Aidat günü gelenleri listele | Ödenmemiş + kısmi ödenmiş aidatlar (ödenmişler yok), toplam kalan tutar doğru | 9 aidat, ₺52.000 | ✓ |
 | O03 | Hafta 1 | Deniz Arslan'a aidat hatırlatması (karttan, onaylı) | Onaydan sonra 1 hatırlatma sıraya alınır | 1 hatırlatma sıraya alındı | ✓ |
 | O04 | Hafta 1 | Deniz Arslan'ın aidat durumu → tekrar hatırlatma | Aynı aidat için ikinci hatırlatma gönderilmez, nedeniyle "gönderilmedi" denir | 0/1, gönderilmedi | ✓ |

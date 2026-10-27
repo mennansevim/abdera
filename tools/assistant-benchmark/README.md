@@ -7,13 +7,17 @@ Abdera Asistanı'nın (docs/10-decisions.md AE, AE9) yerelde, **gerçek dil mode
 |---|---|---|
 | Sohbet benchmark'ı | `cases.json` (117 vaka) + `run-chat.mjs` | Her cümle `POST /api/assistant/chat`'e tek mesaj olarak gider; modelin açtığı kart (tür, öğrenci, gün/saat, kapsam, ekran) ve rol izni beklenenle karşılaştırılır |
 | Görülmemiş set | `cases-holdout.json` (25 vaka) | Aynı ölçüm; istem bu sete göre **ayarlanmaz**, genelleme oranını gösterir |
+| Risk seti | `cases-risk.json` (46 vaka) | Ders saati ve telafide yanlış işleme yol açabilecek cümleler: gün/saat dili, telafi ile taşımanın karışması, öğretmen adı ve ortak soyad tuzakları, toplu işler, çok adımlı düzeltmeler, öğretmen kapsamı |
 | Bir aylık simülasyon | `frontend/e2e/assistant-month.sim.ts` (31 işlem) | Yöneticinin asistanla 4 hafta boyunca yaptığı işlemler (ekrandan, gerçek model); sonuç API'den doğrulanır |
 
 Her vakanın beklenen sonucu (`expected`) dosyanın içinde yazılı; koşu sonuçları `results/` altına
 `*-latest.md` olarak düşer. Bulgular ve düzeltmeler: [REPORT.md](REPORT.md).
 
 Dil modeli her seferinde birebir aynı cevabı vermez: aynı istemle oranlar koşudan koşuya birkaç
-vaka oynar. Bir değişikliği değerlendirirken iki koşuya bak.
+vaka oynar. Bir değişikliği değerlendirirken iki koşuya bak (`--repeat 2`).
+
+Yazma kartlarında (ders taşıma, telafi) kullanıcının söylemediği hedef gün, saat, kaydırma ya da
+kapsam kartta doluysa vaka başarısız sayılır: uydurulmuş hedef yanlış işlem demektir.
 
 ## Yerel ortam
 
@@ -48,6 +52,14 @@ node tools/assistant-benchmark/run-chat.mjs
 
 ```bash
 node tools/assistant-benchmark/run-chat.mjs --cases cases-holdout.json
+```
+
+Maliyet: `--log` API günlüğünü verirse koşunun token sayıları (asistan her yanıtta
+"token giriş … çıkış …" yazar) DeepSeek Flash yoğun saat fiyatıyla dolara çevrilir; `--budget`
+dosyasına eklenir. Bir tam koşu (117 vaka) yaklaşık $0,06 tutar; girişin ~%90'ı önbellekten gelir.
+
+```bash
+node tools/assistant-benchmark/run-chat.mjs --cases cases-risk.json --repeat 2 --log api.log --budget budget.txt
 ```
 
 Yalnızca bir kategori (ör. ders saati vakaları R ile başlar):

@@ -72,7 +72,7 @@
     { "id": "M04", "category": "Telafi", "role": "Admin", "text": "Ada için telafi dersi ayarla", "expected": { "kind": "Makeup", "students": ["Ada Çetin"] } },
     { "id": "M05", "category": "Telafi", "role": "Admin", "text": "Emir Aydın telafi", "expected": { "kind": "Makeup", "students": ["Emir Aydın"] } },
     { "id": "M06", "category": "Telafi", "role": "Admin", "text": "Mina'nın kaçırdığı dersi telafi et", "expected": { "kind": "Makeup", "students": ["Mina Şahin"] } },
-    { "id": "M07", "category": "Telafi", "role": "Admin", "text": "Kerem'in telafisini cumaya koy", "expected": { "kind": "Makeup", "students": ["Kerem Aksoy"] } },
+    { "id": "M07", "category": "Telafi", "role": "Admin", "text": "Kerem'in telafisini cumaya koy", "expected": { "kind": "Makeup", "students": ["Kerem Aksoy"], "move": { "targetWeekday": "Friday" } } },
     { "id": "M08", "category": "Telafi", "role": "Admin", "text": "Ege Kurt 2 telafi hakkı", "expected": { "students": ["Ege Kurt"], "reply": "yok|görünmüyor|bulunmuyor" } },
 
     { "id": "L01", "category": "Dersler", "role": "Admin", "text": "Deniz Arslan'ın dersleri", "expected": { "kind": "Lessons", "students": ["Deniz Arslan"] } },
