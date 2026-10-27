@@ -85,13 +85,21 @@ async function openDues(page: Page) {
 }
 
 // Her işlem temiz bir sohbetle başlar: sayfa yeniden açılır, asistan açılır, cümle yazılır.
+// Cevap gerçek dil modelinden gelir (birkaç saniye); sohbet ucunun yanıtı beklenir.
 async function chat(page: Page, text: string) {
   await page.goto("/dashboard/releases");
   await page.getByRole("button", { name: "Abdera Asistanı (⌘K)" }).click();
   const dialog = page.getByRole("dialog", { name: "Abdera Asistanı" });
-  await dialog.getByLabel("Asistana yaz").fill(text);
-  await dialog.getByRole("button", { name: "Gönder", exact: true }).click();
+  await say(page, dialog, text);
   return dialog;
+}
+
+async function say(page: Page, dialog: Locator, text: string) {
+  await dialog.getByLabel("Asistana yaz").fill(text);
+  const answered = page.waitForResponse((response) => response.url().includes("/api/assistant/chat"), { timeout: 60_000 });
+  await dialog.getByRole("button", { name: "Gönder", exact: true }).click();
+  const response = await answered;
+  expect(response.ok(), `sohbet ucu ${response.status()}`).toBeTruthy();
 }
 
 async function chooseOnce(dialog: Locator) {
@@ -252,19 +260,21 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
     return `seçilen ${slotText}; ${describe([makeup!])}`;
   });
 
-  await op("O13", weekOf(startOfToday()), "Onur Koç'un dersleri", "Onur Koç öğretmen: öğrenci Aras/Lina Koç eşleşmez, \"Hangi öğrenci için?\" sorulur", async () => {
+  await op("O13", weekOf(startOfToday()), "Onur Koç'un dersleri", "Onur Koç öğretmen: öğrenci Aras/Lina Koç için kart açılmaz, ders taşınmaz", async () => {
     const dialog = await chat(page, "Onur Koç'un dersleri");
-    await expect(dialog.getByText("Hangi öğrenci için?", { exact: false })).toBeVisible();
-    await expect(dialog.getByText("Aras Koç")).toHaveCount(0);
-    return "öğrenci soruldu";
+    await expect(dialog.getByText("Aras Koç", { exact: true })).toHaveCount(0);
+    await expect(dialog.getByText("Lina Koç", { exact: true })).toHaveCount(0);
+    return "öğrenci kartı yok";
   });
 
-  await op("O14", weekOf(startOfToday()), "Arslan'ın dersleri → Deniz seç", "İki Arslan seçenek olarak gelir; Deniz seçilince her perşembe 17:30 programı görünür", async () => {
+  await op("O14", weekOf(startOfToday()), "Arslan'ın dersleri → \"Deniz olanın\"", "Model iki Arslan'ı sorar (kart açmaz); ikinci mesajda Deniz'in programı (her perşembe 17:30) kartta görünür", async () => {
     const dialog = await chat(page, "Arslan'ın dersleri");
-    await expect(dialog.getByRole("button", { name: /^Lara Arslan/ })).toBeVisible();
-    await dialog.getByRole("button", { name: /^Deniz Arslan/ }).click();
+    await expect(dialog.getByText(/Lara/).first()).toBeVisible();
+    await expect(dialog.getByText(/Deniz/).first()).toBeVisible();
+    await expect(dialog.getByText(/Her hafta Perşembe/)).toHaveCount(0);
+    await say(page, dialog, "Deniz olanın");
     await expect(dialog.getByText(/Her hafta Perşembe 17:30/)).toBeVisible();
-    return "seçim sonrası program görünür";
+    return "önce soru, sonra program";
   });
 
   await op("O15", weekOf(fourNovember), "Ada Çetin'in 4 Kasım dersini cuma 18:00'e al", "Aynı haftanın cuması: 4 Kasım 18:00 → 6 Kasım Cuma 18:00", async () => {
@@ -323,7 +333,9 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
 
   await op("O21", weekOf(startOfToday()), "Ada'ya telafi oluştur", "Kullanılabilir hak yok mesajı", async () => {
     const dialog = await chat(page, "Ada'ya telafi oluştur");
-    await expect(dialog.getByText(/kullanılabilir telafi hakkı yok/)).toBeVisible();
+    // Kart ya da modelin cevabı: ikisi de hakkın olmadığını söyler; telafi dersi açılmaz.
+    await expect(dialog.getByText(/telafi hakkı (yok|görünmüyor|bulunmuyor)/).first()).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Telafiyi aç" })).toHaveCount(0);
     return "hak yok";
   });
 
@@ -348,7 +360,8 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
 
   await op("O24", weekOf(startOfToday()), "Kerem'in borcu var mı", "Ödenmemiş aidat yok", async () => {
     const dialog = await chat(page, "Kerem'in borcu var mı");
-    await expect(dialog.getByText("Kerem Aksoy için ödenmemiş aidat yok.")).toBeVisible();
+    await expect(dialog.getByText(/(borcu|ödenmemiş aidat\w*|açık aidat\w*) (yok|bulunmuyor|görünmüyor)/).first()).toBeVisible();
+    await expect(dialog.getByText(money(4000))).toHaveCount(0);
     return "borç yok";
   });
 
@@ -414,7 +427,9 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
 
   await op("O31", weekOf(new Date(2026, 10, 26)), "Deniz Arslan'ın 26 Kasım dersini 18:00'e al (seri 24 Kasım'da bitiyor)", "Söylenen günü anarak o gün ders olmadığını söyler; onay yok", async () => {
     const dialog = await chat(page, "Deniz Arslan'ın 26 Kasım dersini 18:00'e al");
-    await expect(dialog.getByText(/26 Kasım Perşembe günü Piyano dersi yok/)).toBeVisible();
+    // Model ya kendisi söyler ya da kartı açar; kart o günü anarak ders olmadığını söyler.
+    await expect(dialog.getByText(/26 Kasım/).first()).toBeVisible();
+    await expect(dialog.getByText(/(ders|program)\w* (yok|görünmüyor|bulunmuyor)|planlı ders\w* (yok|görünmüyor)/).first()).toBeVisible();
     await expect(dialog.getByText("Bu ders taşınacak")).toHaveCount(0);
     return "26 Kasım'da ders yok mesajı";
   });

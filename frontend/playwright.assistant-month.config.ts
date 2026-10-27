@@ -6,7 +6,9 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "assistant-month.sim.ts",
-  timeout: 15 * 60_000,
+  timeout: 20 * 60_000,
+  // Kartlar dil modelinin cevabından sonra açılır; beklemeler gerçek model süresine göre.
+  expect: { timeout: 20_000 },
   workers: 1,
   reporter: "list",
   outputDir: ".playwright-artifacts/assistant-month",

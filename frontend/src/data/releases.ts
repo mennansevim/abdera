@@ -25,7 +25,7 @@ export const RELEASES: Release[] = [
     version: "2026.10.27",
     date: "2026-10-27",
     items: [
-      { audience: "admin", text: "Abdera Asistanı beta olarak açıldı: sol menüdeki Asistan düğmesinden ya da ⌘K ile aç. \"Mennan Sevim'in gelişimini getir\", \"Aidat günü gelenleri listele\" ya da \"Yoklamayı nereden alırım?\" yazabilirsin." },
+      { audience: "admin", text: "Abdera Asistanı beta olarak açıldı: sol menüdeki Asistan düğmesinden ya da ⌘K ile aç ve günlük dilde yaz. \"Deniz nasıl gidiyor?\", \"Aidat günü gelenleri listele\", \"Arslan'ın dersleri ne zaman?\" gibi sorulara cevap verir, gerekirse ilgili kartı açar." },
       { audience: "admin", text: "Asistan ders saatini değiştirir ve telafi dersi açar: önce öğretmenin boş olup olmadığına bakar, uygun saat önerir, senin onayınla takvimdeki işlemin aynısını yapar. Ödeme almaz; \"Ödeme al\" Aidatlar'daki pencereyi açar." },
       { audience: "admin", text: "Öğrenci satırındaki ⋯ menüsünde yeni kısayollar: Gelişimi özetle, Ders saatini değiştir, Telafi planla, Aidat durumu." },
     ],

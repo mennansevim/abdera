@@ -1,5 +1,5 @@
-// Uygulama içi asistan (docs/10-decisions.md AE). Sunucu yalnızca cümlenin ne istediğini
-// söyler (POST /api/assistant/resolve); kartların verisi ve yazma işlemleri mevcut ekranların
+// Uygulama içi asistan (docs/10-decisions.md AE, AE9). Sohbet dil modeliyle (DeepSeek) sunucuda
+// yürür (POST /api/assistant/chat); kartların verisi ve yazma işlemleri mevcut ekranların
 // kullandığı uçlardan geçer. Bu dosya istek tipleri ile kartların ortak hesaplarını tutar.
 "use client";
 
@@ -13,7 +13,6 @@ export function canUseAssistant(role: UserRole | undefined) {
   return role === "Admin";
 }
 
-export type AssistantIntentKind = "Unknown" | "Progress" | "Dues" | "Reschedule" | "Makeup" | "Lessons" | "Navigate";
 export type RescheduleScope = "Unspecified" | "Once" | "Recurring";
 
 export interface AssistantCourse {
@@ -45,23 +44,35 @@ export interface AssistantMove {
   targetNextWeek: boolean;
 }
 
-export interface AssistantResolution {
-  kind: AssistantIntentKind;
-  allowed: boolean;
-  students: AssistantStudent[];
+export type AssistantCardKind = "progress" | "lessons" | "makeup" | "reschedule" | "dues" | "navigate";
+
+// Modelin açtığı kart: veri kartlar tarafından mevcut uçlardan çekilir, yazma işlemleri kartta onayla.
+export interface AssistantCardData {
+  kind: AssistantCardKind;
+  student: AssistantStudent | null;
   move: AssistantMove | null;
   navigation: { key: string; label: string; path: string } | null;
 }
 
-export function useResolveAssistant() {
-  return useMutation({
-    mutationFn: (body: { text: string; studentId?: string | null }) =>
-      api.post<AssistantResolution>("/api/assistant/resolve", body),
-  });
+// Sohbet geçmişi sunucudan MASKELİ döner (kişi adları kodlu) ve her mesajla aynen geri gönderilir;
+// sunucu sohbeti saklamaz (docs/10-decisions.md AE9).
+export interface ChatHistoryItem {
+  role: "user" | "assistant";
+  content: string;
 }
 
-// Bu niyetler bir öğrenci olmadan yanıtlanamaz; aidat listesi öğrencisiz de anlamlıdır.
-export const STUDENT_INTENTS: AssistantIntentKind[] = ["Progress", "Reschedule", "Makeup", "Lessons"];
+export interface AssistantChatResponse {
+  reply: string;
+  cards: AssistantCardData[];
+  history: ChatHistoryItem[];
+}
+
+export function useAssistantChat() {
+  return useMutation({
+    mutationFn: (body: { message: string; history: ChatHistoryItem[]; studentId?: string | null }) =>
+      api.post<AssistantChatResponse>("/api/assistant/chat", body),
+  });
+}
 
 export function initials(fullName: string) {
   return fullName.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase("tr-TR")).join("");

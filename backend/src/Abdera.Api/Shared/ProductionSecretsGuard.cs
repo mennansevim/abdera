@@ -160,6 +160,16 @@ public static class ProductionSecretsGuard
             missing.Add("Ai__ApiKey");
         }
 
+        // Asistan (AE9) da opsiyonel; sağlayıcı açıkça seçilip anahtar boşsa asistan sessizce kapanmasın.
+        var chatbotProvider = app.Configuration["Ai_Chatbot_Provider"];
+        if (!string.IsNullOrWhiteSpace(chatbotProvider) &&
+            !string.Equals(chatbotProvider, "Disabled", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(app.Configuration["Ai_Chatbot_ApiKey"]))
+        {
+            missing.Add("Ai_Chatbot_ApiKey");
+        }
+
+        RejectPlaceholder(app.Configuration, "Ai_Chatbot_ApiKey", "Ai_Chatbot_ApiKey", missing);
         RejectPlaceholder(app.Configuration, "WhatsApp:AppSecret", "WhatsApp__AppSecret", missing);
         RejectPlaceholder(app.Configuration, "Ai:ApiKey", "Ai__ApiKey", missing);
         RejectPlaceholder(app.Configuration, "WhatsApp:PayloadSigningKey", "WhatsApp__PayloadSigningKey", missing);

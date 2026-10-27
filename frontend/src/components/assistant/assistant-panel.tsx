@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
 import { Modal } from "@/components/ui";
 import { errorMessage } from "@/lib/library";
 import { useMe } from "@/lib/use-auth";
-import { STUDENT_INTENTS, useResolveAssistant, type AssistantResolution, type AssistantStudent } from "@/lib/assistant";
+import { useAssistantChat, type AssistantCardData, type ChatHistoryItem } from "@/lib/assistant";
 import type { AssistantRequest } from "./assistant-provider";
 import { DuesCard } from "./dues-card";
 import { LessonsCard } from "./lessons-card";
@@ -16,28 +16,26 @@ import { RescheduleFlow } from "./reschedule-flow";
 import { Choice } from "./shared";
 import { WelcomeSummary } from "./welcome-summary";
 
-// Sohbet: kullanıcının cümlesi sunucuda çözülür, yanıt bir kart olarak çizilir. Kartlar
-// kendi verisini mevcut uçlardan çeker ve yazma işlemini onaydan sonra yapar.
+// Sohbet (docs/10-decisions.md AE9): mesaj sunucuda dil modeline gider, model okulun verisini
+// araçlarla okuyup doğal bir cevap yazar ve gerektiğinde kart açar. Kartlar kendi verisini
+// mevcut uçlardan çeker; kayıt değiştiren her iş kartta kullanıcının onayıyla yapılır.
 type Entry =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "assistant"; text: string; examples?: string[] }
-  | { id: number; role: "assistant"; pick: AssistantStudent[]; resolution: AssistantResolution }
-  | { id: number; role: "assistant"; card: AssistantResolution; student: AssistantStudent | null };
+  | { id: number; role: "assistant"; text: string; cards: AssistantCardData[]; error?: boolean };
 
 type NewEntry = Entry extends infer E ? (E extends unknown ? Omit<E, "id"> : never) : never;
 
-const ADMIN_EXAMPLES = ["Aidat günü gelenleri listele", "Yoklamayı nereden alırım?"];
-const TEACHER_EXAMPLES = ["Yoklamayı nereden alırım?", "Ders notu nasıl yazılır"];
-const FALLBACK_TEXT = "Bunu anlayamadım. Öğrencinin gelişimini getirebilir, aidat günü gelenleri listeleyebilir, ders saatini değiştirebilir, telafi planlayabilir ya da seni bir ekrana götürebilirim. Öğrencinin adını yazmayı unutma.";
+const ADMIN_EXAMPLES = ["Aidat günü gelenleri listele", "Bu hafta hangi derslerde değişiklik var?", "Yoklamayı nereden alırım?"];
+const TEACHER_EXAMPLES = ["Bugünkü öğrencilerimin durumu", "Yoklamayı nereden alırım?"];
 
 export function AssistantPanel({ open, onClose, request }: { open: boolean; onClose: () => void; request: AssistantRequest | null }) {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
-  // Öğrencisiz gelen istek ("gelişimini getir"): sıradaki mesaj yalnızca ad olabilir.
-  const [pending, setPending] = useState<AssistantResolution | null>(null);
-  const resolve = useResolveAssistant();
+  // Sunucunun döndürdüğü maskeli geçmiş; bir sonraki mesajla aynen geri gider.
+  const [history, setHistory] = useState<ChatHistoryItem[]>([]);
+  const chat = useAssistantChat();
   const nextId = useRef(1);
   const handledRequest = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
@@ -47,52 +45,18 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
     setEntries((current) => [...current, { ...entry, id } as Entry]);
   }
 
-  function show(resolution: AssistantResolution) {
-    if (!resolution.allowed) {
-      push({ role: "assistant", text: resolution.kind === "Navigate" && resolution.navigation
-        ? `${resolution.navigation.label} ekranı yalnızca yöneticiye açık.`
-        : "Aidat bilgileri yalnızca yöneticiye açık." });
-      return;
-    }
-
-    let effective = resolution;
-    if (resolution.kind === "Unknown" && pending && resolution.students.length > 0) effective = { ...pending, students: resolution.students };
-    setPending(null);
-
-    if (effective.kind === "Unknown") {
-      push({ role: "assistant", text: FALLBACK_TEXT, examples: isAdmin ? ["Aidat günü gelenleri listele"] : ["Yoklamayı nereden alırım?"] });
-      return;
-    }
-
-    if (STUDENT_INTENTS.includes(effective.kind)) {
-      if (effective.students.length === 0) {
-        setPending(effective);
-        push({ role: "assistant", text: "Hangi öğrenci için? Adını ve soyadını yazabilirsin." });
-        return;
-      }
-      if (effective.students.length > 1) {
-        push({ role: "assistant", pick: effective.students, resolution: effective });
-        return;
-      }
-    }
-
-    push({ role: "assistant", card: effective, student: effective.students.length === 1 ? effective.students[0]! : null });
-  }
-
   function send(text: string, studentId?: string) {
     const trimmed = text.trim();
-    if (!trimmed || resolve.isPending) return;
+    if (!trimmed || chat.isPending) return;
     push({ role: "user", text: trimmed });
     setInput("");
-    resolve.mutate({ text: trimmed, studentId }, {
-      onSuccess: show,
-      onError: (error) => push({ role: "assistant", text: errorMessage(error, "Şu an yanıt veremiyorum; bağlantını kontrol edip tekrar dene.") }),
+    chat.mutate({ message: trimmed, history, studentId }, {
+      onSuccess: (response) => {
+        setHistory(response.history);
+        push({ role: "assistant", text: response.reply, cards: response.cards });
+      },
+      onError: (error) => push({ role: "assistant", text: errorMessage(error, "Asistan şu an yanıt veremiyor; biraz sonra tekrar dene."), cards: [], error: true }),
     });
-  }
-
-  function pick(student: AssistantStudent, resolution: AssistantResolution) {
-    push({ role: "user", text: student.fullName });
-    push({ role: "assistant", card: { ...resolution, students: [student] }, student });
   }
 
   // Kısayoldan gelen istek (öğrenci satırı, kart düğmesi) bir kez gönderilir.
@@ -104,11 +68,11 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [entries.length, resolve.isPending]);
+  }, [entries.length, chat.isPending]);
 
   function reset() {
     setEntries([]);
-    setPending(null);
+    setHistory([]);
     setInput("");
   }
 
@@ -118,36 +82,31 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
   }
 
   return (
-    <Modal open={open} title="Abdera Asistanı" description="Beta · Bilgi getirir, ekrana götürür; değişiklikleri senin onayınla yapar." onClose={onClose} size="md">
+    <Modal open={open} title="Abdera Asistanı" description="Beta · Sorularını yanıtlar, ekrana götürür; değişiklikleri senin onayınla yapar." onClose={onClose} size="md">
       <div className="flex min-h-[min(34rem,70dvh)] flex-col">
         <div aria-live="polite" className="flex-1 space-y-3 pb-4">
           <Bubble role="assistant">
-            <p>Merhaba{me?.name ? ` ${me.name.split(" ")[0]}` : ""}. Öğrenci bilgisini getirebilir, ders saatini değiştirebilir, telafi planlayabilir ya da seni doğru ekrana götürebilirim.</p>
+            <p>Merhaba{me?.name ? ` ${me.name.split(" ")[0]}` : ""}. Bana okulla ilgili her şeyi sorabilirsin: bir öğrencinin gelişimi, aidatlar, ders saatini değiştirmek, telafi planlamak ya da bir işi nerede yapacağın.</p>
             {open && me && <WelcomeSummary isAdmin={isAdmin} />}
             {entries.length === 0 && <Examples items={isAdmin ? ADMIN_EXAMPLES : TEACHER_EXAMPLES} onPick={send} />}
           </Bubble>
 
-          {entries.map((entry) => {
-            if (entry.role === "user") return <Bubble key={entry.id} role="user"><p>{entry.text}</p></Bubble>;
-            if ("text" in entry) return <Bubble key={entry.id} role="assistant"><p>{entry.text}</p>{entry.examples && <Examples items={entry.examples} onPick={send} />}</Bubble>;
-            if ("pick" in entry) {
-              return (
-                <Bubble key={entry.id} role="assistant">
-                  <p>Birden fazla öğrenci eşleşti. Hangisi?</p>
-                  <div className="flex flex-wrap gap-2" role="group" aria-label="Öğrenci seç">
-                    {entry.pick.map((student) => (
-                      <Choice key={student.studentId} onClick={() => pick(student, entry.resolution)}>
-                        {student.fullName}{student.courses[0] ? ` · ${student.courses[0].instrumentName}` : ""}{student.status === "Inactive" ? " · pasif" : ""}
-                      </Choice>
-                    ))}
-                  </div>
-                </Bubble>
-              );
-            }
-            return <Bubble key={entry.id} role="assistant" wide>{renderCard(entry.card, entry.student)}</Bubble>;
-          })}
+          {entries.map((entry) => entry.role === "user"
+            ? <Bubble key={entry.id} role="user"><p className="whitespace-pre-wrap">{entry.text}</p></Bubble>
+            : (
+              <Fragment key={entry.id}>
+                {entry.text && (
+                  <Bubble role="assistant" tone={entry.error ? "error" : "default"}>
+                    <RichText text={entry.text} />
+                  </Bubble>
+                )}
+                {entry.cards.map((card, index) => (
+                  <Bubble key={`${entry.id}-${index}`} role="assistant" wide>{renderCard(card)}</Bubble>
+                ))}
+              </Fragment>
+            ))}
 
-          {resolve.isPending && <Bubble role="assistant"><p className="text-meta">Bakıyorum…</p></Bubble>}
+          {chat.isPending && <Bubble role="assistant"><Thinking /></Bubble>}
           <div ref={endRef} />
         </div>
 
@@ -157,13 +116,13 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              maxLength={300}
-              placeholder="Örn. Mennan Sevim'in gelişimini getir"
+              maxLength={1000}
+              placeholder="Bir şey sor ya da iste…"
               autoFocus
               className="field text-sm"
             />
           </label>
-          <button type="submit" disabled={!input.trim() || resolve.isPending} aria-label="Gönder" className="icon-btn icon-btn-brand shrink-0 disabled:opacity-50">
+          <button type="submit" disabled={!input.trim() || chat.isPending} aria-label="Gönder" className="icon-btn icon-btn-brand shrink-0 disabled:opacity-50">
             <Icon name="arrow-right" className="h-4 w-4" />
           </button>
           <button type="button" onClick={reset} aria-label="Sohbeti temizle" title="Sohbeti temizle" className="icon-btn icon-btn-quiet shrink-0">
@@ -175,22 +134,65 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
   );
 }
 
-function renderCard(resolution: AssistantResolution, student: AssistantStudent | null) {
-  switch (resolution.kind) {
-    case "Progress": return student && <ProgressCard student={student} />;
-    case "Dues": return <DuesCard student={student} />;
-    case "Lessons": return student && <LessonsCard student={student} />;
-    case "Reschedule": return student && <RescheduleFlow student={student} move={resolution.move} />;
-    case "Makeup": return student && <MakeupFlow student={student} />;
-    case "Navigate": return resolution.navigation && <NavigateCard navigation={resolution.navigation} />;
+function renderCard(card: AssistantCardData) {
+  const student = card.student;
+  switch (card.kind) {
+    case "progress": return student && <ProgressCard student={student} />;
+    case "dues": return <DuesCard student={student} />;
+    case "lessons": return student && <LessonsCard student={student} />;
+    case "reschedule": return student && <RescheduleFlow student={student} move={card.move} />;
+    case "makeup": return student && <MakeupFlow student={student} />;
+    case "navigate": return card.navigation && <NavigateCard navigation={card.navigation} />;
     default: return null;
   }
 }
 
-function Bubble({ role, wide = false, children }: { role: "assistant" | "user"; wide?: boolean; children: ReactNode }) {
+// Modelin yazdığı sade metin: paragraflar, "-"/"•"/"1." ile başlayan maddeler ve **kalın**.
+// Markdown kütüphanesi eklenmez; model başlık ve tablo kullanmaması için yönlendirilir.
+function RichText({ text }: { text: string }) {
+  const blocks: ReactNode[] = [];
+  let list: string[] = [];
+  const flush = () => {
+    if (list.length) blocks.push(<ul key={`list-${blocks.length}`} className="list-disc space-y-0.5 pl-5">{list.map((item, index) => <li key={index}>{inline(item)}</li>)}</ul>);
+    list = [];
+  };
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    const bullet = line.match(/^(?:[-•*]|\d+[.)])\s+(.*)$/);
+    if (bullet) list.push(bullet[1] ?? "");
+    else {
+      flush();
+      if (line) blocks.push(<p key={`p-${blocks.length}`}>{inline(line)}</p>);
+    }
+  }
+  flush();
+  return <>{blocks}</>;
+}
+
+function inline(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : <Fragment key={index}>{part.replace(/^#+\s*/, "")}</Fragment>);
+}
+
+function Thinking() {
+  return (
+    <span className="inline-flex items-center gap-1 text-[var(--muted)]" role="status" aria-label="Asistan düşünüyor">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:150ms]" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current [animation-delay:300ms]" />
+    </span>
+  );
+}
+
+function Bubble({ role, wide = false, tone = "default", children }: { role: "assistant" | "user"; wide?: boolean; tone?: "default" | "error"; children: ReactNode }) {
+  const color = role === "user"
+    ? "rounded-br-md bg-[var(--brand)] text-white"
+    : tone === "error"
+      ? "rounded-bl-md bg-[var(--danger-soft)] text-[var(--danger-strong)]"
+      : "rounded-bl-md bg-[var(--surface-muted)] text-[var(--foreground)]";
   return (
     <div className={`flex ${role === "user" ? "justify-end" : "justify-start"}`}>
-      <div className={`${wide ? "w-full" : "max-w-[88%]"} space-y-2.5 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${role === "user" ? "rounded-br-md bg-[var(--brand)] text-white" : "rounded-bl-md bg-[var(--surface-muted)] text-[var(--foreground)]"}`}>
+      <div className={`${wide ? "w-full" : "max-w-[88%]"} space-y-2 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${color}`}>
         {children}
       </div>
     </div>

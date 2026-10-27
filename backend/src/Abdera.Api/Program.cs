@@ -118,6 +118,7 @@ builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian
 builder.Services.AddBillingModule();
 builder.Services.AddMessagingModule();
 builder.Services.AddOpsModule();
+builder.Services.AddAssistantModule(builder.Configuration);
 builder.Services.AddProgressModule();
 builder.Services.AddAttendanceModule();
 

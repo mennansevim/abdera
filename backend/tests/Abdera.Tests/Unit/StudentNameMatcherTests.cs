@@ -81,15 +81,4 @@ public class StudentNameMatcherTests
         Assert.Equal(["mennan", "sevim", "in", "gelisimi"], tokens);
         Assert.Equal(new HashSet<int> { 0, 1, 2 }, result.MatchedTokenIndexes);
     }
-
-    [Fact]
-    public void Full_name_indexes_find_people_named_with_first_and_last_name_only()
-    {
-        var teacher = new StudentNameMatcher.Candidate(Guid.NewGuid(), "Onur", "Koç");
-        var tokens = AssistantText.Tokens(AssistantText.Normalize("Onur Koç'un ve Koç'un dersleri"));
-
-        // "onur koc un ve koc un dersleri": ad + soyad (0, 1) ve ayrı yazılmış eki (2). Tek
-        // başına "Koç" (4) öğretmen sayılmaz.
-        Assert.Equal(new HashSet<int> { 0, 1, 2 }, StudentNameMatcher.FullNameIndexes(tokens, [teacher]));
-    }
 }

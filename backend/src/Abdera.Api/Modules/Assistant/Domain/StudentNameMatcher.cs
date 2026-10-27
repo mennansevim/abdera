@@ -54,22 +54,6 @@ public static class StudentNameMatcher
         return new Result(studentIds, matchedIndexes);
     }
 
-    // Metinde ad + soyadıyla geçen kişilerin kelime konumları (öğretmen adlarını öğrenci
-    // eşlemesinden çıkarmak için - "Burak Eren'in dersleri" öğrenci Defne Eren değildir).
-    public static IReadOnlySet<int> FullNameIndexes(IReadOnlyList<string> tokens, IEnumerable<Candidate> people)
-    {
-        var indexes = new HashSet<int>();
-        foreach (var person in people)
-        {
-            var first = AssistantText.Tokens(AssistantText.Normalize(person.FirstName));
-            var last = AssistantText.Tokens(AssistantText.Normalize(person.LastName));
-            if (first.Length == 0 || last.Length == 0) continue;
-            if (Find(tokens, [.. first, .. last]) is { } found) indexes.UnionWith(found);
-        }
-
-        return indexes;
-    }
-
     private static (Strength, IReadOnlyList<int>) Score(IReadOnlyList<string> tokens, string[] first, string[] last)
     {
         if (last.Length > 0 && Find(tokens, [.. first, .. last]) is { } full) return (Strength.FullName, full);

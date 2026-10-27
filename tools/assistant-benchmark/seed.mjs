@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Benchmark ve simülasyonun başlangıç durumu. BOŞ bir yerel veritabanında bir kez çalıştırılır:
 // örnek okul verisi (sabit tohum), ücret tarifesi, her kayda Ekim aidatı; Ada Çetin, Bora Aydın
-// ve Ege Kurt ödemiş, Kerem Aksoy 2.000 ₺ kısmi ödemiş. Diğer sekiz öğrenci borçlu.
+// ve Ege Kurt ödemiş, Kerem Aksoy 2.000 ₺ kısmi ödemiş. Diğer sekiz öğrenci borçlu. Lara Arslan
+// ve Emir Aydın'ın birer telafi hakkı var.
 //
 //   node tools/assistant-benchmark/seed.mjs [--api http://localhost:8080]
 
@@ -44,4 +45,19 @@ for (const [name, amount] of [["Ada Çetin"], ["Bora Aydın"], ["Ege Kurt"], ["K
   if (paid.status !== 201) throw new Error(`${name} ödemesi kaydedilemedi: ${paid.status}`);
 }
 
-console.log(`${students.length} öğrenci, ${dues.size} Ekim aidatı; 3 ödenmiş, 1 kısmi.`);
+// Telafi akışı için iki öğrenciye gerçek hak: son derslerinden biri yoklamada Mazeretli
+// işaretlenir (yoklama ucu hakkı kendisi açar). Örnek veri bazı dersleri hak açmadan Mazeretli
+// yazdığı için yoklaması Mazeretli olmayan bir ders seçilir.
+const now = new Date();
+const from = new Date(now.getTime() - 14 * 86_400_000).toISOString();
+const lessons = (await call("GET", `/api/calendar?from=${encodeURIComponent(from)}&to=${encodeURIComponent(now.toISOString())}`)).body;
+for (const name of ["Lara Arslan", "Emir Aydın"]) {
+  const lesson = lessons
+    .filter((item) => item.studentName === name && item.status !== "Cancelled" && item.attendanceStatus !== "Excused")
+    .sort((a, b) => b.startAt.localeCompare(a.startAt))[0];
+  if (!lesson) throw new Error(`${name} için son iki haftada ders yok.`);
+  const marked = await call("POST", `/api/lessons/${lesson.id}/attendance`, { status: "Excused", note: "benchmark: telafi hakkı" });
+  if (marked.status !== 200) throw new Error(`${name} yoklaması yazılamadı: ${marked.status}`);
+}
+
+console.log(`${students.length} öğrenci, ${dues.size} Ekim aidatı; 3 ödenmiş, 1 kısmi. Telafi hakkı: Lara Arslan, Emir Aydın.`);

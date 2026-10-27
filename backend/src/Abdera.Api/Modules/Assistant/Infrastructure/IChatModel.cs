@@ -1,0 +1,28 @@
+using System.Text.Json.Nodes;
+
+namespace Abdera.Api.Modules.Assistant.Infrastructure;
+
+// OpenAI uyumlu /chat/completions sözleşmesi (DeepSeek de aynısını konuşur). Mesajlar ve araç
+// tanımları ham JSON olarak taşınır: araç çağrılı asistan mesajı modele aynen geri gönderilmeli,
+// ara bir tipe çevirip yeniden kurmak alan kaybettirir.
+public interface IChatModel
+{
+    bool IsAvailable { get; }
+
+    Task<ChatModelReply> CompleteAsync(IReadOnlyList<JsonObject> messages, JsonArray tools, CancellationToken cancellationToken);
+}
+
+// Başarılıysa Message modelin döndürdüğü asistan mesajıdır (content ve/veya tool_calls).
+// Error kullanıcıya gösterilebilir bir Türkçe açıklamadır; sağlayıcının ham gövdesi değildir.
+public record ChatModelReply(bool Success, JsonObject? Message, string? Error)
+{
+    public static ChatModelReply Fail(string error) => new(false, null, error);
+}
+
+public class DisabledChatModel : IChatModel
+{
+    public bool IsAvailable => false;
+
+    public Task<ChatModelReply> CompleteAsync(IReadOnlyList<JsonObject> messages, JsonArray tools, CancellationToken cancellationToken) =>
+        Task.FromResult(ChatModelReply.Fail("Asistanın dil modeli yapılandırılmamış (Ai_Chatbot_ApiKey)."));
+}

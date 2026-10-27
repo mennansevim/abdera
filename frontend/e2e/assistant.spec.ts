@@ -1,10 +1,11 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { RELEASES } from "../src/data/releases";
 
-// Abdera Asistanı (docs/10-decisions.md AE). API taklit edilir: cümleyi sunucunun çözdüğü
-// varsayılır (POST /api/assistant/resolve - kuralların kendisi backend birim testlerinde),
-// burada kartların doğru veriyi çizdiği, yazma işleminin ONAYDAN ÖNCE gitmediği ve onaydan
-// sonra mevcut ekranların kullandığı uca gittiği sınanır.
+// Abdera Asistanı (docs/10-decisions.md AE, AE9). API taklit edilir: sohbet ucunun (POST
+// /api/assistant/chat, dil modeli) cevabı ve açtığı kart verilir - modelin kendisi
+// tools/assistant-benchmark ile ölçülür. Burada cevabın çizildiği, geçmişin geri gittiği,
+// kartların doğru veriyi gösterdiği, yazma işleminin ONAYDAN ÖNCE gitmediği ve onaydan sonra
+// mevcut ekranların kullandığı uca gittiği sınanır.
 
 type Handler = (request: Request) => unknown;
 
@@ -20,8 +21,9 @@ const STUDENT = {
 
 const PAGED_EMPTY = { items: [], totalCount: 0, page: 1, pageSize: 1 };
 
-function resolution(kind: string, extra: Record<string, unknown> = {}) {
-  return { kind, allowed: true, students: [STUDENT], move: null, navigation: null, ...extra };
+// Sohbet ucunun cevabı: kısa metin + modelin açtığı tek kart.
+function chat(kind: string, card: Record<string, unknown> = {}, reply = "Kartı açtım, onaylarsan uygulanır.") {
+  return { reply, cards: [{ kind, student: STUDENT, move: null, navigation: null, ...card }], history: [] };
 }
 
 function dateKey(date: Date) {
@@ -58,7 +60,11 @@ async function mockApi(page: Page, me: object, handlers: Record<string, Handler>
     if (request.method() !== "GET") writes.push({ method: request.method(), path, body: request.postDataJSON() });
 
     const handler = handlers[`${request.method()} ${path}`] ?? handlers[path];
-    if (handler) return route.fulfill({ json: handler(request) });
+    if (handler) {
+      const result = handler(request) as { status?: number; body?: unknown } & Record<string, unknown>;
+      // { status, body } biçimi hata yanıtı içindir (ör. dil modeli kapalı → 503).
+      return typeof result?.status === "number" && "body" in result ? route.fulfill({ status: result.status, json: result.body }) : route.fulfill({ json: result });
+    }
     if (path === "/api/auth/me") return route.fulfill({ json: me });
     if (path === "/api/me/notifications") return route.fulfill({ json: { items: [], unreadCount: 0 } });
     if (path === "/api/bank-transactions" || path === "/api/notifications") return route.fulfill({ json: PAGED_EMPTY });
@@ -83,7 +89,7 @@ test("progress card shows attendance, piece, last note and the AI summary", asyn
     teacherName: "Ayşe Kaya",
   }));
   await mockApi(page, ADMIN, {
-    "POST /api/assistant/resolve": () => resolution("Progress"),
+    "POST /api/assistant/chat": () => chat("progress"),
     "/api/students/student-1/analysis": () => ({
       studentId: "student-1", fullName: "Deniz Arslan", birthDate: "2013-04-27", status: "Active", siblingDiscount: false, enrolledSince: "2026-04-01",
       courses: [], guardians: [], availableMakeupCredits: 1, nextMakeupCreditExpiry: null, billingVisible: true, openBalance: 0,
@@ -114,18 +120,35 @@ test("progress card shows attendance, piece, last note and the AI summary", asyn
   await expect(dialog.getByRole("link", { name: "Öğrenci analizi" })).toHaveAttribute("href", "/dashboard/students/analysis?studentId=student-1");
 });
 
-test("two matching students are offered as choices before any card", async ({ page }) => {
-  const other = { ...STUDENT, studentId: "student-2", fullName: "Deniz Kaya", courses: [{ ...STUDENT.courses[0]!, enrollmentId: "enrollment-2", instrumentName: "Gitar" }] };
+test("the reply is rendered, the masked history goes back with the next message and errors are shown", async ({ page }) => {
+  const bodies: unknown[] = [];
+  const history = [{ role: "user", content: "Arslan'ın dersleri" }, { role: "assistant", content: "İki öğrenci var: Ö-AB12 ve Ö-CD34. Hangisi?" }];
+  let call = 0;
   await mockApi(page, ADMIN, {
-    "POST /api/assistant/resolve": () => ({ ...resolution("Lessons"), students: [STUDENT, other] }),
-    "/api/students/student-2/lesson-series": () => [],
+    "POST /api/assistant/chat": (request) => {
+      bodies.push(request.postDataJSON());
+      call += 1;
+      if (call === 1) return { reply: "İki öğrenci var:\n- **Deniz Arslan** (piyano, perşembe)\n- Lara Arslan (piyano, pazartesi)\nHangisini soruyorsun?", cards: [], history };
+      if (call === 2) return { reply: "Lara Arslan'ın dersi her pazartesi 16:00.", cards: [], history: [] };
+      return { status: 503, body: { title: "Asistan yanıt veremedi", detail: "Dil modeli zamanında yanıt vermedi." } };
+    },
   });
 
   await page.goto("/dashboard/releases");
-  const dialog = await ask(page, "Deniz'in dersleri");
-  await expect(dialog.getByText("Birden fazla öğrenci eşleşti. Hangisi?")).toBeVisible();
-  await dialog.getByRole("button", { name: "Deniz Kaya · Gitar" }).click();
-  await expect(dialog.getByText("Haftalık ders programı yok.")).toBeVisible();
+  const dialog = await ask(page, "Arslan'ın dersleri");
+  await expect(dialog.getByRole("listitem").filter({ hasText: "Lara Arslan (piyano, pazartesi)" })).toBeVisible();
+  await expect(dialog.locator("strong", { hasText: "Deniz Arslan" })).toBeVisible();
+
+  await dialog.getByLabel("Asistana yaz").fill("Lara olanın");
+  await dialog.getByRole("button", { name: "Gönder", exact: true }).click();
+  await expect(dialog.getByText("Lara Arslan'ın dersi her pazartesi 16:00.")).toBeVisible();
+  // Sunucunun döndürdüğü maskeli geçmiş bir sonraki mesajla aynen geri gider.
+  expect(bodies[0]).toMatchObject({ message: "Arslan'ın dersleri", history: [] });
+  expect(bodies[1]).toMatchObject({ message: "Lara olanın", history });
+
+  await dialog.getByLabel("Asistana yaz").fill("Bir şey daha");
+  await dialog.getByRole("button", { name: "Gönder", exact: true }).click();
+  await expect(dialog.getByText("Dil modeli zamanında yanıt vermedi.")).toBeVisible();
 });
 
 test("dues list groups open dues and sends a reminder only after approval", async ({ page }) => {
@@ -135,7 +158,7 @@ test("dues list groups open dues and sends a reminder only after approval", asyn
     studentId: `student-${id}`, studentName, teacherId: "teacher-1", teacherName: "Ayşe Kaya", instrumentId: "instrument-1", instrumentName: "Piyano", courseKind: "Individual",
   });
   const writes = await mockApi(page, ADMIN, {
-    "POST /api/assistant/resolve": () => ({ ...resolution("Dues"), students: [] }),
+    "POST /api/assistant/chat": () => chat("dues", { student: null }),
     "/api/billing/dues": () => [
       due("r1", "Gecikmiş Öğrenci", daysFromNow(-5), "Overdue"),
       due("r2", "Yaklaşan Öğrenci", daysFromNow(3), "Unpaid", "2026-11"),
@@ -185,7 +208,7 @@ test("a one-off move is checked, confirmed and sent through the calendar's chang
   const target = daysFromNow(2, 17);
   const writes = await mockApi(page, ADMIN, {
     ...scheduleHandlers(sourceStart),
-    "POST /api/assistant/resolve": () => resolution("Reschedule", { move: { sourceDate: null, sourceTime: null, targetDate: null, targetTime: "17:00:00", scope: "Once" } }),
+    "POST /api/assistant/chat": () => chat("reschedule", { move: { sourceDate: null, sourceTime: null, targetDate: null, targetTime: "17:00:00", scope: "Once" } }),
     "POST /api/lessons/lesson-1/change-requests": () => ({ id: "request-1" }),
     "POST /api/change-requests/request-1/approve": () => ({}),
   });
@@ -195,7 +218,7 @@ test("a one-off move is checked, confirmed and sent through the calendar's chang
 
   await expect(dialog.getByText("Bu ders taşınacak")).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Yalnız bu ders" })).toHaveAttribute("aria-pressed", "true");
-  expect(writes).toEqual([expect.objectContaining({ path: "/api/assistant/resolve" })]);
+  expect(writes).toEqual([expect.objectContaining({ path: "/api/assistant/chat" })]);
 
   await dialog.getByRole("button", { name: "Onayla ve taşı" }).click();
   await expect(dialog.getByText(/Deniz Arslan dersi .* 17:00 saatine taşındı\./)).toBeVisible();
@@ -209,7 +232,7 @@ test("a conflicting time is explained and free times are suggested", async ({ pa
   const busy = lesson("lesson-busy", daysFromNow(2, 17), "student-9", "Başka Öğrenci");
   const writes = await mockApi(page, ADMIN, {
     ...scheduleHandlers(sourceStart, [busy]),
-    "POST /api/assistant/resolve": () => resolution("Reschedule", { move: { sourceDate: null, sourceTime: null, targetDate: null, targetTime: "17:00:00", scope: "Once" } }),
+    "POST /api/assistant/chat": () => chat("reschedule", { move: { sourceDate: null, sourceTime: null, targetDate: null, targetTime: "17:00:00", scope: "Once" } }),
   });
 
   await page.goto("/dashboard/releases");
@@ -221,13 +244,13 @@ test("a conflicting time is explained and free times are suggested", async ({ pa
 
   await dialog.getByRole("button", { name: /\d{2}:\d{2}$/ }).first().click();
   await expect(dialog.getByText("Bu ders taşınacak")).toBeVisible();
-  expect(writes.map((write) => write.path)).toEqual(["/api/assistant/resolve"]);
+  expect(writes.map((write) => write.path)).toEqual(["/api/assistant/chat"]);
 });
 
 test("a makeup lesson uses the earliest expiring credit after approval", async ({ page }) => {
   const sourceStart = daysFromNow(-2, 15);
   const writes = await mockApi(page, ADMIN, {
-    "POST /api/assistant/resolve": () => resolution("Makeup"),
+    "POST /api/assistant/chat": () => chat("makeup"),
     "/api/students/student-1/makeup-credits": () => [
       { id: "credit-late", studentId: "student-1", sourceLessonId: "source-2", earnedReason: "Excused", earnedAt: sourceStart.toISOString(), expiresAt: daysFromNow(30).toISOString(), status: "Available", usedLessonId: null, sourceLessonStartAt: sourceStart.toISOString() },
       { id: "credit-early", studentId: "student-1", sourceLessonId: "source-1", earnedReason: "Excused", earnedAt: sourceStart.toISOString(), expiresAt: daysFromNow(15).toISOString(), status: "Available", usedLessonId: null, sourceLessonStartAt: sourceStart.toISOString() },
@@ -247,7 +270,7 @@ test("a makeup lesson uses the earliest expiring credit after approval", async (
   const slot = dialog.getByRole("button", { name: /\d{2}:\d{2}$/ }).first();
   await slot.click();
   await expect(dialog.getByText("Telafi dersi açılacak")).toBeVisible();
-  expect(writes.map((write) => write.path)).toEqual(["/api/assistant/resolve"]);
+  expect(writes.map((write) => write.path)).toEqual(["/api/assistant/chat"]);
 
   await dialog.getByRole("button", { name: "Telafiyi aç" }).click();
   await expect(dialog.getByText(/Deniz Arslan için telafi dersi açıldı/)).toBeVisible();
@@ -255,22 +278,23 @@ test("a makeup lesson uses the earliest expiring credit after approval", async (
   expect(use?.body).toMatchObject({ teacherId: "teacher-1", instrumentId: "instrument-1", durationMinutes: 45 });
 });
 
-test("navigation questions point to the screen and unknown questions get help", async ({ page }) => {
+test("navigation questions point to the screen and unrelated questions get a short answer", async ({ page }) => {
   let call = 0;
   await mockApi(page, ADMIN, {
-    "POST /api/assistant/resolve": () => (++call === 1
-      ? { kind: "Navigate", allowed: true, students: [], move: null, navigation: { key: "attendance", label: "Yoklama", path: "/dashboard/attendance" } }
-      : { kind: "Unknown", allowed: true, students: [], move: null, navigation: null }),
+    "POST /api/assistant/chat": () => (++call === 1
+      ? { reply: "Yoklamayı Yoklama ekranından alırsın.", cards: [{ kind: "navigate", student: null, move: null, navigation: { key: "attendance", label: "Yoklama", path: "/dashboard/attendance" } }], history: [] }
+      : { reply: "Buna bakamam; ders, öğrenci ve aidat işlerinde yardımcı olurum.", cards: [], history: [] }),
   });
 
   await page.goto("/dashboard/releases");
   const dialog = await ask(page, "Yoklamayı nereden alırım?");
+  await expect(dialog.getByText("Yoklamayı Yoklama ekranından alırsın.")).toBeVisible();
   await expect(dialog.getByText("Mazeretli seçilince öğrenciye telafi hakkı açılır.")).toBeVisible();
   await expect(dialog.getByRole("link", { name: "Yoklama ekranına git" })).toHaveAttribute("href", "/dashboard/attendance");
 
   await dialog.getByLabel("Asistana yaz").fill("hava nasıl");
   await dialog.getByRole("button", { name: "Gönder", exact: true }).click();
-  await expect(dialog.getByText(/Bunu anlayamadım\./)).toBeVisible();
+  await expect(dialog.getByText(/Buna bakamam/)).toBeVisible();
 });
 
 test("teachers do not see the assistant yet", async ({ page }) => {
@@ -281,7 +305,7 @@ test("teachers do not see the assistant yet", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Abdera Asistanı (⌘K)" })).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page.getByRole("dialog", { name: "Abdera Asistanı" })).toHaveCount(0);
-  expect(writes.filter((write) => write.path === "/api/assistant/resolve")).toEqual([]);
+  expect(writes.filter((write) => write.path === "/api/assistant/chat")).toEqual([]);
 });
 
 test("the billing link from the assistant opens the payment window for that due", async ({ page }) => {
