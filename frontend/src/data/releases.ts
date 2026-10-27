@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.27.2",
+    date: "2026-10-27",
+    items: [
+      { audience: "admin", text: "Asistanı ilk açtığında kısa bir tanıtım seni karşılar: nasıl soru sorulur, öğrenci nasıl seçilir, değişiklik nasıl onaylanır; her adımı küçük bir canlandırmayla gösterir. Sondaki örneklere dokunup hemen deneyebilirsin, başlıktaki \"?\" ile tanıtımı yeniden açarsın." },
+    ],
+  },
+  {
     version: "2026.10.27",
     date: "2026-10-27",
     items: [
