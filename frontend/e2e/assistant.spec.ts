@@ -322,3 +322,88 @@ test("the billing link from the assistant opens the payment window for that due"
   await expect(payment).toBeVisible();
   await expect(payment.getByText("Gecikmiş Öğrenci")).toBeVisible();
 });
+
+test("typing a name offers students and the picked student goes with the message", async ({ page }) => {
+  let body: { message?: string; studentId?: string | null } = {};
+  const overview = (id: string, firstName: string, lastName: string, instrumentName: string) => ({
+    student: { id, firstName, lastName, birthDate: "2015-01-01", status: "Active", siblingDiscount: false },
+    instruments: [{ instrumentId: `i-${id}`, instrumentName }],
+    enrolledSince: "2026-01-01",
+    recentAttendance: [],
+  });
+  await mockApi(page, ADMIN, {
+    "/api/students/overview": () => [overview("student-1", "Deniz", "Arslan", "Piyano"), overview("student-2", "Lara", "Arslan", "Keman")],
+    "POST /api/assistant/chat": (request) => {
+      body = request.postDataJSON();
+      return { reply: "Tamam.", cards: [], history: [] };
+    },
+  });
+
+  await page.goto("/dashboard/releases");
+  await page.getByRole("button", { name: "Abdera Asistanı (⌘K)" }).click();
+  const dialog = page.getByRole("dialog", { name: "Abdera Asistanı" });
+  const input = dialog.getByLabel("Asistana yaz");
+  await input.pressSequentially("arsl");
+  const options = dialog.getByRole("option");
+  await expect(options).toHaveCount(2);
+  await expect(options.first()).toContainText("Deniz Arslan");
+
+  // Kendiliğinden açılan listede ok tuşu + Enter seçer; mesaj gitmez.
+  await input.press("ArrowDown");
+  await input.press("Enter");
+  await expect(input).toHaveValue("Lara Arslan ");
+  await expect(options).toHaveCount(0);
+
+  await input.pressSequentially("dersini göster");
+  await input.press("Enter");
+  await expect(dialog.getByText("Tamam.")).toBeVisible();
+  expect(body).toMatchObject({ message: "Lara Arslan dersini göster", studentId: "student-2" });
+});
+
+test("a makeup time asked in the sentence is checked and offered for approval", async ({ page }) => {
+  const sourceStart = daysFromNow(-2, 15);
+  const target = daysFromNow(3, 17);
+  const writes = await mockApi(page, ADMIN, {
+    "POST /api/assistant/chat": () => chat("makeup", { move: { sourceDate: null, sourceTime: null, targetDate: dateKey(target), targetTime: "17:00:00", scope: "Unspecified", shiftMinutes: null, targetWeekday: null, targetNextWeek: false } }),
+    "/api/students/student-1/makeup-credits": () => [
+      { id: "credit-1", studentId: "student-1", sourceLessonId: "source-1", earnedReason: "Excused", earnedAt: sourceStart.toISOString(), expiresAt: daysFromNow(20).toISOString(), status: "Available", usedLessonId: null, sourceLessonStartAt: sourceStart.toISOString() },
+    ],
+    "/api/lessons/source-1": () => lesson("source-1", sourceStart),
+    "/api/calendar": () => [],
+    "/api/teachers/teacher-1/availability": () => [],
+    "/api/school-calendar-days": () => [],
+    "POST /api/makeup-credits/credit-1/use": () => ({ creditId: "credit-1", newLessonId: "makeup-1" }),
+  });
+
+  await page.goto("/dashboard/releases");
+  const dialog = await ask(page, "Deniz'e 17:00'de telafi aç");
+
+  await expect(dialog.getByText("Telafi dersi açılacak")).toBeVisible();
+  await expect(dialog.getByText("Öğretmenin müsait olduğu saat")).toBeVisible();
+  expect(writes.map((write) => write.path)).toEqual(["/api/assistant/chat"]);
+  await dialog.getByRole("button", { name: "Onayla, telafiyi aç" }).click();
+  await expect(dialog.getByText(/Deniz Arslan için telafi dersi açıldı/)).toBeVisible();
+  expect(writes.find((write) => write.path === "/api/makeup-credits/credit-1/use")?.body).toMatchObject({ startAt: target.toISOString() });
+});
+
+test("a weekly move that would skip a week says so and can start in the same week", async ({ page }) => {
+  const today = new Date();
+  const nextMonday = (8 - today.getDay()) % 7 || 7;
+  const sourceStart = daysFromNow(nextMonday + 3, 16);
+  const sameWeekTuesday = daysFromNow(nextMonday + 1, 16);
+  const writes = await mockApi(page, ADMIN, {
+    ...scheduleHandlers(sourceStart),
+    "POST /api/assistant/chat": () => chat("reschedule", { move: { sourceDate: dateKey(sourceStart), sourceTime: null, targetDate: dateKey(sameWeekTuesday), targetTime: "16:00:00", scope: "Recurring", shiftMinutes: null, targetWeekday: "Tuesday", targetNextWeek: false } }),
+    "POST /api/lesson-series/series-1/reschedule": () => ({}),
+  });
+
+  await page.goto("/dashboard/releases");
+  const dialog = await ask(page, "Deniz'in perşembe dersini bundan sonra salıya al");
+
+  await expect(dialog.getByText(/o hafta ders olmayacak/)).toBeVisible();
+  await dialog.getByRole("button", { name: /Bu hafta .* başlasın/ }).click();
+  await expect(dialog.getByText(/o hafta ders olmayacak/)).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Onayla, programı değiştir" }).click();
+  await expect(dialog.getByText(/programı her salı 16:00 oldu/)).toBeVisible();
+  expect(writes.find((write) => write.path === "/api/lesson-series/series-1/reschedule")?.body).toMatchObject({ dayOfWeek: "Tuesday", startTime: "16:00:00", effectiveFrom: dateKey(sameWeekTuesday) });
+});

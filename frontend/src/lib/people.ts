@@ -194,8 +194,8 @@ export interface RecentAttendanceWeek {
 
 // Öğrenci listesindeki enstrüman rozetleri buna dayanır - useTeacherOverviews ile aynı
 // desen (N+1 yerine tek toplu istek, bkz. Students.cs OverviewAsync).
-export function useStudentOverviews() {
-  return useQuery({ queryKey: ["student-overviews"], queryFn: () => api.get<StudentOverview[]>("/api/students/overview") });
+export function useStudentOverviews({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: ["student-overviews"], queryFn: () => api.get<StudentOverview[]>("/api/students/overview"), enabled });
 }
 
 export function useStudentAutocomplete(query: string) {

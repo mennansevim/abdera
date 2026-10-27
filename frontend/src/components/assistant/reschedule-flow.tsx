@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { addDays, dayLabel, hhmm, localDateKey, type AssistantMove, type AssistantStudent } from "@/lib/assistant";
+import { addDays, dayLabel, hasPassed, hhmm, localDateKey, type AssistantMove, type AssistantStudent } from "@/lib/assistant";
 import { useRescheduleLesson } from "@/lib/attendance";
 import { errorMessage } from "@/lib/library";
 import { useRescheduleLessonSeries, useTeacherAvailability, useUpdateLesson, type CalendarLesson, type StudentLessonSeries, type TeacherAvailability } from "@/lib/scheduling";
@@ -10,10 +10,11 @@ import { useMe } from "@/lib/use-auth";
 import { Actions, AssistantCard, Choice, ConfirmBox, DoneLine, ErrorLine, GoLink, Loading, StudentHeading, WarningLine } from "./shared";
 import { lessonsOfSeries, useStudentSchedule } from "./use-student-schedule";
 
-// "Perşembe dersini 17:00'ye al". Adımlar: hangi ders (tatile denk gelen gün söylenir) →
-// bir kerelik mi her hafta mı → yeni saat (öğretmen müsaitliği ve çakışma denetlenir; uygun
-// değilse boş saat önerilir) → onay → takvimdeki taşımayla AYNI uç (AE2): her hafta için seri
-// taşıma, tek ders için yöneticide talep+onay, öğretmende ders güncellemesi.
+// "Perşembe dersini 17:00'ye al". Adımlar: hangi ders (modelin seçtiği ders görünür ve
+// değiştirilebilir; tatile denk gelen gün söylenir) → bir kerelik mi her hafta mı → yeni saat
+// (öğretmen müsaitliği ve çakışma denetlenir; uygun değilse boş saat önerilir) → onay →
+// takvimdeki taşımayla AYNI uç (AE2): her hafta için seri taşıma, tek ders için yöneticide
+// talep+onay, öğretmende ders güncellemesi. Onay kutusu yapılacak işin aynısını gösterir.
 type Scope = "Once" | "Recurring";
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const RECURRING_CHECK_WEEKS = 4;
@@ -27,8 +28,10 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
   const { data: me } = useMe();
   const schedule = useStudentSchedule(student);
   const [chosenSeriesId, setChosenSeriesId] = useState<string | null>(null);
+  const [chosenLessonId, setChosenLessonId] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope | null>(move && move.scope !== "Unspecified" ? move.scope : null);
   const [picked, setPicked] = useState<Date | null>(null);
+  const [startSameWeek, setStartSameWeek] = useState(false);
   const [manualDate, setManualDate] = useState("");
   const [manualTime, setManualTime] = useState("");
   const [cancelled, setCancelled] = useState(false);
@@ -67,7 +70,10 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
     );
   }
 
-  const source = findSource(lessonsOfSeries(schedule, series), move, schedule.holidays);
+  // Başlamış ders taşınmaz; seçenekler yalnız henüz başlamamış dersler.
+  const candidates = lessonsOfSeries(schedule, series).filter((lesson) => new Date(lesson.startAt) > schedule.now);
+  const chosenLesson = candidates.find((lesson) => lesson.id === chosenLessonId);
+  const source = chosenLesson ? { lesson: chosenLesson, notice: null } : findSource(candidates, move, schedule.holidays);
   if (!source) {
     // Kullanıcı bir gün söylediyse cevap o günü anmalı; genel "ders yok" yanıltıcı.
     const asked = move?.sourceDate ? dayLabel(new Date(`${move.sourceDate}T00:00:00`)) : null;
@@ -86,31 +92,47 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
 
   const lessonStart = new Date(source.lesson.startAt);
   const durationMinutes = Math.round((new Date(source.lesson.endAt).getTime() - lessonStart.getTime()) / 60000);
-  const desired = picked ?? desiredFromMove(move, scope, lessonStart);
+  const requested = picked ?? desiredFromMove(move, scope, lessonStart);
+  // Her hafta: sunucu yeni programı taşınan dersin gününden başlatır; ilk ders o günden sonraki
+  // ilk hedef gündür. Karttaki tarih de buna çekilir ki onaylanan ile yapılan aynı olsun.
+  const firstWeekly = requested && scope === "Recurring" ? firstOnOrAfter(lessonStart, requested) : null;
+  const sameWeek = firstWeekly ? sameWeekStart(lessonStart, firstWeekly) : null;
+  const desired = scope === "Recurring" ? (startSameWeek && sameWeek ? sameWeek : firstWeekly) : requested;
+  const effectiveFrom = desired && scope === "Recurring" && desired < lessonStart ? desired : lessonStart;
+  const skipsWeek = scope === "Recurring" && desired !== null && !startSameWeek && weekKey(desired) !== weekKey(lessonStart);
+
   const otherLessons = scope === "Recurring"
-    ? schedule.allLessons.filter((lesson) => !(lesson.studentId === student.studentId && lesson.teacherId === series.teacherId && lesson.instrumentId === series.instrumentId && lesson.startAt >= source.lesson.startAt))
+    ? schedule.allLessons.filter((lesson) => !(lesson.studentId === student.studentId && lesson.teacherId === series.teacherId && lesson.instrumentId === series.instrumentId && new Date(lesson.startAt) >= startOfDay(effectiveFrom)))
     : schedule.allLessons.filter((lesson) => lesson.id !== source.lesson.id);
-  const problem = desired && scope
-    ? checkTarget({ start: desired, scope, durationMinutes, lessonStart, series, studentId: student.studentId, availability: availability.data ?? [], lessons: otherLessons, holidays: schedule.holidays })
+  // Müsaitlik gelmeden denetim yapılmaz: boş liste "her gün açık" sayıldığı için erken bir onay
+  // müsait olmayan saate ders koyabilirdi (tek ders ve telafide sunucu müsaitliği denetlemiyor).
+  const ready = availability.isSuccess;
+  const problem = desired && scope && ready
+    ? checkTarget({ start: desired, scope, durationMinutes, lessonStart, series, studentId: student.studentId, availability: availability.data, lessons: otherLessons, holidays: schedule.holidays })
     : null;
-  const suggestions = scope && (!desired || problem) && !availability.isLoading
-    ? suggest({ scope, lessonStart, durationMinutes, series, studentId: student.studentId, availability: availability.data ?? [], lessons: otherLessons, holidays: schedule.holidays })
+  const suggestions = scope && (!desired || problem) && ready
+    ? suggest({ scope, lessonStart, durationMinutes, series, studentId: student.studentId, availability: availability.data, lessons: otherLessons, holidays: schedule.holidays })
     : [];
 
   async function confirm(start: Date) {
     if (!series || !scope || !source) return;
     setError(null);
+    // Kart uzun süre açık kaldıysa seçilen saat ya da taşınacak ders geçmiş olabilir.
+    if (hasPassed(start) || hasPassed(lessonStart)) {
+      setError("Bu saat ya da taşınacak ders geçti; kartı yeniden açıp başka saat seç.");
+      return;
+    }
     const end = new Date(start.getTime() + durationMinutes * 60000);
     try {
       if (scope === "Recurring") {
         await rescheduleSeries.mutateAsync({
           seriesId: series.id,
-          dayOfWeek: DAY_KEYS[start.getDay()]!,
+          dayOfWeek: DAY_KEYS[start.getDay()] ?? "Monday",
           startTime: `${hhmm(start)}:00`,
           durationMinutes: series.durationMinutes,
-          effectiveFrom: localDateKey(lessonStart),
+          effectiveFrom: localDateKey(effectiveFrom),
         });
-        setDone(`${student.fullName} için ${series.instrumentName} programı ${dayLabel(lessonStart)} dersinden itibaren her ${weekdayName(start)} ${hhmm(start)} oldu.`);
+        setDone(`${student.fullName} için ${series.instrumentName} programı her ${weekdayName(start)} ${hhmm(start)} oldu. İlk ders ${dayLabel(start)}.`);
       } else if (me?.role === "Admin") {
         await rescheduleLesson.mutateAsync({ lessonId: source.lesson.id, proposedStartAt: start.toISOString(), proposedEndAt: end.toISOString() });
         setDone(`${student.fullName} dersi ${dayLabel(start)} ${hhmm(start)} saatine taşındı.`);
@@ -126,18 +148,47 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
   function submitManual(event: FormEvent) {
     event.preventDefault();
     if (!manualDate || !manualTime) return;
+    setStartSameWeek(false);
     setPicked(new Date(`${manualDate}T${manualTime}:00`));
   }
+
+  function chooseScope(next: Scope) {
+    setScope(next);
+    setPicked(null);
+    setStartSameWeek(false);
+  }
+
+  const options = candidates.slice(0, 8);
+  if (!options.includes(source.lesson)) options.push(source.lesson);
+  const checks = [
+    "Öğretmenin müsait olduğu saat",
+    "Öğretmenin ve öğrencinin o saatte başka dersi yok",
+    ...(scope === "Recurring" ? [`Sonraki ${RECURRING_CHECK_WEEKS} haftada da çakışma yok`] : ["Resmi tatil değil"]),
+  ];
 
   return (
     <AssistantCard>
       <StudentHeading student={student} />
       {source.notice && !done && <WarningLine>{source.notice}</WarningLine>}
-      {/* İşlemden sonra takvim tazelenir ve "sıradaki ders" yeni saat olur; satır gizlenir. */}
-      {!done && <p className="text-sm">
-        Taşınacak ders: <b>{dayLabel(lessonStart)} {hhmm(lessonStart)}</b> · {series.instrumentName} · {series.teacherName}
-        <span className="text-meta block text-xs">Program: her {weekdayName(lessonStart)} {series.startTime.slice(0, 5)} · {series.durationMinutes} dk</span>
-      </p>}
+      {/* İşlemden sonra takvim tazelenir ve "sıradaki ders" yeni saat olur; seçim gizlenir. */}
+      {!done && !cancelled && (
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold" htmlFor={`source-${source.lesson.id}`}>Taşınacak ders</label>
+          <select
+            id={`source-${source.lesson.id}`}
+            className="field text-sm"
+            value={source.lesson.id}
+            onChange={(event) => { setChosenLessonId(event.target.value); setPicked(null); setStartSameWeek(false); }}
+          >
+            {options.map((lesson) => {
+              const start = new Date(lesson.startAt);
+              const holiday = schedule.holidays.get(localDateKey(start));
+              return <option key={lesson.id} value={lesson.id}>{dayLabel(start)} {hhmm(start)}{holiday ? ` · tatil (${holiday})` : ""}</option>;
+            })}
+          </select>
+          <p className="text-meta text-xs">{series.instrumentName} · {series.teacherName} · program: her {weekdayName(lessonStart)} {series.startTime.slice(0, 5)}, {series.durationMinutes} dk</p>
+        </div>
+      )}
 
       {done ? (
         <>
@@ -152,48 +203,60 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
           <div className="space-y-2">
             <p className="text-sm">Bir kerelik mi, yoksa bundan sonraki her hafta mı?</p>
             <div className="flex flex-wrap gap-2">
-              <Choice selected={scope === "Once"} onClick={() => { setScope("Once"); setPicked(null); }}>Yalnız bu ders</Choice>
-              <Choice selected={scope === "Recurring"} onClick={() => { setScope("Recurring"); setPicked(null); }}>Bu dersten itibaren her hafta</Choice>
+              <Choice selected={scope === "Once"} onClick={() => chooseScope("Once")}>Yalnız bu ders</Choice>
+              <Choice selected={scope === "Recurring"} onClick={() => chooseScope("Recurring")}>Bu dersten itibaren her hafta</Choice>
             </div>
           </div>
 
+          {scope && desired && !ready && (availability.isError
+            ? <ErrorLine>Öğretmenin müsaitliği getirilemedi; taşımayı takvimden yap.</ErrorLine>
+            : <Loading>Öğretmenin müsaitliğine bakıyorum…</Loading>)}
+
           {scope && desired && problem && <WarningLine>{dayLabel(desired)} {hhmm(desired)}: {problem}</WarningLine>}
 
-          {scope && (!desired || problem) && (
+          {scope && (!desired || problem) && ready && (
             <div className="space-y-2">
-              <p className="text-sm">{availability.isLoading ? "Boş saatlere bakıyorum…" : suggestions.length ? "Uygun saatler:" : "Önerecek boş saat bulamadım; saati kendin yazabilirsin."}</p>
+              <p className="text-sm">{suggestions.length ? "Uygun saatler:" : "Önerecek boş saat bulamadım; saati kendin yazabilirsin."}</p>
               {suggestions.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {suggestions.map((slot) => (
-                    <Choice key={slot.start.toISOString()} onClick={() => setPicked(slot.start)}>
+                    <Choice key={slot.start.toISOString()} onClick={() => { setStartSameWeek(false); setPicked(slot.start); }}>
                       {scope === "Recurring" ? `Her ${weekdayName(slot.start)} ${hhmm(slot.start)}` : `${dayLabel(slot.start)} ${hhmm(slot.start)}`}
                     </Choice>
                   ))}
                 </div>
               )}
               <form onSubmit={submitManual} className="flex flex-wrap items-end gap-2">
-                <label className="text-xs font-semibold">{scope === "Recurring" ? "İlk ders günü" : "Gün"}<input type="date" className="field mt-1 text-sm" value={manualDate} min={localDateKey(new Date())} onChange={(event) => setManualDate(event.target.value)} /></label>
+                <label className="text-xs font-semibold">{scope === "Recurring" ? "Yeni gün (herhangi bir hafta)" : "Gün"}<input type="date" className="field mt-1 text-sm" value={manualDate} min={localDateKey(new Date())} onChange={(event) => setManualDate(event.target.value)} /></label>
                 <label className="text-xs font-semibold">Saat<input type="time" step={900} className="field mt-1 text-sm" value={manualTime} onChange={(event) => setManualTime(event.target.value)} /></label>
                 <button type="submit" disabled={!manualDate || !manualTime} className="btn btn-quiet text-xs">Bu saati dene</button>
               </form>
             </div>
           )}
 
-          {scope && desired && !problem && (
+          {scope && desired && ready && !problem && (
             <ConfirmBox
               title={scope === "Recurring" ? "Haftalık program değişecek" : "Bu ders taşınacak"}
               rows={[
                 { label: "Öğrenci", value: `${student.fullName} · ${series.instrumentName}` },
-                { label: "Kapsam", value: scope === "Recurring" ? `${dayLabel(lessonStart)} dersinden itibaren her hafta` : "Yalnız bu ders" },
+                { label: "Kapsam", value: scope === "Recurring" ? "Bundan sonraki her hafta" : "Yalnız bu ders" },
                 {
-                  label: "Saat",
+                  label: scope === "Recurring" ? "Program" : "Saat",
                   value: scope === "Recurring"
                     ? <><s className="font-normal text-[var(--muted)]">Her {weekdayName(lessonStart)} {hhmm(lessonStart)}</s> → Her {weekdayName(desired)} {hhmm(desired)}</>
                     : <><s className="font-normal text-[var(--muted)]">{dayLabel(lessonStart)} {hhmm(lessonStart)}</s> → {dayLabel(desired)} {hhmm(desired)}</>,
                 },
-                { label: "Öğretmen", value: `${series.teacherName} (değişmiyor)` },
+                ...(scope === "Recurring" ? [{ label: "İlk ders", value: `${dayLabel(desired)} ${hhmm(desired)}` }] : []),
+                { label: "Süre", value: `${durationMinutes} dk · ${series.teacherName} (değişmiyor)` },
               ]}
-              confirmLabel="Onayla ve taşı"
+              checks={checks}
+              warning={skipsWeek ? (
+                <span className="block space-y-2">
+                  <span className="block">{dayLabel(lessonStart)} dersi kalkıyor ve yeni program {dayLabel(desired)} başlıyor: o hafta ders olmayacak.</span>
+                  {sameWeek && <button type="button" onClick={() => setStartSameWeek(true)} className="btn btn-quiet text-xs">Bu hafta {dayLabel(sameWeek)} başlasın</button>}
+                </span>
+              ) : undefined}
+              confirmLabel={scope === "Recurring" ? "Onayla, programı değiştir" : "Onayla ve taşı"}
               pending={pending}
               onConfirm={() => void confirm(desired)}
               onCancel={() => setCancelled(true)}
@@ -206,6 +269,32 @@ export function RescheduleFlow({ student, move }: { student: AssistantStudent; m
   );
 }
 
+function startOfDay(date: Date) {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
+// Pazartesi başlangıçlı haftanın anahtarı.
+function weekKey(date: Date) {
+  return localDateKey(addDays(startOfDay(date), -((date.getDay() + 6) % 7)));
+}
+
+// Taşınan dersin gününden itibaren hedefin haftanın günü ve saatine denk gelen ilk an.
+function firstOnOrAfter(lessonStart: Date, target: Date) {
+  const date = addDays(startOfDay(lessonStart), (target.getDay() - lessonStart.getDay() + 7) % 7);
+  date.setHours(target.getHours(), target.getMinutes(), 0, 0);
+  return date;
+}
+
+// Yeni gün taşınan dersin haftasında daha önceyse ve henüz geçmediyse, programın bu hafta
+// başlaması seçeneği. Yoksa null.
+function sameWeekStart(lessonStart: Date, firstWeekly: Date) {
+  if (weekKey(firstWeekly) === weekKey(lessonStart)) return null;
+  const candidate = addDays(firstWeekly, -7);
+  return candidate.getTime() > Date.now() && weekKey(candidate) === weekKey(lessonStart) ? candidate : null;
+}
+
 function weekdayName(date: Date) {
   return date.toLocaleDateString("tr-TR", { weekday: "long" }).toLocaleLowerCase("tr-TR");
 }
@@ -214,14 +303,20 @@ function weekdayName(date: Date) {
 // (resmi tatil) söylenir ve sonraki derse geçilir.
 function findSource(lessons: CalendarLesson[], move: AssistantMove | null, holidays: Map<string, string>): Source | null {
   const sourceDate = move?.sourceDate;
-  if (!sourceDate) return lessons[0] ? { lesson: lessons[0], notice: null } : null;
+  // Ders söylenmediyse sıradaki ders alınır ve bu açıkça yazılır; kullanıcı aşağıdan değiştirebilir.
+  if (!sourceDate) return lessons[0] ? { lesson: lessons[0], notice: lessons.length > 1 ? `Hangi ders olduğu söylenmedi; sıradaki dersi (${dayLabel(new Date(lessons[0].startAt))}) seçtim. Başka bir dersse aşağıdan değiştir.` : null } : null;
 
   const sameDay = lessons.filter((lesson) => localDateKey(new Date(lesson.startAt)) === sourceDate);
   const sourceTime = move?.sourceTime?.slice(0, 5);
-  const exact = sameDay.find((lesson) => !sourceTime || hhmm(new Date(lesson.startAt)) === sourceTime) ?? sameDay[0];
+  const timed = sameDay.find((lesson) => !sourceTime || hhmm(new Date(lesson.startAt)) === sourceTime);
+  const exact = timed ?? sameDay[0];
   if (exact) {
     const holidayOfLesson = holidays.get(sourceDate);
-    return { lesson: exact, notice: holidayOfLesson ? `${dayLabel(new Date(`${sourceDate}T00:00:00`))} resmi tatil (${holidayOfLesson}) ama bu ders planlı görünüyor.` : null };
+    const day = dayLabel(new Date(`${sourceDate}T00:00:00`));
+    // Söylenen saatte ders yoksa o günün dersi seçilir ama bu açıkça söylenir.
+    const timeNotice = timed ? null : `${day} ${sourceTime} dersi yok; o günkü ${hhmm(new Date(exact.startAt))} dersini seçtim.`;
+    const holidayNotice = holidayOfLesson ? `${day} resmi tatil (${holidayOfLesson}) ama bu ders planlı görünüyor.` : null;
+    return { lesson: exact, notice: [timeNotice, holidayNotice].filter(Boolean).join(" ") || null };
   }
 
   const next = lessons.find((lesson) => localDateKey(new Date(lesson.startAt)) > sourceDate);

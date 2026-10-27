@@ -194,6 +194,26 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     [Fact]
+    public async Task A_makeup_card_carries_the_asked_day_and_time()
+    {
+        var school = await SeedAsync("Defne");
+        var model = new ScriptedModel((messages, call) => call switch
+        {
+            0 => ToolCall("show_card", new { kind = "makeup", student = StudentCode(LastUser(messages)), target_date = "2026-11-06", target_time = "17:00" }),
+            _ => Say("Telafi kartını açtım; kontrol edip onayla."),
+        });
+        var admin = await LoginAsync(WithModel(model), "admin@test.local", "Test1234!");
+
+        var response = await ReadAsync<AssistantChat.Response>(await ChatAsync(admin, "Defne Sevim'e 6 Kasım 17:00'de telafi aç"));
+
+        var card = Assert.Single(response.Cards);
+        Assert.Equal("makeup", card.Kind);
+        Assert.Equal(school.Sevim, card.Student?.StudentId);
+        Assert.Equal(new DateOnly(2026, 11, 6), card.Move?.TargetDate);
+        Assert.Equal(new TimeOnly(17, 0), card.Move?.TargetTime);
+    }
+
+    [Fact]
     public async Task Context_student_is_offered_to_the_model_only_when_visible()
     {
         var school = await SeedAsync("Tuna");

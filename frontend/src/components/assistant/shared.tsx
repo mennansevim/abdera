@@ -10,7 +10,7 @@ import { useAssistant } from "./assistant-provider";
 // Asistan kartlarının ortak parçaları. Kart çerçevesi tek yerde: başlıkta öğrenci, altta
 // ilgili ekrana götüren bağlantılar.
 export function AssistantCard({ children }: { children: ReactNode }) {
-  return <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5">{children}</div>;
+  return <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-3.5 shadow-[0_1px_2px_rgba(84,43,28,.05)]">{children}</div>;
 }
 
 export function StudentHeading({ student, meta }: { student: AssistantStudent; meta?: string }) {
@@ -80,10 +80,14 @@ export function DoneLine({ children }: { children: ReactNode }) {
   return <p className="flex items-start gap-2 text-sm font-bold text-[var(--success-strong)]" role="status"><Icon name="check" className="mt-0.5 h-4 w-4 shrink-0" />{children}</p>;
 }
 
-// Yazma işleminden önceki onay kutusu: ne değişeceği satır satır, altında Vazgeç / Onayla.
-export function ConfirmBox({ title, rows, note, confirmLabel, pending, onConfirm, onCancel }: {
+// Yazma işleminden önceki onay kutusu: ne değişeceği satır satır, kartın neyi denetlediği
+// (müsaitlik, çakışma, tatil) ve altında Vazgeç / Onayla. Ders ve telafi işlerinde kullanıcı
+// onaylamadan önce neyin doğrulandığını görür.
+export function ConfirmBox({ title, rows, checks = [], warning, note, confirmLabel, pending, onConfirm, onCancel }: {
   title: string;
   rows: { label: string; value: ReactNode }[];
+  checks?: string[];
+  warning?: ReactNode;
   note?: ReactNode;
   confirmLabel: string;
   pending: boolean;
@@ -91,15 +95,21 @@ export function ConfirmBox({ title, rows, note, confirmLabel, pending, onConfirm
   onCancel: () => void;
 }) {
   return (
-    <div className="space-y-3 rounded-xl border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)] p-3">
-      <p className="text-sm font-bold">{title}</p>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+    <div className="space-y-3 rounded-2xl border-[1.5px] border-[var(--brand)] bg-[var(--brand-soft)]/50 p-3.5">
+      <p className="text-sm font-extrabold">{title}</p>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
         {rows.map((row) => <div key={row.label} className="contents"><dt className="text-[var(--muted)]">{row.label}</dt><dd className="font-semibold">{row.value}</dd></div>)}
       </dl>
+      {checks.length > 0 && (
+        <ul className="space-y-1 rounded-xl bg-white/70 px-3 py-2 text-xs" aria-label="Denetlenenler">
+          {checks.map((check) => <li key={check} className="flex items-start gap-1.5 text-[var(--success-strong)]"><Icon name="check" className="mt-px h-3.5 w-3.5 shrink-0" /><span className="text-[var(--foreground)]">{check}</span></li>)}
+        </ul>
+      )}
+      {warning && <WarningLine>{warning}</WarningLine>}
       {note && <p className="text-meta text-xs">{note}</p>}
-      <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={onCancel} disabled={pending} className="btn btn-quiet text-xs">Vazgeç</button>
-        <button type="button" onClick={onConfirm} disabled={pending} className="btn btn-primary text-xs">{pending ? "Kaydediliyor…" : confirmLabel}</button>
+      <div className="flex gap-2">
+        <button type="button" onClick={onCancel} disabled={pending} className="btn btn-quiet flex-1 text-xs sm:flex-none">Vazgeç</button>
+        <button type="button" onClick={onConfirm} disabled={pending} className="btn btn-primary flex-1 text-xs sm:ml-auto sm:flex-none">{pending ? "Kaydediliyor…" : confirmLabel}</button>
       </div>
     </div>
   );

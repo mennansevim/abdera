@@ -17,6 +17,8 @@ export interface StudentSchedule {
   allLessons: CalendarLesson[];
   holidays: Map<string, string>;
   rangeStart: Date;
+  // Kartın açıldığı an; "geçmiş ders" ve "geçmiş saat" denetimleri buna göre.
+  now: Date;
   isLoading: boolean;
   isError: boolean;
 }
@@ -47,6 +49,7 @@ export function useStudentSchedule(student: AssistantStudent): StudentSchedule {
       allLessons,
       holidays,
       rangeStart: range.start,
+      now: range.now,
       isLoading: seriesQuery.isLoading || calendar.isLoading || holidaysQuery.isLoading,
       isError: seriesQuery.isError || calendar.isError,
     };

@@ -92,6 +92,11 @@ export function dayLabel(date: Date) {
   return date.toLocaleDateString("tr-TR", { day: "numeric", month: "long", weekday: "long" });
 }
 
+// Onay anındaki son denetim için (kart uzun süre açık kalmış olabilir).
+export function hasPassed(date: Date) {
+  return date.getTime() <= Date.now();
+}
+
 export function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);

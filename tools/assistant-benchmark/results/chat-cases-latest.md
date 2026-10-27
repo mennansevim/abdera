@@ -1,8 +1,8 @@
 # Asistan sohbet benchmark'ı (cases.json, gerçek dil modeli)
 
-Tarih: 27.10.2026 05:10:04 · API: http://localhost:8080
+Tarih: 27.10.2026 11:41:04 · API: http://localhost:8080
 
-**Toplam: 116/117 (%99)** · yanıt süresi ortanca 2550 ms, en uzun 4832 ms
+**Toplam: 115/117 (%98)** · yanıt süresi ortanca 2728 ms, en uzun 5730 ms
 
 | Kategori | Geçen | Oran |
 |---|---|---|
@@ -15,9 +15,11 @@ Tarih: 27.10.2026 05:10:04 · API: http://localhost:8080
 | Belirsizlik | 6/6 | %100 |
 | Zorlayıcı | 13/14 | %93 |
 | Rol (öğretmen) | 9/9 | %100 |
-| Anlaşılmayan | 8/8 | %100 |
+| Anlaşılmayan | 7/8 | %88 |
 
 ## Başarısız vakalar
 
 - **X12** `Deniz Arslan'ın velisine mesaj at` — navigate kartı yok (açılan: hiç)
-  - Cevap: Deniz Arslan'ın velisine mesaj gönderme işini ben yapamıyorum; mesajları Mesaj Merkezi'nden sen iletebilirsin. İstersen o ekranı açayım.
+  - Cevap: Mesaj gönderme işini ben yapamıyorum; Mesaj Merkezi ekranından veliye kendin yazabilirsin. İstersen ekranı açayım mı?
+- **U03** `Bu ay en çok devamsızlık yapan öğrenciler kim?` — beklenmeyen kart: navigate
+  - Cevap: Yoklama ekranının bağlantısını açtım; oradan tüm öğrencilerin devam kayıtlarını görebilirsin. Tek bir öğrenci için gelişim özetini istersen adını ya da kodunu söylemen yeterli.

@@ -58,10 +58,10 @@ public sealed class AssistantToolbox(
                 ["screen"] = Prop("string", "navigate için ekran anahtarı"),
                 ["source_date"] = Prop("string", "reschedule: taşınacak dersin günü, YYYY-MM-DD. Kullanıcı dersin gününü ya da tarihini söylediyse (\"perşembe dersini\", \"4 Kasım dersinden\") ZORUNLU."),
                 ["source_time"] = Prop("string", "reschedule: taşınacak dersin saati, HH:mm"),
-                ["target_date"] = Prop("string", "reschedule: yeni gün, YYYY-MM-DD (açık tarih söylendiyse)"),
-                ["target_weekday"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Enum.GetNames<DayOfWeek>().Select(day => (JsonNode)day).ToArray()), ["description"] = "reschedule: yalnız gün adı söylendiyse (\"cumaya al\")" },
-                ["target_next_week"] = Prop("boolean", "reschedule: \"haftaya cuma\" gibi"),
-                ["target_time"] = Prop("string", "reschedule: yeni saat, HH:mm"),
+                ["target_date"] = Prop("string", "reschedule ve makeup: yeni gün / telafi günü, YYYY-MM-DD (açık tarih söylendiyse)"),
+                ["target_weekday"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Enum.GetNames<DayOfWeek>().Select(day => (JsonNode)day).ToArray()), ["description"] = "reschedule ve makeup: yalnız gün adı söylendiyse (\"cumaya al\", \"cuma telafi\")" },
+                ["target_next_week"] = Prop("boolean", "reschedule ve makeup: \"haftaya cuma\" gibi"),
+                ["target_time"] = Prop("string", "reschedule ve makeup: yeni saat / telafi saati, HH:mm"),
                 ["shift_minutes"] = Prop("integer", "reschedule: dersin kendi saatine göre kaydırma; \"yarım saat ileri\" 30, \"bir saat erkene\" -60"),
                 ["scope"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("Once", "Recurring"), ["description"] = "reschedule: yalnız bu ders mi (Once), bundan sonraki her hafta mı (Recurring); belirsizse verme" },
             }, "kind"),
@@ -326,12 +326,13 @@ public sealed class AssistantToolbox(
         }
 
         var studentId = ResolveStudent(Text(args, "student") ?? throw new ToolException("Bu kart için öğrenci kodu gerekli."));
-        var move = kind == "reschedule" ? ReadMove(args) : null;
+        // Telafi kartı da istenen gün/saati alır; kart o saati denetler, uygun değilse nedenini söyler.
+        var move = kind is "reschedule" or "makeup" ? ReadMove(args) : null;
         Cards.Add(new Card(kind, studentId, move, null));
         return Ok(kind switch
         {
             "reschedule" => "Ders taşıma kartı açıldı. Kart dersi bulur, müsaitliği ve çakışmayı denetler, kullanıcı onaylarsa taşır. Henüz hiçbir şey değişmedi.",
-            "makeup" => "Telafi kartı açıldı. Kart uygun saatleri önerir, kullanıcı onaylarsa telafi dersini açar. Henüz hiçbir şey değişmedi.",
+            "makeup" => "Telafi kartı açıldı. Kart istenen saati denetler ya da uygun saatleri önerir, kullanıcı onaylarsa telafi dersini açar. Henüz hiçbir şey değişmedi.",
             _ => "Kart gösterildi.",
         });
     }
