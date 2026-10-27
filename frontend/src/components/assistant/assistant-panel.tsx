@@ -6,6 +6,7 @@ import { Icon, type IconName } from "@/components/icons";
 import { errorMessage } from "@/lib/library";
 import { meDisplayName, useMe } from "@/lib/use-auth";
 import { useAssistantChat, type AssistantCardData, type ChatHistoryItem } from "@/lib/assistant";
+import { AssistantIntro, introSeen, markIntroSeen, type IntroExample } from "./assistant-intro";
 import type { AssistantRequest } from "./assistant-provider";
 import { DuesCard } from "./dues-card";
 import { LessonsCard } from "./lessons-card";
@@ -44,6 +45,19 @@ const ADMIN_TASKS: Task[] = [
 const TEACHER_TASKS: Task[] = ADMIN_TASKS.filter((task) => task.icon !== "wallet");
 const QUESTIONS = ["Yoklamayı nereden alırım?", "Fiyat politikası nerede?", "Yeni öğrenci nasıl kaydedilir?"];
 
+// Tanıtımın son adımındaki "Hemen dene" örnekleri. Asistanın araçları öğrenci başına çalışır;
+// okulun gerçek bir öğrencisiyle kurulan örnek her zaman çalışan bir cevap gösterir. Ad ek almaz
+// ("Ayşe Kaya'nın" değil) ki ünlü uyumu hatası olmasın; kimlik de bağlam olarak gider.
+function introExamples(isAdmin: boolean, student: MentionCandidate | undefined): IntroExample[] {
+  const general: IntroExample = isAdmin ? { text: "Aidat günü gelenleri listele" } : { text: "Yoklamayı nereden alırım?" };
+  if (!student) return [general, { text: "Yeni öğrenci nasıl kaydedilir?" }];
+  return [
+    { text: `${student.fullName} nasıl gidiyor?`, studentId: student.id },
+    { text: `${student.fullName} ne zaman derse geliyor?`, studentId: student.id },
+    general,
+  ];
+}
+
 export function AssistantPanel({ open, onClose, request }: { open: boolean; onClose: () => void; request: AssistantRequest | null }) {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
@@ -57,6 +71,8 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
   const [activeIndex, setActiveIndex] = useState(0);
   const [navigated, setNavigated] = useState(false);
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  // İlk açılışta kısa tanıtım; görüldüyse doğrudan sohbet.
+  const [showIntro, setShowIntro] = useState(() => typeof window !== "undefined" && !introSeen());
   const chat = useAssistantChat();
   const candidates = useMentionCandidates(open);
   const nextId = useRef(1);
@@ -195,6 +211,12 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
     place("", 0);
   }
 
+  function closeIntro() {
+    markIntroSeen();
+    setShowIntro(false);
+    inputRef.current?.focus();
+  }
+
   const firstName = me ? meDisplayName(me).split(/\s+/)[0] : undefined;
   const empty = entries.length === 0 && !chat.isPending;
 
@@ -206,7 +228,10 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
           <h2 className="flex items-center gap-2 text-[.95rem] font-extrabold">Abdera Asistanı <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[.65rem] font-bold uppercase tracking-wide text-[var(--brand-strong)]">Beta</span></h2>
           <p className="text-meta truncate text-xs">Okulunun verisiyle çalışır · değişiklikler senin onayınla</p>
         </div>
-        {!empty && (
+        {!showIntro && (
+          <button type="button" onClick={() => setShowIntro(true)} aria-label="Nasıl kullanılır" title="Nasıl kullanılır" className="icon-btn icon-btn-quiet shrink-0 text-sm font-extrabold">?</button>
+        )}
+        {!empty && !showIntro && (
           <button type="button" onClick={reset} disabled={chat.isPending} aria-label="Yeni sohbet" title="Yeni sohbet" className="icon-btn icon-btn-quiet shrink-0">
             <Icon name="plus" className="h-4 w-4" />
           </button>
@@ -217,7 +242,13 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
       </header>
 
       <div ref={scrollRef} aria-live="polite" className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-        {empty ? (
+        {showIntro ? (
+          <AssistantIntro
+            examples={introExamples(isAdmin, candidates.find((candidate) => !candidate.inactive))}
+            onDone={closeIntro}
+            onExample={(example) => { closeIntro(); send(example.text, example.studentId); }}
+          />
+        ) : empty ? (
           <div className="assistant-rise mx-auto flex max-w-md flex-col gap-5">
             <div className="flex flex-col items-center gap-3 pt-2 text-center">
               <AssistantMark size="lg" />

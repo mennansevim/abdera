@@ -47,12 +47,13 @@ function lesson(id: string, start: Date, studentId = "student-1", studentName = 
 
 // Her istek önce testin kendi tablosuna bakar; yoksa ekranı ayakta tutan boş yanıt döner.
 // GET dışındaki her istek kaydedilir: yazma işlemi onaydan önce gitmemeli.
-async function mockApi(page: Page, me: object, handlers: Record<string, Handler>) {
+async function mockApi(page: Page, me: object, handlers: Record<string, Handler>, { intro = false } = {}) {
   const writes: { method: string; path: string; body: unknown }[] = [];
-  await page.addInitScript(({ userId, version }) => {
-    // "Yenilikler" penceresi testin önüne geçmesin.
+  await page.addInitScript(({ userId, version, intro }) => {
+    // "Yenilikler" penceresi ve asistanın ilk açılış tanıtımı testin önüne geçmesin.
     window.localStorage.setItem(`abdera:seen-release:${userId}`, version);
-  }, { userId: (me as { id: string }).id, version: RELEASES[0]!.version });
+    if (!intro) window.localStorage.setItem("abdera.assistant.intro.v1", "1");
+  }, { userId: (me as { id: string }).id, version: RELEASES[0]!.version, intro });
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -406,4 +407,45 @@ test("a weekly move that would skip a week says so and can start in the same wee
   await dialog.getByRole("button", { name: "Onayla, programı değiştir" }).click();
   await expect(dialog.getByText(/programı her salı 16:00 oldu/)).toBeVisible();
   expect(writes.find((write) => write.path === "/api/lesson-series/series-1/reschedule")?.body).toMatchObject({ dayOfWeek: "Tuesday", startTime: "16:00:00", effectiveFrom: dateKey(sameWeekTuesday) });
+});
+
+test("the first open shows a short intro whose examples use a real student and it is not shown again", async ({ page }) => {
+  let body: { message?: string; studentId?: string | null } = {};
+  await mockApi(page, ADMIN, {
+    "/api/students/overview": () => [{
+      student: { id: "student-1", firstName: "Deniz", lastName: "Arslan", birthDate: "2015-01-01", status: "Active", siblingDiscount: false },
+      instruments: [{ instrumentId: "i-1", instrumentName: "Piyano" }],
+      enrolledSince: "2026-01-01",
+      recentAttendance: [],
+    }],
+    "POST /api/assistant/chat": (request) => {
+      body = request.postDataJSON();
+      return { reply: "Deniz düzenli geliyor.", cards: [], history: [] };
+    },
+  }, { intro: true });
+
+  await page.goto("/dashboard/releases");
+  await page.getByRole("button", { name: "Abdera Asistanı (⌘K)" }).click();
+  const dialog = page.getByRole("dialog", { name: "Abdera Asistanı" });
+  await expect(dialog.getByText("Kısa tanıtım · 1/3")).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Günlük dilde sor" })).toBeVisible();
+  await dialog.getByRole("button", { name: "İleri" }).click();
+  await expect(dialog.getByRole("heading", { name: "Adı yaz, ben tamamlayayım" })).toBeVisible();
+  await dialog.getByRole("button", { name: "İleri" }).click();
+  await expect(dialog.getByRole("heading", { name: "Önce kontrol, sonra senin onayın" })).toBeVisible();
+
+  // Örnek okulun gerçek öğrencisiyle kurulur ve kimliği bağlam olarak gider.
+  await dialog.getByRole("button", { name: "Deniz Arslan nasıl gidiyor?" }).click();
+  await expect(dialog.getByText("Deniz düzenli geliyor.")).toBeVisible();
+  expect(body).toMatchObject({ message: "Deniz Arslan nasıl gidiyor?", studentId: "student-1" });
+  await expect(dialog.getByText("Kısa tanıtım · 1/3")).toHaveCount(0);
+
+  // Görüldü: yeniden açılışta doğrudan sohbet; "Nasıl kullanılır" tanıtımı geri getirir.
+  await page.reload();
+  await page.getByRole("button", { name: "Abdera Asistanı (⌘K)" }).click();
+  await expect(dialog.getByText("ne yapalım?")).toBeVisible();
+  await dialog.getByRole("button", { name: "Nasıl kullanılır" }).click();
+  await expect(dialog.getByText("Kısa tanıtım · 1/3")).toBeVisible();
+  await dialog.getByRole("button", { name: "Geç" }).click();
+  await expect(dialog.getByText("ne yapalım?")).toBeVisible();
 });

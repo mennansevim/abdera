@@ -124,7 +124,7 @@ test("asistanla bir aylık işlem simülasyonu", async ({ page }) => {
   const login = await page.request.post(`${API}/api/dev/auth/login`, { data: { role: "Admin" } });
   expect(login.ok()).toBeTruthy();
   const me = await getJson<{ id: string }>(page, "/api/auth/me");
-  await page.addInitScript(({ userId, version }) => window.localStorage.setItem(`abdera:seen-release:${userId}`, version), { userId: me.id, version: RELEASES[0]!.version });
+  await page.addInitScript(({ userId, version }) => { window.localStorage.setItem(`abdera:seen-release:${userId}`, version); window.localStorage.setItem("abdera.assistant.intro.v1", "1"); }, { userId: me.id, version: RELEASES[0]!.version });
   const students = new Map((await getJson<{ id: string; firstName: string; lastName: string }[]>(page, "/api/students")).map((student) => [`${student.firstName} ${student.lastName}`, student.id]));
 
   const monday = next(1), thursday = next(4), friday = next(5), saturday = next(6);

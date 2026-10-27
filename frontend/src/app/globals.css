@@ -243,6 +243,13 @@ textarea:focus-visible:not(.field) {
 .assistant-rise { animation: assistant-rise .22s ease-out both; }
 /* Mesaj kutusunun odak halkası çevresindeki çerçevede (focus-within); iç halka çift görünürdü. */
 textarea.assistant-input:focus-visible { outline: none; }
+/* Asistan tanıtımı: yazılan metin soldan açılır, imleç yanıp söner, onay düğmesine basılır. */
+@keyframes intro-type { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes intro-caret { 50% { opacity: 0; } }
+@keyframes intro-press { 40% { transform: scale(.92); } }
+.intro-type { display: inline-block; vertical-align: bottom; animation: intro-type .8s steps(18, end) both; }
+.intro-caret { display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -0.15em; background: var(--brand-strong); animation: intro-caret 1s steps(1) infinite; }
+.intro-press { animation: intro-press .35s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
