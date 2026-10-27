@@ -43,6 +43,14 @@ const sections: { title: string; body: string[] }[] = [
     ],
   },
   {
+    title: "Yapay zekâ asistanı",
+    body: [
+      "Panelde yalnızca okul personelinin (yönetici ve öğretmen) kullandığı bir asistan bulunur. Personelin yazdığı soruyu yanıtlamak için gerekli veriler (ders programı ve saatleri, yoklama, telafi hakları, gelişim notları ve aidat durumu) yapay zekâ hizmet sağlayıcısı DeepSeek'e (Hangzhou DeepSeek Artificial Intelligence Co., Ltd., Çin Halk Cumhuriyeti) aktarılır.",
+      "Aktarım öncesinde öğrenci ve öğretmen adları kod ile değiştirilir; veli bilgileri, telefon numarası, e-posta, doğum tarihi ve adres gönderilmez. Asistan hiçbir kaydı kendiliğinden değiştirmez; ders saati veya telafi gibi her işlem personelin ekranda onayıyla yapılır.",
+      "Bu aktarım, 6698 sayılı KVKK'nın 9. maddesi kapsamında yurt dışına veri aktarımıdır. Aktarıma ilişkin sorularınızı ve itirazlarınızı aşağıdaki adrese iletebilirsiniz.",
+    ],
+  },
+  {
     title: "Saklama ve güvenlik",
     body: [
       "Veriler, yalnızca şifreli (HTTPS) bağlantı üzerinden erişilen bir sunucudaki veritabanında tutulur; yedekler şifrelenerek saklanır. Panele yalnızca yetkili okul personeli erişebilir.",
@@ -65,7 +73,7 @@ export default function PrivacyPolicyPage() {
     </header>
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       <h1 className="text-2xl font-bold sm:text-3xl">Gizlilik Politikası</h1>
-      <p className="text-meta mt-2">Son güncelleme: 29 Eylül 2026</p>
+      <p className="text-meta mt-2">Son güncelleme: 27 Ekim 2026</p>
       {sections.map((section) => <section key={section.title} className="mt-8">
         <h2 className="text-lg font-bold">{section.title}</h2>
         {section.body.map((paragraph) => <p key={paragraph} className="mt-3 leading-relaxed">{paragraph}</p>)}
