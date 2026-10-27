@@ -47,7 +47,7 @@ const sections: { title: string; body: string[] }[] = [
     body: [
       "Panelde yalnızca okul personelinin (yönetici ve öğretmen) kullandığı bir asistan bulunur. Personelin yazdığı soruyu yanıtlamak için gerekli veriler (ders programı ve saatleri, yoklama, telafi hakları, gelişim notları ve aidat durumu) yapay zekâ hizmet sağlayıcısı DeepSeek'e (Hangzhou DeepSeek Artificial Intelligence Co., Ltd., Çin Halk Cumhuriyeti) aktarılır.",
       "Aktarım öncesinde öğrenci ve öğretmen adları kod ile değiştirilir; veli bilgileri, telefon numarası, e-posta, doğum tarihi ve adres gönderilmez. Asistan hiçbir kaydı kendiliğinden değiştirmez; ders saati veya telafi gibi her işlem personelin ekranda onayıyla yapılır.",
-      "Bu aktarım, 6698 sayılı KVKK'nın 9. maddesi kapsamında yurt dışına veri aktarımıdır. Aktarıma ilişkin sorularınızı ve itirazlarınızı aşağıdaki adrese iletebilirsiniz.",
+      "Bu aktarım, 6698 sayılı KVKK'nın 9. maddesi kapsamında yurt dışına veri aktarımıdır. Aktarıma ilişkin sorularınızı ve itirazlarınızı aşağıdaki adrese iletebilirsiniz. Hizmet sağlayıcısı değişirse bu bölüm güncellenir.",
     ],
   },
   {
