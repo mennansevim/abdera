@@ -135,6 +135,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 // WithWebHostBuilder ile kurup asıl davranışı doğruluyor.
                 ["RateLimiting:LoginPermitLimit"] = "10000",
                 ["RateLimiting:GuardianOtpPermitLimit"] = "10000",
+                ["RateLimiting:AssistantPermitLimit"] = "10000",
                 // Faz 4: BackupService.RunPgDumpAsync sonrası gerçekten şifreleme çalışsın diye -
                 // testlerde Backup:Provider/Email:Provider ayarlanmadığı için ikisi de varsayılan
                 // Fake kalır (OpsFlowTests), yalnızca şifreleme anahtarı gerçek olmalı.

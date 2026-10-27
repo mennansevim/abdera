@@ -10,6 +10,7 @@ using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.People.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -272,5 +273,30 @@ public class AssistantFlowTests : IClassFixture<AbderaWebApplicationFactory>
 
         var anonymous = await _factory.CreateClient().PostAsJsonAsync("/api/assistant/chat", new AssistantChat.Request("Merhaba", null, null));
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    // Her mesaj ücretli bir model çağrısı: kullanıcı başına pencere dolunca 429 döner, başka
+    // kullanıcı etkilenmez.
+    [Fact]
+    public async Task Assistant_messages_are_rate_limited_per_user()
+    {
+        var school = await SeedAsync("Ilgaz");
+        var model = new ScriptedModel((_, _) => Say("Tamam."));
+        var limited = WithModel(model).WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RateLimiting:AssistantPermitLimit"] = "2",
+                ["RateLimiting:AssistantWindowMinutes"] = "10",
+            })));
+        var admin = await LoginAsync(limited, "admin@test.local", "Test1234!");
+        var teacher = await LoginAsync(limited, school.PianoTeacherEmail, school.PianoTeacherPassword);
+
+        Assert.Equal(HttpStatusCode.OK, (await ChatAsync(admin, "merhaba")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ChatAsync(admin, "merhaba")).StatusCode);
+        var rejected = await ChatAsync(admin, "merhaba");
+        Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
+        Assert.Equal(2, model.Calls.Count);
+
+        Assert.Equal(HttpStatusCode.OK, (await ChatAsync(teacher, "merhaba")).StatusCode);
     }
 }

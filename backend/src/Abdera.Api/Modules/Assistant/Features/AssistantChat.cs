@@ -54,7 +54,8 @@ public static partial class AssistantChat
     public static void MapAssistantChat(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/assistant/chat", HandleAsync)
-            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
+            .RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin)
+            .RequireRateLimiting("assistant");
     }
 
     private static async Task<IResult> HandleAsync(
