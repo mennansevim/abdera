@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.28.2",
+    date: "2026-10-28",
+    items: [
+      { audience: "admin", text: "Ayarlar'da yeni \"Excel'den içe aktar\" ekranı: öğrencileri, velilerini ve kurs kayıtlarını, ayrıca geçmiş ödemeleri bir Excel dosyasından toplu olarak alabilirsin. Boş şablonu indirip doldur; yüklediğinde önce bir önizleme görürsün, onaylamadan hiçbir şey kaydedilmez." },
+      { audience: "admin", text: "Sistemde zaten olan öğrenci ya da ödenmiş ay atlanır, üzerine yazılmaz; hatalı satırlar nedeniyle listelenir. Kayıtlı bir veli telefonu yazılırsa öğrenci o veliye kardeş olarak bağlanır." },
+    ],
+  },
+  {
     version: "2026.10.28",
     date: "2026-10-28",
     items: [
