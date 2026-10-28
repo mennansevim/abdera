@@ -1,0 +1,353 @@
+<title>Yoklama Kartları</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Lora:ital,wght@1,500;1,600&family=Caveat:wght@500;600&display=swap">
+<style>
+/* Layout: öğrenci listesi solda, seçili öğrencinin yoklama kartı (kâğıt defterin dijital hali) sağda yapışkan. */
+:root {
+  --bg: #fdf3e7; --fg: #3a2a1f; --surface: #ffffff; --surface-muted: #fbeadb; --line: #f0ddc4; --muted: #74604f;
+  --brand: #d9662a; --brand-strong: #a84e1f; --brand-soft: #fce4d0;
+  --success: #3f9142; --success-soft: #e3f3df; --success-strong: #2f6f30;
+  --danger: #c94f3f; --danger-soft: #fce2dc; --danger-strong: #a13c2f;
+  --warning: #c98a1f; --warning-soft: #fbeed0; --warning-strong: #96660f;
+  --paper: #fffaf2; --paper-rule: #e6d3b8; --ink: #2f3d73;
+  --shadow: 0 2px 4px rgba(120,70,30,.05), 0 14px 34px rgba(120,70,30,.08);
+  --f-body: "Figtree", system-ui, sans-serif; --f-display: "Lora", Georgia, serif; --f-hand: "Caveat", "Segoe Print", cursive;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #1d1612; --fg: #f3e6d8; --surface: #271e18; --surface-muted: #31251d; --line: #44352a; --muted: #b9a28d;
+  --brand: #ec8a52; --brand-strong: #f4a574; --brand-soft: #4a2d1c;
+  --success: #6cbf6f; --success-soft: #1f3420; --success-strong: #8fd492;
+  --danger: #e57b6c; --danger-soft: #42221d; --danger-strong: #f19d90;
+  --warning: #e3ac4a; --warning-soft: #3d2f15; --warning-strong: #f1c674;
+  --paper: #2a211a; --paper-rule: #4a3a2d; --ink: #a9b8f0; --shadow: 0 2px 4px rgba(0,0,0,.3), 0 14px 34px rgba(0,0,0,.35); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #1d1612; --fg: #f3e6d8; --surface: #271e18; --surface-muted: #31251d; --line: #44352a; --muted: #b9a28d;
+  --brand: #ec8a52; --brand-strong: #f4a574; --brand-soft: #4a2d1c;
+  --success: #6cbf6f; --success-soft: #1f3420; --success-strong: #8fd492;
+  --danger: #e57b6c; --danger-soft: #42221d; --danger-strong: #f19d90;
+  --warning: #e3ac4a; --warning-soft: #3d2f15; --warning-strong: #f1c674;
+  --paper: #2a211a; --paper-rule: #4a3a2d; --ink: #a9b8f0; --shadow: 0 2px 4px rgba(0,0,0,.3), 0 14px 34px rgba(0,0,0,.35); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: .875rem; line-height: 1.45; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 12px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, tr:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+.mock-note { font-size: .75rem; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 10px; }
+.head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px; }
+.head h1 { font-family: var(--f-display); font-style: italic; font-weight: 600; font-size: 1.5rem; margin: 0; }
+.head p { margin: 2px 0 0; color: var(--muted); max-width: 62ch; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--surface-muted); color: var(--muted); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+
+/* Ödeme bekleniyor bildirimi */
+.alert { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: 14px; background: var(--warning-soft); color: var(--warning-strong); border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
+.alert .bell { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--surface); flex: none; }
+.alert .txt { flex: 1 1 260px; min-width: 0; }
+.alert strong { display: block; font-size: .9rem; }
+.alert .names { font-size: .8rem; opacity: .9; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 7px 12px; font-size: .8rem; font-weight: 600; }
+.btn:hover { background: var(--surface-muted); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.primary:hover { background: var(--brand-strong); }
+.btn.warn { background: var(--warning); border-color: var(--warning); color: #fff; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); }
+.stat { padding: 10px 14px; border: 0; background: none; text-align: left; border-right: 1px solid var(--line); }
+.stat:last-child { border-right: 0; }
+.stat:hover { background: var(--surface-muted); }
+.stat[aria-pressed="true"] { background: var(--brand-soft); }
+.stat .l { font-size: .75rem; color: var(--muted); }
+.stat .v { font-size: 1.35rem; font-weight: 800; }
+.stat .v.warning { color: var(--warning-strong); } .stat .v.danger { color: var(--danger-strong); } .stat .v.success { color: var(--success-strong); }
+@media (max-width: 640px) { .stats { grid-template-columns: repeat(2, minmax(0,1fr)); } .stat:nth-child(2) { border-right: 0; } .stat:nth-child(-n+2) { border-bottom: 1px solid var(--line); } }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; }
+.field { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 10px; padding: 7px 10px; font: inherit; min-width: 0; }
+.filters .field { flex: 1 1 160px; }
+
+.grid { display: grid; gap: 12px; align-items: start; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr) 31rem; } .sheet-col { position: sticky; top: 12px; } }
+
+/* Öğrenci tablosu */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 640px; }
+th { text-align: left; font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr { cursor: pointer; }
+tbody tr:hover td { background: var(--surface-muted); }
+tbody tr[aria-selected="true"] td { background: var(--brand-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+.who b { display: block; font-weight: 700; }
+.who span { color: var(--muted); font-size: .78rem; }
+.muted { color: var(--muted); }
+.slots { display: inline-grid; grid-template-columns: repeat(4, 2.6rem); gap: 4px; }
+.slot { height: 1.7rem; border-radius: 7px; border: 1.5px dashed var(--paper-rule); display: grid; place-items: center; font-size: .68rem; font-weight: 700; color: var(--muted); }
+.slot.on { border: 0; background: var(--success-soft); color: var(--success-strong); }
+.slots.full .slot.on { background: var(--warning-soft); color: var(--warning-strong); }
+.slot.on.exc { box-shadow: inset 0 0 0 1.5px var(--warning); }
+.row .c.exc { color: var(--warning-strong); }
+.row .d .miss { font-family: var(--f-body); vertical-align: middle; }
+.pill { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: .74rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.success { background: var(--success-soft); color: var(--success-strong); }
+.pill.warning { background: var(--warning-soft); color: var(--warning-strong); }
+.pill.danger { background: var(--danger-soft); color: var(--danger-strong); }
+.pill.muted { background: var(--surface-muted); color: var(--muted); }
+
+/* Yoklama kartı - defterdeki "Yoklama Listesi"nin dijital hali */
+.sheet { background: var(--paper); border: 1px solid var(--paper-rule); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.sheet-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 12px 16px; border-bottom: 2px solid var(--fg); }
+.sheet-top .brand { font-weight: 800; letter-spacing: .08em; font-size: .78rem; text-transform: uppercase; }
+.sheet-top .kind { font-weight: 800; letter-spacing: .08em; font-size: .78rem; text-transform: uppercase; color: var(--muted); }
+.ident { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 2px solid var(--fg); }
+.ident > div { padding: 8px 16px; border-right: 1px solid var(--paper-rule); min-width: 0; }
+.ident > div:last-child { border-right: 0; }
+.ident .full { grid-column: 1 / -1; border-bottom: 1px solid var(--paper-rule); border-right: 0; }
+.ident label { display: block; font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ident .hand { font-family: var(--f-hand); font-size: 1.45rem; line-height: 1.1; color: var(--ink); }
+.sheet-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--paper-rule); align-items: center; }
+.sheet-actions .sp { flex: 1; }
+.cycles { display: grid; grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr)); gap: 0; max-height: 34rem; overflow-y: auto; }
+.cycle { border-right: 1px solid var(--paper-rule); border-bottom: 2px solid var(--fg); }
+.cycle-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 6px 10px; background: color-mix(in srgb, var(--paper-rule) 35%, transparent); font-size: .72rem; font-weight: 700; }
+.cycle-head .n { color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.row { display: grid; grid-template-columns: 1.4rem 1fr 1.8rem; align-items: center; border-top: 1px solid var(--paper-rule); min-height: 2rem; padding: 0 10px; }
+.row .i { font-size: .66rem; color: var(--muted); font-weight: 700; }
+.row .d { font-family: var(--f-hand); font-size: 1.3rem; color: var(--ink); line-height: 1; }
+.row .d.empty { font-family: var(--f-body); font-size: .8rem; color: color-mix(in srgb, var(--muted) 55%, transparent); letter-spacing: .3em; }
+.row .c { font-family: var(--f-hand); font-size: 1.45rem; color: var(--success-strong); text-align: center; line-height: 1; border-left: 1px solid var(--paper-rule); height: 100%; display: grid; place-items: center; }
+.row.next { background: color-mix(in srgb, var(--brand-soft) 60%, transparent); }
+.row.next .d.empty { color: var(--brand-strong); letter-spacing: 0; font-weight: 600; }
+.misses { padding: 5px 10px 7px; border-top: 1px dashed var(--paper-rule); display: flex; flex-wrap: wrap; gap: 4px; }
+.miss { font-size: .68rem; font-weight: 600; padding: 1px 6px; border-radius: 6px; }
+.miss.absent { background: var(--danger-soft); color: var(--danger-strong); }
+.miss.excused { background: var(--warning-soft); color: var(--warning-strong); }
+.cycle.await { box-shadow: inset 0 0 0 2px var(--warning); }
+.callout { margin: 0; padding: 10px 16px; font-size: .8rem; background: var(--warning-soft); color: var(--warning-strong); border-bottom: 1px solid var(--paper-rule); }
+.callout b { display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 16px; font-size: .72rem; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: 10px; font-weight: 600; font-size: .8rem; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: no-preference) { .row.fresh { animation: pop .6s ease; } @keyframes pop { from { background: var(--success-soft); } to { background: transparent; } } }
+</style>
+
+<div class="wrap">
+  <p class="mock-note">Tasarım taslağı — örnek veriler. Öykü'nün kartı defterdeki gerçek sayfadan alındı, diğer öğrenciler uydurma. Bu ekranı yalnızca yönetici görür.</p>
+
+  <header class="head">
+    <div>
+      <h1>Yoklama</h1>
+      <p>Her öğrencinin yoklama kartı: 4 başarılı ders bir aylık hakkı doldurur. 4. dersten sonra ödeme beklenir, bir sonraki derste yeni dönem aidatı tahakkuk eder.</p>
+    </div>
+    <span class="badge">Yalnızca yönetici</span>
+  </header>
+
+  <section class="alert" id="alert" aria-live="polite"></section>
+
+  <section class="card stats" id="stats" aria-label="Duruma göre filtrele"></section>
+
+  <section class="card filters">
+    <input class="field" id="q" type="search" placeholder="Öğrenci ara…" aria-label="Öğrenci ara">
+    <select class="field" id="branch" aria-label="Branş"><option value="">Tüm branşlar</option></select>
+    <select class="field" id="teacher" aria-label="Öğretmen"><option value="">Tüm öğretmenler</option></select>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Öğrenci</th><th>Başlangıç</th><th>Dönem</th><th>Bu dönem (4 ders)</th><th>Durum</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <div class="sheet-col" id="sheet"></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const FEE = 3500;
+const TRY = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
+const pad = n => String(n).padStart(2, "0");
+const dm = s => s.slice(0, 5);
+
+// Öykü: defter sayfasındaki tarihler (Gg.Aa.Yyyy). Her 4 "Geldi" bir dönem.
+const oykuDates = ["20.09.2025","27.09.2025","04.10.2025","11.10.2025","18.10.2025","25.10.2025","01.11.2025","22.11.2025","06.12.2025","13.12.2025","20.12.2025","27.12.2025","03.01.2026","10.01.2026","17.01.2026","24.01.2026","31.01.2026","07.02.2026","14.02.2026","21.02.2026","28.02.2026","07.03.2026","14.03.2026","28.03.2026","04.04.2026","11.04.2026","18.04.2026","02.05.2026","09.05.2026","16.05.2026","23.05.2026","06.06.2026","13.06.2026","20.06.2026","26.06.2026","03.07.2026","07.07.2026","10.07.2026","14.07.2026","17.07.2026","21.07.2026","24.07.2026","31.07.2026","04.08.2026","14.08.2026","18.08.2026","21.08.2026","25.08.2026","28.08.2026","01.09.2026","09.09.2026","11.09.2026","16.09.2026","24.09.2026","01.10.2026","08.10.2026","15.10.2026","22.10.2026"];
+
+function weekly(start, count, stepDays = 7) {
+  const [d, m, y] = start.split(".").map(Number); const out = []; const dt = new Date(y, m - 1, d);
+  for (let i = 0; i < count; i++) { out.push(`${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}.${dt.getFullYear()}`); dt.setDate(dt.getDate() + stepDays); }
+  return out;
+}
+const P = dates => dates.map(d => ({ date: d, s: "P" }));
+
+// lessons: P = Geldi (satır doldurur), A = Gelmedi, E = Mazeretli (satır doldurmaz). paidCycles: ödemesi alınmış dönem sayısı.
+const students = [
+  { id: 1, name: "Öykü", branch: "Piyano", teacher: "Selin Aydın", lessons: P(oykuDates), paidCycles: 15 },
+  { id: 2, name: "Deniz Kaya", branch: "Gitar", teacher: "Mert Yıldız", lessons: [...P(weekly("06.08.2026", 6)), { date: "17.09.2026", s: "A" }, ...P(weekly("24.09.2026", 4))], paidCycles: 2 },
+  { id: 3, name: "Ela Demir", branch: "Keman", teacher: "Zeynep Arslan", lessons: P(weekly("02.09.2026", 8)), paidCycles: 2 },
+  { id: 4, name: "Kerem Öztürk", branch: "Bateri", teacher: "Mert Yıldız", lessons: [...P(weekly("01.07.2026", 12)), ...P(weekly("23.09.2026", 4))], paidCycles: 4 },
+  { id: 5, name: "Mira Şahin", branch: "Piyano", teacher: "Selin Aydın", lessons: [...P(weekly("05.08.2026", 9)), { date: "07.10.2026", s: "E" }, ...P(weekly("14.10.2026", 2))], paidCycles: 3 },
+  { id: 6, name: "Arda Çelik", branch: "Şan", teacher: "Zeynep Arslan", lessons: P(weekly("29.07.2026", 11)), paidCycles: 2 },
+  { id: 7, name: "Lina Koç", branch: "Gitar", teacher: "Mert Yıldız", lessons: P(weekly("09.09.2026", 7)), paidCycles: 2 },
+  { id: 8, name: "Yusuf Aksoy", branch: "Piyano", teacher: "Selin Aydın", lessons: P(weekly("15.10.2026", 1)), paidCycles: 1 },
+  { id: 9, name: "Nehir Polat", branch: "Keman", teacher: "Zeynep Arslan", lessons: [...P(weekly("08.07.2026", 13)), { date: "07.10.2026", s: "A" }, { date: "14.10.2026", s: "A" }, ...P(["21.10.2026"])], paidCycles: 3 },
+];
+
+// Kartı dönemlere böler: her dönem 4 satır taşır. Geldi ve Mazeretli satır doldurur;
+// Gelmedi doldurmaz, o dönemin altına not olur.
+function cyclesOf(st) {
+  const cycles = [{ present: [], misses: [] }];
+  for (const l of st.lessons) {
+    let cur = cycles[cycles.length - 1];
+    if (l.s === "P" || l.s === "E") {
+      if (cur.present.length === 4) { cur = { present: [], misses: [] }; cycles.push(cur); }
+      cur.present.push(l);
+    } else cur.misses.push(l);
+  }
+  return cycles;
+}
+
+function stateOf(st) {
+  const cycles = cyclesOf(st);
+  const cur = cycles[cycles.length - 1];
+  const filled = cur.present.length;
+  const n = cycles.length;
+  const curPaid = st.paidCycles >= n;
+  const unpaid = Math.max(0, n - st.paidCycles);
+  let status;
+  if (filled === 4 && st.paidCycles > n) status = { key: "ok", tone: "success", label: "Yeni dönem peşin ödendi" };
+  else if (filled === 4 && curPaid) status = { key: "await", tone: "warning", label: "Ödeme bekleniyor" };
+  else if (!curPaid) status = { key: "debt", tone: "danger", label: `Ödenmedi · ${TRY.format(unpaid * FEE)}` };
+  else if (filled === 3) status = { key: "last", tone: "muted", label: "Son derse 1 kaldı" };
+  else status = { key: "ok", tone: "success", label: `Devam ediyor · ${filled}/4` };
+  return { cycles, cur, filled, n, curPaid, status, last: st.lessons[st.lessons.length - 1]?.date };
+}
+
+let filter = "all";
+let selected = 1;
+const $ = id => document.getElementById(id);
+
+function fill(sel, values) { [...new Set(values)].sort((a, b) => a.localeCompare(b, "tr")).forEach(v => sel.add(new Option(v, v))); }
+fill($("branch"), students.map(s => s.branch));
+fill($("teacher"), students.map(s => s.teacher));
+["q", "branch", "teacher"].forEach(id => $(id).addEventListener("input", render));
+
+function visible() {
+  const q = $("q").value.trim().toLocaleLowerCase("tr"), b = $("branch").value, t = $("teacher").value;
+  return students.filter(s => (!q || s.name.toLocaleLowerCase("tr").includes(q)) && (!b || s.branch === b) && (!t || s.teacher === t)
+    && (filter === "all" || stateOf(s).status.key === filter));
+}
+
+function render() {
+  const all = students.map(s => ({ s, st: stateOf(s) }));
+  const awaiting = all.filter(x => x.st.status.key === "await");
+  const debt = all.filter(x => x.st.status.key === "debt");
+
+  // Bildirim bandı
+  const alert = $("alert");
+  alert.hidden = awaiting.length === 0;
+  alert.innerHTML = `
+    <div class="bell" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>
+    <div class="txt"><strong>${awaiting.length} öğrenci 4 dersini tamamladı, ödeme bekleniyor</strong>
+      <span class="names">${awaiting.map(x => x.s.name).join(", ")} · bir sonraki derslerinde yeni dönem aidatı tahakkuk edecek.</span></div>
+    <button class="btn warn" type="button" id="showAwait">${filter === "await" ? "Tümünü göster" : "Listele"}</button>`;
+  $("showAwait").onclick = () => { filter = filter === "await" ? "all" : "await"; render(); };
+
+  // Özet şeridi
+  const stats = [
+    ["all", "Aktif öğrenci", students.length, ""],
+    ["await", "Ödeme bekleniyor", awaiting.length, "warning"],
+    ["last", "Son derse 1 kaldı", all.filter(x => x.st.status.key === "last").length, ""],
+    ["debt", "Ödenmemiş dönem", debt.length, "danger"],
+  ];
+  $("stats").innerHTML = stats.map(([k, l, v, tone]) =>
+    `<button type="button" class="stat" data-k="${k}" aria-pressed="${filter === k}"><div class="l">${l}</div><div class="v num ${tone}">${v}</div></button>`).join("");
+  $("stats").querySelectorAll(".stat").forEach(b => b.onclick = () => { filter = filter === b.dataset.k ? "all" : b.dataset.k; render(); });
+
+  // Tablo
+  const list = visible();
+  $("rows").innerHTML = list.length ? list.map(s => {
+    const st = stateOf(s);
+    const slots = [0, 1, 2, 3].map(i => st.cur.present[i] ? `<span class="slot on num ${st.cur.present[i].s === "E" ? "exc" : ""}" title="${st.cur.present[i].s === "E" ? "Mazeretli" : "Geldi"}">${dm(st.cur.present[i].date)}</span>` : `<span class="slot">${i + 1}</span>`).join("");
+    return `<tr tabindex="0" data-id="${s.id}" aria-selected="${s.id === selected}">
+      <td class="who"><b>${s.name}</b><span>${s.branch} · ${s.teacher}</span></td>
+      <td class="num muted">${s.lessons[0].date}</td>
+      <td class="num">${st.n}. dönem</td>
+      <td><span class="slots ${st.filled === 4 ? "full" : ""}">${slots}</span></td>
+      <td><span class="pill ${st.status.tone}">${st.status.label}</span></td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="muted" style="padding:24px 12px">Bu filtreye uyan öğrenci yok.</td></tr>`;
+  $("rows").querySelectorAll("tr[data-id]").forEach(tr => {
+    const pick = () => { selected = +tr.dataset.id; render(); if (innerWidth < 1100) $("sheet").scrollIntoView({ behavior: "smooth", block: "start" }); };
+    tr.onclick = pick; tr.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+  });
+
+  renderSheet();
+}
+
+function renderSheet(freshDate) {
+  const s = students.find(x => x.id === selected);
+  const st = stateOf(s);
+  const cycles = st.cycles.map((c, idx) => {
+    const n = idx + 1; const paid = s.paidCycles >= n; const isCur = n === st.n;
+    const awaitHere = isCur && st.status.key === "await";
+    const tag = awaitHere ? `<span class="pill warning">Ödeme bekleniyor</span>`
+      : paid ? `<span class="pill success">Ödendi</span>` : `<span class="pill danger">Ödenmedi</span>`;
+    const rows = [0, 1, 2, 3].map(i => {
+      const d = c.present[i];
+      const isNext = isCur && !d && i === c.present.length;
+      return `<div class="row ${isNext ? "next" : ""} ${d && d.date === freshDate ? "fresh" : ""}"><span class="i">${i + 1}</span>
+        ${d ? `<span class="d num">${d.date.replace(/\./g, " / ")}${d.s === "E" ? ` <span class="miss excused">Mazeretli</span>` : ""}</span>` : `<span class="d empty">${isNext ? "Sıradaki ders" : "__ / __ / ____"}</span>`}
+        <span class="c ${d && d.s === "E" ? "exc" : ""}">${d ? "✓" : ""}</span></div>`;
+    }).join("");
+    const misses = c.misses.length ? `<div class="misses">${c.misses.map(m => `<span class="miss absent">Gelmedi ${dm(m.date)}</span>`).join("")}</div>` : "";
+    return `<div class="cycle ${awaitHere ? "await" : ""}"><div class="cycle-head"><span class="n">${n}. dönem</span>${tag}</div>${rows}${misses}</div>`;
+  }).reverse().join("");
+
+  const callout = st.status.key === "await"
+    ? `<p class="callout"><b>Bu ayın 4 dersi tamamlandı.</b>Sıradaki derste ${st.n + 1}. dönem aidatı (${TRY.format(FEE)}) tahakkuk eder. Veliye hatırlatma göndermek ister misin?</p>`
+    : st.status.key === "debt"
+    ? `<p class="callout" style="background:var(--danger-soft);color:var(--danger-strong)"><b>Bu dönemin ödemesi alınmadı.</b>${st.filled}/4 ders işlendi, ödeme bekleniyor.</p>` : "";
+
+  $("sheet").innerHTML = `<article class="sheet" aria-label="${s.name} yoklama kartı">
+    <div class="sheet-top"><span class="brand">Abdera Sanat Akademi</span><span class="kind">Yoklama listesi</span></div>
+    <div class="ident">
+      <div class="full"><label>Adı soyadı</label><span class="hand">${s.name}</span></div>
+      <div><label>Branşı</label><span class="hand">${s.branch}</span></div>
+      <div><label>Baş. tarihi</label><span class="hand num">${s.lessons[0].date.replace(/\./g, " / ")}</span></div>
+    </div>
+    <div class="sheet-actions">
+      <span class="pill ${st.status.tone}">${st.status.label}</span><span class="sp"></span>
+      ${st.status.key === "await" || st.status.key === "debt" ? `<button class="btn" type="button" id="remind">Hatırlatma gönder</button><button class="btn" type="button" id="collect">Tahsil et</button>` : ""}
+      <button class="btn primary" type="button" id="mark">+ Geldi işle (demo)</button>
+    </div>
+    ${callout}
+    <div class="cycles">${cycles}</div>
+    <div class="legend"><span>✓ Geldi ve <span class="miss excused">Mazeretli</span> satırı doldurur</span><span><span class="miss absent">Gelmedi</span> satır doldurmaz</span><span>En yeni dönem en üstte</span></div>
+  </article>`;
+
+  $("mark").onclick = () => {
+    const before = stateOf(s);
+    const [d, m, y] = (before.last).split(".").map(Number); const dt = new Date(y, m - 1, d + 7);
+    const date = `${pad(dt.getDate())}.${pad(dt.getMonth() + 1)}.${dt.getFullYear()}`;
+    s.lessons.push({ date, s: "P" });
+    const after = stateOf(s);
+    if (after.n > before.n) toast(`${s.name}: ${after.n}. dönem başladı, ${TRY.format(FEE)} aidat tahakkuk etti.`);
+    else if (after.filled === 4) toast(`${s.name} 4 dersini tamamladı, ödeme bekleniyor.`);
+    else toast(`${s.name}: ${dm(date)} işlendi (${after.filled}/4).`);
+    render(); renderSheet(date);
+  };
+  const r = $("remind"); if (r) r.onclick = () => toast("Taslakta: veliye WhatsApp hatırlatması gönderilir.");
+  const c = $("collect"); if (c) c.onclick = () => { s.paidCycles = Math.max(s.paidCycles, st.n + (st.status.key === "await" ? 1 : 0)); toast("Taslakta: aidat ekranındaki ödeme penceresi açılır."); render(); };
+}
+
+let tt;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(tt); tt = setTimeout(() => t.hidden = true, 3200); }
+
+render();
+</script>
