@@ -64,9 +64,10 @@ public class SftpBackupStorage : IBackupStorage
         client.Connect();
         try
         {
-            EnsureRemoteDirectory(client, _options.RemoteDirectory);
-            using var fileStream = File.OpenRead(localFilePath);
             var remotePath = $"{_options.RemoteDirectory.TrimEnd('/')}/{remoteFileName}";
+            // remoteFileName "audio-clips/<dosya>" gibi bir alt klasör taşıyabilir.
+            EnsureRemoteDirectory(client, remotePath[..remotePath.LastIndexOf('/')]);
+            using var fileStream = File.OpenRead(localFilePath);
             client.UploadFile(fileStream, remotePath);
             _logger.LogInformation("[SftpBackupStorage] yüklendi -> {Path}", remotePath);
         }
@@ -77,20 +78,24 @@ public class SftpBackupStorage : IBackupStorage
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<RemoteBackupFile>> ListAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<RemoteBackupFile>> ListAsync(string? subdirectory = null, CancellationToken cancellationToken = default)
     {
         using var client = CreateClient();
         client.Connect();
         try
         {
-            if (!client.Exists(_options.RemoteDirectory))
+            var directory = subdirectory is null
+                ? _options.RemoteDirectory
+                : $"{_options.RemoteDirectory.TrimEnd('/')}/{subdirectory}";
+            if (!client.Exists(directory))
             {
                 return Task.FromResult<IReadOnlyList<RemoteBackupFile>>([]);
             }
 
-            var files = client.ListDirectory(_options.RemoteDirectory)
+            var prefix = subdirectory is null ? "" : $"{subdirectory}/";
+            var files = client.ListDirectory(directory)
                 .Where(f => f.IsRegularFile)
-                .Select(f => new RemoteBackupFile(f.Name, new DateTimeOffset(f.LastWriteTimeUtc, TimeSpan.Zero), f.Length))
+                .Select(f => new RemoteBackupFile(prefix + f.Name, new DateTimeOffset(f.LastWriteTimeUtc, TimeSpan.Zero), f.Length))
                 .ToList();
             return Task.FromResult<IReadOnlyList<RemoteBackupFile>>(files);
         }

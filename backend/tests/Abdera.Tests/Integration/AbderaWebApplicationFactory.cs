@@ -28,6 +28,9 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
     private string _connectionString = "";
     private string _databaseName = "";
 
+    // Ses Defteri dosyaları (AudioClipStore) her fabrikanın kendi geçici klasörüne yazılır.
+    public string AudioDirectory { get; } = Path.Combine(Path.GetTempPath(), "abdera-audio-tests", Guid.NewGuid().ToString("N"));
+
     public async Task InitializeAsync()
     {
         var postgres = await SharedPostgres.Value;
@@ -60,6 +63,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
         }
         var postgres = await SharedPostgres.Value;
         await ExecuteOnServerAsync(postgres, $"DROP DATABASE IF EXISTS \"{_databaseName}\" WITH (FORCE)");
+        if (Directory.Exists(AudioDirectory)) Directory.Delete(AudioDirectory, recursive: true);
     }
 
     private static async Task<PostgreSqlContainer> StartSharedPostgresAsync()
@@ -139,6 +143,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 // Faz 4: BackupService.RunPgDumpAsync sonrası gerçekten şifreleme çalışsın diye -
                 // testlerde Backup:Provider/Email:Provider ayarlanmadığı için ikisi de varsayılan
                 // Fake kalır (OpsFlowTests), yalnızca şifreleme anahtarı gerçek olmalı.
+                ["AudioClips:Directory"] = AudioDirectory,
                 ["Backup:EncryptionKey"] = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
             });
         });

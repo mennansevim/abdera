@@ -3,6 +3,7 @@ using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Infrastructure;
+using Abdera.Api.Modules.Progress.Infrastructure;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,7 +45,7 @@ public static class DeletePerson
         Results.Ok(await PersonEraser.DescribeTeacherAsync(teacherId, db));
 
     private static async Task<IResult> DeleteStudentAsync(
-        Guid studentId, bool? force, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid studentId, bool? force, ClaimsPrincipal principal, AbderaDbContext db, AudioClipStore audioStore, IClock clock)
     {
         var impact = await PersonEraser.DescribeStudentAsync(studentId, db);
 
@@ -61,10 +62,12 @@ public static class DeletePerson
             AuthContext.GetUserId(principal), "student.deleted", nameof(Student), studentId, now,
             beforeJson: JsonSerializer.Serialize(impact)));
 
+        var audioFiles = await PersonEraser.AudioClipFilesOfStudentAsync(studentId, db);
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.SaveChangesAsync();
         await PersonEraser.EraseStudentAsync(studentId, db);
         await transaction.CommitAsync();
+        audioStore.DeleteMany(audioFiles);
 
         return Results.Ok(impact);
     }

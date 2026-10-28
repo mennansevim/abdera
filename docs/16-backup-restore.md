@@ -46,7 +46,14 @@ provası" kabul kriterinin nasıl yerine getirileceğini tarif eder.
 5. **Gerçek geri dönüşte** (yalnızca gerçek bir kayıp anında): `abdera_restore_test` yerine
    canlı veritabanı adını kullan, ama önce **mevcut (bozuk) veritabanının da bir anlık pg_dump'ını al**
    (geri yüklemeden önce ne olduğunu kaybetme).
-6. **Sonucu kaydet.** `docs/11-progress-log.md`'ye ne zaman, hangi yedek, kaç satır, tutarlılık kontrolünün sonucu.
+6. **Ses Defteri kayıtları (issue #52).** Ses dosyaları veritabanı dökümüne GİRMEZ; aynı yedek
+   hedefinde `audio-clips/<kayıt-id>.<uzantı>.enc` olarak durur (her kayıt bir kez, gece bakımında
+   yüklenir). Geri yüklenen veritabanındaki `audio_clips.file_name` listesini al, karşılık gelen
+   `.enc` dosyalarını aynı `BackupEncryption.DecryptFileAsync` ile çöz ve `.enc` uzantısını atarak
+   API'nin `AudioClips__Directory` klasörüne (docker-compose'da `abdera_audio` volume'ü, `/app/audio`)
+   koy. Silinmiş bir kaydın uzak kopyası `Backup__RetentionDays` kadar tutulur, yani o süredeki her
+   dökümün sesleri bulunur.
+7. **Sonucu kaydet.** `docs/11-progress-log.md`'ye ne zaman, hangi yedek, kaç satır, tutarlılık kontrolünün sonucu.
 
 ## Ne sıklıkla prova yapılmalı
 

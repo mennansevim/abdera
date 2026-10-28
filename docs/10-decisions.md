@@ -473,6 +473,20 @@ Kullanıcı isteği: "excel ile aktarım modülü". Netleştirme soruları sonra
 | AF5 | Ödeme dosyası | Satır = bir kurs kaydının ödenmiş ayı (öğrenci, enstrüman, isteğe bağlı öğretmen, ay, tutar, tarih, şekil). İkinci bir para yolu açılmadı: her satır `Collections.RecordAsync`'ten geçer (H17'nin tek tahsilat çekirdeği). Satırdaki tutar `AgreedTotal`dır (M2): tarifeden azsa fark indirim olarak donar, tarifeyi aşamaz. Birebir derste dönemle faturalanan aylar, tarifesi olmayan aylar ve belirsiz öğrenci/kurs eşleşmesi satır hatasıdır - tahmin yok (E1 ile aynı ilke). Her satır kendi savepoint'inde; hata o satırı geri alır. |
 | AF6 | Audit | Mevcut audit'ler aynen yazılır (`enrollment.created`, `receivable.collection_recorded`); ek olarak dosya başına `import.students` / `import.payments` özeti. Yeni tablo yok, `PersonEraser` değişmedi. |
 
+## AG - Ses Defteri: kısa ders kayıtları ve yer yönetimi (2026-10-29, issue #52)
+
+Kullanıcı isteği: rakip taramasından çıkan "Ses Defteri + Müzik Yolculuğu" fikri; ek şart "ses dosyalarının çok yer kaplamaması önemli". Bu adım kayıt + depolama + rıza + veli paylaşımı; Müzik Yolculuğu sayfası sonraki adım.
+
+| # | Konu | Karar |
+|---|---|---|
+| AG1 | Depolama yeri | Ses **veritabanına girmez** (StudentPhoto/ScoreFile'ın tersi): günlük tam döküm 30 gün tutuluyor, DB'ye giren her MB yedekte ~30 kat yer kaplardı. Dosya ayrı Docker volume'de (`abdera_audio`), tabloda yalnızca meta veri. Yeni bağımlılık yok. |
+| AG2 | Sıkıştırma | Tarayıcıda: `MediaRecorder`, mono Opus 32 kbps (Safari'de WebM yoksa AAC 48 kbps). Sunucuda ffmpeg/dönüştürme yok; format istemci başlığına değil ilk baytlara bakılarak doğrulanır (WebM/Ogg/M4A). Ölçülen: 60 sn ≈ 226 KB. Konuşma filtreleri (yankı/gürültü bastırma, otomatik kazanç) kapalı - enstrüman sesini bozuyor. |
+| AG3 | Sınırlar | En fazla 60 sn (arayüz kendisi durdurur), 400 KB (DB `CHECK` + sunucu denetimi), öğrenci başına dönemde 20 kayıt (`AudioClips__MaxPerStudentPerTerm`). |
+| AG4 | Budama | Gece bakımı (`AudioClipMaintenance`, 6 saatte bir): `AudioClips__RetentionMonths` (12) aydan eski, yıldızsız ara kayıtlar silinir; eser başına ilk ve son kayıt ile yıldızlılar kalır - yolculuk sayfası her zaman çalışır. Yetim dosyalar (1 saatten eski, satırı olmayan) silinir. Budama `audio_clip.pruned` audit'i yazar. |
+| AG5 | Yedek | Her kayıt bir kez, `Backup__EncryptionKey` ile şifrelenip mevcut yedek hedefine `audio-clips/` altına yüklenir (`backed_up_at`). DB dökümünün tutulma temizliği yalnızca `*.sql.enc`'e dokunur; silinmiş kaydın uzak kopyası `Backup__RetentionDays` sonra silinir. Anahtar yoksa ses asla şifresiz yüklenmez. Geri yükleme: `docs/16-backup-restore.md` adım 6. |
+| AG6 | Rıza (KVKK) | `students.audio_recording_consent`, varsayılan kapalı. Veli portaldan, yönetici Gelişim ekranından açar/kapatır; değişiklik audit'e yazılır. Rıza kapanınca öğrencinin bütün kayıtları (satır + dosya) silinir - işlemenin durması. Rıza yoksa kayıt `409`. |
+| AG7 | Görünürlük | Kaydı yalnızca dersin öğretmeni alır (yönetici `403`). Varsayılan yalnızca ekip görür; öğretmen/yönetici "Veliye göster" derse veli portalının Gelişim sekmesine düşer (`audio_clip.shared` audit). Paylaşılmamış kayıt veliye `404` - varlığı sızmaz. Dosya `private, immutable` önbellekle sunulur; liste açılınca hiçbir ses inmez (`preload="none"`). |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

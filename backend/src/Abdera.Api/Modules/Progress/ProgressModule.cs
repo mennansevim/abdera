@@ -8,6 +8,8 @@ public static class ProgressModule
     public static void AddProgressModule(this IServiceCollection services)
     {
         services.AddHostedService<LessonNoteReminderWorker>();
+        services.AddSingleton<AudioClipStore>();
+        services.AddHostedService<AudioClipMaintenanceWorker>();
     }
 
     public static void MapProgressModule(this WebApplication app)
@@ -20,5 +22,6 @@ public static class ProgressModule
         app.MapPracticeAssignments();
         app.MapPracticeJournal();
         app.MapTermReports();
+        app.MapAudioClips();
     }
 }

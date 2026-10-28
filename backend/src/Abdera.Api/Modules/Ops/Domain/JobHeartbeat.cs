@@ -35,9 +35,10 @@ public static class BackgroundJobs
     public static readonly BackgroundJob MonthlyReceivables = new("monthly-receivables", "Aylık aidat üretimi", TimeSpan.FromHours(24));
     public static readonly BackgroundJob AttendanceReminder = new("attendance-reminder", "Yoklama hatırlatması", TimeSpan.FromMinutes(10));
     public static readonly BackgroundJob LessonNoteReminder = new("lesson-note-reminder", "Ders yorumu hatırlatması", TimeSpan.FromHours(3));
+    public static readonly BackgroundJob AudioClipMaintenance = new("audio-clip-maintenance", "Ses Defteri bakımı ve yedeği", TimeSpan.FromHours(6));
 
     public static readonly IReadOnlyList<BackgroundJob> All =
-        [NotificationDispatcher, OverdueReceivables, MonthlyReceivables, AttendanceReminder, LessonNoteReminder];
+        [NotificationDispatcher, OverdueReceivables, MonthlyReceivables, AttendanceReminder, LessonNoteReminder, AudioClipMaintenance];
 
     // Bir tur kaçabilir (deploy, kısa kesinti); üç tur üst üste başarısızsa sorun var demektir.
     public const int MissedRunsBeforeAlert = 3;

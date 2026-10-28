@@ -119,6 +119,12 @@ public static class PersonEraser
             teacher.UserId is not null);
     }
 
+    // Silmeden ÖNCE çağrılır: öğrencinin Ses Defteri dosya adları. Satırlar EraseStudentAsync ile
+    // gider; dosyalar transaction commit edildikten sonra AudioClipStore.DeleteMany ile silinir
+    // (geri alınan bir silmede ses kaybolmasın diye önce değil).
+    public static async Task<List<string>> AudioClipFilesOfStudentAsync(Guid studentId, AbderaDbContext db) =>
+        await db.AudioClips.Where(clip => clip.StudentId == studentId).Select(clip => clip.FileName).ToListAsync();
+
     // Öğrencinin tüm izini siler. Çağıranın ödeme uyarısını zaten göstermiş olması beklenir.
     public static async Task EraseStudentAsync(Guid studentId, AbderaDbContext db) =>
         await RunAsync(db, StudentSql, ("student_id", studentId));
@@ -218,6 +224,9 @@ public static class PersonEraser
         DELETE FROM manual_attendance_entries WHERE enrollment_id IN (SELECT id FROM _enr);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM practice_journal_entries WHERE student_id = @student_id;
+        -- Ses Defteri satırları; diskteki dosyaları çağıran commit'ten sonra siler
+        -- (AudioClipFilesOfStudentAsync), kaçanı gece bakımı yetim olarak temizler.
+        DELETE FROM audio_clips WHERE student_id = @student_id OR lesson_id IN (SELECT id FROM _les);
         DELETE FROM progress_summaries WHERE student_id = @student_id;
         DELETE FROM term_reports WHERE student_id = @student_id;
         DELETE FROM show_items WHERE student_id = @student_id;
@@ -268,6 +277,7 @@ public static class PersonEraser
         UPDATE term_reports SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         UPDATE show_items SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
         UPDATE library_suggestions SET teacher_id = @new_teacher_id WHERE teacher_id = @teacher_id;
+        UPDATE audio_clips SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         -- Grup dersi sınıfı üyeleriyle birlikte yeni öğretmene geçer.
         UPDATE lesson_groups SET teacher_id = @new_teacher_id, updated_at = now() WHERE teacher_id = @teacher_id;
         """;
@@ -315,6 +325,11 @@ public static class PersonEraser
         DELETE FROM lesson_attendances WHERE lesson_id IN (SELECT id FROM _tles);
         DELETE FROM manual_attendance_entries WHERE enrollment_id IN (SELECT id FROM _tenr);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _tles);
+
+        -- Ses Defteri kaydı öğrencinin yolculuğudur ve kalır; yalnızca silinen derse ve
+        -- öğretmene olan bağ boşalır.
+        UPDATE audio_clips SET lesson_id = NULL, updated_at = now() WHERE lesson_id IN (SELECT id FROM _tles);
+        UPDATE audio_clips SET teacher_id = NULL, updated_at = now() WHERE teacher_id = @teacher_id;
 
         DELETE FROM lessons WHERE id IN (SELECT id FROM _tles);
         DELETE FROM lesson_series WHERE id IN (SELECT id FROM _tser);

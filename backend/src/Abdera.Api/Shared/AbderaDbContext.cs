@@ -59,6 +59,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<PracticeJournalEntry> PracticeJournalEntries => Set<PracticeJournalEntry>();
     public DbSet<ProgressSummary> ProgressSummaries => Set<ProgressSummary>();
     public DbSet<TermReport> TermReports => Set<TermReport>();
+    public DbSet<AudioClip> AudioClips => Set<AudioClip>();
 
     public DbSet<GrowthIdea> GrowthIdeas => Set<GrowthIdea>();
     public DbSet<ProfitCommentary> ProfitCommentaries => Set<ProfitCommentary>();

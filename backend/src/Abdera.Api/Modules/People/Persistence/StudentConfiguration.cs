@@ -16,6 +16,8 @@ public class StudentConfiguration : IEntityTypeConfiguration<Student>
         builder.Property(s => s.BirthDate).HasColumnName("birth_date");
         builder.Property(s => s.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(s => s.SiblingDiscount).HasColumnName("sibling_discount").HasDefaultValue(false);
+        builder.Property(s => s.AudioRecordingConsent).HasColumnName("audio_recording_consent").HasDefaultValue(false);
+        builder.Property(s => s.AudioConsentUpdatedAt).HasColumnName("audio_consent_updated_at");
         builder.Property(s => s.CreatedAt).HasColumnName("created_at");
         builder.Property(s => s.UpdatedAt).HasColumnName("updated_at");
 

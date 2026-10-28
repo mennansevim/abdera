@@ -12,17 +12,25 @@ public class FakeBackupStorage(ILogger<FakeBackupStorage> logger) : IBackupStora
     public Task UploadAsync(string localFilePath, string remoteFileName, CancellationToken cancellationToken = default)
     {
         var size = new FileInfo(localFilePath).Length;
-        _files.Add(new RemoteBackupFile(remoteFileName, DateTimeOffset.UtcNow, size));
+        lock (_files) _files.Add(new RemoteBackupFile(remoteFileName, DateTimeOffset.UtcNow, size));
         logger.LogInformation("[FakeBackupStorage] yüklendi -> {File} ({Size} byte)", remoteFileName, size);
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<RemoteBackupFile>> ListAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult<IReadOnlyList<RemoteBackupFile>>(_files.ToList());
+    public Task<IReadOnlyList<RemoteBackupFile>> ListAsync(string? subdirectory = null, CancellationToken cancellationToken = default)
+    {
+        lock (_files)
+        {
+            var files = subdirectory is null
+                ? _files.Where(f => !f.Name.Contains('/'))
+                : _files.Where(f => f.Name.StartsWith($"{subdirectory}/", StringComparison.Ordinal));
+            return Task.FromResult<IReadOnlyList<RemoteBackupFile>>(files.ToList());
+        }
+    }
 
     public Task DeleteAsync(string remoteFileName, CancellationToken cancellationToken = default)
     {
-        _files.RemoveAll(f => f.Name == remoteFileName);
+        lock (_files) _files.RemoveAll(f => f.Name == remoteFileName);
         logger.LogInformation("[FakeBackupStorage] silindi -> {File}", remoteFileName);
         return Task.CompletedTask;
     }

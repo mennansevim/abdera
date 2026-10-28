@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { AdminGate, PageHeader } from "@/components/ui";
 import { ApiError } from "@/lib/api";
+import { formatBytes, useAudioClipUsage } from "@/lib/audio-clips";
 import { useBackupRuns, useSystemHealth, useTriggerBackup, type BackgroundJobStatus, type BackupRunStatus } from "@/lib/ops";
 
 const STATUS_LABELS: Record<BackupRunStatus, string> = { Running: "sürüyor", Succeeded: "başarılı", Failed: "başarısız" };
@@ -82,6 +83,7 @@ function BackupsPageContent() {
       {triggered && <p role="status" className="rounded-xl bg-[var(--success-soft)] px-3 py-2.5 text-sm font-medium text-[var(--success-strong)]">Yedekleme başlatıldı, birkaç dakika içinde aşağıdaki listede görünecek.</p>}
 
       {health && health.jobs.length > 0 && <BackgroundJobsCard jobs={health.jobs} />}
+      <AudioUsageCard />
 
       <section className="app-card overflow-x-auto">
         <table className="w-full min-w-[46rem] text-sm">
@@ -163,6 +165,24 @@ function BackgroundJobsCard({ jobs }: { jobs: BackgroundJobStatus[] }) {
           );
         })}
       </ul>
+    </section>
+  );
+}
+
+// Ses Defteri (issue #52) disk payı: kayıtlar veritabanı yedeğine girmez, ayrı volume'de durur ve
+// gece bakımında yalnızca yeni olanlar şifreli olarak yedeklenir.
+function AudioUsageCard() {
+  const { data } = useAudioClipUsage();
+  if (!data) return null;
+  return (
+    <section className="app-card px-4 py-3">
+      <h2 className="text-title">Ses Defteri alanı</h2>
+      <dl className="mt-2 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <div><dt className="text-meta">Toplam</dt><dd className="font-bold tabular-nums">{formatBytes(data.diskBytes)}</dd></div>
+        <div><dt className="text-meta">Kayıt</dt><dd className="font-bold tabular-nums">{data.clipCount}</dd></div>
+        <div><dt className="text-meta">Son 30 gün</dt><dd className="font-bold tabular-nums">+{formatBytes(data.last30DaysBytes)}</dd></div>
+        <div><dt className="text-meta">Yedeklenmeyi bekleyen</dt><dd className="font-bold tabular-nums">{data.notBackedUp}</dd></div>
+      </dl>
     </section>
   );
 }

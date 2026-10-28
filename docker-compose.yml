@@ -61,9 +61,14 @@ services:
       # bakabilsin diye (Program.cs artik Frontend:Origin'i virgulle boluyor).
       Frontend__Origin: ${FRONTEND_ORIGIN:-http://localhost:3000,http://localhost:3001}
       Auth__KeysDirectory: /app/keys
+      AudioClips__Directory: /app/audio
     volumes:
       # Data Protection anahtarlari - kalici olmazsa her restart'ta oturumlar dusuer.
       - abdera_dpkeys:/app/keys
+      # Ses Defteri kayitlari (issue #52). Veritabanina girmez, bu yuzden pg_dump'a da girmez;
+      # yedegi AudioClipMaintenance yalnizca yeni dosyalari sifreleyip R2'ye "audio-clips/"
+      # altina yukleyerek alir.
+      - abdera_audio:/app/audio
     ports:
       # 127.0.0.1: production'da Caddy (prod profili) disindan kimse dogrudan
       # API'ye ulasamasin. Caddy zaten ic docker agindan "api:8080" ile baglanir.
@@ -164,5 +169,6 @@ services:
 volumes:
   abdera_pgdata:
   abdera_dpkeys:
+  abdera_audio:
   caddy_data:
   caddy_config:

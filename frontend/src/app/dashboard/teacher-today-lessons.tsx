@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { LessonAudioRecorder } from "@/components/audio-clips";
 import { Icon } from "@/components/icons";
 import { continuePatch, QuickNoteBar, type QuickNotePatch } from "@/components/quick-note-bar";
 import { ApiError } from "@/lib/api";
@@ -38,7 +39,7 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
   const nextLesson = useMemo(() => (upcoming ?? [])
     .filter((lesson) => lesson.status !== "Cancelled" && lesson.status !== "Rescheduled")
     .sort((a, b) => a.startAt.localeCompare(b.startAt))[0], [upcoming]);
-  const [expanded, setExpanded] = useState<{ id: string; mode: "attendance" | "note" } | null>(null);
+  const [expanded, setExpanded] = useState<{ id: string; mode: LessonMode } | null>(null);
   // Enstrüman renkleri artık dashboard'daki haftalık ızgara ile aynı paletten (lesson-colors.ts) -
   // önceden burada ayrı, karakter-hash'ine dayalı bir renk kümesi kullanılıyordu (docs/14-ui-design-prompt.md C).
   const colors = useMemo(() => buildInstrumentColorMap((lessons ?? []).map((lesson) => lesson.instrumentName)), [lessons]);
@@ -71,11 +72,13 @@ export function TeacherTodayLessons({ date = new Date() }: { date?: Date }) {
   );
 }
 
+type LessonMode = "attendance" | "note" | "audio";
+
 function TodayLessonCard({ lesson, tone, expandedMode, onToggle, onDone }: {
   lesson: CalendarLesson;
   tone: InstrumentTone;
-  expandedMode: "attendance" | "note" | null;
-  onToggle: (mode: "attendance" | "note") => void;
+  expandedMode: LessonMode | null;
+  onToggle: (mode: LessonMode) => void;
   onDone: () => void;
 }) {
   const start = new Date(lesson.startAt);
@@ -106,11 +109,14 @@ function TodayLessonCard({ lesson, tone, expandedMode, onToggle, onDone }: {
       {/* Yapılmış iş düğmenin kendisinde görünür: "Yoklama Al / Not Ekle" her kartta aynı
           kalınca öğretmen notunu yazdığı dersi ayırt edemiyor, zildeki "yorum bekliyor"
           hatırlatmasını yanlış sanıyor ve aynı derse ikinci not giriyordu. */}
-      <div className="grid grid-cols-2 gap-2 border-t border-[var(--line)] p-3">
+      <div className="grid grid-cols-[1fr_1fr_auto] gap-2 border-t border-[var(--line)] p-3">
         <button onClick={() => onToggle("attendance")} aria-expanded={expandedMode === "attendance"} className={`${actionClass} ${attendanceTaken ? doneClass : idleClass}`}><Icon name={attendanceTaken ? "check" : "calendar"} className="h-4 w-4" /> {attendanceTaken ? lesson.attendanceStatus ? `Yoklama: ${ATTENDANCE_LABELS[lesson.attendanceStatus]}` : "Yoklama alındı" : "Yoklama Al"}</button>
         <button onClick={() => onToggle("note")} aria-expanded={expandedMode === "note"} className={`${actionClass} ${hasNote ? doneClass : idleClass}`}><Icon name={hasNote ? "check" : "note"} className="h-4 w-4" /> {hasNote ? "Not girildi" : "Not Ekle"}</button>
+        {/* Ses Defteri (issue #52): dersin sonunda kısa çalış kaydı. */}
+        <button onClick={() => onToggle("audio")} aria-expanded={expandedMode === "audio"} aria-label="Ses kaydı al" title="Ses kaydı al" className={`${actionClass} ${idleClass} px-3`}><Icon name="mic" className="h-4 w-4" /><span className="max-sm:sr-only">Kayıt</span></button>
       </div>
-      {expandedMode && <LessonActions lesson={lesson} initialMode={expandedMode} onDone={onDone} />}
+      {expandedMode === "audio" && lesson.status !== "Cancelled" && <LessonAudioRecorder lessonId={lesson.id} studentId={lesson.studentId} studentName={lesson.studentName} />}
+      {expandedMode && expandedMode !== "audio" && <LessonActions lesson={lesson} initialMode={expandedMode} onDone={onDone} />}
     </article>
   );
 }

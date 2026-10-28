@@ -2204,6 +2204,16 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("AudioConsentUpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("audio_consent_updated_at");
+
+                    b.Property<bool>("AudioRecordingConsent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("audio_recording_consent");
+
                     b.Property<DateOnly>("BirthDate")
                         .HasColumnType("date")
                         .HasColumnName("birth_date");
@@ -2561,6 +2571,101 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.ToTable("profit_commentaries", null, t =>
                         {
                             t.HasCheckConstraint("ck_profit_commentaries_refresh_count", "refresh_count BETWEEN 0 AND 3");
+                        });
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.AudioClip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("BackedUpAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("backed_up_at");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_seconds");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("file_name");
+
+                    b.Property<Guid?>("LessonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lesson_id");
+
+                    b.Property<string>("PieceTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("piece_title");
+
+                    b.Property<Guid?>("SharedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shared_by_user_id");
+
+                    b.Property<DateTimeOffset?>("SharedWithGuardianAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shared_with_guardian_at");
+
+                    b.Property<int>("SizeBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<bool>("Starred")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("starred");
+
+                    b.Property<Guid>("StudentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("student_id");
+
+                    b.Property<Guid?>("TeacherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("teacher_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_audio_clips_not_backed_up")
+                        .HasFilter("backed_up_at IS NULL");
+
+                    b.HasIndex("FileName")
+                        .IsUnique();
+
+                    b.HasIndex("LessonId");
+
+                    b.HasIndex("StudentId", "CreatedAt");
+
+                    b.ToTable("audio_clips", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_audio_clips_duration", "duration_seconds BETWEEN 1 AND 60");
+
+                            t.HasCheckConstraint("ck_audio_clips_size", "size_bytes > 0 AND size_bytes <= 409600");
                         });
                 });
 
@@ -3631,6 +3736,15 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("InstrumentId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.AudioClip", b =>
+                {
+                    b.HasOne("Abdera.Api.Modules.People.Domain.Student", null)
+                        .WithMany()
+                        .HasForeignKey("StudentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Abdera.Api.Modules.Progress.Domain.PracticeAssignment", b =>

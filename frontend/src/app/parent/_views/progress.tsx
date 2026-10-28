@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { TermReportFactsView } from "@/components/term-report-facts";
 import { ApiError } from "@/lib/api";
+import { guardianClipUrl, useGuardianAudioClips, useSetAudioConsent } from "@/lib/audio-clips";
 import { useCreateGuardianPracticeEntry, type GuardianProgress, type GuardianProgressEntry, type PracticeJournal } from "@/lib/guardian";
 import { useGuardianTermReports } from "@/lib/term-reports";
 import { EmptyCard, SectionTitle, SkeletonStack, ViewHeader, formatInstantDate, localIsoDate } from "./shared";
@@ -52,6 +53,7 @@ export function ProgressView({ studentId, progress, practiceJournal, loading }: 
         <EmptyCard icon="note">Öğretmen henüz bir not paylaşmadı.</EmptyCard>
       )}
 
+      <AudioNotebook studentId={studentId} />
       <PracticeJournalPanel studentId={studentId} journal={practiceJournal} />
       <TermReports studentId={studentId} />
     </div>
@@ -215,6 +217,49 @@ function PracticeJournalPanel({ studentId, journal }: { studentId: string | unde
           </ul>
         )}
       </section>
+    </>
+  );
+}
+
+// Ses Defteri (issue #52): öğretmenin veliye açtığı kısa çalış kayıtları. Rıza veli tarafından
+// buradan verilir/geri alınır; geri alınınca okuldaki bütün kayıtlar silinir.
+function AudioNotebook({ studentId }: { studentId: string | undefined }) {
+  const { data } = useGuardianAudioClips(studentId);
+  const setConsent = useSetAudioConsent(studentId ?? "", "guardian");
+  const [error, setError] = useState<string | null>(null);
+  if (!data || !studentId) return null;
+
+  async function toggle(next: boolean) {
+    setError(null);
+    if (!next && !window.confirm("Rızayı geri alırsanız okulda tutulan bütün ses kayıtları kalıcı olarak silinir. Devam edilsin mi?")) return;
+    try { await setConsent.mutateAsync(next); } catch (err) { setError(err instanceof ApiError ? err.detail ?? err.title : "Kaydedilemedi."); }
+  }
+
+  return (
+    <>
+      <SectionTitle>Ses Defteri</SectionTitle>
+      <div className="app-card space-y-3 p-4">
+        {data.clips.length ? (
+          <ul className="space-y-3">
+            {data.clips.map((clip) => (
+              <li key={clip.id}>
+                <p className="text-sm font-bold">{clip.pieceTitle ?? "Dersten bir kayıt"}</p>
+                <p className="text-[.8125rem] text-[var(--muted)]">{formatInstantDate(clip.createdAt)}{clip.teacherName && ` · ${clip.teacherName}`} · {clip.durationSeconds} sn</p>
+                <audio src={guardianClipUrl(clip.id)} controls preload="none" className="mt-2 w-full" />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-[var(--muted)]">
+            {data.consent ? "Öğretmen bir kaydı paylaştığında burada dinleyebilirsiniz." : "Öğretmen derslerin sonunda çocuğunuzun kısa bir çalış kaydını alıp sizinle paylaşabilir. Bunun için izninizi açın."}
+          </p>
+        )}
+        <label className="flex items-start gap-2 border-t border-[var(--line)] pt-3 text-[.8125rem]">
+          <input type="checkbox" className="mt-0.5" checked={data.consent} disabled={setConsent.isPending} onChange={(event) => void toggle(event.target.checked)} />
+          <span>Derslerde ses kaydı alınmasına izin veriyorum. <span className="text-[var(--muted)]">Kayıtlar yalnızca okulda ve bu sayfada görünür; izni istediğiniz an geri alabilirsiniz.</span></span>
+        </label>
+        {error && <p role="alert" className="text-[.8125rem] font-semibold text-[var(--danger-strong)]">{error}</p>}
+      </div>
     </>
   );
 }

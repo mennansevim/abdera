@@ -37,6 +37,8 @@ ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 # eşleşecek, "app" kullanıcısının (1654:1654) yazabilmesi için COPY'den önce oluşturulup
 # sahiplik veriliyor; COPY --chown olmadan varsayılan olarak root sahipli gelirdi.
 RUN mkdir -p /app/keys && chown app:app /app/keys
+# Ses Defteri dosyaları (AudioClips__Directory, issue #52) - aynı gerekçe, ayrı volume.
+RUN mkdir -p /app/audio && chown app:app /app/audio
 
 # Root olmayan kullanıcı - imaj varsayılan olarak zaten "app" kullanıcısını içerir.
 USER app

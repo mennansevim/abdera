@@ -1,5 +1,6 @@
 "use client";
 
+import { StudentAudioClipsPanel } from "@/components/audio-clips";
 import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
@@ -200,6 +201,9 @@ function ProgressPageContent() {
               onClearFilters={clearFilters}
             />
             <StudentLibrarySuggestions key={`suggestions-${activeStudent.id}`} studentId={activeStudent.id} />
+            <div className="app-card p-4">
+              <StudentAudioClipsPanel key={`audio-${activeStudent.id}`} studentId={activeStudent.id} isAdmin={isAdmin} />
+            </div>
           </div>
         </>
       )}

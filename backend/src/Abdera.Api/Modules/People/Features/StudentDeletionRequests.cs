@@ -4,6 +4,7 @@ using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Infrastructure;
+using Abdera.Api.Modules.Progress.Infrastructure;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -128,7 +129,7 @@ public static class StudentDeletionRequests
     }
 
     private static async Task<IResult> ApproveAsync(
-        Guid requestId, DecisionRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid requestId, DecisionRequest request, ClaimsPrincipal principal, AbderaDbContext db, AudioClipStore audioStore, IClock clock)
     {
         var deletionRequest = await db.StudentDeletionRequests.SingleOrDefaultAsync(item => item.Id == requestId)
             ?? throw new NotFoundException("Silme talebi bulunamadı.");
@@ -154,10 +155,12 @@ public static class StudentDeletionRequests
                 decisionNote = deletionRequest.DecisionNote,
             })));
 
+        var audioFiles = await PersonEraser.AudioClipFilesOfStudentAsync(deletionRequest.StudentId, db);
         await using var transaction = await db.Database.BeginTransactionAsync();
         await db.SaveChangesAsync();
         await PersonEraser.EraseStudentAsync(deletionRequest.StudentId, db);
         await transaction.CommitAsync();
+        audioStore.DeleteMany(audioFiles);
 
         return Results.Ok(impact);
     }

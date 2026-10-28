@@ -349,3 +349,26 @@ kaçıran işi `Degraded` sayar (#31). Kişiye/derse/aidata referans yok, `Perso
 görünen ad (`PUT /api/auth/me/display-name`, değişiklik `audit_log`'a `user.display_name_changed` olarak yazılır).
 Yalnızca ekleme: mevcut satırlar null kalır, ön yüz öğretmende Teacher kaydındaki adı, yöneticide e-postadan türetilen
 adı gösterir. Yeni tablo yok, `PersonEraser` değişmez. `Down()` kolonu düşürür.
+
+## audio_clips, students.audio_recording_consent (Ses Defteri, issue #52)
+
+**AddAudioClips** (Progress modülü): öğretmenin ders sonunda aldığı kısa çalış kaydının meta
+verisi. Ses baytları tabloda DEĞİL, diskte (`AudioClipStore`, `abdera_audio` volume'ü) durur;
+günlük `pg_dump`'a girmez, yedeği gece bakımı yalnızca yeni dosyaları şifreleyip yükleyerek alır.
+
+```
+audio_clips(id, student_id FK students RESTRICT, teacher_id, lesson_id, piece_title,
+            file_name, content_type, size_bytes, duration_seconds, starred,
+            shared_with_guardian_at, shared_by_user_id, backed_up_at,
+            created_by_user_id, created_at, updated_at)
+UNIQUE (file_name)
+CHECK (size_bytes > 0 AND size_bytes <= 409600)
+CHECK (duration_seconds BETWEEN 1 AND 60)
+INDEX (student_id, created_at), INDEX (lesson_id)
+INDEX (created_at) WHERE backed_up_at IS NULL   -- artımlı yedek taraması
+
+students + audio_recording_consent boolean default false, audio_consent_updated_at timestamptz
+```
+
+Kayıt finansal/audit verisi değildir: rıza geri alınınca, öğretmen silince ve budamada satır
+silinir (`PersonEraser` öğrenci silmede satırı, çağıran commit'ten sonra dosyayı kaldırır).

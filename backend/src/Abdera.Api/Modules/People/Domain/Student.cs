@@ -23,6 +23,12 @@ public class Student
     // çocuğuna da bağlandığında kardeş olmayana veriyordu. Artık yöneticinin kutuyu
     // işaretlemesi gerekir - "bu indirim neye göre verildi" sorusunun tek yanıtı bu alan.
     public bool SiblingDiscount { get; private set; }
+
+    // Ses Defteri rızası (issue #52, KVKK): çocuğun sesi kişisel veri. Varsayılan kapalı; veli
+    // portalından veya yönetici tarafından açılır. Kapalıyken öğretmen kayıt alamaz, kapatılınca
+    // mevcut kayıtlar silinir (AudioClips.SetConsentAsync).
+    public bool AudioRecordingConsent { get; private set; }
+    public DateTimeOffset? AudioConsentUpdatedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -63,6 +69,13 @@ public class Student
     public void SetSiblingDiscount(bool value, DateTimeOffset now)
     {
         SiblingDiscount = value;
+        UpdatedAt = now;
+    }
+
+    public void SetAudioRecordingConsent(bool consent, DateTimeOffset now)
+    {
+        AudioRecordingConsent = consent;
+        AudioConsentUpdatedAt = now;
         UpdatedAt = now;
     }
 

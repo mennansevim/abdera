@@ -14,6 +14,7 @@ using Abdera.Api.Modules.Show.Domain;
 using Abdera.Api.Modules.Show.Features;
 using Abdera.Api.Modules.Progress.Domain;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Abdera.Tests.Integration;
 
@@ -172,6 +173,13 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         // Yoklama kartına elle yazılmış geçmiş ders kurs kaydına bağlıdır (AD10).
         db.ManualAttendanceEntries.Add(Abdera.Api.Modules.Attendance.Domain.ManualAttendanceEntry.Create(
             seeded.EnrollmentId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3), null, DateTimeOffset.UtcNow));
+        // Ses Defteri: satır PersonEraser'la, diskteki dosya commit'ten sonra gider (issue #52).
+        var audioStore = _factory.Services.GetRequiredService<Abdera.Api.Modules.Progress.Infrastructure.AudioClipStore>();
+        var audioClip = Abdera.Api.Modules.Progress.Domain.AudioClip.Create(
+            seeded.StudentId, seeded.TeacherId, lessonIds[0], "Minuet", Abdera.Api.Modules.Progress.Domain.AudioFormat.WebM,
+            4_000, 10, Guid.NewGuid(), DateTimeOffset.UtcNow);
+        db.AudioClips.Add(audioClip);
+        await audioStore.SaveAsync(audioClip.FileName, new byte[4_000]);
         // Program değişikliği mesajı ve bildirimi seriyi işaret eder (LessonScheduleChanged).
         // Gönderilmiş, veli dışı bir numaraya giden satır: yalnızca seri koşulu bunu silebilir.
         Assert.NotEmpty(seriesIds);
@@ -202,6 +210,8 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.PracticeAssignments.AnyAsync(p => lessonIds.Contains(p.LessonId)));
         Assert.False(await db.SkillAssessments.AnyAsync(a => a.StudentId == seeded.StudentId));
         Assert.False(await db.PracticeJournalEntries.AnyAsync(p => p.StudentId == seeded.StudentId));
+        Assert.False(await db.AudioClips.AnyAsync(c => c.StudentId == seeded.StudentId));
+        Assert.Null(audioStore.ExistingPath(audioClip.FileName));
         Assert.False(await db.ProgressSummaries.AnyAsync(s => s.StudentId == seeded.StudentId));
         Assert.False(await db.TermReports.AnyAsync(r => r.StudentId == seeded.StudentId));
         Assert.False(await db.Receivables.AnyAsync(r => receivableIds.Contains(r.Id)));

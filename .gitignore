@@ -87,3 +87,6 @@ tools/bulk-seed/last-run-report.*
 
 # Asistan benchmark ham sonuçları (md özetleri commit edilir)
 tools/assistant-benchmark/results/*.json
+
+# Ses Defteri yerel geliştirme deposu (AudioClipStore varsayılanı)
+backend/src/Abdera.Api/data/

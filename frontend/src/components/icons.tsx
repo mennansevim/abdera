@@ -42,6 +42,11 @@ export type IconName =
   | "violin"
   | "drums"
   | "cake"
+  | "mic"
+  | "play"
+  | "pause"
+  | "star"
+  | "trash"
   | "bug";
 
 const paths: Record<IconName, React.ReactNode> = {
@@ -78,6 +83,12 @@ const paths: Record<IconName, React.ReactNode> = {
   // Gecikmiş aidat uyarısı için (Ders Programı ders kartları) - küçük, tanıdık bir ünlem işareti.
   "alert-triangle": <><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4M12 17h.01"/></>,
   plus: <path d="M12 5v14M5 12h14"/>,
+  // Ses Defteri (issue #52): kayıt, dinleme, işaretleme, silme.
+  mic: <><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></>,
+  play: <path d="M7 4.5v15l12-7.5z" fill="currentColor" strokeWidth="1"/>,
+  pause: <><rect x="6.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" strokeWidth="1"/><rect x="14" y="5" width="3.5" height="14" rx="1" fill="currentColor" strokeWidth="1"/></>,
+  star: <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9Z"/>,
+  trash: <><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></>,
   bug: <><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9.5 7V5.5a2.5 2.5 0 0 1 5 0V7M12 11v9M3 13h4M17 13h4M4 7.5l3 2M20 7.5l-3 2M4 19l3-2M20 19l-3-2"/></>,
   pencil: <><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="m14.5 6.5 3 3"/></>,
   phone: <path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5L16 12l4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3.5 5.2 2 2 0 0 1 5.5 3h1Z"/>,

@@ -233,8 +233,10 @@ public class BackupService(
         var retentionDays = config.GetValue("Backup:RetentionDays", 30);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays);
 
-        var files = await storage.ListAsync(cancellationToken);
-        foreach (var file in files.Where(f => f.ModifiedAt < cutoff))
+        // Yalnızca veritabanı dökümleri: aynı hedefteki Ses Defteri yedekleri (audio-clips/)
+        // kendi kuralıyla temizlenir (AudioClipMaintenance), burada asla silinmemeli.
+        var files = await storage.ListAsync(cancellationToken: cancellationToken);
+        foreach (var file in files.Where(f => f.ModifiedAt < cutoff && f.Name.EndsWith(".sql.enc", StringComparison.Ordinal)))
         {
             await storage.DeleteAsync(file.Name, cancellationToken);
         }

@@ -7,7 +7,10 @@ namespace Abdera.Api.Modules.Ops.Domain;
 public interface IBackupStorage
 {
     Task UploadAsync(string localFilePath, string remoteFileName, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<RemoteBackupFile>> ListAsync(CancellationToken cancellationToken = default);
+    // subdirectory: Ses Defteri yedekleri "audio-clips/" altında durur (AudioClipMaintenance).
+    // Verilmezse yalnızca kök klasördeki dosyalar döner; dönen Name, Upload/Delete'e verilecek
+    // uzak addır ("audio-clips/<dosya>").
+    Task<IReadOnlyList<RemoteBackupFile>> ListAsync(string? subdirectory = null, CancellationToken cancellationToken = default);
     Task DeleteAsync(string remoteFileName, CancellationToken cancellationToken = default);
 }
 

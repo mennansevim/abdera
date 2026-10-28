@@ -12,7 +12,7 @@ public class DisabledBackupStorage : IBackupStorage
     public Task UploadAsync(string localFilePath, string remoteFileName, CancellationToken cancellationToken = default) =>
         Task.FromException(DisabledException());
 
-    public Task<IReadOnlyList<RemoteBackupFile>> ListAsync(CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<RemoteBackupFile>> ListAsync(string? subdirectory = null, CancellationToken cancellationToken = default) =>
         Task.FromException<IReadOnlyList<RemoteBackupFile>>(DisabledException());
 
     public Task DeleteAsync(string remoteFileName, CancellationToken cancellationToken = default) =>
