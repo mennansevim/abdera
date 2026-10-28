@@ -17,8 +17,6 @@ import { meDisplayName, meInitials, useMe } from "@/lib/use-auth";
 import { Panel, StatStrip } from "@/components/ui";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 import { TeacherWeekCard } from "./teacher-week-card";
-import { WhatsAppTestCard } from "./whatsapp-test-card";
-
 function weekStartFor(date: Date) {
   const result = new Date(date);
   const day = result.getDay();
@@ -72,8 +70,6 @@ function AdminDashboard({ me }: { me: Me }) {
           { key: "failed", label: "Gönderilemeyen bildirim", value: failedNotifications?.totalCount ?? 0, tone: failedNotifications?.totalCount ? "danger" : undefined, loading: statsLoading, href: "/dashboard/notifications" },
         ]}
       />
-
-      <WhatsAppTestCard />
 
       <div className={`grid items-start gap-3 ${railOpen ? "xl:grid-cols-[minmax(0,1fr)_20rem]" : "xl:grid-cols-[minmax(0,1fr)_3.5rem]"}`}>
         <WeeklySummary weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} error={lessonsError} retrying={lessonsFetching} onRetry={() => void refetchLessons()} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />

@@ -22,11 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.29.2",
+    date: "2026-10-29",
+    items: [],
+  },
+  {
     version: "2026.10.29",
     date: "2026-10-29",
-    items: [
-      { audience: "admin", text: "Ana ekranda yeni \"WhatsApp'ı dene\" kartı: bir telefon numarası yazıp deneme mesajı gönderirsin; WhatsApp bağlantısının çalışıp çalışmadığını bir veliye yazmadan görürsün. Mesaj gitmezse sebebi kartta yazar." },
-    ],
+    items: [],
   },
   {
     version: "2026.10.28.2",
