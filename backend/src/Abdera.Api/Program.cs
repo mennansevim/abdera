@@ -175,6 +175,8 @@ else
 builder.Services.AddScoped<IWhatsAppClient>(sp => new ConsentGatedWhatsAppClient(
     resolveProviderClient(sp), sp.GetRequiredService<AbderaDbContext>(),
     sp.GetRequiredService<ILogger<ConsentGatedWhatsAppClient>>()));
+// Yönetici "deneme mesajı" uç noktası: onay kapısının arkasındaki sağlayıcıya doğrudan gider (TestMessage).
+builder.Services.AddScoped(sp => new WhatsAppTestSender(resolveProviderClient(sp)));
 
 // --- Banka entegrasyonu sağlayıcısı: docs/10-decisions.md E1 - WhatsApp'takiyle aynı
 // yapısal DI kararı, gerçek sağlayıcı (PayTR/Papara İşletme/vb.) henüz seçilmedi.

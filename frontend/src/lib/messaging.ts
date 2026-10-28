@@ -135,6 +135,20 @@ export function useRetryNotification() {
   });
 }
 
+export interface WhatsAppTestResult {
+  success: boolean;
+  provider: string;
+  messageId: string | null;
+  error: string | null;
+}
+
+// Panelden bir numaraya deneme mesajı: entegrasyonun (jeton, numara kimliği, şablon) çalıştığını gösterir.
+export function useSendWhatsAppTest() {
+  return useMutation({
+    mutationFn: (phoneNumber: string) => api.post<WhatsAppTestResult>("/api/whatsapp/test-message", { phoneNumber }),
+  });
+}
+
 export interface NotificationAutomationSettings {
   lessonReminderMinutesBefore: 15 | 30 | 45 | 60;
   isEnabled: boolean;

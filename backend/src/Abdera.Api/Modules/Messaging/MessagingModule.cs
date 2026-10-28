@@ -19,6 +19,7 @@ public static class MessagingModule
         app.MapWebhookEventLog();
         app.MapStaffNotifications();
         app.MapAutomationSettings();
+        app.MapTestMessage();
 
         if (app.Environment.IsDevelopment())
         {

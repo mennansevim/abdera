@@ -872,6 +872,38 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(1, inboundCount);
     }
 
+    // Panelden "WhatsApp'ı dene": veliye ait olmayan numaraya (onay kapısını aşmadan değil, kendi yoluyla)
+    // gider, audit_log'a yalnızca son 4 haneyle yazılır, yalnızca Admin kullanır ve 10 dakikada 5 ile sınırlıdır.
+    // Tek testte, çünkü sınır yönetici başına paylaşılan audit_log'dan sayılır.
+    [Fact]
+    public async Task Admin_can_send_a_test_message_to_any_number_and_it_is_audited_and_rate_limited()
+    {
+        var anonymous = _factory.CreateClient();
+        var denied = await anonymous.PostAsJsonAsync("/api/whatsapp/test-message", new TestMessage.Request("0533 157 35 20"));
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+
+        var admin = await CreateAdminClientAsync();
+        var invalid = await admin.PostAsJsonAsync("/api/whatsapp/test-message", new TestMessage.Request("123"));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+
+        var ok = await admin.PostAsJsonAsync("/api/whatsapp/test-message", new TestMessage.Request("0533 157 35 20"));
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var body = (await ok.Content.ReadFromJsonAsync<TestMessage.Response>(TestJson.Options))!;
+        Assert.True(body.Success);
+
+        await using var db = await _factory.CreateDbContextAsync();
+        var audit = await db.AuditLogs.AsNoTracking().SingleAsync(a => a.Action == "whatsapp.test_message");
+        Assert.Contains("3520", audit.AfterJson);
+        Assert.DoesNotContain("533157", audit.AfterJson);
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 5; i++)
+        {
+            statuses.Add((await admin.PostAsJsonAsync("/api/whatsapp/test-message", new TestMessage.Request("0533 157 35 20"))).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.TooManyRequests, statuses[^1]);
+    }
+
     // Faz 3: otomasyon ayarı değişince bekleyen (henüz gönderilmemiş) LessonReminder job'larının
     // scheduled_at'i dersin gerçek başlangıç saatine göre yeniden hesaplanmalı.
     [Fact]
