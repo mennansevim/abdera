@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Abdera.Platform.Api.Domain;
+using Abdera.Platform.Api.Features;
 using Abdera.Platform.Api.Infrastructure;
 using Abdera.Platform.Api.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -311,6 +312,8 @@ public class CertificateWatcher(IServiceScopeFactory scopes, IConfiguration conf
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
         var probe = scope.ServiceProvider.GetRequiredService<ICertificateProbe>();
+        var notifier = scope.ServiceProvider.GetRequiredService<IOperatorNotifier>();
+        var notices = new List<OperatorNotice>();
         var warnDays = config.GetValue("Certificates:WarnDays", 14);
         var schools = await db.Schools.Where(s => s.Status == SchoolStatus.Active).ToListAsync(cancellationToken);
         var open = (await db.Alerts
@@ -343,13 +346,74 @@ public class CertificateWatcher(IServiceScopeFactory scopes, IConfiguration conf
                     var detail = daysLeft <= 0
                         ? $"{domain} sertifikasının süresi {info.NotAfter:yyyy-MM-dd} tarihinde doldu."
                         : $"{domain} sertifikası {info.NotAfter:yyyy-MM-dd} tarihinde bitiyor ({Math.Floor(daysLeft)} gün). Caddy yenilemesi çalışmıyor olabilir.";
-                    db.Alerts.Add(SchoolAlert.Create(school.Id, ExpiringKind, daysLeft < 3 ? "critical" : "warning", detail, now, now));
+                    var level = daysLeft < 3 ? "critical" : "warning";
+                    db.Alerts.Add(SchoolAlert.Create(school.Id, ExpiringKind, level, detail, now, now));
+                    notices.Add(new OperatorNotice(level, school.Slug, ExpiringKind, detail));
                 }
                 if (!info.ChainValid && open.Add((school.Id, InvalidKind)))
-                    db.Alerts.Add(SchoolAlert.Create(school.Id, InvalidKind, "critical",
-                        $"{domain} sertifikası doğrulanamıyor (zincir, ad uyuşmazlığı ya da kendinden imzalı).", now, now));
+                {
+                    var detail = $"{domain} sertifikası doğrulanamıyor (zincir, ad uyuşmazlığı ya da kendinden imzalı).";
+                    db.Alerts.Add(SchoolAlert.Create(school.Id, InvalidKind, "critical", detail, now, now));
+                    notices.Add(new OperatorNotice("critical", school.Slug, InvalidKind, detail));
+                }
             }
         }
         await db.SaveChangesAsync(cancellationToken);
+        await notifier.NotifyAsync(notices, cancellationToken);
+    }
+}
+
+// Lisans bitişini izler (§5.7). Süresi dolan okul kendiliğinden kapanmaz (karar operatörün); bu yalnızca
+// "yenilemeyi unuttum" durumunu panelde ve webhook'ta görünür kılar. Okul + tür başına tek onaylanmamış
+// alarm: "bitiyor" ile "doldu" ayrı türlerdir, böylece süre dolunca düzey yükselir ve yeniden bildirilir.
+public class LicenseWatcher(IServiceScopeFactory scopes, IConfiguration config, TimeProvider time, ILogger<LicenseWatcher> logger) : BackgroundService
+{
+    public const string ExpiringKind = "license_expiring";
+    public const string ExpiredKind = "license_expired";
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(config.GetValue("Licenses:CheckHours", 12)), time);
+        do
+        {
+            try { await CheckAllAsync(stoppingToken); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Lisans turu başarısız oldu."); }
+        }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    public async Task CheckAllAsync(CancellationToken cancellationToken)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var notifier = scope.ServiceProvider.GetRequiredService<IOperatorNotifier>();
+        var today = PlatformClock.Today(config, time);
+        var now = time.GetUtcNow();
+        var schools = await db.Schools.Where(s => s.Status == SchoolStatus.Active && s.LicenseEndsOn != null).ToListAsync(cancellationToken);
+        var open = (await db.Alerts
+                .Where(a => a.AcknowledgedAt == null && (a.Kind == ExpiringKind || a.Kind == ExpiredKind))
+                .Select(a => new { a.SchoolId, a.Kind })
+                .ToListAsync(cancellationToken))
+            .Select(a => (a.SchoolId, a.Kind)).ToHashSet();
+
+        var notices = new List<OperatorNotice>();
+        foreach (var school in schools)
+        {
+            var state = SchoolPackage.StateOn(school.LicenseEndsOn, today);
+            if (state is not (LicenseState.Expiring or LicenseState.Expired)) continue;
+            var expired = state == LicenseState.Expired;
+            var kind = expired ? ExpiredKind : ExpiringKind;
+            if (!open.Add((school.Id, kind))) continue;
+
+            var daysLeft = SchoolPackage.DaysLeft(school.LicenseEndsOn, today)!.Value;
+            var detail = expired
+                ? $"Lisans {school.LicenseEndsOn:yyyy-MM-dd} tarihinde doldu ({-daysLeft} gün önce). Okul açık kalır; Paket → Lisansı yenile."
+                : $"Lisans {school.LicenseEndsOn:yyyy-MM-dd} tarihinde bitiyor ({daysLeft} gün). Paket → Lisansı yenile.";
+            var level = expired ? "critical" : "warning";
+            db.Alerts.Add(SchoolAlert.Create(school.Id, kind, level, detail, now, now));
+            notices.Add(new OperatorNotice(level, school.Slug, kind, detail));
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        await notifier.NotifyAsync(notices, cancellationToken);
     }
 }

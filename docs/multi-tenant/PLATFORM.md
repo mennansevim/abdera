@@ -42,9 +42,18 @@ gerekçeler `ARCHITECTURE.md`'dedir; burada yalnızca yapılacaklar var.
    R2_BUCKET=abdera-backups
    R2_SCHOOL_ACCESS_KEY_ID=...
    R2_SCHOOL_SECRET_ACCESS_KEY=...
+   PLATFORM_NOTIFY_WEBHOOK_URL=<isteğe bağlı: alarm bildirimi için Slack/Discord/Telegram webhook adresi>
+   PLATFORM_NOTIFY_MIN_LEVEL=critical   # warning yazarsan uyarılar da gider
+   PLATFORM_BACKUP_KEEP_DAYS=14
    ```
 6. `docker compose -f platform/compose.yml --env-file platform/.env up -d --build`
 7. Panele gir, **TOTP'yi kur** (kimlik doğrulayıcıya gizli anahtarı ekle). TOTP olmadan okul yönetilemez.
+
+### Platform veritabanı yedeği
+
+`backup` servisi (`platform/backup.sh`) her gün `abdera_platform` dökümünü `backups` volume'üne yazar, 14 günü tutar.
+Bu **yanlış silme ve bozulmaya karşıdır, disk kaybına karşı değil**: dökümü ve anahtar yedeğini (aşağıda) birlikte
+sunucu dışına al. Son döküm: `docker compose -f platform/compose.yml exec backup ls -l /backups`.
 
 ### Anahtar yedeği (kritik)
 
@@ -149,6 +158,13 @@ denetler. Okul silinince (`purge`) alan adı serbest kalır.
 
 - **Telemetri:** platform 5 dakikada bir her okulun sağlık/sayı/yedek bilgisini okur; ulaşılamayan okulun kutucuğu kırmızıya döner.
 - **Okul alarmları:** okul kendi sorunlarını (yedek, bildirim, sağlık) imzalı olarak bildirir; Panel → Alarmlar.
+- **Lisans:** platform 12 saatte bir (`Licenses__CheckHours`) etkin okulların lisansına bakar; bitişe 30 günden az
+  kalınca "Lisans bitiyor" (uyarı), dolunca "Lisans doldu" (kritik) alarmı düşer. Okul kendiliğinden kapanmaz; yenile:
+  okul detayı → Paket → Lisansı yenile.
+- **Operatör bildirimi:** alarmlar yalnızca panelde durursa gece düşen sorun sabaha kadar görülmez.
+  `PLATFORM_NOTIFY_WEBHOOK_URL` verilirse okul alarmı, sertifika ve lisans alarmları kritik düzeyden itibaren (ya da
+  `PLATFORM_NOTIFY_MIN_LEVEL=warning`) bu adrese `{"text","content"}` gövdesiyle POST edilir. Gövdede kişi verisi yok:
+  okul kısaltması, tür, düzey, metin. Gönderim en iyi çabadır, başarısız olması alarmı kaydetmeyi bozmaz.
 - **Sertifika:** platform 6 saatte bir her okulun alan adına TLS ile bağlanır. Sertifikanın bitmesine 14 günden az
   kaldıysa "Sertifika bitiyor" (3 günden az: kritik), zincir doğrulanmıyorsa "Sertifika geçersiz" alarmı düşer.
   Caddy normalde 30 gün kala yeniler; bu alarm yenilemenin durduğu anlamına gelir (DNS kaydı değişti, port 80

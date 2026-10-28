@@ -24,7 +24,7 @@ public static class Alerts
         group.MapPost("/{id:guid}/ack", AcknowledgeAsync);
     }
 
-    private static async Task<IResult> ReceiveAsync(HttpContext http, PlatformDbContext db, SecretVault vault, TimeProvider time)
+    private static async Task<IResult> ReceiveAsync(HttpContext http, PlatformDbContext db, SecretVault vault, TimeProvider time, IOperatorNotifier notifier)
     {
         using var reader = new StreamReader(http.Request.Body, Encoding.UTF8);
         var body = await reader.ReadToEndAsync();
@@ -42,12 +42,14 @@ public static class Alerts
             return Results.Unauthorized();
 
         var occurredAt = payload.TryGetProperty("at", out var at) && at.TryGetDateTimeOffset(out var parsed) ? parsed : time.GetUtcNow();
-        db.Alerts.Add(SchoolAlert.Create(school!.Id,
+        var alert = SchoolAlert.Create(school!.Id,
             payload.TryGetProperty("kind", out var kind) ? kind.GetString() ?? "unknown" : "unknown",
             payload.TryGetProperty("level", out var level) ? level.GetString() ?? "Unknown" : "Unknown",
             payload.TryGetProperty("detail", out var detail) ? detail.GetString() ?? "" : "",
-            occurredAt, time.GetUtcNow()));
+            occurredAt, time.GetUtcNow());
+        db.Alerts.Add(alert);
         await db.SaveChangesAsync();
+        await notifier.NotifyAsync([new OperatorNotice(alert.Level, school.Slug, alert.Kind, alert.Detail)], http.RequestAborted);
         return Results.Accepted();
     }
 

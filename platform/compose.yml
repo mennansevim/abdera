@@ -41,6 +41,9 @@ services:
       Dns__Cloudflare__ApiToken: ${CLOUDFLARE_API_TOKEN:?}
       SchoolClient__Provider: Http
       Certificates__Provider: Tls
+      # İsteğe bağlı: kritik alarm panelin dışına da gitsin (Slack/Discord/Telegram köprüsü). Boşsa gönderilmez.
+      Notifications__WebhookUrl: ${PLATFORM_NOTIFY_WEBHOOK_URL:-}
+      Notifications__MinLevel: ${PLATFORM_NOTIFY_MIN_LEVEL:-critical}
       Backup__R2__AccountId: ${R2_ACCOUNT_ID:?}
       Backup__R2__Bucket: ${R2_BUCKET:-abdera-backups}
       # Okullara dağıtılan anahtar: okuma + yazma, SİLME YOK (§16.9).
@@ -50,6 +53,22 @@ services:
       # Kaybolursa tüm okulların sırları okunamaz: bu volume ayrıca şifreli yedeklenir (PLATFORM.md).
       - keys:/app/keys
       - ${PLATFORM_SSH_KEY_PATH:?}:/run/secrets/platform_ssh_key:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Platform veritabanının günlük dökümü (backup.sh). Anahtar yedeğinden ayrı tutulur: döküm tek başına
+  # okulların sırlarını açmaz (sırlar `keys` volume'ündeki anahtarla şifreli).
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGPASSWORD: ${PLATFORM_DB_PASSWORD:?}
+      BACKUP_KEEP_DAYS: ${PLATFORM_BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - backups:/backups
     depends_on:
       db:
         condition: service_healthy
@@ -76,5 +95,6 @@ services:
 volumes:
   pgdata: {}
   keys: {}
+  backups: {}
   caddy_data: {}
   caddy_config: {}

@@ -62,6 +62,9 @@ builder.Services.AddSingleton<RolloutWorker>();
 builder.Services.AddSingleton<TelemetryPoller>();
 builder.Services.AddSingleton<HostStatsPoller>();
 builder.Services.AddSingleton<CertificateWatcher>();
+builder.Services.AddSingleton<LicenseWatcher>();
+builder.Services.AddHttpClient(WebhookOperatorNotifier.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddSingleton<IOperatorNotifier, WebhookOperatorNotifier>();
 if (builder.Configuration.GetValue("Platform:RunWorkers", true))
 {
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ProvisioningWorker>());
@@ -69,6 +72,7 @@ if (builder.Configuration.GetValue("Platform:RunWorkers", true))
     builder.Services.AddHostedService(sp => sp.GetRequiredService<TelemetryPoller>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<HostStatsPoller>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CertificateWatcher>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<LicenseWatcher>());
 }
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
