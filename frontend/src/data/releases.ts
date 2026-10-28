@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.28",
+    date: "2026-10-28",
+    items: [
+      { audience: "admin", text: "Veli portalı telefona göre yenilendi: daha büyük yazılar ve düğmeler, ekranın altında sabit menü. Veli açar açmaz sıradaki dersi görür ve tek dokunuşla \"Geliyorum / Geç kalacağım / Gelemiyorum\" der." },
+      { audience: "admin", text: "Veli Aidat ekranında ödenecek tutarı ve son ödeme gününü en üstte görür, IBAN'ı tek dokunuşla kopyalar. Takvim artık önümüzdeki iki ayın derslerini tek listede gösterir; birden fazla çocuğu olan veli çocuklar arasında üstteki isimlerden geçer." },
+      { audience: "admin", text: "Veli portalında birebir dersin dönem aidatı artık \"3. dönem · 4 ders\" diye doğru yazıyor; saati taşınan dersin eski saati \"Taşındı\" olarak görünüyor, sıradaki ders sanılmıyor." },
+    ],
+  },
+  {
     version: "2026.10.27.2",
     date: "2026-10-27",
     items: [
