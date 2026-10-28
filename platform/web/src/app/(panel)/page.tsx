@@ -187,8 +187,8 @@ function SchoolTileCard({ school, now, categoryName }: { school: SchoolTile; now
           <dd className="text-right font-bold tabular-nums">
             {school.package?.staffSeats ? `${formatNumber(telemetry?.activeStaffUsers)}/${formatNumber(school.package.staffSeats)}` : "sınırsız"}
           </dd>
-          <dt className="text-[var(--muted)]">Aylık</dt>
-          <dd className="text-right font-bold tabular-nums">{school.package?.staffSeats ? formatMoney(school.package.monthlyTotal, school.package.currency) : "—"}</dd>
+          <dt className="text-[var(--muted)]">Yıllık</dt>
+          <dd className="text-right font-bold tabular-nums">{school.package?.staffSeats ? formatMoney(school.package.yearlyTotal, school.package.currency) : "—"}</dd>
           <dt className="text-[var(--muted)]">Son yedek</dt>
           <dd className={`text-right font-bold ${school.status === "Active" && backupStale ? "text-[var(--danger-strong)]" : ""}`}>{formatAge(telemetry?.lastBackupAt, now)}</dd>
         </dl>

@@ -99,12 +99,12 @@ public class PlatformUnitTests
     }
 
     [Fact]
-    public void Monthly_total_counts_seats_and_only_enabled_add_ons()
+    public void Yearly_total_counts_seats_and_only_enabled_add_ons()
     {
         var prices = new Dictionary<string, decimal> { ["whatsapp"] = 300m, ["ai"] = 150.5m };
-        Assert.Equal(5 * 450m + 300m, SchoolPackage.MonthlyTotal(5, 450m, prices, ["whatsapp"]));
-        Assert.Equal(300m + 150.5m, SchoolPackage.MonthlyTotal(null, null, prices, ["whatsapp", "ai", "ai"]));
-        Assert.Equal(0m, SchoolPackage.MonthlyTotal(null, null, new Dictionary<string, decimal>(), []));
+        Assert.Equal(5 * 450m + 300m, SchoolPackage.YearlyTotal(5, 450m, prices, ["whatsapp"]));
+        Assert.Equal(300m + 150.5m, SchoolPackage.YearlyTotal(null, null, prices, ["whatsapp", "ai", "ai"]));
+        Assert.Equal(0m, SchoolPackage.YearlyTotal(null, null, new Dictionary<string, decimal>(), []));
     }
 
     [Fact]

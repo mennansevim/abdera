@@ -5,6 +5,7 @@ namespace Abdera.Platform.Api.Features;
 
 // Liste fiyatı (Pricing ayarı): sihirbazın ve yeni açılan eklentinin başlangıç değeri. Okula yazılan
 // fiyat bundan kopyalanır ve donar (SchoolPackage); liste fiyatını değiştirmek kurulu okulları etkilemez.
+// Bütün tutarlar yıllıktır (lisans yıllık).
 //   Pricing__PricePerSeat=450
 //   Pricing__Addons__whatsapp=300
 public static class Pricing

@@ -34,8 +34,8 @@ gerekçeler `ARCHITECTURE.md`'dedir; burada yalnızca yapılacaklar var.
    PLATFORM_BOOTSTRAP_PASSWORD=<en az 12 karakter, ilk girişten sonra boşaltılabilir>
    PLATFORM_SSH_KEY_PATH=/srv/platform/platform_ssh_key
    SCHOOLS_BASE_DOMAIN=abdera.app
-   PRICE_PER_SEAT=<kullanıcı başı aylık liste fiyatı, TRY>
-   PRICE_ADDON_WHATSAPP=<aylık>   PRICE_ADDON_AI=<aylık>   PRICE_ADDON_BANKING=<aylık>
+   PRICE_PER_SEAT=<kullanıcı başı yıllık liste fiyatı, TRY>
+   PRICE_ADDON_WHATSAPP=<yıllık>   PRICE_ADDON_AI=<yıllık>   PRICE_ADDON_BANKING=<yıllık>
    CLOUDFLARE_ZONE_ID=...
    CLOUDFLARE_API_TOKEN=...
    R2_ACCOUNT_ID=...
@@ -88,7 +88,7 @@ Bir adım hata verirse: **Yeniden dene** kaldığı adımdan sürer. Vazgeçilir
 veri almadıysa sunucudaki her şey hemen silinir, DNS kaydı ve kapasite bırakılır.
 
 **Paket ve fiyat:** fiyatın tek ekseni personel hesabı sayısıdır (yönetici + öğretmen; veli ve öğrenci
-sayılmaz). Sihirbazda kullanıcı sayısı, kullanıcı başı fiyat ve seçilen her ücretli eklentinin aylık fiyatı
+sayılmaz). Sihirbazda kullanıcı sayısı, kullanıcı başı fiyat ve seçilen her ücretli eklentinin yıllık fiyatı
 girilir; liste fiyatı (`PRICE_*`) boş alanlara gelir, okulla anlaşılan fiyat elle yazılır. Paket okul kaydına
 donar. Okulda paket dolunca yeni personel hesabı açılmaz ve pasif öğretmen geri açılmaz; hesapsız öğretmen
 kaydı ve var olan hesaplar etkilenmez. Sonradan okul detayı → **Paket**: kullanıcı sayısı değişirse okul

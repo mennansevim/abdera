@@ -1,16 +1,16 @@
 namespace Abdera.Platform.Api.Domain;
 
 // Okulun satın aldığı paket (ARCHITECTURE.md §5.7): fiyatın tek ekseni personel hesabı sayısıdır
-// (yönetici + öğretmen; veli ve öğrenci sayılmaz), ücretli eklentiler bunun üstüne sabit aylık tutar
-// ekler. Paketin tamamı okul satırına donar: liste fiyatı (Pricing ayarı) sonradan değişse de var olan
-// okulun fiyatı değişmez. Aylık tutarın hesaplandığı tek yer burası - panel yalnızca gösterir.
+// (yönetici + öğretmen; veli ve öğrenci sayılmaz), ücretli eklentiler bunun üstüne sabit yıllık tutar
+// ekler. Lisans yıllıktır: bütün fiyatlar yıllık. Paketin tamamı okul satırına donar: liste fiyatı (Pricing ayarı) sonradan değişse de var olan
+// okulun fiyatı değişmez. Yıllık tutarın hesaplandığı tek yer burası - panel yalnızca gösterir.
 public static class SchoolPackage
 {
     public const int MaxSeats = 1000;
     public const decimal MaxPrice = 1_000_000m;
     public const string DefaultCurrency = "TRY";
 
-    public static decimal MonthlyTotal(
+    public static decimal YearlyTotal(
         int? staffSeats, decimal? pricePerSeat, IReadOnlyDictionary<string, decimal> addonPrices, IEnumerable<string> modules)
     {
         var seats = staffSeats is { } count && pricePerSeat is { } price ? count * price : 0m;

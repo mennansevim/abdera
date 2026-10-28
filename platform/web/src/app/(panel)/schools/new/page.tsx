@@ -589,10 +589,10 @@ function PackageStep({ state, update, errors, catalog }: StepProps) {
         okulda yeni hesap açılmaz, var olan hesaplar etkilenmez. Paket sonradan okul detayından büyütülüp küçültülebilir.
       </p>
       <NumberField label="Kullanıcı sayısı" suffix="hesap" value={state.staffSeats} onChange={(value) => update({ staffSeats: value })} error={errors.staffSeats} hint={`Yönetici dahil, 1-${MAX_STAFF_SEATS}.`} />
-      <NumberField label="Kullanıcı başı aylık fiyat" suffix={currency} value={state.pricePerSeat} onChange={(value) => update({ pricePerSeat: value })} error={errors.pricePerSeat} hint={pricing.data && pricing.data.pricePerSeat > 0 ? `Liste fiyatı ${formatMoney(pricing.data.pricePerSeat, currency)}` : undefined} />
+      <NumberField label="Kullanıcı başı yıllık fiyat" suffix={currency} value={state.pricePerSeat} onChange={(value) => update({ pricePerSeat: value })} error={errors.pricePerSeat} hint={pricing.data && pricing.data.pricePerSeat > 0 ? `Liste fiyatı ${formatMoney(pricing.data.pricePerSeat, currency)}` : undefined} />
       {addons.length > 0 && (
         <fieldset className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
-          <legend className="form-label mb-2">Ücretli eklentiler (aylık, sabit)</legend>
+          <legend className="form-label mb-2">Ücretli eklentiler (yıllık, sabit)</legend>
           {addons.map((key) => (
             <NumberField key={key} label={name(key)} suffix={currency} value={state.addonPrices[key] ?? ""}
               onChange={(value) => update({ addonPrices: { ...state.addonPrices, [key]: value } })} error={errors[`addon.${key}`]}
@@ -601,7 +601,7 @@ function PackageStep({ state, update, errors, catalog }: StepProps) {
         </fieldset>
       )}
       <div className="app-card flex items-baseline justify-between gap-3 p-4 sm:col-span-2" aria-live="polite">
-        <span className="text-meta">Aylık toplam</span>
+        <span className="text-meta">Yıllık toplam</span>
         <b className="text-lg">{total === null ? "—" : formatMoney(total, currency)}</b>
       </div>
     </div>
@@ -822,7 +822,7 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
       <SummarySection title="Paket ve fiyat" step="package" onGoTo={onGoTo}>
         <SummaryRow label="Kullanıcı">{state.staffSeats} personel hesabı × {money(state.pricePerSeat)}</SummaryRow>
         {optional.map((key) => <SummaryRow key={key} label={name(key)}>{money(state.addonPrices[key] ?? "")}</SummaryRow>)}
-        <SummaryRow label="Aylık toplam"><b>{packagePreview(state, entries) === null ? "—" : formatMoney(packagePreview(state, entries))}</b></SummaryRow>
+        <SummaryRow label="Yıllık toplam"><b>{packagePreview(state, entries) === null ? "—" : formatMoney(packagePreview(state, entries))}</b></SummaryRow>
       </SummarySection>
       <SummarySection title="Yönetici" step="admin" onGoTo={onGoTo}>
         <SummaryRow label="E-posta">{state.adminEmail}</SummaryRow>

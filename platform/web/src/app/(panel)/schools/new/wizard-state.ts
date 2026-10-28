@@ -48,7 +48,7 @@ export interface WizardState {
   version: string;
   isCanary: boolean;
   modules: Set<string>;
-  // Kullanıcı paketi: personel hesabı (yönetici + öğretmen) sayısı ve aylık fiyat. Liste fiyatı
+  // Kullanıcı paketi: personel hesabı (yönetici + öğretmen) sayısı ve yıllık fiyat. Liste fiyatı
   // (/api/pricing) adım ilk açılınca boş alanlara yazılır; okulla anlaşılan fiyat elle girilir.
   staffSeats: string;
   pricePerSeat: string;
@@ -232,9 +232,9 @@ export function validateStep(step: StepKey, state: WizardState, context: Validat
       break;
     case "package":
       if (!intIn(state.staffSeats, 1, MAX_STAFF_SEATS)) errors.staffSeats = `1 ile ${MAX_STAFF_SEATS} arasında bir tam sayı.`;
-      if (!decimalIn(state.pricePerSeat, 0, MAX_PRICE)) errors.pricePerSeat = "Kullanıcı başı aylık fiyatı gir (en fazla iki ondalık).";
+      if (!decimalIn(state.pricePerSeat, 0, MAX_PRICE)) errors.pricePerSeat = "Kullanıcı başı yıllık fiyatı gir (en fazla iki ondalık).";
       for (const key of optionalOnly(state.modules, context.catalog ?? [])) {
-        if (!decimalIn(state.addonPrices[key] ?? "", 0, MAX_PRICE)) errors[`addon.${key}`] = "Aylık fiyatı gir (ücretsizse 0).";
+        if (!decimalIn(state.addonPrices[key] ?? "", 0, MAX_PRICE)) errors[`addon.${key}`] = "Yıllık fiyatı gir (ücretsizse 0).";
       }
       break;
     case "admin": {
@@ -299,7 +299,7 @@ export function integrationsFor(state: WizardState, catalog?: ModuleEntry[]): Re
 export const MAX_STAFF_SEATS = 1000;
 const MAX_PRICE = 1_000_000;
 
-// Paketin aylık tutarının önizlemesi (sunucu SchoolPackage.MonthlyTotal ile aynı kural: kullanıcı
+// Paketin yıllık tutarının önizlemesi (sunucu SchoolPackage.YearlyTotal ile aynı kural: kullanıcı
 // sayısı × kullanıcı başı fiyat + seçilen eklentilerin fiyatı). Kurulduktan sonra gösterilen tutar
 // sunucunun hesabıdır.
 export function packagePreview(state: WizardState, catalog?: ModuleEntry[]): number | null {

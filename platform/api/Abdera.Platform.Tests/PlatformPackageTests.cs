@@ -52,11 +52,11 @@ public class PlatformPackageTests(PlatformFactory factory) : IClassFixture<Platf
         var school = await SchoolAsync(id);
         Assert.Equal(8, school.StaffSeatLimit);
         Assert.Equal(400m, school.PricePerSeat);
-        Assert.Equal(8 * 400m + 100m + 100m, school.MonthlyTotal);
+        Assert.Equal(8 * 400m + 100m + 100m, school.YearlyTotal);
 
         var tiles = await client.GetFromJsonAsync<JsonElement>("/api/schools");
         var package = tiles.EnumerateArray().Single(t => t.GetProperty("slug").GetString() == "paketli").GetProperty("package");
-        Assert.Equal(3400m, package.GetProperty("monthlyTotal").GetDecimal());
+        Assert.Equal(3400m, package.GetProperty("yearlyTotal").GetDecimal());
         Assert.Equal("TRY", package.GetProperty("currency").GetString());
 
         await factory.RunAllAsync();
@@ -77,14 +77,14 @@ public class PlatformPackageTests(PlatformFactory factory) : IClassFixture<Platf
         Assert.Equal(JsonValueKind.Null, (await priceOnly.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("runId").ValueKind);
         await using (var db = factory.Db())
             Assert.False(await db.Runs.AnyAsync(r => r.SchoolId == id && r.Kind == RunKind.Reconfigure));
-        Assert.Equal(8 * 350m, (await SchoolAsync(id)).MonthlyTotal);
+        Assert.Equal(8 * 350m, (await SchoolAsync(id)).YearlyTotal);
 
         var grow = await client.PutAsJsonAsync($"/api/schools/{id}/package",
             new { staffSeats = 12, pricePerSeat = 350m, addonPrices = new Dictionary<string, decimal> { ["progress"] = 0m } });
         Assert.Equal(HttpStatusCode.OK, grow.StatusCode);
         await factory.RunAllAsync();
         Assert.Contains(factory.Agent.Stdins, s => s.Contains("INSTANCE_SLUG=buyuyen") && s.Contains("School__StaffSeatLimit=12\n"));
-        Assert.Equal(12 * 350m, (await SchoolAsync(id)).MonthlyTotal);
+        Assert.Equal(12 * 350m, (await SchoolAsync(id)).YearlyTotal);
 
         await using (var db = factory.Db())
         {
@@ -105,7 +105,7 @@ public class PlatformPackageTests(PlatformFactory factory) : IClassFixture<Platf
         Assert.Equal(HttpStatusCode.Accepted, change.StatusCode);
         var school = await SchoolAsync(id);
         Assert.Equal(["whatsapp"], school.AddonPrices.Keys);
-        Assert.Equal(8 * 400m, school.MonthlyTotal);
+        Assert.Equal(8 * 400m, school.YearlyTotal);
 
         var pricing = await client.GetFromJsonAsync<JsonElement>("/api/pricing");
         Assert.Equal("TRY", pricing.GetProperty("currency").GetString());

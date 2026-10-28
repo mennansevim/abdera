@@ -53,7 +53,7 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.Property(x => x.Currency).HasMaxLength(3).HasDefaultValue(SchoolPackage.DefaultCurrency);
             e.Property(x => x.AddonPricesJson).HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");
             e.Ignore(x => x.AddonPrices);
-            e.Ignore(x => x.MonthlyTotal);
+            e.Ignore(x => x.YearlyTotal);
         });
 
         model.Entity<ServerHost>(e =>

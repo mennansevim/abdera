@@ -26,9 +26,9 @@ public static class Schools
         IReadOnlyDictionary<string, string>? Integrations, bool IsCanary, IReadOnlyList<BranchRequest>? Branches = null,
         IReadOnlyList<CustomCategoryRequest>? CustomCategories = null, PackageRequest? Package = null);
     // Kullanıcı paketi (SchoolPackage): personel hesabı sınırı, kullanıcı başı fiyat ve seçilen eklentilerin
-    // aylık fiyatı. Sihirbazdan kurulan okulda zorunlu; sahiplenmede boşsa okul sınırsız kalır.
+    // yıllık fiyatı. Sihirbazdan kurulan okulda zorunlu; sahiplenmede boşsa okul sınırsız kalır.
     public record PackageRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices);
-    public record PackageResponse(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal> AddonPrices, string Currency, decimal MonthlyTotal);
+    public record PackageResponse(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal> AddonPrices, string Currency, decimal YearlyTotal);
     // Okulun alt birimi (branş): kategori sürümün kataloğundan (Releases.CategoryEntry) ya da okulun
     // kendi açtığı alandan (CustomCategories), ad serbest.
     public record BranchRequest(string Category, string Name);
@@ -307,7 +307,7 @@ public static class Schools
         t.LastBackupAt, t.DatabaseSizeBytes, t.PendingNotifications, t.FailedNotifications, t.Error, t.ActiveStaffUsers);
 
     private static PackageResponse ToPackage(School school) =>
-        new(school.StaffSeatLimit, school.PricePerSeat, school.AddonPrices, school.Currency, school.MonthlyTotal);
+        new(school.StaffSeatLimit, school.PricePerSeat, school.AddonPrices, school.Currency, school.YearlyTotal);
 
     private static async Task<IResult> DetailAsync(Guid id, PlatformDbContext db, ProvisioningEngine engine)
     {

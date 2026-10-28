@@ -16,7 +16,7 @@ function parse(value: string): number {
 
 const isMoney = (value: number) => Number.isFinite(value) && value >= 0 && value <= 1_000_000 && Math.round(value * 100) === value * 100;
 
-// Kullanıcı paketi (ARCHITECTURE.md §5.7): personel hesabı sınırı ve aylık fiyat. Sınır değişince
+// Kullanıcı paketi (ARCHITECTURE.md §5.7): personel hesabı sınırı ve yıllık fiyat. Sınır değişince
 // okulun yapılandırması yeniden yazılır (~30 sn kesinti); yalnızca fiyat değişirse okula dokunulmaz.
 // Eklenti fiyatı yalnızca açık eklentiler için girilir; eklenti Modüller sekmesinden açılıp kapatılır.
 export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueued: (message: string) => void }) {
@@ -64,7 +64,7 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
         label="Paket"
         items={[
           { key: "seats", label: "Kullanıcı", value: pkg?.staffSeats ? `${formatNumber(used)} / ${formatNumber(pkg.staffSeats)}` : "Sınırsız", tone: used !== null && pkg?.staffSeats && used >= pkg.staffSeats ? "warning" : undefined, hint: "etkin yönetici + öğretmen hesabı" },
-          { key: "total", label: "Aylık tutar", value: formatMoney(pkg?.monthlyTotal ?? 0, currency) },
+          { key: "total", label: "Yıllık tutar", value: formatMoney(pkg?.yearlyTotal ?? 0, currency) },
         ]}
       />
       {!pkg?.staffSeats && <FormMessage tone="info">Bu okulun paketi yok; kullanıcı sayısı sınırsız. Paket kaydedilince okulda sınır başlar.</FormMessage>}
@@ -80,7 +80,7 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
             {errors.seats ? <span className="form-error">{errors.seats}</span> : !seatsEditable && <span className="text-meta">Yalnızca çalışan ve süren işlemi olmayan okulda değişir.</span>}
           </label>
           <label className="form-label">
-            Kullanıcı başı aylık fiyat ({currency})
+            Kullanıcı başı yıllık fiyat ({currency})
             <input className="form-input" inputMode="decimal" value={perSeat} onChange={(event) => setPerSeat(event.target.value)} />
             {errors.perSeat && <span className="form-error">{errors.perSeat}</span>}
           </label>
@@ -93,7 +93,7 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
           ))}
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line)] pt-3">
-          <span className="text-meta">Yeni aylık tutar: <b className="text-[var(--foreground)]">{preview === null ? "—" : formatMoney(preview, currency)}</b></span>
+          <span className="text-meta">Yeni yıllık tutar: <b className="text-[var(--foreground)]">{preview === null ? "—" : formatMoney(preview, currency)}</b></span>
           <button type="button" className="btn btn-primary" disabled={!valid || (!seatsChanged && !pricesChanged)} onClick={() => { save.reset(); setConfirm(true); }}>
             Paketi kaydet
           </button>

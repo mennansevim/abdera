@@ -146,7 +146,7 @@ Her adım taslak olarak platform DB'ye kaydedilir (`schools.status = Draft`); si
 | 5 | **Modül ayarları** | Yalnızca seçilen modüllerin ayarları: WhatsApp (Phone Number ID, WABA ID, erişim jetonu, App Secret), E-posta (SMTP veya platformun ortak gönderici hesabı), Banka (sağlayıcı + anahtarlar), AI (açık/kapalı) | Her entegrasyon için **"Bağlantıyı dene"** düğmesi; başarısız test "İleri"yi engellemez ama özet ekranında uyarı olarak kalır |
 | 6 | **Okul kuralları** | Ders türleri ve ilk tarifeler (Birebir/Grup), çoklu kurs ve kardeş indirimi, vade günü, peşin ödeme kademeleri, öğretmen ödeme haftası kapanış günü, grup dersi öğretmen payı, haftalık ders üst sınırı, telafi süreleri | Varsayılanlar bugünkü Abdera değerleri; "Varsayılanları kullan" tek tık |
 | 7 | **Sunucu ve kaynaklar** | Sunucu (varsayılan: otomatik — en çok boş kapasitesi olan), yedek saklama süresi | Seçilen sunucuda rezerv bellek yeterli mi |
-| 8 | **Özet ve kur** | Tüm seçimlerin özeti, tahmini aylık maliyet, "Kur" düğmesi | Son onay; tıklanınca `provisioning_runs` kaydı açılır |
+| 8 | **Özet ve kur** | Tüm seçimlerin özeti, yıllık lisans tutarı, "Kur" düğmesi | Son onay; tıklanınca `provisioning_runs` kaydı açılır |
 | 9 | **Kurulum ilerlemesi** | Adım adım canlı liste (§6), her adımın süresi ve logu, hata olursa "Yeniden dene" / "İptal et ve temizle" | Bittiğinde: "Okulu aç" düğmesi, yöneticiye giden e-postanın durumu |
 
 ### 4.3 Okul detay ekranı
@@ -276,10 +276,10 @@ telafi, aidat. Değişen yalnızca "neyin dersi" sorusudur.
 
 ### 5.7 Kullanıcı paketi ve fiyat
 - **Fiyatın tek ekseni personel hesabı:** etkin yönetici + öğretmen hesabı (`users.role IN (Admin, Teacher) AND is_active`). Veli ve öğrenci sayılmaz; giriş hesabı olmayan öğretmen kaydı da sayılmaz.
-- Ücretli eklentiler (WhatsApp, yapay zekâ, banka) okul başına sabit aylık tutar ekler. Aylık tutar = kullanıcı sayısı × kullanıcı başı fiyat + açık eklentilerin fiyatı; hesabın tek yeri platform `Domain/SchoolPackage.cs`.
+- **Lisans yıllıktır** (kullanıcı kararı, 2026-10-28): bütün fiyatlar yıllık. Ücretli eklentiler (WhatsApp, yapay zekâ, banka) okul başına sabit yıllık tutar ekler. Yıllık tutar = kullanıcı sayısı × kullanıcı başı yıllık fiyat + açık eklentilerin yıllık fiyatı; hesabın tek yeri platform `Domain/SchoolPackage.cs`.
 - Paket okul satırına donar (`staff_seat_limit`, `price_per_seat numeric(12,2)`, `currency`, `addon_prices_json`). Liste fiyatı (`Pricing__*`) yalnızca sihirbazın ve sonradan açılan eklentinin başlangıç değeridir.
 - Sınır okula `School__StaffSeatLimit` ile gider. Okul uygulaması (`Modules/Auth/Features/StaffSeats.cs`) hesaplı öğretmen açarken ve pasif öğretmeni geri açarken denetler; doluysa 409 "Kullanıcı paketiniz dolu". Paket küçültülse bile var olan hesaplar kapanmaz. Değer boşsa okul sınırsızdır (bugünkü davranış, sahiplenilen okul).
-- Telemetri `activeStaffUsers` sayısını taşır; panel kutucukta "5/8 kullanıcı" ve aylık tutarı gösterir.
+- Telemetri `activeStaffUsers` sayısını taşır; panel kutucukta "5/8 kullanıcı" ve yıllık tutarı gösterir.
 - Kapsam dışı: faturalama/tahsilat (platform fatura kesmez, ödeme almaz) ve otomatik paket yükseltme.
 
 ### 5.5 İmaj ve yapılandırma
@@ -471,6 +471,7 @@ flowchart LR
 | 2026-10-20 | §8 özel alan adı | Okulun kendi alan adı: platformda kaydet → DNS denetimi (alan adı okulun sunucusuna çözülünce) → `DomainAttach` işlemi (ajan `route alias`, Caddy'de aynı blokta ikinci adres ya da asıl adresten yönlendirme; `/api` ve `/health` yönlenmez) → `https` duman testi → etkin. Kaldırma `DomainDetach`. Panelde "Alan adı" sekmesi ve müşteriye verilecek CNAME/A talimatı. Sertifika izleyicisi bağlı adresi de denetler; silinen okulun alan adı serbest kalır. | Platform 34/34 (alan adı akışı, sertifika alarmı, silinen okulun alanının yeniden kullanımı), ajan 93/93 (geçersiz girdi, Caddy reddinde eski hâle dönüş, askı/devamda korunma) |
 
 | 2026-10-22 | §5.7 kullanıcı paketi | Sihirbaza "Paket ve fiyat" adımı (kullanıcı sayısı, kullanıcı başı fiyat, eklenti fiyatları, aylık toplam), özette paket, kutucukta kullanıcı/aylık tutar, okul detayında "Paket" sekmesi. Platform: `SchoolPackage` (hesabın tek yeri), paket okul satırına donar, `PUT /api/schools/{id}/package` (sınır değişince Reconfigure, fiyat değişikliği okula gitmez), `GET /api/pricing` liste fiyatı, modül değişiminde eklenti fiyatları hizalanır, audit. Okul: `School__StaffSeatLimit`, `StaffSeats` (hesaplı öğretmen ve pasiften geri açma denetimi), `/api/staff-seats`, Öğretmen ekle formunda gösterge, telemetride `activeStaffUsers`. | Okul 765/765, platform 39/39 (yeni: `StaffSeatFlowTests` 3, `PlatformPackageTests` 3, paket birim testleri). Panel ekranları tarayıcıda denenmedi |
+| 2026-10-28 | Raspberry Pi provası (§14) + yıllık lisans | `deploy/pi/`: Pi 5 (arm64, 8 GB) okul sunucusu, platform Mac'te; okullar `*.miredo.app` altında Cloudflare Tunnel ile internete açık (Pi'de sudo yok, Caddy yalnızca 127.0.0.1). Paket fiyatı **yıllık** (`SchoolPackage.YearlyTotal`, panelde tüm paket metinleri). `main` merge'ü: Asistan `ai` modülüne bağlandı. | Sihirbazdan Sanatevim (müzik, kanarya, 8 kullanıcı) ve API ile Ritim Dans (dans, eklentisiz): 12 adım ~45 sn, internetten `https` 200, telemetri ve yedek. Oturum çerezi izolasyonu (A'nın çerezi B'de 401), ağ izolasyonu (B'nin DB'si ad ve IP ile erişilemez). Boşta okul başına ~235 MB (api ~150, web ~40, db ~28, yedek ~17). Platform 39/39, okul 822/823 (düşen saate bağlı test tek başına geçer) |
 
 **Kalan işler (yerelde yapılamayanlar, altyapı ve onay gerektirir):**
 1. Gerçek bir test sunucusu (Hetzner) + `setup-host.sh` + gerçek GHCR imajlarıyla sihirbazdan ilk okulun uçtan uca kurulumu (§14 kurulum ölçütü). Gerekenler: test sunucusu, Cloudflare'de DNS bölgesi ve jetonu, R2 bucket'ı, GHCR'ye ilk sürüm etiketi.

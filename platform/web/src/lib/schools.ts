@@ -29,13 +29,13 @@ export interface Telemetry {
 }
 
 // Kullanıcı paketi (platform/api Domain/SchoolPackage.cs). staffSeats boşsa okul sınırsız (eski kurulum).
-// monthlyTotal sunucunun hesabıdır; panel kendi toplamını yalnızca form önizlemesinde gösterir.
+// yearlyTotal sunucunun hesabıdır; panel kendi toplamını yalnızca form önizlemesinde gösterir.
 export interface SchoolPackage {
   staffSeats: number | null;
   pricePerSeat: number | null;
   addonPrices: Record<string, number>;
   currency: string;
-  monthlyTotal: number;
+  yearlyTotal: number;
 }
 
 export interface PackageInput {

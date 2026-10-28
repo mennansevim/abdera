@@ -41,7 +41,7 @@ public class School
     public IReadOnlyDictionary<string, string> CustomCategoryNames =>
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(CustomCategoryNamesJson) ?? [];
     public string? PrimaryColor { get; private set; }
-    // Paket (SchoolPackage): personel hesabı sınırı ve aylık fiyatın donmuş hâli. Sınır boşsa okul
+    // Paket (SchoolPackage): personel hesabı sınırı ve yıllık fiyatın donmuş hâli. Sınır boşsa okul
     // sınırsızdır (sihirbazdan önce kurulmuş ya da sahiplenilmiş okul - bugünkü davranış).
     public int? StaffSeatLimit { get; private set; }
     public decimal? PricePerSeat { get; private set; }
@@ -50,7 +50,7 @@ public class School
     public IReadOnlyDictionary<string, decimal> AddonPrices =>
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, decimal>>(AddonPricesJson) ?? [];
     // Fiyat yalnızca açık eklentiler için tutulur (SetPackage doğrular); modül kapatılınca fiyatı da düşer.
-    public decimal MonthlyTotal => SchoolPackage.MonthlyTotal(StaffSeatLimit, PricePerSeat, AddonPrices, Modules);
+    public decimal YearlyTotal => SchoolPackage.YearlyTotal(StaffSeatLimit, PricePerSeat, AddonPrices, Modules);
     // Filo güncellemesinde ilk dalga (kanarya) ve güncellemeden muaf tutma (§7).
     public bool IsCanary { get; private set; }
     public bool IsVersionPinned { get; private set; }
