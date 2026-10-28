@@ -139,7 +139,7 @@ public static class Schools
         var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
         if (request.IsCanary) school.SetCanary(true, now);
         school.SetPackage(request.Package.StaffSeats, request.Package.PricePerSeat, request.Package.AddonPrices ?? new Dictionary<string, decimal>(), now);
-        school.SetLicense(request.Package.LicenseStartsOn ?? Today(config, time), now);
+        school.SetLicense(request.Package.LicenseStartsOn ?? PlatformClock.Today(config, time), now);
         school.SetCategories(branches.Select(branch => branch.Category), now,
             customCategories.Where(c => branches.Any(b => b.Category == c.Key)).ToDictionary(c => c.Key, c => c.Name));
         db.Schools.Add(school);
@@ -283,7 +283,7 @@ public static class Schools
     private static async Task<IResult> ListAsync(PlatformDbContext db, ProvisioningEngine engine, IConfiguration config, TimeProvider time)
     {
         var schools = await db.Schools.Where(s => s.Status != SchoolStatus.Destroyed).OrderBy(s => s.DisplayName).ToListAsync();
-        return Results.Ok(await TilesAsync(db, engine, schools, Today(config, time)));
+        return Results.Ok(await TilesAsync(db, engine, schools, PlatformClock.Today(config, time)));
     }
 
     private static async Task<List<TileResponse>> TilesAsync(PlatformDbContext db, ProvisioningEngine engine, List<School> schools, DateOnly today)
@@ -323,16 +323,11 @@ public static class Schools
             today is { } day ? SchoolPackage.StateOn(school.LicenseEndsOn, day) : null,
             today is { } d ? SchoolPackage.DaysLeft(school.LicenseEndsOn, d) : null);
 
-    // Platformun "bugün"ü okulların saat dilimindedir (Platform:TimeZone, varsayılan Europe/Istanbul): lisans
-    // gün sınırı UTC gece yarısında değil, yerel gece yarısında döner.
-    private static DateOnly Today(IConfiguration config, TimeProvider time) =>
-        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(),
-            TimeZoneInfo.FindSystemTimeZoneById(config["Platform:TimeZone"] is { Length: > 0 } zone ? zone : "Europe/Istanbul")).DateTime);
 
     private static async Task<IResult> DetailAsync(Guid id, PlatformDbContext db, ProvisioningEngine engine, IConfiguration config, TimeProvider time)
     {
         var school = await db.Schools.SingleOrDefaultAsync(s => s.Id == id) ?? throw new NotFoundException("Okul bulunamadı.");
-        var tile = (await TilesAsync(db, engine, [school], Today(config, time))).Single();
+        var tile = (await TilesAsync(db, engine, [school], PlatformClock.Today(config, time))).Single();
         var runs = await db.Runs.Where(r => r.SchoolId == id).OrderByDescending(r => r.CreatedAt).Take(10).ToListAsync();
         var runIds = runs.Select(r => r.Id).ToList();
         var steps = await db.Steps.Where(s => runIds.Contains(s.RunId)).OrderBy(s => s.Step).ThenBy(s => s.Attempt).ToListAsync();
@@ -488,7 +483,7 @@ public static class Schools
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.package_changed", id, time.GetUtcNow(),
             beforeJson: before, afterJson: JsonSerializer.Serialize(ToPackage(school))));
         await db.SaveChangesAsync();
-        return Results.Ok(new { package = ToPackage(school, Today(config, time)), runId = run?.Id });
+        return Results.Ok(new { package = ToPackage(school, PlatformClock.Today(config, time)), runId = run?.Id });
     }
 
     // Lisansı bir yıl uzatır. Yalnızca platform kaydıdır, okula gitmez; süresi dolmuş okul da yenilenebilir.
@@ -502,6 +497,6 @@ public static class Schools
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.license_renewed", id, time.GetUtcNow(),
             beforeJson: before, afterJson: JsonSerializer.Serialize(new { school.LicenseStartsOn, school.LicenseEndsOn })));
         await db.SaveChangesAsync();
-        return Results.Ok(ToPackage(school, Today(config, time)));
+        return Results.Ok(ToPackage(school, PlatformClock.Today(config, time)));
     }
 }

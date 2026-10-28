@@ -23,6 +23,75 @@ namespace Abdera.Platform.Api.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Abdera.Platform.Api.Domain.HostSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContainersJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("containers_json")
+                        .HasDefaultValueSql("'[]'::jsonb");
+
+                    b.Property<int?>("Cpus")
+                        .HasColumnType("integer")
+                        .HasColumnName("cpus");
+
+                    b.Property<int?>("DiskFreeMb")
+                        .HasColumnType("integer")
+                        .HasColumnName("disk_free_mb");
+
+                    b.Property<int?>("DiskTotalMb")
+                        .HasColumnType("integer")
+                        .HasColumnName("disk_total_mb");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<Guid>("HostId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("host_id");
+
+                    b.Property<decimal?>("Load1")
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("load1");
+
+                    b.Property<decimal?>("Load5")
+                        .HasColumnType("numeric(8,2)")
+                        .HasColumnName("load5");
+
+                    b.Property<int?>("MemAvailableMb")
+                        .HasColumnType("integer")
+                        .HasColumnName("mem_available_mb");
+
+                    b.Property<int?>("MemTotalMb")
+                        .HasColumnType("integer")
+                        .HasColumnName("mem_total_mb");
+
+                    b.Property<bool>("Reachable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("reachable");
+
+                    b.Property<DateTimeOffset>("TakenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_at");
+
+                    b.Property<long?>("UptimeSeconds")
+                        .HasColumnType("bigint")
+                        .HasColumnName("uptime_seconds");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HostId", "TakenAt");
+
+                    b.ToTable("host_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("Abdera.Platform.Api.Domain.PlatformAuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -703,9 +772,21 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("database_size_bytes");
 
+                    b.Property<int?>("DbConnections")
+                        .HasColumnType("integer")
+                        .HasColumnName("db_connections");
+
+                    b.Property<int?>("DbWaitingOnLocks")
+                        .HasColumnType("integer")
+                        .HasColumnName("db_waiting_on_locks");
+
                     b.Property<string>("Error")
                         .HasColumnType("text")
                         .HasColumnName("error");
+
+                    b.Property<int?>("Errors24h")
+                        .HasColumnType("integer")
+                        .HasColumnName("errors24h");
 
                     b.Property<int?>("FailedNotifications")
                         .HasColumnType("integer")
@@ -723,6 +804,14 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_backup_at");
 
+                    b.Property<DateTimeOffset?>("LastErrorAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_error_at");
+
+                    b.Property<string>("LastMigration")
+                        .HasColumnType("text")
+                        .HasColumnName("last_migration");
+
                     b.Property<int?>("PendingNotifications")
                         .HasColumnType("integer")
                         .HasColumnName("pending_notifications");
@@ -738,6 +827,10 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                     b.Property<DateTimeOffset>("TakenAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("taken_at");
+
+                    b.Property<int?>("Warnings24h")
+                        .HasColumnType("integer")
+                        .HasColumnName("warnings24h");
 
                     b.HasKey("Id");
 

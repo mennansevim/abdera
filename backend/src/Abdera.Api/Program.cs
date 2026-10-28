@@ -90,12 +90,16 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 // --- Serilog: yapılandırılmış log, CLAUDE.md "safe logging" gereği erişim jetonu/parola loglanmaz ---
+// Hata/uyarı sayacı platformun gözlem paneline yalnızca adet verir (Modules/Instance/Infrastructure/LogLevelCounter.cs).
+var logLevelCounter = new Abdera.Api.Modules.Instance.Infrastructure.LogLevelCounter();
+builder.Services.AddSingleton(logLevelCounter);
 builder.Host.UseSerilog((context, configuration) =>
 {
     configuration
         .ReadFrom.Configuration(context.Configuration)
         .Enrich.FromLogContext()
-        .WriteTo.Console();
+        .WriteTo.Console()
+        .WriteTo.Sink(logLevelCounter);
 });
 
 // Bağlantı dizesi builder.Build()'den SONRA, DI çözümlenirken okunur - burada eager

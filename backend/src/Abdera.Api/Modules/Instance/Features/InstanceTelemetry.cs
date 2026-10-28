@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Instance.Infrastructure;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Infrastructure;
@@ -18,9 +19,13 @@ public static class InstanceTelemetry
     public record CountsResponse(int ActiveStudents, int ActiveTeachers, int ActiveEnrollments, int ActiveStaffUsers);
     public record BackupResponse(DateTimeOffset? LastSucceededAt, BackupRunStatus? LastStatus, DateTimeOffset? LastStartedAt);
     public record NotificationsResponse(int Pending, int Failed);
+    // Son 24 saatin hata/uyarı adedi; sayaç sürecin açılışında sıfırlanır (CountingSince). Metin yok.
+    public record LogsResponse(int Errors24h, int Warnings24h, DateTimeOffset? LastErrorAt, DateTimeOffset CountingSince);
+    public record DatabaseResponse(int Connections, int WaitingOnLocks, string? LastMigration);
     public record TelemetryResponse(
         string Version, DateTimeOffset GeneratedAt, DateTimeOffset? ProvisionedAt, HealthResponse Health, CountsResponse Counts,
-        BackupResponse Backup, NotificationsResponse Notifications, long DatabaseSizeBytes, IReadOnlyList<string> EnabledModules);
+        BackupResponse Backup, NotificationsResponse Notifications, long DatabaseSizeBytes, IReadOnlyList<string> EnabledModules,
+        LogsResponse? Logs = null, DatabaseResponse? Database = null);
 
     public static void MapInstanceTelemetry(this IEndpointRouteBuilder app)
     {
@@ -29,7 +34,7 @@ public static class InstanceTelemetry
     }
 
     private static async Task<IResult> GetAsync(
-        HttpContext http, AbderaDbContext db, IConfiguration config, EnabledModules modules, IClock clock)
+        HttpContext http, AbderaDbContext db, IConfiguration config, EnabledModules modules, IClock clock, LogLevelCounter logCounter)
     {
         if (PlatformAccess.Check(http, config, PlatformAccess.TelemetryTokenKey) is { } denied) return denied;
 
@@ -44,6 +49,14 @@ public static class InstanceTelemetry
         var databaseSize = await db.Database
             .SqlQueryRaw<long>("SELECT pg_database_size(current_database()) AS \"Value\"")
             .SingleAsync();
+        var connections = await db.Database
+            .SqlQueryRaw<int>("SELECT count(*)::int AS \"Value\" FROM pg_stat_activity WHERE datname = current_database()")
+            .SingleAsync();
+        var waitingOnLocks = await db.Database
+            .SqlQueryRaw<int>("SELECT count(*)::int AS \"Value\" FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'")
+            .SingleAsync();
+        var lastMigration = (await db.Database.GetAppliedMigrationsAsync()).LastOrDefault();
+        var (errors, warnings) = logCounter.Last24Hours(clock.UtcNow);
 
         http.Response.Headers.CacheControl = "no-store";
         return Results.Ok(new TelemetryResponse(
@@ -61,7 +74,9 @@ public static class InstanceTelemetry
                 await db.NotificationJobs.CountAsync(job => job.Status == NotificationJobStatus.Pending),
                 await db.NotificationJobs.CountAsync(job => job.Status == NotificationJobStatus.Failed)),
             databaseSize,
-            modules.Current.Order(StringComparer.Ordinal).ToList()));
+            modules.Current.Order(StringComparer.Ordinal).ToList(),
+            new LogsResponse(errors, warnings, logCounter.LastErrorAt, logCounter.CountingSince),
+            new DatabaseResponse(connections, waitingOnLocks, lastMigration)));
     }
 
     // Platformun "şimdi yedek al" isteği (askıya alma ve silme öncesi son yedek, §16.3). Admin

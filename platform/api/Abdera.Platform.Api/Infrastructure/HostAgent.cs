@@ -50,6 +50,7 @@ public sealed partial record AgentCommand(string Text, string? Stdin)
     [
         "create", "reconfigure", "pull", "up", "down", "upgrade", "rollback", "route add", "route remove", "route alias", "route alias-remove", "suspend", "resume",
         "provision", "backup-now", "dump", "restore", "destroy", "undestroy", "purge", "status", "host-info", "version",
+        "host-stats", "logs", "backups",
     ];
 
     // Yalnızca alan adı, digest'li imaj, döküm adı ve bayrak karakterleri.
@@ -139,6 +140,9 @@ public class FakeHostAgent : IHostAgent
                 "provision" => new AgentResult(0, "{\"alreadyProvisioned\":false}", ""),
                 "status" => new AgentResult(0, $"{{\"slug\":\"{parts[1]}\",\"state\":\"running\",\"healthy\":true}}", ""),
                 "dump" => new AgentResult(0, $"/srv/abdera/{parts[1]}/dumps/{parts[1]}-fake.sql.gz.enc", ""),
+                "host-stats" => new AgentResult(0, FakeHostStats, ""),
+                "logs" => new AgentResult(0, $"api-1  | 2026-10-28T10:00:00.000Z [10:00:00 ERR] sahte hata\napi-1  | 2026-10-28T10:00:01.000Z [10:00:01 INF] sahte bilgi", ""),
+                "backups" => new AgentResult(0, $"{{\"remote\":[{{\"Path\":\"abdera-20261028-030000.sql.enc\",\"Size\":2048,\"ModTime\":\"2026-10-28T03:00:05Z\"}},{{\"Path\":\"suspended/{parts[1]}-20261020-120000.sql.gz.enc\",\"Size\":4096,\"ModTime\":\"2026-10-20T12:00:00Z\"}}],\"local\":[{{\"name\":\"{parts[1]}-20261027-120000.sql.gz.enc\",\"size\":1024,\"modTime\":1793102400}}]}}", ""),
                 _ => new AgentResult(0, "", ""),
             };
         }
@@ -146,4 +150,10 @@ public class FakeHostAgent : IHostAgent
         if (op is not null) _operations[op] = result;
         return Task.FromResult(result);
     }
+
+    private const string FakeHostStats = """
+        {"agent":"2","load1":0.42,"load5":0.35,"load15":0.30,"cpus":4,"memTotalMb":65536,"memAvailableMb":60000,"diskTotalMb":500000,"diskFreeMb":400000,"uptimeSeconds":86400,
+         "stats":[{"Name":"abdera-deniz-api-1","MemUsage":"150MiB / 384MiB","CPUPerc":"1.50%"}],
+         "containers":[{"name":"/abdera-deniz-api-1","restarts":1,"status":"running","health":"healthy","startedAt":"2026-10-28T10:00:00Z"}]}
+        """;
 }

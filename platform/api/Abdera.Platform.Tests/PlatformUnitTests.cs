@@ -108,6 +108,44 @@ public class PlatformUnitTests
     }
 
     [Fact]
+    public void Host_stats_are_parsed_into_numbers_and_containers_are_tied_to_their_school()
+    {
+        Assert.Equal("ritim-dans", HostSnapshot.SchoolSlugOf("abdera-ritim-dans-api-1"));
+        Assert.Equal("deniz", HostSnapshot.SchoolSlugOf("abdera-deniz-backup-gw-1"));
+        Assert.Null(HostSnapshot.SchoolSlugOf("abdera-caddy"));
+        Assert.Null(HostSnapshot.SchoolSlugOf("abdera-pi-registry"));
+        Assert.Equal((150m, 384m), HostSnapshot.ParseMemUsage("150MiB / 384MiB"));
+        Assert.Equal(1536m, HostSnapshot.ParseSize("1.5GiB"));
+        Assert.Equal(0.5m, HostSnapshot.ParseSize("512KiB"));
+        Assert.Null(HostSnapshot.ParseSize("--"));
+
+        var snapshot = HostSnapshot.Parse(Guid.NewGuid(), """
+            {"agent":"2","load1":1.25,"load5":0.9,"load15":0.5,"cpus":4,"memTotalMb":8000,"memAvailableMb":5000,"diskTotalMb":100000,"diskFreeMb":5000,"uptimeSeconds":10,
+             "stats":[{"Name":"abdera-deniz-api-1","MemUsage":"150MiB / 384MiB","CPUPerc":"2.5%"}],
+             "containers":[{"name":"/abdera-deniz-api-1","restarts":3,"status":"running","health":"unhealthy","startedAt":"x"},
+                           {"name":"/abdera-caddy","restarts":0,"status":"running","health":null,"startedAt":"x"}]}
+            """, DateTimeOffset.UtcNow);
+        Assert.Equal(1.25m, snapshot.Load1);
+        var api = snapshot.Containers.Single(c => c.Name == "abdera-deniz-api-1");
+        Assert.Equal(("deniz", 3, 150m, 2.5m, "unhealthy"), (api.School, api.Restarts, api.MemMb, api.CpuPercent, api.Health));
+        Assert.Null(snapshot.Containers.Single(c => c.Name == "abdera-caddy").MemMb);
+    }
+
+    [Fact]
+    public void Fleet_health_flags_unreachable_schools_stale_backups_and_full_disks()
+    {
+        var now = new DateTimeOffset(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
+        var host = ServerHost.Create("h1", "h1.test", 22, "root", "SHA256:abc", "203.0.113.1", 8192, now);
+        var full = HostSnapshot.Parse(host.Id, """{"cpus":2,"load5":3.5,"memTotalMb":8000,"memAvailableMb":400,"diskTotalMb":100000,"diskFreeMb":5000,"stats":[],"containers":[]}""", now);
+        var hostIssues = FleetHealth.ForHost(host, full, now).ToList();
+        Assert.Contains(hostIssues, i => i.Kind == "disk" && i.Severity == FleetHealth.Level.Critical);
+        Assert.Contains(hostIssues, i => i.Kind == "memory");
+        Assert.Contains(hostIssues, i => i.Kind == "load");
+        Assert.Contains(FleetHealth.ForHost(host, full, now.AddHours(1)), i => i.Kind == "host-stale");
+        Assert.Contains(FleetHealth.ForHost(host, HostSnapshot.Unreachable(host.Id, "zaman aşımı", now), now), i => i.Kind == "host-unreachable");
+    }
+
+    [Fact]
     public void License_runs_one_year_and_warns_in_its_last_month()
     {
         Assert.Equal(new DateOnly(2027, 10, 31), SchoolPackage.LicenseEnd(new DateOnly(2026, 11, 1)));

@@ -20,8 +20,9 @@ import {
 import { AlertsTab, AuditTab, GeneralTab, ModulesTab, RunsTab, TelemetryTab } from "./tabs";
 import { DomainTab } from "./domain-tab";
 import { PackageTab } from "./package-tab";
+import { BackupsTab, LogsTab } from "./monitoring-tabs";
 
-type TabKey = "general" | "runs" | "modules" | "package" | "domain" | "telemetry" | "alerts" | "audit";
+type TabKey = "general" | "runs" | "modules" | "package" | "domain" | "telemetry" | "logs" | "backups" | "alerts" | "audit";
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "general", label: "Genel" },
@@ -30,6 +31,8 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: "package", label: "Paket" },
   { key: "domain", label: "Alan adı" },
   { key: "telemetry", label: "Telemetri" },
+  { key: "logs", label: "Loglar" },
+  { key: "backups", label: "Yedekler" },
   { key: "alerts", label: "Alarmlar" },
   { key: "audit", label: "Denetim" },
 ];
@@ -197,6 +200,8 @@ export default function SchoolDetailPage() {
         {tab === "package" && <PackageTab detail={data} onQueued={(message) => { setNotice(message); if (message.includes("yeniden başlayacak")) setTab("runs"); }} />}
         {tab === "domain" && <DomainTab detail={data} onQueued={(message) => { setNotice(message); setTab("runs"); }} />}
         {tab === "telemetry" && <TelemetryTab detail={data} />}
+        {tab === "logs" && <LogsTab detail={data} />}
+        {tab === "backups" && <BackupsTab detail={data} />}
         {tab === "alerts" && <AlertsTab detail={data} />}
         {tab === "audit" && <AuditTab schoolId={id} />}
       </div>

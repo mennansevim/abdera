@@ -54,7 +54,9 @@ public class FakeSchoolClient : ISchoolClient
             new SchoolTelemetry.CountsPart(0, 0, 0),
             new SchoolTelemetry.BackupPart(DateTimeOffset.UtcNow.AddHours(-3)),
             new SchoolTelemetry.NotificationsPart(0, 0),
-            12_000_000));
+            12_000_000,
+            new SchoolTelemetry.LogsPart(0, 3, null),
+            new SchoolTelemetry.DatabasePart(4, 0, "20261028000000_Fake")));
 
     public Task<string?> SmokeTestAsync(School school, CancellationToken cancellationToken, string? domain = null) => Task.FromResult<string?>(null);
 }

@@ -16,6 +16,7 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
     public DbSet<Release> Releases => Set<Release>();
     public DbSet<Rollout> Rollouts => Set<Rollout>();
     public DbSet<TelemetrySnapshot> Telemetry => Set<TelemetrySnapshot>();
+    public DbSet<HostSnapshot> HostSnapshots => Set<HostSnapshot>();
     public DbSet<PlatformAuditLog> AuditLogs => Set<PlatformAuditLog>();
     public DbSet<SchoolAlert> Alerts => Set<SchoolAlert>();
     public DbSet<PlatformUser> Users => Set<PlatformUser>();
@@ -124,6 +125,17 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
             e.ToTable("telemetry_snapshots");
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.SchoolId, x.TakenAt });
+        });
+
+        model.Entity<HostSnapshot>(e =>
+        {
+            e.ToTable("host_snapshots");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Load1).HasColumnType("numeric(8,2)");
+            e.Property(x => x.Load5).HasColumnType("numeric(8,2)");
+            e.Property(x => x.ContainersJson).HasColumnType("jsonb").HasDefaultValueSql("'[]'::jsonb");
+            e.Ignore(x => x.Containers);
+            e.HasIndex(x => new { x.HostId, x.TakenAt });
         });
 
         model.Entity<PlatformAuditLog>(e =>

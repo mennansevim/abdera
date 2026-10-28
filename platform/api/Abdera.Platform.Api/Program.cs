@@ -60,12 +60,14 @@ else builder.Services.AddSingleton<ICertificateProbe, FakeCertificateProbe>();
 builder.Services.AddSingleton<ProvisioningWorker>();
 builder.Services.AddSingleton<RolloutWorker>();
 builder.Services.AddSingleton<TelemetryPoller>();
+builder.Services.AddSingleton<HostStatsPoller>();
 builder.Services.AddSingleton<CertificateWatcher>();
 if (builder.Configuration.GetValue("Platform:RunWorkers", true))
 {
     builder.Services.AddHostedService(sp => sp.GetRequiredService<ProvisioningWorker>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<RolloutWorker>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<TelemetryPoller>());
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<HostStatsPoller>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<CertificateWatcher>());
 }
 
@@ -165,6 +167,7 @@ app.MapSchoolDomains();
 app.MapRollouts();
 app.MapAlerts();
 app.MapAudit();
+app.MapMonitoring();
 
 if (app.Configuration.GetValue("Database:AutoMigrate", true))
 {

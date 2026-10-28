@@ -14,6 +14,7 @@ interface NavLink {
 }
 
 const LINKS: NavLink[] = [
+  { href: "/overview", label: "Genel bakış", icon: "activity" },
   { href: "/", label: "Okullar", icon: "home" },
   { href: "/hosts", label: "Sunucular", icon: "server" },
   { href: "/releases", label: "Sürümler", icon: "package" },

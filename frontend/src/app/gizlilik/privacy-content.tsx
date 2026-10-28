@@ -66,6 +66,7 @@ function buildSections(controller: string, panel: string, CONTACT_EMAIL: string,
     title: "Saklama ve güvenlik",
     body: [
       "Veriler, yalnızca şifreli (HTTPS) bağlantı üzerinden erişilen bir sunucudaki veritabanında tutulur; yedekler şifrelenerek saklanır. Panele yalnızca yetkili okul personeli erişebilir.",
+      "Sistemin teknik işletmecisi (veri işleyen), arıza giderme amacıyla ve yalnızca gerektiğinde sunucunun sistem kayıtlarını (log) görüntüleyebilir. Bu kayıtlar işletmecide saklanmaz ve her görüntüleme kayıt altına alınır.",
       "Muhasebe ve yasal yükümlülükler gereği saklanması gereken ödeme kayıtları dışındaki veriler, öğrencinin okulla ilişkisi sona erdikten sonra talep üzerine silinir.",
     ],
   },
@@ -90,7 +91,7 @@ export function PrivacyContent() {
     </header>
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       <h1 className="text-2xl font-bold sm:text-3xl">Gizlilik Politikası</h1>
-      <p className="text-meta mt-2">Son güncelleme: 27 Ekim 2026</p>
+      <p className="text-meta mt-2">Son güncelleme: 28 Ekim 2026</p>
       {sections.map((section) => <section key={section.title} className="mt-8">
         <h2 className="text-lg font-bold">{section.title}</h2>
         {section.body.map((paragraph) => <p key={paragraph} className="mt-3 leading-relaxed">{paragraph}</p>)}

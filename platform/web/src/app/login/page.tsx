@@ -19,7 +19,7 @@ export default function LoginPage() {
 
   // Oturum zaten tam doğrulanmışsa giriş ekranı atlanır.
   useEffect(() => {
-    if (me?.totpEnabled && me.totpVerified) router.replace("/");
+    if (me?.totpEnabled && me.totpVerified) router.replace("/overview");
   }, [me, router]);
 
   // Oturum açık ama bu oturumda kod girilmemiş: e-posta bilinir, kod zorunlu.
@@ -33,7 +33,7 @@ export default function LoginPage() {
       {
         onSuccess: (result) => {
           if (!result.totpEnabled) router.replace("/setup-totp");
-          else if (result.totpVerified) router.replace("/");
+          else if (result.totpVerified) router.replace("/overview");
         },
       },
     );

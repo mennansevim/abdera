@@ -82,6 +82,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!text) {
     return undefined as T;
   }
+  // Okul logu düz metin döner (Features/Monitoring.cs).
+  if (response.headers.get("content-type")?.startsWith("text/plain")) return text as T;
 
   return JSON.parse(text) as T;
 }

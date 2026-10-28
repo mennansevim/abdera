@@ -18,12 +18,12 @@ export default function SetupTotpPage() {
   useEffect(() => {
     if (isLoading) return;
     if (me === null) router.replace("/login");
-    else if (me?.totpEnabled) router.replace(me.totpVerified ? "/" : "/login");
+    else if (me?.totpEnabled) router.replace(me.totpVerified ? "/overview" : "/login");
   }, [isLoading, me, router]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    confirm.mutate(code, { onSuccess: () => router.replace("/") });
+    confirm.mutate(code, { onSuccess: () => router.replace("/overview") });
   }
 
   if (isLoading || !me || me.totpEnabled) return null;

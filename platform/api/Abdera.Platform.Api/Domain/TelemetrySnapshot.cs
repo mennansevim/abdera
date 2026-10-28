@@ -19,6 +19,14 @@ public class TelemetrySnapshot
     public long? DatabaseSizeBytes { get; private set; }
     public int? PendingNotifications { get; private set; }
     public int? FailedNotifications { get; private set; }
+    // Gözlem paneli (yalnızca adet; eski okul sürümü göndermez): son 24 saatin hata/uyarı sayısı ve
+    // veritabanı bağlantı/kilit/migration bilgisi.
+    public int? Errors24h { get; private set; }
+    public int? Warnings24h { get; private set; }
+    public DateTimeOffset? LastErrorAt { get; private set; }
+    public int? DbConnections { get; private set; }
+    public int? DbWaitingOnLocks { get; private set; }
+    public string? LastMigration { get; private set; }
     public string? Error { get; private set; }
 
     private TelemetrySnapshot() { }
@@ -49,6 +57,12 @@ public class TelemetrySnapshot
         DatabaseSizeBytes = telemetry.DatabaseSizeBytes,
         PendingNotifications = telemetry.Notifications?.Pending,
         FailedNotifications = telemetry.Notifications?.Failed,
+        Errors24h = telemetry.Logs?.Errors24h,
+        Warnings24h = telemetry.Logs?.Warnings24h,
+        LastErrorAt = telemetry.Logs?.LastErrorAt,
+        DbConnections = telemetry.Database?.Connections,
+        DbWaitingOnLocks = telemetry.Database?.WaitingOnLocks,
+        LastMigration = telemetry.Database?.LastMigration is { Length: > 150 } m ? m[..150] : telemetry.Database?.LastMigration,
     };
 }
 
@@ -59,8 +73,12 @@ public record SchoolTelemetry(
     SchoolTelemetry.CountsPart? Counts,
     SchoolTelemetry.BackupPart? Backup,
     SchoolTelemetry.NotificationsPart? Notifications,
-    long? DatabaseSizeBytes)
+    long? DatabaseSizeBytes,
+    SchoolTelemetry.LogsPart? Logs = null,
+    SchoolTelemetry.DatabasePart? Database = null)
 {
+    public record LogsPart(int Errors24h, int Warnings24h, DateTimeOffset? LastErrorAt);
+    public record DatabasePart(int Connections, int WaitingOnLocks, string? LastMigration);
     public record HealthPart(string? Level, string? Detail);
     public record CountsPart(int ActiveStudents, int ActiveTeachers, int ActiveEnrollments, int? ActiveStaffUsers = null);
     public record BackupPart(DateTimeOffset? LastSucceededAt);

@@ -252,8 +252,9 @@ export function isRunOpen(status: RunStatus) {
   return status === "Pending" || status === "Running";
 }
 
-// Yedek 36 saatten eskiyse okul "sorunlu" sayılır (ARCHITECTURE.md §4.1).
-export const BACKUP_STALE_HOURS = 36;
+// Yedek 26 saatten eskiyse (günlük yedek + 2 saat pay) okul "sorunlu" sayılır. Sunucudaki
+// FleetHealth.BackupStaleHours ile aynı değer olmalı: kutucuk ve genel bakış farklı şey söylemesin.
+export const BACKUP_STALE_HOURS = 26;
 
 export function useSchools(options?: { poll?: boolean }) {
   return useQuery({

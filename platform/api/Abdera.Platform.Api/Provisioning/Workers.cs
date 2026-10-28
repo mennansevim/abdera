@@ -245,6 +245,47 @@ public class TelemetryPoller(IServiceScopeFactory scopes, IConfiguration config,
     }
 }
 
+// Sunucu ölçümleri (gözlem paneli): her sunucuda ajanın `host-stats` komutu - yük, bellek, disk ve
+// konteynerlerin bellek/CPU/yeniden başlama sayısı. Kapalı sunucuya bağlanılmaz; ulaşılamayan sunucu
+// kırmızı kayıt düşer. 7 günden eski ölçümler budanır (eğri için yeterli, tablo büyümesin).
+public class HostStatsPoller(IServiceScopeFactory scopes, IConfiguration config, TimeProvider time, ILogger<HostStatsPoller> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(config.GetValue("Telemetry:PollMinutes", 5)), time);
+        do
+        {
+            try { await PollAllAsync(stoppingToken); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Sunucu ölçüm turu başarısız oldu."); }
+        }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    public async Task PollAllAsync(CancellationToken cancellationToken)
+    {
+        using var scope = scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PlatformDbContext>();
+        var agent = scope.ServiceProvider.GetRequiredService<IHostAgent>();
+        var hosts = await db.Hosts.Where(h => h.Status != HostStatus.Offline).ToListAsync(cancellationToken);
+        foreach (var host in hosts)
+        {
+            var now = time.GetUtcNow();
+            try
+            {
+                var result = await agent.RunAsync(host, AgentCommand.For("host-stats"), cancellationToken);
+                db.HostSnapshots.Add(result.Ok ? HostSnapshot.Parse(host.Id, result.Output, now) : HostSnapshot.Unreachable(host.Id, result.Describe(), now));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                db.HostSnapshots.Add(HostSnapshot.Unreachable(host.Id, ex.Message, now));
+            }
+        }
+        var cutoff = time.GetUtcNow().AddDays(-7);
+        await db.HostSnapshots.Where(s => s.TakenAt < cutoff).ExecuteDeleteAsync(cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+}
+
 // TLS bitiş tarihlerini izler (§3.3). Caddy sertifikayı kendisi yeniler; bu yalnızca güvence: yenileme
 // sessizce durursa (DNS kaydı değişti, Let's Encrypt sınırı) okul kırılmadan alarm düşer. Ulaşılamayan okul
 // burada alarm üretmez - onu TelemetryPoller zaten kırmızıya çevirir. Aynı okul ve türde onaylanmamış

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Icon } from "@/components/icons";
 import { Badge, EmptyState, FormMessage, LoadError, Modal, Notice, PageHeader, Panel, ProgressBar, Skeleton } from "@/components/ui";
@@ -48,7 +49,7 @@ export default function HostsPage() {
               <section key={host.id} className="app-card grid gap-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="flex items-center gap-2 text-sm font-bold"><Icon name="server" className="h-4 w-4" />{host.name}</p>
+                    <Link href={`/hosts/${host.id}`} className="flex items-center gap-2 text-sm font-bold hover:underline"><Icon name="server" className="h-4 w-4" />{host.name}<Icon name="arrow-right" className="h-3.5 w-3.5" /></Link>
                     <p className="text-meta break-all font-mono">{host.sshUser}@{host.address}:{host.sshPort} · {host.publicIp}</p>
                   </div>
                   <Badge tone={STATUS_TONE[host.status]}>{HOST_STATUS_LABEL[host.status]}</Badge>

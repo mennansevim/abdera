@@ -55,6 +55,12 @@ case "$args" in
       grep -qxF "ABDERA_API_IMAGE=$(cat "$STUB_STATE/up-fails-for")" "$envf" && exit 1
     fi
     exit 0 ;;
+  "ps -aq --filter name=abdera-"*) [ -f "$STUB_STATE/no-containers" ] || printf 'c1\nc2\n'; exit 0 ;;
+  "stats --no-stream"*) echo "$args" >> "$STUB_STATE/stats-args"
+    printf '%s\n' '{"Name":"abdera-deniz-api-1","MemUsage":"150MiB / 384MiB","CPUPerc":"1.5%"}' '{"Name":"abdera-deniz-db-1","MemUsage":"28MiB / 256MiB","CPUPerc":"0.0%"}'; exit 0 ;;
+  inspect*) printf '%s\n' '{"name":"/abdera-deniz-api-1","restarts":2,"status":"running","health":"healthy","startedAt":"2026-10-28T10:00:00Z"}'; exit 0 ;;
+  *" logs "*) echo "$args" > "$STUB_STATE/logs-args"; echo "api-1  | 2026-10-28T10:00:00Z [ERR] örnek"; exit 0 ;;
+  *"exec -T backup-gw rclone lsjson"*) echo '[{"Path":"abdera-20261028-030000.sql.enc","Size":1234,"ModTime":"2026-10-28T03:00:05Z"}]'; exit 0 ;;
   run*) exit 0 ;;
   *) exit 0 ;;
 esac
@@ -206,6 +212,25 @@ check "kurulum isteği iletilir" 0 bash -c "printf '{\"admin\":{}}' | '$AGENT' p
 assert "istek gövdesi iç ağa gitti" grep -q '"admin"' "$STUB_STATE/provision-body"
 assert "jeton komut satırında değil" bash -c "! grep -q 'provisioning-0123' '$STUB_LOG'"
 assert "kurulum işareti yazıldı" [ -f "$ABDERA_ROOT/deniz/.provisioned" ]
+
+# --- gözlem: ölçüm, log, yedek listesi (salt okunur) ---
+check "sunucu ölçümleri" 0 "$AGENT" host-stats
+assert "ölçümler ajan sürümünü, konteyner ölçümlerini ve yeniden başlama sayısını taşır" bash -c "grep -q '\"agent\":\"2\"' '$WORK/out' && grep -q '\"stats\":\[{\"Name\":\"abdera-deniz-api-1\"' '$WORK/out' && grep -q '\"restarts\":2' '$WORK/out'"
+touch "$STUB_STATE/no-containers"; rm -f "$STUB_STATE/stats-args"
+check "konteyner yokken ölçüm" 0 "$AGENT" host-stats
+assert "konteyner yokken docker stats hiç çağrılmaz (bütün konteynerleri dökerdi)" [ ! -f "$STUB_STATE/stats-args" ]
+rm -f "$STUB_STATE/no-containers"
+check "log okunur" 0 "$AGENT" logs deniz api 1h 200
+assert "log yalnızca istenen servis, süre ve satırla" grep -q -- "logs --no-color --timestamps --since 1h --tail 200 api" "$STUB_STATE/logs-args"
+check "bilinmeyen servisin logu reddedilir" 2 "$AGENT" logs deniz caddy 1h 200
+check "geçersiz süre reddedilir" 2 "$AGENT" logs deniz api 1d 200
+check "satır sınırı aşılınca reddedilir" 2 "$AGENT" logs deniz api 1h 5000
+check "log komut değiştirmeyle çağrılamaz" 2 env SSH_ORIGINAL_COMMAND='logs deniz api $(id) 10' "$AGENT"
+check "eksik argümanla log reddedilir" 2 "$AGENT" logs deniz api
+check "olmayan okulun logu" 4 "$AGENT" logs yokokul api 1h 10
+mkdir -p "$ABDERA_ROOT/deniz/dumps"; echo x > "$ABDERA_ROOT/deniz/dumps/deniz-20261027-120000.sql.gz.enc"
+check "yedek listesi" 0 "$AGENT" backups deniz
+assert "R2 ve yerel döküm aynı JSON'da" bash -c "grep -q '\"remote\":\[{\"Path\":\"abdera-20261028-030000.sql.enc\"' '$WORK/out' && grep -q '\"local\":\[{\"name\":\"deniz-20261027-120000.sql.gz.enc\",\"size\":2' '$WORK/out'"
 
 # --- iki aşamalı silme ---
 check "silme 1. aşama" 0 "$AGENT" destroy deniz

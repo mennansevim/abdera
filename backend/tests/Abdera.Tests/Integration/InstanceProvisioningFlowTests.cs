@@ -126,6 +126,12 @@ public class InstanceProvisioningFlowTests : IClassFixture<EmptySchoolWebApplica
         Assert.NotNull(telemetry.ProvisionedAt);
         Assert.Equal(0, telemetry.Counts.ActiveStudents);
         Assert.True(telemetry.DatabaseSizeBytes > 0);
+        // Gözlem paneli: hata/uyarı yalnızca adet, veritabanı bağlantı ve migration bilgisi.
+        Assert.NotNull(telemetry.Logs);
+        Assert.True(telemetry.Logs.Errors24h >= 0);
+        Assert.NotNull(telemetry.Database);
+        Assert.True(telemetry.Database.Connections >= 1);
+        Assert.False(string.IsNullOrEmpty(telemetry.Database.LastMigration));
 
         Assert.Equal(HttpStatusCode.Accepted,
             (await Client(EmptySchoolWebApplicationFactory.TelemetryToken).PostAsync("/api/instance/backup-now", null)).StatusCode);

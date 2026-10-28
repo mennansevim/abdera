@@ -136,6 +136,17 @@ denetler. Okul silinince (`purge`) alan adı serbest kalır.
 
 ## 7a. İzleme ve alarmlar
 
+- **Genel bakış** (menüde ilk sıra, girişten sonra açılır): bütün okullar ve sunucular tek ekranda. Üstte
+  **Sorunlar** listesi (kritik önce), altında sunucu kartları ve okul tablosu. Sunucu adına basınca 7 güne kadar
+  yük/bellek/disk eğrisi ve konteynerler açılır.
+- **Loglar:** okul detayı → Loglar → servis ve süre seç → **Getir**. Log okulun sunucusundan o an okunur,
+  platformda tutulmaz; kişisel veri içerebileceği için her okuma denetime yazılır.
+- **Yedekler:** okul detayı → Yedekler: R2'deki günlük yedekler, askı/silme öncesi saklama dışı dökümler
+  (`suspended/`) ve sunucudaki dökümler.
+- Ajanı güncellemek gerekir (sürüm 2): her okul sunucusunda `deploy/host/abdera-host` yeniden kurulur
+  (`install -m 755 deploy/host/abdera-host /usr/local/bin/abdera-host`). Eski ajanlı sunucuda ölçüm, log ve
+  yedek listesi "bilinmeyen komut" hatası verir; okullar etkilenmez.
+
 - **Telemetri:** platform 5 dakikada bir her okulun sağlık/sayı/yedek bilgisini okur; ulaşılamayan okulun kutucuğu kırmızıya döner.
 - **Okul alarmları:** okul kendi sorunlarını (yedek, bildirim, sağlık) imzalı olarak bildirir; Panel → Alarmlar.
 - **Sertifika:** platform 6 saatte bir her okulun alan adına TLS ile bağlanır. Sertifikanın bitmesine 14 günden az
