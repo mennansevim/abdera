@@ -17,14 +17,17 @@ public static class BillingPolicy
         decimal MultiCourseDiscountPercent,
         decimal SiblingDiscountPercent,
         int DueDayOfMonth,
-        List<TierRequest> PrepayTiers);
+        List<TierRequest> PrepayTiers,
+        // Birebir derslerde dönem (4 ders) aidatının başladığı gün; boş = kapalı (BillingSettings).
+        DateOnly? CycleBillingStartsOn = null);
 
     public record TierResponse(Guid Id, int MinMonths, decimal Percent);
     public record PolicyResponse(
         decimal MultiCourseDiscountPercent,
         decimal SiblingDiscountPercent,
         int DueDayOfMonth,
-        List<TierResponse> PrepayTiers);
+        List<TierResponse> PrepayTiers,
+        DateOnly? CycleBillingStartsOn);
 
     public static void MapBillingPolicy(this IEndpointRouteBuilder app)
     {
@@ -63,6 +66,7 @@ public static class BillingPolicy
             multiCourse = settings.MultiCourseDiscountPercent,
             sibling = settings.SiblingDiscountPercent,
             dueDay = settings.DueDayOfMonth,
+            cycleBillingStartsOn = settings.CycleBillingStartsOn,
         });
 
         if (settings is null)
@@ -73,7 +77,7 @@ public static class BillingPolicy
 
         settings.Update(
             request.MultiCourseDiscountPercent, request.SiblingDiscountPercent,
-            request.DueDayOfMonth, actorId, now);
+            request.DueDayOfMonth, request.CycleBillingStartsOn, actorId, now);
 
         // Kademeler tam değişimle yazılır (sil + ekle): ekranda kullanıcı kademe silebiliyor,
         // kısmi güncelleme "hangisi kaldırıldı" sorusunu istemciye yıkardı. Tarifenin
@@ -93,6 +97,7 @@ public static class BillingPolicy
                 multiCourse = request.MultiCourseDiscountPercent,
                 sibling = request.SiblingDiscountPercent,
                 dueDay = request.DueDayOfMonth,
+                cycleBillingStartsOn = request.CycleBillingStartsOn,
                 tiers = request.PrepayTiers.Select(tier => new { tier.MinMonths, tier.Percent }),
             })));
 
@@ -106,5 +111,6 @@ public static class BillingPolicy
         settings.MultiCourseDiscountPercent,
         settings.SiblingDiscountPercent,
         settings.DueDayOfMonth,
-        tiers.Select(tier => new TierResponse(tier.Id, tier.MinMonths, tier.Percent)).ToList());
+        tiers.Select(tier => new TierResponse(tier.Id, tier.MinMonths, tier.Percent)).ToList(),
+        settings.CycleBillingStartsOn);
 }

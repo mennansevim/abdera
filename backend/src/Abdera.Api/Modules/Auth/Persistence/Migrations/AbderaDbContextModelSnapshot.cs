@@ -102,6 +102,41 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.ToTable("lesson_rsvps", (string)null);
                 });
 
+            modelBuilder.Entity("Abdera.Api.Modules.Attendance.Domain.ManualAttendanceEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("enrollment_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnrollmentId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("manual_attendance_entries", (string)null);
+                });
+
             modelBuilder.Entity("Abdera.Api.Modules.Auth.Domain.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -353,6 +388,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<DateOnly?>("CycleBillingStartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("cycle_billing_starts_on");
 
                     b.Property<int>("DueDayOfMonth")
                         .HasColumnType("integer")
@@ -686,6 +725,14 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<Guid?>("AccruedLessonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accrued_lesson_id");
+
+                    b.Property<DateOnly?>("AccruedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("accrued_on");
 
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric(12,2)")
@@ -2023,6 +2070,10 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateOnly?>("CycleStartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("cycle_starts_on");
 
                     b.Property<string>("EndNote")
                         .HasMaxLength(500)

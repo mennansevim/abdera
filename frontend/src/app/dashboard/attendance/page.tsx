@@ -84,10 +84,18 @@ const RANGE_PRESETS = [
   { label: "3 ay", from: () => shiftDays(-89) },
 ];
 
+// Yoklama ekranı geriye dönük ders dökümüdür; yönetici tüm öğretmenleri, öğretmen kendi derslerini
+// görür. Yoklama kartları (4 derslik dönem) Aidatlar ekranının "Kartlar" görünümüne taşındı (AD15).
+export default function AttendancePage() {
+  const { data: me } = useMe();
+  if (!me) return null;
+  return <AttendanceHistory />;
+}
+
 // Geriye dönük yoklama dökümü: hangi ders işlendi, öğrenci geldi mi, hangi öğretmende.
 // Yoklama GİRME işi burada değil - o, dersin öğretmeninin "Bugün" ekranındaki akışı
 // (teacher-today-lessons.tsx). Bu ekran salt okunur bir geçmiş görünümüdür.
-export default function AttendancePage() {
+function AttendanceHistory() {
   const { data: me } = useMe();
   const isAdmin = me?.role === "Admin";
 

@@ -66,6 +66,8 @@ public static class Receivables
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
 
         var pricer = await TuitionPricer.LoadAsync(db);
+        if (pricer.BillsByCycle(enrollment, request.Period))
+            throw new ConflictException(TuitionPricer.CycleBilledMessage);
         // Mesaj ders türünü ve dönemi açıkça söyler: Aylık aidatlar ekranındaki "Bu ayın
         // aidatını aç" düğmesi bunu olduğu gibi gösterir, admin neyi düzelteceğini bilir.
         // Tarife dönemin İLK gününe göre seçilir (TuitionPricer.Price) - ay ortasında

@@ -60,7 +60,7 @@ public static class ModuleCatalog
         // uygulamasına düşülür, bekleyen işler üretilmez.
         new(ModuleKeys.WhatsApp, "WhatsApp bildirimleri", false, []),
         // Yorumlar Gelişim ve Kârlılık ekranlarının içinde.
-        new(ModuleKeys.Ai, "Yapay zekâ yorumları", false, []),
+        new(ModuleKeys.Ai, "Yapay zekâ yorumları ve asistan", false, []),
         new(ModuleKeys.Banking, "Banka entegrasyonu (sanal IBAN)", false, [ModuleKeys.Billing]),
     ];
 

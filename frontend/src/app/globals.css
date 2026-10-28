@@ -234,6 +234,23 @@ textarea:focus-visible:not(.field) {
 
 @keyframes shimmer { to { transform: translateX(100%); } }
 
+/* Asistan paneli: masaüstünde sağdan, telefonda alttan gelir; mesajlar hafifçe yükselir. */
+@keyframes assistant-sheet-in { from { opacity: 0; transform: translateY(1.5rem); } }
+@keyframes assistant-sheet-in-side { from { opacity: 0; transform: translateX(1.5rem); } }
+@keyframes assistant-rise { from { opacity: 0; transform: translateY(.35rem); } }
+.assistant-sheet-in { animation: assistant-sheet-in .24s cubic-bezier(.2,.8,.2,1); }
+@media (min-width: 640px) { .assistant-sheet-in { animation-name: assistant-sheet-in-side; } }
+.assistant-rise { animation: assistant-rise .22s ease-out both; }
+/* Mesaj kutusunun odak halkası çevresindeki çerçevede (focus-within); iç halka çift görünürdü. */
+textarea.assistant-input:focus-visible { outline: none; }
+/* Asistan tanıtımı: yazılan metin soldan açılır, imleç yanıp söner, onay düğmesine basılır. */
+@keyframes intro-type { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes intro-caret { 50% { opacity: 0; } }
+@keyframes intro-press { 40% { transform: scale(.92); } }
+.intro-type { display: inline-block; vertical-align: bottom; animation: intro-type .8s steps(18, end) both; }
+.intro-caret { display: inline-block; width: 1.5px; height: 1em; margin-left: 1px; vertical-align: -0.15em; background: var(--brand-strong); animation: intro-caret 1s steps(1) infinite; }
+.intro-press { animation: intro-press .35s ease-out; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;

@@ -44,7 +44,113 @@ export function useMarkAttendance(lessonId: string) {
       queryClient.invalidateQueries({ queryKey: ["staff-notifications"] });
       // "Mazeretli" telafi hakkı doğurur, ondan çıkan düzeltme hakkı geri alır.
       queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
+      // Birebir derste yoklama kartın satırını doldurur; dönemin ilk dersi aidatı açar.
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
     },
+  });
+}
+
+// Yönetici yoklama ekranı (AttendanceCards.cs, docs/10-decisions.md AD): birebir kayıt başına
+// okulun kâğıt "Yoklama Listesi"nin dijital hali. 4 satır bir dönemdir; yalnızca Geldi satır
+// doldurur (AD13), Gelmedi ve Mazeretli kartın altına not düşer. Kartı ve durumu sunucu kurar, ekran yalnızca çizer.
+export type CardState = "NotStarted" | "InProgress" | "LastLesson" | "AwaitingPayment" | "NextPrepaid" | "Unpaid";
+
+export interface CardLesson {
+  // Sistemdeki yoklamalı ders; karta elle yazılmış geçmiş derste null, entryId dolu.
+  lessonId: string | null;
+  entryId: string | null;
+  startAt: string;
+  date: string;
+  status: AttendanceStatus;
+}
+
+export interface CycleReceivable {
+  id: string;
+  status: "Unpaid" | "Partial" | "Paid" | "Overdue" | "Cancelled";
+  amount: number;
+  paid: number;
+  currency: string;
+  dueDate: string;
+  accruedOn: string | null;
+  // Son ödemenin günü (tarih düzeltmesi dahil); kartta dönemin yanındaki ödeme sütununa yazılır.
+  paidOn: string | null;
+  // Dönemin gerçek aidatı: "D002" ya da dönemi karşılayan aylık aidatın ayı "2026-09" (AD14).
+  // Tahsilat bu anahtarla yapılır.
+  period: string;
+  // Sayılan ödemeler; kartta ödeme tarihi düzeltilirken (useCorrectPaymentDates) gönderilir.
+  paymentIds?: string[];
+}
+
+export interface CardCycle {
+  number: number;
+  filled: CardLesson[];
+  misses: CardLesson[];
+  receivable: CycleReceivable | null;
+}
+
+export interface AttendanceCard {
+  enrollmentId: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  instrumentName: string;
+  startedAt: string;
+  // Dönem sayacının başladığı gün; null: kayda başlangıç girilmedi ve okul geneli geçiş kapalı.
+  countingFrom: string | null;
+  currentCycle: number;
+  filledInCurrent: number;
+  state: CardState;
+  unpaidAmount: number;
+  currency: string;
+  lastLessonDate: string | null;
+  cycles: CardCycle[];
+  // Geçiş gününden önce işlenmiş dersler: yalnızca bilgi, karta sayılmaz ve aidat açmaz.
+  earlierLessons: CardLesson[];
+  // Sayaç başlangıcı kayda özel girilmiş mi (öğrencinin ilk giriş günü).
+  hasOwnCycleStart: boolean;
+}
+
+export interface AttendanceCardsResponse {
+  cycleBillingStartsOn: string | null;
+  cards: AttendanceCard[];
+  // Karta elle ders yazılabilecek en eski gün (geçen ayın 1'i).
+  entriesFrom: string;
+}
+
+// Karta elle yazılan geçmiş ders (kâğıttaki satır): eklenir, tarihi değişir ya da kaldırılır.
+// Her değişiklikte sunucu kartı yeniden sayar ve dönem aidatlarını eşitler.
+function useCardEntryMutation<T>(fn: (body: T) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["attendance-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["billing-board"] });
+    },
+  });
+}
+
+export function useAddCardEntry() {
+  return useCardEntryMutation(({ enrollmentId, date }: { enrollmentId: string; date: string }) =>
+    api.post(`/api/attendance/cards/${enrollmentId}/entries`, { date }));
+}
+
+export function useChangeCardEntry() {
+  return useCardEntryMutation(({ entryId, date }: { entryId: string; date: string }) =>
+    api.put(`/api/attendance/cards/entries/${entryId}`, { date }));
+}
+
+export function useRemoveCardEntry() {
+  return useCardEntryMutation((entryId: string) => api.delete(`/api/attendance/cards/entries/${entryId}`));
+}
+
+export function useAttendanceCards(enabled = true) {
+  return useQuery({
+    queryKey: ["attendance-cards"],
+    queryFn: () => api.get<AttendanceCardsResponse>("/api/attendance/cards"),
+    enabled,
   });
 }
 

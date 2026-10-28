@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.Attendance.Features;
 using Abdera.Api.Modules.Auth.Domain;
+using Abdera.Api.Modules.Billing.Infrastructure;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Progress.Domain;
 using Abdera.Api.Modules.Progress.Infrastructure;
@@ -196,8 +197,11 @@ public static class LessonNotes
             })));
         // Not yazılan derse öğrenci gelmiştir: yoklama hiç girilmediyse "geldi" olarak aynı
         // kayıtla işlenir ve zildeki "öğrenci geldi mi?" sorusu kapanır.
-        await AttendanceFromNote.MarkPresentIfUnmarkedAsync(db, clock, notifier, lesson, AuthContext.GetUserId(principal));
+        var markedPresent = await AttendanceFromNote.MarkPresentIfUnmarkedAsync(db, clock, notifier, lesson, AuthContext.GetUserId(principal));
         await db.SaveChangesAsync();
+        // Otomatik "geldi" de yoklama kartının bir satırını doldurur (dönem aidatı, BillingCycle).
+        if (markedPresent)
+            await CycleReceivableAccruer.SyncForLessonAsync(db, clock, lesson, AuthContext.GetUserId(principal));
 
         // Zildeki hatırlatma hemen güncellenir: yazılan ders listeden düşer, son eksik de
         // yazıldıysa kapanır (not önce kaydedilmeli ki "bekleyen ders" sorgusu onu görsün).

@@ -215,6 +215,7 @@ public static class PersonEraser
         DELETE FROM lesson_notes WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM lesson_rsvps WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM lesson_attendances WHERE lesson_id IN (SELECT id FROM _les);
+        DELETE FROM manual_attendance_entries WHERE enrollment_id IN (SELECT id FROM _enr);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _les);
         DELETE FROM practice_journal_entries WHERE student_id = @student_id;
         DELETE FROM progress_summaries WHERE student_id = @student_id;
@@ -312,6 +313,7 @@ public static class PersonEraser
         DELETE FROM term_reports WHERE teacher_id = @teacher_id OR enrollment_id IN (SELECT id FROM _tenr);
         DELETE FROM lesson_rsvps WHERE lesson_id IN (SELECT id FROM _tles);
         DELETE FROM lesson_attendances WHERE lesson_id IN (SELECT id FROM _tles);
+        DELETE FROM manual_attendance_entries WHERE enrollment_id IN (SELECT id FROM _tenr);
         DELETE FROM lesson_change_requests WHERE lesson_id IN (SELECT id FROM _tles);
 
         DELETE FROM lessons WHERE id IN (SELECT id FROM _tles);

@@ -90,3 +90,6 @@ platform/api/Abdera.Platform.Api/.dev-keys/
 
 # Yerel test ortamı çıktıları
 deploy/local/.out/
+
+# Asistan benchmark ham sonuçları (md özetleri commit edilir)
+tools/assistant-benchmark/results/*.json

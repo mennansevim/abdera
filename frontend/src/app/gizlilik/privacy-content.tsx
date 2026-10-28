@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
 import { SchoolBrandMark } from "@/components/school-brand";
-import { useSchoolProfile } from "@/lib/instance";
+import { useModuleEnabled, useSchoolProfile } from "@/lib/instance";
 
 // Gizlilik metni okulun kendi adını, unvanını ve başvuru adresini taşır (docs/multi-tenant/ARCHITECTURE.md
 // §5.1). Veri sorumlusu okuldur; unvan girilmemişse okulun adı, başvuru adresi girilmemişse okulun
@@ -17,10 +17,12 @@ function usePrivacySections() {
   // Sunucu çiziminde adres bilinmez; istemcide hidrasyon uyuşmazlığı olmadan doldurulur.
   const panel = useSyncExternalStore(noSubscribe, () => window.location.host, () => "");
   const CONTACT_EMAIL = profile.contactEmail ?? "";
-  return { sections: buildSections(controller, panel, CONTACT_EMAIL), contactEmail: CONTACT_EMAIL, shortName: profile.shortName };
+  // Asistan yapay zekâ modülüne bağlı; modül kapalı okulda DeepSeek'e aktarım yoktur, bölüm de yazılmaz.
+  const assistant = useModuleEnabled("ai");
+  return { sections: buildSections(controller, panel, CONTACT_EMAIL, assistant), contactEmail: CONTACT_EMAIL, shortName: profile.shortName };
 }
 
-function buildSections(controller: string, panel: string, CONTACT_EMAIL: string) {
+function buildSections(controller: string, panel: string, CONTACT_EMAIL: string, assistant: boolean) {
   const sections: { title: string; body: string[] }[] = [
   {
     title: "Kapsam",
@@ -52,6 +54,14 @@ function buildSections(controller: string, panel: string, CONTACT_EMAIL: string)
       "Bildirimleri durdurmak için okulun WhatsApp hattına \"dur\", \"iptal\" veya \"stop\" yazmanız yeterlidir. Bekleyen tüm bildirimler iptal edilir ve tek bir teyit mesajı gönderilir.",
     ],
   },
+  ...(assistant ? [{
+    title: "Yapay zekâ asistanı",
+    body: [
+      "Panelde yalnızca okul personelinin (yönetici ve öğretmen) kullandığı bir asistan bulunur. Personelin yazdığı soruyu yanıtlamak için gerekli veriler (ders programı ve saatleri, yoklama, telafi hakları, gelişim notları ve aidat durumu) yapay zekâ hizmet sağlayıcısı DeepSeek'e (Hangzhou DeepSeek Artificial Intelligence Co., Ltd., Çin Halk Cumhuriyeti) aktarılır.",
+      "Aktarım öncesinde öğrenci ve öğretmen adları kod ile değiştirilir; veli bilgileri, telefon numarası, e-posta, doğum tarihi ve adres gönderilmez. Asistan hiçbir kaydı kendiliğinden değiştirmez; ders saati veya telafi gibi her işlem personelin ekranda onayıyla yapılır.",
+      "Bu aktarım, 6698 sayılı KVKK'nın 9. maddesi kapsamında yurt dışına veri aktarımıdır. Aktarıma ilişkin sorularınızı ve itirazlarınızı aşağıdaki adrese iletebilirsiniz. Hizmet sağlayıcısı değişirse bu bölüm güncellenir.",
+    ],
+  }] : []),
   {
     title: "Saklama ve güvenlik",
     body: [
@@ -80,7 +90,7 @@ export function PrivacyContent() {
     </header>
     <main className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       <h1 className="text-2xl font-bold sm:text-3xl">Gizlilik Politikası</h1>
-      <p className="text-meta mt-2">Son güncelleme: 29 Eylül 2026</p>
+      <p className="text-meta mt-2">Son güncelleme: 27 Ekim 2026</p>
       {sections.map((section) => <section key={section.title} className="mt-8">
         <h2 className="text-lg font-bold">{section.title}</h2>
         {section.body.map((paragraph) => <p key={paragraph} className="mt-3 leading-relaxed">{paragraph}</p>)}

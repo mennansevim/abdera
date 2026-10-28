@@ -241,3 +241,9 @@ POST   /api/student-deletion-requests/{id}/reject        ✅                    
 `POST /api/students/{id}/enrollments`, `POST|GET /api/students/{id}/guardians`,
 `POST /api/guardians`, `PATCH /api/guardians/{id}`.
 `GET /api/guardians` (okul geneli liste) Admin'de kaldı.
+
+## Uygulama içi asistan (AE, AE9)
+
+```
+POST   /api/assistant/chat                       ✅ Teacher+Admin - { message (1-1000), history[{role: user|assistant, content}] (≤16, MASKELİ, önceki yanıttan aynen), studentId? } → { reply, cards[{kind: progress|lessons|makeup|reschedule|dues|navigate, student?, move?, navigation?}], history }. Dil modeli (DeepSeek) salt okunur araçlarla çalışır, kayıt değiştirmez; yazma işleri kartta onayla mevcut uçlardan. Model yapılandırılmamışsa 503
+```

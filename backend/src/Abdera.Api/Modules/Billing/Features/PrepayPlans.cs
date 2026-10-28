@@ -110,6 +110,7 @@ public static class PrepayPlans
         var priced = new List<(string Period, TuitionRate Rate, TuitionCalculator.Breakdown Breakdown)>();
         foreach (var period in periods)
         {
+            if (pricer.BillsByCycle(enrollment, period)) throw new ConflictException(TuitionPricer.CycleBilledMessage);
             var (rate, breakdown) = pricer.Price(enrollment, period, prepayPercent)
                 ?? throw new ConflictException(pricer.MissingRateMessage(enrollment.CourseKind, period));
             priced.Add((period, rate, breakdown));

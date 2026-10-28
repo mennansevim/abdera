@@ -88,10 +88,10 @@ public static class DeterministicIntents
 
         if (upcoming.Status is ReceivableStatus.Paid)
         {
-            return $"{upcoming.Period} dönemi aidatı ödendi.";
+            return $"{BillingCycle.MessageLabel(upcoming.Period)} dönemi aidatı ödendi.";
         }
 
-        return $"{upcoming.Period} dönemi aidatınız {(upcoming.Status == ReceivableStatus.Overdue ? "vadesi geçmiş" : "ödenmedi")} " +
+        return $"{BillingCycle.MessageLabel(upcoming.Period)} dönemi aidatınız {(upcoming.Status == ReceivableStatus.Overdue ? "vadesi geçmiş" : "ödenmedi")} " +
                $"- {upcoming.DueDate.ToString("d MMMM", culture)} vade, {upcoming.Amount.ToString("N2", culture)} {upcoming.Currency}.";
     }
 

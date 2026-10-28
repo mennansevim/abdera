@@ -34,7 +34,7 @@ function formatDate(value: string) {
 
 const COURSE_KINDS: CourseKind[] = ["Individual", "Group"];
 
-type DiscountDraft = { multiCourse: number; sibling: number; dueDay: number; tiers: PrepayTier[] };
+type DiscountDraft = { multiCourse: number; sibling: number; dueDay: number; cycleStart: string; tiers: PrepayTier[] };
 
 export function TuitionPolicySection() {
   const { data: rates, isLoading, isError, refetch, isFetching } = useTuitionRates();
@@ -176,6 +176,7 @@ function DiscountPolicyCard() {
     multiCourse: policy.multiCourseDiscountPercent,
     sibling: policy.siblingDiscountPercent,
     dueDay: policy.dueDayOfMonth,
+    cycleStart: policy.cycleBillingStartsOn ?? "",
     tiers: policy.prepayTiers.map((tier) => ({ minMonths: tier.minMonths, percent: tier.percent })),
   } : null);
 
@@ -203,6 +204,7 @@ function DiscountPolicyCard() {
         siblingDiscountPercent: draft!.sibling,
         dueDayOfMonth: draft!.dueDay,
         prepayTiers: [...draft!.tiers].sort((a, b) => a.minMonths - b.minMonths),
+        cycleBillingStartsOn: draft!.cycleStart || null,
       });
       // Kaydedildikten sonra taslak bırakılır; ekran tazelenen sunucu politikasından
       // yeniden türer, böylece sunucunun sıraladığı/temizlediği hâli görünür.
@@ -230,6 +232,17 @@ function DiscountPolicyCard() {
         <label className="form-label">Vade günü
           <input type="number" inputMode="numeric" min={1} max={28} value={draft.dueDay} onChange={(event) => patch({ dueDay: Number(event.target.value) })} className="field text-sm" />
         </label>
+      </div>
+
+      {/* docs/10-decisions.md AD: birebir derste aidat 4 dersin dolmasıyla açılır. Bu günden önceki
+          dersler karta sayılmaz; bu günden itibaren başlayan aylarda birebir kayda aylık aidat açılmaz. */}
+      <div className="rounded-2xl border border-[var(--line)] p-3">
+        <label className="form-label max-w-xs">Birebir derslerde 4 derslik dönem başlangıcı
+          <input type="date" value={draft.cycleStart} onChange={(event) => patch({ cycleStart: event.target.value })} className="field text-sm" />
+        </label>
+        <p className="text-meta mt-1.5">{draft.cycleStart
+          ? "Birebir derste her 4 Geldi (telafi dersi dahil) bir dönemdir; dönemin ilk dersi işlenince aidatı açılır. Ayın 1'ini seç: o aydan itibaren birebir kayda aylık aidat açılmaz."
+          : "Boş: birebir dersler de aylık aidatla devam eder."}</p>
       </div>
 
       <div className="rounded-2xl border border-[var(--line)] p-3">

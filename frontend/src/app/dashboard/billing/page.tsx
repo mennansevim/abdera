@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { AdminGate, PageHeader, Segmented } from "@/components/ui";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AdminGate, Notice, PageHeader, Segmented } from "@/components/ui";
+import { QuickCollect } from "./collect-sheet";
 import { DuesBoard } from "./dues-board";
 import { TuitionPolicySection } from "./tuition-policy-section";
 
@@ -11,13 +13,32 @@ import { TuitionPolicySection } from "./tuition-policy-section";
 type BillingView = "dues" | "pricing";
 
 export default function BillingPage() {
-  return <AdminGate><BillingPageContent /></AdminGate>;
+  // useSearchParams App Router'da bir Suspense sınırı ister.
+  return <AdminGate><Suspense><BillingPageContent /></Suspense></AdminGate>;
 }
 
 // Aidatlar tamamen Admin'e özel (docs/04-permissions.md) - AdminGate sayfayı bir
 // öğretmen doğrudan adres yazsa bile açmaz, /dashboard'a geri yönlendirir.
+//
+// Asistandan gelen bağlantılar (docs/10-decisions.md AE2): `?view=pricing` Fiyat politikası
+// sekmesini, `?collect={enrollmentId}&period=..&name=..` o kaydın sade ödeme penceresini
+// (QuickCollect) açar. Asistan para almaz; tahsilat yine bu ekranın tek ödeme yolundan geçer.
 function BillingPageContent() {
-  const [view, setView] = useState<BillingView>("dues");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const [view, setView] = useState<BillingView>(() => (searchParams.get("view") === "pricing" ? "pricing" : "dues"));
+  const [collect, setCollect] = useState(() => {
+    const enrollmentId = searchParams.get("collect");
+    const period = searchParams.get("period");
+    return enrollmentId && period ? { enrollmentId, period, name: searchParams.get("name") ?? "Öğrenci" } : null;
+  });
+  const [collected, setCollected] = useState<string | null>(null);
+
+  function closeCollect(message?: string) {
+    setCollect(null);
+    if (message) setCollected(message);
+    router.replace("/dashboard/billing", { scroll: false });
+  }
 
   return (
     <div className="space-y-3">
@@ -35,8 +56,16 @@ function BillingPageContent() {
           />
         }
       />
+      {collected && <Notice onDismiss={() => setCollected(null)}>{collected}</Notice>}
       {view === "dues" && <DuesBoard />}
       {view === "pricing" && <TuitionPolicySection />}
+      {collect && <QuickCollect
+        enrollmentId={collect.enrollmentId}
+        studentName={collect.name}
+        periods={[collect.period]}
+        onClose={() => closeCollect()}
+        onCollected={(message) => closeCollect(message)}
+      />}
     </div>
   );
 }

@@ -114,7 +114,7 @@ public static class InstanceProvisioning
                 db.BillingSettings.Add(settings);
             }
             settings.Update(billingRequest.MultiCourseDiscountPercent, billingRequest.SiblingDiscountPercent,
-                billingRequest.DueDayOfMonth, admin.Id, now);
+                billingRequest.DueDayOfMonth, settings.CycleBillingStartsOn, admin.Id, now);
         }
 
         // Migration'lar Abdera'nın kendi tarifelerini tohum olarak ekler (RedesignTuitionAndDues). Yeni

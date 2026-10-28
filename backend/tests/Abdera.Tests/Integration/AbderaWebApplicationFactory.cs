@@ -84,6 +84,10 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
             .UseNpgsql(templateConnection).Options))
         {
             await db.Database.MigrateAsync();
+            // Migration canlı okul için dönem (4 ders) aidatını açar. Testler gerçek saatle koşuyor:
+            // açık kalsaydı geçiş tarihinden sonra birebir kayıtların aylık aidat testleri kendiliğinden
+            // kırılırdı. Varsayılan kapalı; dönem testleri Fiyat politikasından kendileri açar.
+            await db.Database.ExecuteSqlRawAsync("UPDATE billing_settings SET cycle_billing_starts_on = NULL");
         }
 
         return postgres;
@@ -131,6 +135,7 @@ public class AbderaWebApplicationFactory : WebApplicationFactory<Program>, IAsyn
                 // WithWebHostBuilder ile kurup asıl davranışı doğruluyor.
                 ["RateLimiting:LoginPermitLimit"] = "10000",
                 ["RateLimiting:GuardianOtpPermitLimit"] = "10000",
+                ["RateLimiting:AssistantPermitLimit"] = "10000",
                 // Faz 4: BackupService.RunPgDumpAsync sonrası gerçekten şifreleme çalışsın diye -
                 // testlerde Backup:Provider/Email:Provider ayarlanmadığı için ikisi de varsayılan
                 // Fake kalır (OpsFlowTests), yalnızca şifreleme anahtarı gerçek olmalı.

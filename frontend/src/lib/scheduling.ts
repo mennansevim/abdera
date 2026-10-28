@@ -272,6 +272,24 @@ export function useOpenSlots(params: { instrumentId: string; durationMinutes: nu
   });
 }
 
+// Okul takvimi (SchoolCalendarDays.cs): resmi tatil günlerinde ders üretilmez. Asistan bir
+// gün ifadesini ("perşembe dersi") tatile denk geldiğinde bunu söylemek için okur.
+export interface SchoolCalendarDay {
+  id: string;
+  date: string;
+  type: "Holiday" | "Event";
+  label: string;
+}
+
+export function useSchoolCalendarDays(from: string, to: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["school-calendar-days", from, to],
+    queryFn: () => api.get<SchoolCalendarDay[]>(`/api/school-calendar-days?from=${from}&to=${to}`),
+    enabled: options?.enabled ?? true,
+    staleTime: 60 * 60_000,
+  });
+}
+
 // Öğretmenler ekranındaki "uygun günler" tek-tık aç/kapa arayüzü bu ikisini kullanır: bir
 // günü açmak POST, kapatmak DELETE'tir - ayrı bir "toggle" ucu yok, backend zaten
 // create/delete olarak modelliyor (TeacherAvailabilities.cs).

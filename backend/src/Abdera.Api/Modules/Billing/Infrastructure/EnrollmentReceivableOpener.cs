@@ -28,6 +28,8 @@ public static class EnrollmentReceivableOpener
         NotActive,
         StartsInLaterPeriod,
         NoTariff,
+        // Birebir ders, geçiş tarihinden sonra: aidatı yoklama kartı açar (BillingCycle).
+        CycleBilled,
     }
 
     // Kurs kaydı bu çağrıdan ÖNCE kaydedilmiş olmalı: TuitionPricer çoklu kurs indirimini
@@ -52,6 +54,7 @@ public static class EnrollmentReceivableOpener
             return Outcome.AlreadyExists;
 
         var pricer = await TuitionPricer.LoadAsync(db);
+        if (pricer.BillsByCycle(enrollment, period)) return Outcome.CycleBilled;
         var priced = pricer.Price(enrollment, period);
         if (priced is null) return Outcome.NoTariff;
 

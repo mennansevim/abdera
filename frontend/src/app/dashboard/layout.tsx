@@ -2,10 +2,15 @@
 
 import { useRequireAuth } from "@/lib/use-require-auth";
 import { AppLoader } from "@/components/app-loader";
+import { AssistantProvider } from "@/components/assistant/assistant-provider";
+import { canUseAssistant } from "@/lib/assistant";
+import { useModuleQueryEnabled } from "@/lib/instance";
 import { AppShell } from "./app-header";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { me, isLoading, authError } = useRequireAuth();
+  // Asistan yapay zekâ modülünün parçası (docs/multi-tenant/ARCHITECTURE.md §4); kapalı okulda düğme de yok.
+  const aiEnabled = useModuleQueryEnabled("ai");
 
   if (isLoading) {
     return <AppLoader message="Uygulama hazırlanıyor…" />;
@@ -28,5 +33,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  return <AppShell me={me}>{children}</AppShell>;
+  // Asistan her ekrandan açılır (kenar menüsü, ⌘K, öğrenci satırı) - docs/10-decisions.md AE.
+  return <AssistantProvider enabled={aiEnabled && canUseAssistant(me.role)}><AppShell me={me}>{children}</AppShell></AssistantProvider>;
 }

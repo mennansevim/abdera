@@ -233,6 +233,9 @@ public static class LessonSeriesFeatures
         await EnsureSingleSeriesPerInstrumentAsync(
             enrollment.StudentId, enrollment.InstrumentId, effectiveFrom, originalUntil, db,
             excludeSeriesId: series.Id);
+        await EnsureNoSingleLessonConflictAsync(
+            enrollment, request.DayOfWeek, request.StartTime, endTime, effectiveFrom, originalUntil,
+            series.Id, db, clock);
 
         var beforeJson = SerializeSeries(series, enrollment.TeacherId, enrollment.StudentId);
 
@@ -431,6 +434,40 @@ public static class LessonSeriesFeatures
             throw new ConflictException(
                 $"Bu saat aralığı öğrencinin başka bir ders serisiyle çakışıyor ({Describe(candidate.Series.DayOfWeek, candidate.Series.StartTime)}).");
         }
+    }
+
+    // Seri kontrolü yalnız haftalık programlara bakar; telafi dersleri ve tek seferliğine
+    // taşınmış dersler seriye bağlı değildir. Program yeni gün/saate taşınırken öğretmenin ya da
+    // öğrencinin o saatlerde zaten duran tek dersleri de çakışma sayılır - aksi halde ders
+    // üretimi aynı saate ikinci bir ders koyardı. Taşınan serinin kendi dersleri zaten kaldırılır.
+    internal static async Task EnsureNoSingleLessonConflictAsync(
+        Enrollment enrollment, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime,
+        DateOnly effectiveFrom, DateOnly? effectiveUntil, Guid movedSeriesId, AbderaDbContext db, IClock clock)
+    {
+        // Okul saati UTC+3; tarih sınırında bir günlük pay bırakılır, kesin gün/saat aşağıda yerelde denetlenir.
+        var from = new DateTimeOffset(effectiveFrom.AddDays(-1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var lessons = await db.Lessons
+            .Where(l => l.Status != LessonStatus.Cancelled && l.Status != LessonStatus.Rescheduled)
+            .Where(l => l.TeacherId == enrollment.TeacherId || l.StudentId == enrollment.StudentId)
+            .Where(l => l.LessonSeriesId == null || l.LessonSeriesId != movedSeriesId)
+            .Where(l => l.StartAt >= from)
+            .ToListAsync();
+
+        var conflict = lessons
+            .Select(lesson => (Lesson: lesson, Start: clock.ToSchoolLocal(lesson.StartAt), End: clock.ToSchoolLocal(lesson.EndAt)))
+            .Where(x => DateOnly.FromDateTime(x.Start.DateTime) >= effectiveFrom)
+            .Where(x => effectiveUntil is not { } until || DateOnly.FromDateTime(x.Start.DateTime) <= until)
+            .Where(x => x.Start.DayOfWeek == dayOfWeek)
+            .Where(x => startTime < TimeOnly.FromDateTime(x.End.DateTime) && TimeOnly.FromDateTime(x.Start.DateTime) < endTime)
+            .OrderBy(x => x.Start)
+            .FirstOrDefault();
+
+        if (conflict.Lesson is null) return;
+
+        var who = conflict.Lesson.StudentId == enrollment.StudentId ? "öğrencinin" : "öğretmenin";
+        throw new ConflictException(
+            $"Bu saat {who} {conflict.Start:dd.MM.yyyy HH:mm} tarihindeki dersiyle çakışıyor. " +
+            "Önce o dersi taşıyın ya da başka bir saat seçin.");
     }
 
     // Öğretmenin o gün/saatte başka bir dersi (seri) ya da grubu var mı. Grup oluştururken de

@@ -1,74 +1,43 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@/components/icons";
 import { SearchInput, Segmented } from "@/components/ui";
-import { ApiError } from "@/lib/api";
-import { useBillingBoard, useCollect, useCorrectPayment, type BoardRow } from "@/lib/billing";
-import { currentPeriod, formatMoney, formatPeriod, todayInput } from "@/lib/billing-format";
+import { useBillingBoard, type BoardRow } from "@/lib/billing";
+import { currentPeriod, formatMoney, formatPeriod, isCyclePeriod } from "@/lib/billing-format";
 import { useSessionState } from "@/lib/use-session-state";
 import {
-  MONTHS_SHORT,
   byStudentName,
   cellState,
-  hasDebt,
   initials,
   isOwed,
   isSelectable,
   lateCount,
   matchesQuery,
-  periodOf,
-  remainingOf,
+  monthEntry,
+  remainingOfAll,
   type CellState,
 } from "./board-model";
-import { CollectSheet } from "./collect-sheet";
+import { AttendanceCards } from "./attendance-cards";
+import { CollectSheet, QuickCollect } from "./collect-sheet";
 
-// Aidatlar ekranı (docs/10-decisions.md H17): iki görünüm, bir ödeme penceresi.
-//   Liste   - seçili ayın bekleyenleri; "Ödeme al" tek dokunuşla ayı kapatır.
-//   Çizelge - öğrenci × ay; yılın resmi ve geçmiş.
-// Görünüm seçimi sayfada durur ve hatırlanır (ilk açılışta telefonda Liste, geniş ekranda
-// Çizelge). Arama iki görünümde ortak: öğrenci, öğretmen, veli veya enstrüman adı.
-type View = "list" | "grid";
+// Aidatlar ekranı (docs/10-decisions.md H17, AD18): tek görünüm. Üstte birebir öğrencilerin delikli
+// kartları (4 ders = 1 aidat), altında aylık faturalanan kayıtlar (grup dersleri ve dönem sayacı
+// başlamamış birebir kayıt) - onların kartı yok, ay ay listelenir. Arama ikisinde ortak: öğrenci,
+// öğretmen, veli veya enstrüman adı. Tahsilat her yerde aynı tek yoldan (Collections.cs).
 type ListFilter = "wait" | "paid" | "all";
 type SheetState = { row: BoardRow; periods: string[] } | null;
 type Toast = { message: string; undo?: () => Promise<void> } | null;
 
-const VIEW_KEY = "abdera:billing:view";
-
 export function DuesBoard() {
   const today = currentPeriod();
-  const [view, setView] = useState<View>("list");
   const [month, setMonth] = useState(today);
   const year = Number(month.slice(0, 4));
   const [query, setQuery] = useSessionState("abdera:billing:board-search", "");
   const [listFilter, setListFilter] = useState<ListFilter>("wait");
-  const [debtOnly, setDebtOnly] = useState(false);
   const [sheet, setSheet] = useState<SheetState>(null);
   const [toast, setToast] = useState<Toast>(null);
-  const { data: board, isLoading, isError, refetch } = useBillingBoard(year);
-
-  useEffect(() => {
-    let initial: View = window.matchMedia("(min-width: 1024px)").matches ? "grid" : "list";
-    try {
-      const stored = window.localStorage.getItem(VIEW_KEY);
-      if (stored === "list" || stored === "grid") initial = stored;
-    } catch {
-      // Depolama kapalıysa ekran genişliğine göre başlar.
-    }
-    // Tarayıcı deposunu ilk açılışta bir kez React'e eşitliyoruz (useSessionState ile aynı desen).
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setView(initial);
-  }, []);
-
-  function changeView(next: View) {
-    setView(next);
-    try {
-      window.localStorage.setItem(VIEW_KEY, next);
-    } catch {
-      // Hatırlanamazsa yalnızca bu oturum için geçerli olur.
-    }
-  }
+  const { data: board, isError, refetch } = useBillingBoard(year);
 
   useEffect(() => {
     if (!toast) return;
@@ -76,36 +45,24 @@ export function DuesBoard() {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const rows = useMemo(() => (board ?? []).filter((row) => matchesQuery(row, query)), [board, query]);
-  const teacherHit = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase("tr-TR");
-    if (!q) return null;
-    const names = [...new Set((board ?? []).map((row) => row.teacherName))].filter((name) => name.toLocaleLowerCase("tr-TR").includes(q));
-    return names.length === 1 ? names[0] : null;
-  }, [board, query]);
-  const studentCount = useMemo(() => new Set(rows.map((row) => row.studentId)).size, [rows]);
+  const monthlyRows = useMemo(
+    () => (board ?? []).filter((row) => (row.courseKind === "Group" || !row.cycleBillingStartsOn) && matchesQuery(row, query)),
+    [board, query],
+  );
 
   return <div className="space-y-3">
-    <section className="app-card overflow-hidden">
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
-        <Segmented
-          label="Görünüm"
-          options={[{ value: "list", label: "Liste" }, { value: "grid", label: "Çizelge" }]}
-          value={view}
-          onChange={changeView}
-        />
-        <SearchInput value={query} onChange={setQuery} label="Öğrenci, öğretmen veya veli ara" placeholder="Öğrenci, öğretmen veya veli ara…" />
-      </div>
-      {query.trim() && <p className="text-meta border-b border-[var(--line)] px-3 py-1.5 text-xs">
-        {teacherHit && <><strong className="text-[var(--foreground)]">{teacherHit}</strong> öğrencileri · </>}{studentCount} öğrenci
-      </p>}
+    <SearchInput value={query} onChange={setQuery} label="Öğrenci, öğretmen veya veli ara" placeholder="Öğrenci, öğretmen veya veli ara…" />
 
-      {isLoading && <p className="text-meta px-3 py-6 text-center">Aidatlar yükleniyor…</p>}
-      {isError && <div className="px-3 py-6 text-center"><p className="text-meta">Aidatlar yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>}
-      {board && (view === "list"
-        ? <ListView rows={rows} month={month} today={today} onMonth={setMonth} filter={listFilter} onFilter={setListFilter} onOpen={(row, periods) => setSheet({ row, periods })} onToast={setToast} />
-        : <GridView rows={rows} year={year} today={today} onYear={(next) => setMonth(next === Number(today.slice(0, 4)) ? today : `${next}-12`)} debtOnly={debtOnly} onDebtOnly={setDebtOnly} onOpen={(row, periods) => setSheet({ row, periods })} />)}
-    </section>
+    <AttendanceCards query={query} onFullCollect={(enrollmentId) => {
+      const row = board?.find((item) => item.enrollmentId === enrollmentId);
+      if (row) setSheet({ row, periods: [] });
+    }} />
+
+    {isError && <div className="app-card px-3 py-6 text-center"><p className="text-meta">Aylık aidatlar yüklenemedi.</p><button type="button" onClick={() => refetch()} className="btn btn-quiet mt-2">Tekrar dene</button></div>}
+    {board && monthlyRows.length > 0 && <section aria-labelledby="monthly-dues" className="app-card overflow-hidden">
+      <h2 id="monthly-dues" className="border-b border-[var(--line)] px-3 py-2.5 text-sm font-bold">Aylık aidatlar · grup dersleri</h2>
+      <ListView rows={monthlyRows} month={month} today={today} onMonth={setMonth} filter={listFilter} onFilter={setListFilter} onOpen={(row, periods) => setSheet({ row, periods })} onToast={setToast} />
+    </section>}
 
     {sheet && <CollectSheet
       key={`${sheet.row.enrollmentId}-${sheet.periods.join(",")}`}
@@ -138,8 +95,9 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
 }) {
   const year = Number(month.slice(0, 4));
   const { inMonth, paid, waiting, waitingAmount, shown } = useMemo(() => {
+    // Dönemle faturalanan birebir kayıtta ayın satırı, o ay başlamış dönemlerdir (monthEntry).
     const all = rows
-      .map((row) => ({ row, state: cellState(row, month, today) }))
+      .map((row) => ({ row, ...monthEntry(row, month, today) }))
       .filter((item) => item.state !== "none" && item.state !== "cancelled");
     const paidRows = all.filter((item) => item.state === "paid");
     const waitingRows = all.filter((item) => item.state !== "paid");
@@ -151,7 +109,7 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
       inMonth: all,
       paid: paidRows,
       waiting: waitingRows,
-      waitingAmount: waitingRows.reduce((sum, item) => sum + (remainingOf(item.row, month) ?? 0), 0),
+      waitingAmount: waitingRows.reduce((sum, item) => sum + (remainingOfAll(item.row, item.periods) ?? 0), 0),
       shown: visible,
     };
   }, [rows, month, today, filter, year]);
@@ -196,25 +154,25 @@ function ListView({ rows, month, today, onMonth, filter, onFilter, onOpen, onToa
 
     {!shown.length && <p className="text-meta border-t border-[var(--line)] px-3 py-6 text-center">{inMonth.length ? "Bu filtrede kimse yok." : "Bu ay için kurs kaydı yok."}</p>}
     <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
-      {shown.map(({ row, state }) => <ListRow key={row.enrollmentId} row={row} state={state} month={month} onOpen={onOpen} onToast={onToast} />)}
+      {shown.map(({ row, state, periods }) => <ListRow key={row.enrollmentId} row={row} state={state} periods={periods} onOpen={onOpen} onToast={onToast} />)}
     </ul>
-    <p className="text-meta px-3 py-3 text-xs">&quot;Ödeme al&quot; ayın aidatını kayıttaki indirimle nakit olarak kaydeder. Birkaç ay almak, indirimi değiştirmek ya da geçmişi görmek için isme dokun.</p>
   </div>;
 }
 
-function ListRow({ row, state, month, onOpen, onToast }: {
+function ListRow({ row, state, periods, onOpen, onToast }: {
   row: BoardRow;
   state: CellState;
-  month: string;
+  // Aylık kayıtta [ay]; dönemle faturalanan kayıtta o ay başlamış dönemler ("D003").
+  periods: string[];
   onOpen: (row: BoardRow, periods: string[]) => void;
   onToast: (toast: Toast) => void;
 }) {
-  const collect = useCollect();
-  const correct = useCorrectPayment(row.studentId);
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-  const remaining = remainingOf(row, month);
-  const cell = row.cells.find((item) => item.period === month);
+  // "Ödeme al" kartlardaki ile aynı sade pencereyi açar (QuickCollect: tarih + tutar).
+  const [quick, setQuick] = useState(false);
+  const remaining = remainingOfAll(row, periods);
+  const cell = row.cells.filter((item) => periods.includes(item.period)).sort((a, b) => (b.lastPaymentDate ?? "").localeCompare(a.lastPaymentDate ?? ""))[0];
+  const unpaid = periods.filter((period) => isOwed(cellState(row, period)) || cellState(row, period) === "open");
+  const label = periods.map(formatPeriod).join(", ");
   const tags = [
     row.siblingDiscount && "kardeş",
     row.multiCourse && "çoklu kurs",
@@ -222,45 +180,13 @@ function ListRow({ row, state, month, onOpen, onToast }: {
     state === "partial" && "kısmi ödendi",
   ].filter(Boolean);
 
-  async function quickPay() {
-    if (remaining === null) return;
-    setError(null);
-    try {
-      const result = await collect.mutateAsync({
-        enrollmentId: row.enrollmentId,
-        periods: [month],
-        discounts: null,
-        paymentDate: todayInput(),
-        method: "Cash",
-        expectedTotal: remaining,
-      });
-      const paymentIds = result.receivables.flatMap((receivable) => {
-        const latest = receivable.payments
-          .filter((payment) => payment.kind === "Payment")
-          .sort((a, b) => (b.recordedAt ?? "").localeCompare(a.recordedAt ?? ""))[0];
-        return latest ? [latest.id] : [];
-      });
-      onToast({
-        message: `${row.studentName} · ${formatPeriod(month)}: ${formatMoney(result.total, result.currency)} alındı`,
-        undo: paymentIds.length ? async () => {
-          for (const paymentId of paymentIds)
-            await correct.mutateAsync({ paymentId, correctedAmount: 0, reason: "Ödeme al'a yanlışlıkla basıldı, hemen geri alındı" });
-          await queryClient.invalidateQueries({ queryKey: ["billing-board"] });
-          onToast({ message: "Ödeme geri alındı" });
-        } : undefined,
-      });
-    } catch (err) {
-      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Ödeme kaydedilemedi.");
-    }
-  }
-
   return <li className="px-3 py-2.5">
     <div className="flex items-center gap-3">
-      <button type="button" onClick={() => onOpen(row, isSelectable(state) ? [month] : [])} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+      <button type="button" onClick={() => onOpen(row, isSelectable(state) ? unpaid : [])} className="flex min-w-0 flex-1 items-center gap-3 text-left">
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-xs font-extrabold text-[var(--brand-strong)]">{initials(row.studentName)}</span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-bold">{row.studentName}</span>
-          <span className="text-meta line-clamp-2 text-xs">{row.instrumentName} · {row.teacherName}{tags.length ? ` · ${tags.join(" · ")}` : ""}</span>
+          <span className="text-meta line-clamp-2 text-xs">{row.instrumentName} · {row.teacherName}{periods.some(isCyclePeriod) ? ` · ${label}` : ""}{tags.length ? ` · ${tags.join(" · ")}` : ""}</span>
         </span>
       </button>
       {state === "paid"
@@ -269,108 +195,17 @@ function ListRow({ row, state, month, onOpen, onToast }: {
         // ~55px kalıyordu.
         : <span className="flex shrink-0 flex-col items-end gap-1 min-[400px]:flex-row min-[400px]:items-center min-[400px]:gap-3">
           {remaining !== null && <span className={`shrink-0 text-right text-sm font-bold tabular-nums ${state === "late" || state === "partial" ? "text-[var(--danger-strong)]" : ""}`}>{formatMoney(remaining, cell?.currency ?? "TRY")}</span>}
-          {remaining !== null && remaining > 0
-            ? <button type="button" onClick={quickPay} disabled={collect.isPending} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">{collect.isPending ? "Kaydediliyor…" : "Ödeme al"}</button>
-            : <button type="button" onClick={() => onOpen(row, [month])} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
+          {unpaid.length > 0
+            ? <button type="button" onClick={() => setQuick(true)} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>
+            : <button type="button" onClick={() => onOpen(row, unpaid)} className="btn shrink-0 border-[1.5px] border-[var(--brand-strong)] bg-white text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">Ödeme al</button>}
         </span>}
     </div>
-    {error && <p role="alert" className="mt-1.5 text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+    {quick && <QuickCollect
+      enrollmentId={row.enrollmentId}
+      studentName={row.studentName}
+      periods={unpaid}
+      onClose={() => setQuick(false)}
+      onCollected={(message) => { setQuick(false); onToast({ message }); }}
+    />}
   </li>;
-}
-
-// ---- Çizelge --------------------------------------------------------------------
-
-const GRID_SYMBOL: Record<CellState, string> = { paid: "✓", late: "!", current: "•", partial: "½", open: "", future: "", none: "–", cancelled: "×" };
-const GRID_CLASS: Record<CellState, string> = {
-  paid: "bg-[var(--success-soft)] text-[var(--success-strong)]",
-  late: "bg-[var(--danger-soft)] text-[var(--danger-strong)]",
-  current: "border-[1.5px] border-[var(--brand)] text-[var(--brand-strong)]",
-  partial: "bg-[var(--warning-soft)] text-[var(--warning-strong)]",
-  open: "border border-dashed border-[var(--line)]",
-  future: "border border-dashed border-[var(--line)]",
-  none: "text-[var(--line)]",
-  cancelled: "text-[var(--muted)]",
-};
-
-function GridView({ rows, year, today, onYear, debtOnly, onDebtOnly, onOpen }: {
-  rows: BoardRow[];
-  year: number;
-  today: string;
-  onYear: (year: number) => void;
-  debtOnly: boolean;
-  onDebtOnly: (value: boolean) => void;
-  onOpen: (row: BoardRow, periods: string[]) => void;
-}) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const visible = useMemo(() => {
-    const sorted = [...rows].sort(byStudentName);
-    return debtOnly ? sorted.filter((row) => hasDebt(row, year, today)) : sorted;
-  }, [rows, debtOnly, year, today]);
-  const currentIndex = today.startsWith(`${year}-`) ? Number(today.slice(5, 7)) - 1 : -1;
-  const paidNow = currentIndex >= 0 ? visible.filter((row) => cellState(row, today, today) === "paid").length : 0;
-  const owedNow = currentIndex >= 0 ? visible.filter((row) => { const s = cellState(row, today, today); return s !== "none" && s !== "cancelled"; }).length : 0;
-
-  // Telefonda 12 ay sığmaz: çizelge bu ayın çevresinden açılır, önceki aylar sola kaydırınca.
-  useEffect(() => {
-    const element = scroller.current;
-    if (!element || currentIndex < 0) return;
-    const column = element.querySelector<HTMLElement>(`[data-col="${currentIndex}"]`);
-    if (column && column.offsetLeft + column.offsetWidth > element.clientWidth)
-      element.scrollLeft = column.offsetLeft + column.offsetWidth - element.clientWidth + 48;
-  }, [currentIndex, year]);
-
-  return <div>
-    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3">
-      <div className="flex items-center gap-1" role="group" aria-label="Yıl">
-        <button type="button" onClick={() => onYear(year - 1)} className="icon-btn icon-btn-quiet !h-9 !w-9" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-3.5 w-3.5" /></button>
-        <strong className="min-w-12 text-center text-sm tabular-nums">{year}</strong>
-        <button type="button" onClick={() => onYear(year + 1)} disabled={year >= Number(today.slice(0, 4))} className="icon-btn icon-btn-quiet !h-9 !w-9 disabled:opacity-35" aria-label="Sonraki yıl"><Icon name="arrow-right" className="h-3.5 w-3.5" /></button>
-      </div>
-      <button type="button" aria-pressed={debtOnly} onClick={() => onDebtOnly(!debtOnly)} className={`pressable rounded-full border px-3 py-1.5 text-xs font-bold ${debtOnly ? "border-[var(--foreground)] bg-[var(--foreground)] text-white" : "border-[var(--line)] bg-white"}`}>Yalnızca borcu olanlar</button>
-      {currentIndex >= 0 && <span className="text-meta text-xs tabular-nums">{MONTHS_SHORT[currentIndex]}: {paidNow}/{owedNow} ödedi</span>}
-    </div>
-    <div className="flex flex-wrap gap-1.5 px-3 pb-2 text-[.7rem] font-bold">
-      <span className="rounded-full bg-[var(--success-soft)] px-2 py-0.5 text-[var(--success-strong)]">✓ ödendi</span>
-      <span className="rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[var(--danger-strong)]">! gecikti</span>
-      <span className="rounded-full border border-[var(--brand)] px-2 py-0.5 text-[var(--brand-strong)]">• bu ay</span>
-      <span className="rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[var(--warning-strong)]">½ kısmi</span>
-    </div>
-
-    {!visible.length && <p className="text-meta border-t border-[var(--line)] px-3 py-6 text-center">{rows.length ? "Borcu olan kimse yok." : "Bu yıl için kurs kaydı yok."}</p>}
-    {!!visible.length && <div ref={scroller} className="max-h-[calc(100dvh-15rem)] overflow-auto border-t border-[var(--line)]">
-      <table className="border-separate border-spacing-0 text-sm">
-        <thead>
-          <tr>
-            <th scope="col" className="sticky left-0 top-0 z-30 min-w-36 border-b border-r border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-left text-xs font-bold text-[var(--muted)] sm:min-w-52">Öğrenci</th>
-            {MONTHS_SHORT.map((label, index) => <th key={label} data-col={index} scope="col" className={`sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--surface)] px-0.5 py-2 text-center text-xs font-bold ${index === currentIndex ? "text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>{label}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((row) => <tr key={row.enrollmentId}>
-            <th scope="row" className="sticky left-0 z-10 max-w-36 border-b border-r border-[var(--line)] bg-[var(--surface)] px-3 py-1 text-left font-normal sm:max-w-52">
-              <button type="button" onClick={() => onOpen(row, [])} className="block w-full min-w-0 text-left">
-                <span className="block truncate text-sm font-bold underline decoration-[var(--line)] decoration-dotted underline-offset-4">{row.studentName}</span>
-                <span className="text-meta block truncate text-[.7rem]">{row.instrumentName}</span>
-              </button>
-            </th>
-            {MONTHS_SHORT.map((label, index) => {
-              const period = periodOf(year, index);
-              const state = cellState(row, period, today);
-              const clickable = state !== "none";
-              return <td key={label} className="border-b border-[var(--line)] p-0.5 text-center">
-                <button
-                  type="button"
-                  disabled={!clickable}
-                  onClick={() => onOpen(row, isSelectable(state) ? [period] : [])}
-                  aria-label={`${row.studentName} ${formatPeriod(period)}: ${state === "paid" ? "ödendi" : isOwed(state) ? "ödenmedi" : state === "none" ? "kayıt dışında" : "açık"}`}
-                  className={`mx-auto grid h-8 w-9 place-items-center rounded-lg text-sm font-extrabold sm:w-11 ${GRID_CLASS[state]} ${clickable ? "pressable" : "cursor-default"}`}
-                >{GRID_SYMBOL[state]}</button>
-              </td>;
-            })}
-          </tr>)}
-        </tbody>
-      </table>
-    </div>}
-    <p className="text-meta px-3 py-3 text-xs">Bir hücreye dokununca o ay seçili ödeme penceresi açılır; isme dokununca öğrencinin tamamı ve geçmişi.</p>
-  </div>;
 }

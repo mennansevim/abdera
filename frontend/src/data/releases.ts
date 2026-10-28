@@ -22,6 +22,142 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.28",
+    date: "2026-10-28",
+    items: [
+      { audience: "admin", text: "Veli portalı telefona göre yenilendi: daha büyük yazılar ve düğmeler, ekranın altında sabit menü. Veli açar açmaz sıradaki dersi görür ve tek dokunuşla \"Geliyorum / Geç kalacağım / Gelemiyorum\" der." },
+      { audience: "admin", text: "Veli Aidat ekranında ödenecek tutarı ve son ödeme gününü en üstte görür, IBAN'ı tek dokunuşla kopyalar. Takvim artık önümüzdeki iki ayın derslerini tek listede gösterir; birden fazla çocuğu olan veli çocuklar arasında üstteki isimlerden geçer." },
+      { audience: "admin", text: "Veli portalında birebir dersin dönem aidatı artık \"3. dönem · 4 ders\" diye doğru yazıyor; saati taşınan dersin eski saati \"Taşındı\" olarak görünüyor, sıradaki ders sanılmıyor." },
+    ],
+  },
+  {
+    version: "2026.10.27.2",
+    date: "2026-10-27",
+    items: [
+      { audience: "admin", text: "Asistanı ilk açtığında kısa bir tanıtım seni karşılar: nasıl soru sorulur, öğrenci nasıl seçilir, değişiklik nasıl onaylanır; her adımı küçük bir canlandırmayla gösterir. Sondaki örneklere dokunup hemen deneyebilirsin, başlıktaki \"?\" ile tanıtımı yeniden açarsın." },
+    ],
+  },
+  {
+    version: "2026.10.27",
+    date: "2026-10-27",
+    items: [
+      { audience: "admin", text: "Abdera Asistanı beta olarak açıldı: sol menüdeki Asistan düğmesinden ya da ⌘K ile aç ve günlük dilde yaz. \"Deniz nasıl gidiyor?\", \"Aidat günü gelenleri listele\", \"Arslan'ın dersleri ne zaman?\" gibi sorulara cevap verir, gerekirse ilgili kartı açar." },
+      { audience: "admin", text: "Asistan ders saatini değiştirir ve telafi dersi açar: önce öğretmenin boş olup olmadığına bakar, uygun saat önerir, senin onayınla takvimdeki işlemin aynısını yapar. Ödeme almaz; \"Ödeme al\" Aidatlar'daki pencereyi açar." },
+      { audience: "admin", text: "Öğrenci satırındaki ⋯ menüsünde yeni kısayollar: Gelişimi özetle, Ders saatini değiştir, Telafi planla, Aidat durumu." },
+      { audience: "admin", text: "Asistanda öğrencinin adını yazmaya başla ya da @ yaz: öğrenci listesi açılır, Tab ile seçersin. Seçtiğin öğrenci, aynı soyadlı başka biriyle karışmaz." },
+      { audience: "admin", text: "Ders ve telafi kartları neyi denetlediğini gösterir (öğretmen müsait, çakışma yok, tatil değil). Telafi için gün ve saat söylersen kart önce o saate bakar; her hafta taşımada o hafta ders düşecekse uyarır." },
+    ],
+  },
+  {
+    version: "2026.10.23.9",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Aidatlar tek ekran oldu: her öğrenci 4 delikli bir kart, sonunda ödeme yuvası. Ödemesi gerekenler en üstte, \"Ödeme al\" yalnızca onlarda." },
+      { audience: "admin", text: "Karta dokununca öğrencinin tüm kartları ders ve ödeme tarihleriyle açılır. Tarihe dokunup düzeltebilir, boş deliğe geçmiş ders ekleyebilirsin." },
+      { audience: "admin", text: "İndirimli ya da peşin ödeme için kartın içindeki \"Ayrıntılı ödeme\"yi kullan. Grup dersleri sayfanın altında aylık listede." },
+    ],
+  },
+  {
+    version: "2026.10.23.8",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "\"Ödeme al\" Liste'de ve Kartlar'da aynı: tarih ve tutar soran sade pencere." },
+      { audience: "admin", text: "Kartlar'da isimlerin altında bu dönemin 4 dersi kutucuk olarak görünür. Çizelge görünümü şimdilik kapalı." },
+    ],
+  },
+  {
+    version: "2026.10.23.7",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Aidatlar artık Kartlar görünümüyle açılıyor; öğrenci listesi ve kart sayfanın tamamını kullanıyor, süzgeçler tek satırda." },
+      { audience: "admin", text: "\"Tahsil et\" kartın üstünde hep görünür; borcu olmayan öğrencide sıradaki dönemi peşin alır." },
+    ],
+  },
+  {
+    version: "2026.10.23.6",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Kartta \"Tahsil et\" artık sade bir pencere açıyor: tarih ve tutar. Tutar kendiliğinden dolar, istersen değiştirirsin; daha az alırsan kalanı borç olarak kalır." },
+      { audience: "admin", text: "Her 4 ders bir ödeme: alınmış ödeme kartın ilk dönemini karşılar. Ekimi ödenmiş, eylülü açık öğrencide 1. dönem \"Ödendi\" görünür; dönem başlamadan \"Gecikti\" yazmaz." },
+      { audience: "admin", text: "Kartta tarihler artık kesilmeden tam görünür." },
+    ],
+  },
+  {
+    version: "2026.10.23.5",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Aidatlar → Kartlar: solda öğrenci listesi, sağda seçtiğin öğrencinin kartı. Listeden öğrenci değiştirdikçe kart yerinde değişir." },
+      { audience: "admin", text: "Kartta tüm tarihler aynı biçimde yazılıyor; boş satıra tıklayınca tarih seçebilirsin. Dönem başlıkları hizalı." },
+    ],
+  },
+  {
+    version: "2026.10.23.4",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartları Aidatlar ekranına taşındı: Aidatlar'da artık Liste, Çizelge ve Kartlar görünümü var. Ödemeyi, ödeme tarihini ve 4'lü dönemleri tek yerden takip edersin; arama kutusu kartları da süzer." },
+      { audience: "admin", text: "Yoklama ekranında yalnızca ders dökümü kaldı." },
+    ],
+  },
+  {
+    version: "2026.10.23.3",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartında her 4 ders bir ödeme: kart başladıktan sonra alınan aylık aidatlar sırayla 1., 2. dönemi karşılar. Eylülü ödenmiş öğrencide 1. dönem artık \"Ödendi\" görünür, aynı derslere ikinci borç yazılmaz." },
+      { audience: "admin", text: "Karttaki \"Tahsil et\" dönemin gerçek aidatını açar (ör. Ekim 2026 aidatı); aynı dönem için yeni bir borç açılmaz." },
+      { audience: "admin", text: "Kartta her dönemin yanında derslerin tarih aralığı (17.09 – 15.10) ve onu karşılayan aidat yazar." },
+    ],
+  },
+  {
+    version: "2026.10.23.2",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartı artık tam ekran açılıyor: öğrencinin tüm dönemleri kâğıttaki gibi 4'erli bloklar halinde, yan yana sütunlarda görünür." },
+      { audience: "admin", text: "Her bloğun sağında ödeme tarihi var: Aidatlar ekranından tahsilat alındığı an o dönemin yanına tarih kendiliğinden düşer. Ödenmemiş dönemde boş kalır." },
+      { audience: "admin", text: "Karta artık yalnızca \"Geldi\" işaretlenen dersler yazılıyor. Mazeretli ders satır doldurmaz, telafi hakkı doğurur; telafi dersi yapılıp Geldi denince karta o yazılır." },
+    ],
+  },
+  {
+    version: "2026.10.23",
+    date: "2026-10-23",
+    items: [
+      { audience: "admin", text: "Yoklama kartında ilk giriş günü artık ayrıca seçilmiyor: karta yazdığın ilk tarih kartın başlangıcı olur. Geçmiş dersleri geçen ayın 1'ine kadar geriye dönük yazabilirsin." },
+      { audience: "admin", text: "Sistemde yoklaması olan bir dersin tarihini ilk satıra yazarsan kart o dersten başlar; o gün için ayrı satır açılmaz. 4 ders dolunca tek aidat açılır, o ayın aylık aidatı varsa ikinci kez borç yazılmaz." },
+    ],
+  },
+  {
+    version: "2026.10.22.4",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Yoklama kartı artık kâğıttaki yoklama listesi gibi: her öğrencide 4'er satırlık 2 tablo açık. Geçmiş dersleri boş satırlara tarih olarak yazabilirsin; sonraki dersler yoklamadan kendiliğinden gelir." },
+      { audience: "admin", text: "Elle yazılan dersler de 4'lük sayaca girer ve dönem dolunca aidat açar. Yanlış yazılan satırın tarihini değiştirebilir ya da × ile kaldırabilirsin." },
+    ],
+  },
+  {
+    version: "2026.10.22.3",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Yoklama kartlarında öğrencinin ilk giriş gününü artık doğrudan listeden girebilirsin: tarihi seçip alandan çıkınca kaydedilir. Kartı açmak için satıra dokun; kart pencere olarak açılır." },
+    ],
+  },
+  {
+    version: "2026.10.22.2",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Her öğrencinin 4'lük sayacı artık kendi ilk giriş gününden başlar; ay ortası da olabilir. Yoklama kartındaki \"İlk giriş\" alanından girip değiştirebilirsin. O ayın aylık aidatı varsa 1. dönem sayılır, ikinci kez borç yazılmaz." },
+      { audience: "admin", text: "İlk giriş gününden önce işlenen dersler kartın altında bilgi olarak görünür; sayaca girmez ve aidat açmaz." },
+    ],
+  },
+  {
+    version: "2026.10.22",
+    date: "2026-10-22",
+    items: [
+      { audience: "admin", text: "Yoklama ekranında yeni \"Yoklama kartları\" görünümü: her birebir öğrencinin kartı defterdeki yoklama listesi gibi 4'er derslik dönemlerle görünür. Geldi ve Mazeretli bir satır doldurur, Gelmedi doldurmaz." },
+      { audience: "admin", text: "4 dersini tamamlayan öğrenciler üstte \"ödeme bekleniyor\" uyarısıyla listelenir; karttaki \"Tahsil et\" ile ödemeyi oradan alabilirsin." },
+      { audience: "admin", text: "1 Kasım'dan itibaren birebir derslerde aidat her ay değil, yeni dönemin ilk dersinde açılır ve 7 gün içinde ödenmesi beklenir. Ekim ve önceki aylık aidatlar olduğu gibi kalır; başlangıç tarihi Fiyat politikası ekranından değiştirilebilir." },
+      { audience: "admin", text: "Aidatlar çizelgesinde birebir öğrenciler için dönem sütunları var; ödeme penceresinde ay yerine dönem seçilir ve sıradaki dönemler peşin alınabilir." },
+    ],
+  },
+  {
     version: "2026.10.21",
     date: "2026-10-21",
     items: [

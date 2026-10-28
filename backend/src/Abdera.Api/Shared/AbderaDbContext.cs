@@ -52,6 +52,7 @@ public class AbderaDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<LessonRsvp> LessonRsvps => Set<LessonRsvp>();
     public DbSet<LessonAttendance> LessonAttendances => Set<LessonAttendance>();
+    public DbSet<ManualAttendanceEntry> ManualAttendanceEntries => Set<ManualAttendanceEntry>();
 
     public DbSet<LessonNote> LessonNotes => Set<LessonNote>();
     public DbSet<SkillDefinition> SkillDefinitions => Set<SkillDefinition>();

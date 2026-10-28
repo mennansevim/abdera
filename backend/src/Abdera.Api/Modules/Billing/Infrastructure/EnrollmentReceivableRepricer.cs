@@ -33,7 +33,10 @@ public static class EnrollmentReceivableRepricer
 
         foreach (var receivable in candidates.Where(r => paid.GetValueOrDefault(r.Id) == 0m))
         {
-            var priced = pricer.Price(enrollment, receivable.Period);
+            // Dönem aidatı tahakkuk gününün (peşin, başlamamışsa açıldığı günün) tarifesiyle fiyatlanır.
+            var priced = BillingCycle.IsKey(receivable.Period)
+                ? pricer.PriceOn(enrollment, receivable.AccruedOn ?? DateOnly.FromDateTime(receivable.CreatedAt.UtcDateTime))
+                : pricer.Price(enrollment, receivable.Period);
             if (priced is null) continue;
 
             var breakdown = priced.Value.Breakdown;

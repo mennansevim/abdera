@@ -236,14 +236,18 @@ public static class StudentAnalysis
     private static async Task<Dictionary<string, BillingMonth>> LoadBillingAsync(
         List<Guid> enrollmentIds, IReadOnlyList<string> periods, AbderaDbContext db)
     {
-        var receivables = await db.Receivables.AsNoTracking()
-            .Where(r => enrollmentIds.Contains(r.EnrollmentId) && periods.Contains(r.Period) && r.Status != ReceivableStatus.Cancelled)
-            .ToListAsync();
+        // Dönem aidatı tahakkuk gününün ayına düşer (BillingCycle.AccrualMonth); başlamamış dönem hiçbir aya düşmez.
+        var receivables = (await db.Receivables.AsNoTracking()
+                .Where(r => enrollmentIds.Contains(r.EnrollmentId) && r.Status != ReceivableStatus.Cancelled
+                    && (periods.Contains(r.Period) || r.AccruedOn != null))
+                .ToListAsync())
+            .Where(r => BillingCycle.AccrualMonth(r.Period, r.AccruedOn) is { } month && periods.Contains(month))
+            .ToList();
         var totals = await Receivables.ComputeTotalsPaidAsync(receivables.Select(r => r.Id), db);
         var payments = await Receivables.ComputePaymentsAsync(receivables.Select(r => r.Id), db);
 
         return receivables
-            .GroupBy(r => r.Period)
+            .GroupBy(r => BillingCycle.AccrualMonth(r.Period, r.AccruedOn)!)
             .ToDictionary(group => group.Key, group =>
             {
                 var rows = group.ToList();

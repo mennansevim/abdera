@@ -38,6 +38,10 @@ public class Enrollment
     // (çoklu kurs / kardeş) YERİNE geçer - admin bilinçli bir karar vermiştir.
     public decimal? ManualDiscountPercent { get; private set; }
     public string? ManualDiscountReason { get; private set; }
+    // Birebir kaydın 4 derslik dönem sayacının başladığı gün (docs/10-decisions.md AD9): bu
+    // günden itibaren her 4 derste bir aidat açılır, ay ortası olabilir. Boşsa okul geneli geçiş
+    // günü (billing_settings.cycle_billing_starts_on) kullanılır.
+    public DateOnly? CycleStartsOn { get; private set; }
     public EnrollmentStatus Status { get; private set; } = EnrollmentStatus.Active;
     public DateOnly StartedAt { get; private set; }
     public DateOnly? EndedAt { get; private set; }
@@ -100,6 +104,12 @@ public class Enrollment
     public const int InstrumentVariantMaxLength = 40;
 
     // Boş/boşluk metin alt dalı kaldırır.
+    public void SetCycleStart(DateOnly? on, DateTimeOffset now)
+    {
+        CycleStartsOn = on;
+        UpdatedAt = now;
+    }
+
     public void SetInstrumentVariant(string? variant, DateTimeOffset now)
     {
         var trimmed = string.IsNullOrWhiteSpace(variant) ? null : variant.Trim();

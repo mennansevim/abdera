@@ -1,3 +1,4 @@
+using Abdera.Api.Modules.Assistant;
 using Abdera.Api.Modules.Attendance;
 using Abdera.Api.Modules.Auth;
 using Abdera.Api.Modules.Auth.Domain;
@@ -151,6 +152,7 @@ builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian
 builder.Services.AddBillingModule();
 builder.Services.AddMessagingModule();
 builder.Services.AddOpsModule();
+builder.Services.AddAssistantModule(builder.Configuration);
 builder.Services.AddProgressModule();
 builder.Services.AddAttendanceModule();
 
@@ -479,6 +481,23 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
             });
     });
+
+    // /api/assistant/chat: her mesaj ücretli bir dil modeli çağrısı. Döngüye giren bir istemci ya
+    // da ele geçirilmiş bir oturum faturayı sınırsız büyütmesin diye KULLANICI başına sabit
+    // pencere (öneri: 30 mesaj / 10 dakika - gerçek kullanımın birkaç katı).
+    options.AddPolicy("assistant", httpContext =>
+    {
+        var config = httpContext.RequestServices.GetRequiredService<IConfiguration>();
+        var userId = httpContext.User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+        return System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: userId ?? GetClientIp(httpContext),
+            factory: _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+            {
+                PermitLimit = config.GetValue("RateLimiting:AssistantPermitLimit", 30),
+                Window = TimeSpan.FromMinutes(config.GetValue("RateLimiting:AssistantWindowMinutes", 10)),
+                QueueLimit = 0,
+            });
+    });
 });
 
 static string GetClientIp(HttpContext httpContext) =>
@@ -540,8 +559,10 @@ app.Use(async (httpContext, next) =>
     }
 });
 app.UseCors();
-app.UseRateLimiter();
+// Kimlik doğrulamadan SONRA: "assistant" politikası kullanıcı kimliğine göre bölünür; önce
+// çalışsaydı oturum henüz okunmamış olur, herkes IP'ye düşerdi. IP bazlı politikalar etkilenmez.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 if (app.Environment.IsDevelopment())
@@ -576,6 +597,7 @@ app.MapMessagingModule();
 app.MapBankingModule();
 app.MapOpsModule();
 app.MapInstanceModule();
+app.MapAssistantModule();
 
 if (app.Environment.IsDevelopment())
 {

@@ -169,6 +169,9 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
             ReportTerm.Containing(DateOnly.FromDateTime(DateTime.UtcNow)), DateTimeOffset.UtcNow);
         karne.SaveComment("Karne yorumu.", DateTimeOffset.UtcNow);
         db.TermReports.Add(karne);
+        // Yoklama kartına elle yazılmış geçmiş ders kurs kaydına bağlıdır (AD10).
+        db.ManualAttendanceEntries.Add(Abdera.Api.Modules.Attendance.Domain.ManualAttendanceEntry.Create(
+            seeded.EnrollmentId, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-3), null, DateTimeOffset.UtcNow));
         // Program değişikliği mesajı ve bildirimi seriyi işaret eder (LessonScheduleChanged).
         // Gönderilmiş, veli dışı bir numaraya giden satır: yalnızca seri koşulu bunu silebilir.
         Assert.NotEmpty(seriesIds);
@@ -192,6 +195,7 @@ public class PersonDeletionFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.False(await db.LessonSeries.AnyAsync(s => seriesIds.Contains(s.Id)));
         Assert.False(await db.Lessons.AnyAsync(l => lessonIds.Contains(l.Id)));
         Assert.False(await db.LessonAttendances.AnyAsync(a => lessonIds.Contains(a.LessonId)));
+        Assert.False(await db.ManualAttendanceEntries.AnyAsync(e => enrollmentIds.Contains(e.EnrollmentId)));
         Assert.False(await db.LessonRsvps.AnyAsync(r => lessonIds.Contains(r.LessonId)));
         Assert.False(await db.LessonNotes.AnyAsync(n => lessonIds.Contains(n.LessonId)));
         Assert.False(await db.LessonChangeRequests.AnyAsync(c => lessonIds.Contains(c.LessonId)));

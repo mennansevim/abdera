@@ -14,14 +14,21 @@ public static class BillingBoard
 {
     public record Cell(
         string Period, Guid ReceivableId, ReceivableStatus Status, decimal Amount, decimal TotalPaid,
-        decimal BaseAmount, decimal DiscountPercent, string? DiscountReason, string Currency, DateOnly? LastPaymentDate);
+        decimal BaseAmount, decimal DiscountPercent, string? DiscountReason, string Currency, DateOnly? LastPaymentDate,
+        // Dönem aidatında ("D003") dönemi açan dersin günü; boşsa dönem peşin ödenmiş, henüz başlamamış.
+        DateOnly? AccruedOn = null);
 
     public record BoardRow(
         Guid EnrollmentId, Guid StudentId, string StudentName, Guid TeacherId, string TeacherName,
         string InstrumentName, CourseKind CourseKind, string GuardianNames,
         bool SiblingDiscount, bool MultiCourse, decimal? ManualDiscountPercent, string? ManualDiscountReason,
         DateOnly StartedAt, DateOnly? EndedAt, EnrollmentStatus EnrollmentStatus,
-        List<Cell> Cells);
+        List<Cell> Cells,
+        // Birebir kayıt bu günden itibaren dönem (4 ders) aidatıyla faturalanıyor (BillingCycle);
+        // null: aylık. Çizelge bu satırda dönem sütunlarını, ödeme penceresi sıradaki dönemleri gösterir.
+        DateOnly? CycleBillingStartsOn = null,
+        // Ödeme penceresinin peşin tahsilat için önereceği ilk dönem numarası.
+        int NextCycleNumber = 1);
 
     public static void MapBillingBoard(this IEndpointRouteBuilder app)
     {
@@ -61,9 +68,20 @@ public static class BillingBoard
             .ToDictionary(group => group.Key, group => string.Join(", ", group.Select(link => $"{link.FirstName} {link.LastName}")));
 
         var prefix = $"{y:D4}-";
+        // Dönem aidatı yıla tahakkuk gününe göre düşer; başlamamış (peşin) dönem her yılda görünür.
         var receivables = await db.Receivables.AsNoTracking()
-            .Where(r => enrollmentIds.Contains(r.EnrollmentId) && r.Period.StartsWith(prefix))
+            .Where(r => enrollmentIds.Contains(r.EnrollmentId)
+                && (r.Period.StartsWith(prefix)
+                    || (r.Period.StartsWith("D") && (r.AccruedOn == null || (r.AccruedOn >= yearStart && r.AccruedOn <= yearEnd)))))
             .ToListAsync();
+        // Sıradaki dönem numarası yıl filtresinden bağımsız: geçen yılın dönemleri de sayılır.
+        var lastCycle = (await db.Receivables.AsNoTracking()
+                .Where(r => enrollmentIds.Contains(r.EnrollmentId) && r.Period.StartsWith("D"))
+                .Select(r => new { r.EnrollmentId, r.Period })
+                .ToListAsync())
+            .Where(r => BillingCycle.IsKey(r.Period))
+            .GroupBy(r => r.EnrollmentId)
+            .ToDictionary(g => g.Key, g => g.Max(r => BillingCycle.Number(r.Period)));
         var receivableIds = receivables.Select(r => r.Id).ToList();
         var totals = await Receivables.ComputeTotalsPaidAsync(receivableIds, db);
         var boardPayments = await db.Payments.AsNoTracking()
@@ -76,6 +94,26 @@ public static class BillingBoard
             .ToDictionary(g => g.Key, g => g.Max(p => paymentDates[p.Id]));
 
         var pricer = await TuitionPricer.LoadAsync(db);
+        // Aylık aidatın karşıladığı dönemler de numara tüketir (AD14): eylül ve ekim aidatı 1. ve 2.
+        // dönemi karşılıyorsa sıradaki dönem 3'tür. Tek sorgu, eşleme bellekte.
+        var todayLocal = DateOnly.FromDateTime(today.Date);
+        var cycleStarts = enrollments
+            .Select(e => (e.Id, Start: pricer.CycleStartFor(e)))
+            .Where(item => item.Start is not null)
+            .ToDictionary(item => item.Id, item => item.Start!.Value);
+        var startIds = cycleStarts.Keys.ToList();
+        var startReceivables = await db.Receivables.AsNoTracking()
+            .Where(r => startIds.Contains(r.EnrollmentId) && r.Status != ReceivableStatus.Cancelled)
+            .ToListAsync();
+        var startPaid = await Receivables.ComputeTotalsPaidAsync(startReceivables.Select(r => r.Id), db);
+        var byEnrollment = startReceivables.ToLookup(r => r.EnrollmentId);
+        var coveredCycles = cycleStarts.ToDictionary(pair => pair.Key, pair =>
+        {
+            var dues = byEnrollment[pair.Key].Where(r => BillingCycle.IsKey(r.Period)).ToDictionary(r => BillingCycle.Number(r.Period));
+            var coverage = CycleReceivableAccruer.AssignCoverage(
+                CycleReceivableAccruer.CoveringMonthlies(byEnrollment[pair.Key], pair.Value, todayLocal), dues, startPaid);
+            return coverage.Keys.DefaultIfEmpty(0).Max();
+        });
 
         var rows = enrollments
             .Where(e => students.ContainsKey(e.StudentId) && teachers.ContainsKey(e.TeacherId) && instruments.ContainsKey(e.InstrumentId))
@@ -90,13 +128,15 @@ public static class BillingBoard
                     .Select(r => new Cell(
                         r.Period, r.Id, r.Status, r.Amount, totals.GetValueOrDefault(r.Id), r.BaseAmount,
                         r.DiscountPercent, r.DiscountReason, r.Currency,
-                        lastPayments.TryGetValue(r.Id, out var last) ? last : null))
+                        lastPayments.TryGetValue(r.Id, out var last) ? last : null, r.AccruedOn))
                     .ToList();
                 return new BoardRow(
                     e.Id, student.Id, $"{student.FirstName} {student.LastName}", teacher.Id, $"{teacher.FirstName} {teacher.LastName}",
                     instruments[e.InstrumentId].Name, e.CourseKind, guardianNames.GetValueOrDefault(student.Id, ""),
                     facts.HasSibling, facts.AttendsMultipleCourses, e.ManualDiscountPercent, e.ManualDiscountReason,
-                    e.StartedAt, e.EndedAt, e.Status, cells);
+                    e.StartedAt, e.EndedAt, e.Status, cells,
+                    pricer.CycleStartFor(e),
+                    Math.Max(lastCycle.GetValueOrDefault(e.Id), coveredCycles.GetValueOrDefault(e.Id)) + 1);
             })
             // Türkçe alfabetik sıra istemcide (localeCompare "tr") - burada named culture
             // kullanmak Alpine imajında ICU'ya bağımlılık demek (CLAUDE.md).

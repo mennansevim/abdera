@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/icons";
 import { FormMessage, Modal } from "@/components/ui";
-import { ApiError } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useModuleEnabled } from "@/lib/instance";
 import {
   COURSE_KIND_LABEL,
@@ -16,21 +17,24 @@ import {
   useUpdateEnrollmentBilling,
   type CourseKind,
   type BoardRow,
+  type CollectionQuote,
   type DiscountChoice,
   type PaymentMethod,
   type PaymentRecord,
 } from "@/lib/billing";
-import { formatMoney, formatPeriod, todayInput } from "@/lib/billing-format";
-import { MONTHS_SHORT, cellState, CELL_LABEL, isSelectable, type CellState } from "./board-model";
+import { cycleNumber, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
+import { MONTHS_SHORT, cellState, CELL_LABEL, CYCLE_LABEL, cycleCellState, cycleChoices, isOwed, isSelectable, type CellState } from "./board-model";
 
 // Aidatlar ekranının TEK ödeme penceresi (docs/10-decisions.md H17). Liste ve Çizelge aynı
 // pencereyi açar: aylar → isteğe bağlı indirimler → tahsil et; altında öğrencinin geçmişi.
 // Toplu ödeme ayrı bir akış değil, birden fazla ay seçmek. Tutarı sunucu hesaplar
 // (collection-preview); düğme yalnızca sunucunun gösterdiği toplamı teyit ederek tahsil eder.
-export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }: {
+export function CollectSheet({ row, year, initialPeriods, periodLabels, onClose, onCollected }: {
   row: BoardRow;
   year: number;
   initialPeriods: string[];
+  // Yoklama kartından açılınca özet satırları kartın diliyle yazılır ("2. dönem · Ekim 2026 aidatı").
+  periodLabels?: Record<string, string>;
   onClose: () => void;
   onCollected: (message: string) => void;
 }) {
@@ -103,11 +107,40 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
     }
   }
 
+  // Dönemle faturalanan birebir kayıt (docs/10-decisions.md AD): seçim ay yerine dönemdir. Geçiş
+  // öncesinden kalmış ödenmemiş aylık aidat varsa ay ızgarası da altında açık kalır.
+  const byCycle = !!row.cycleBillingStartsOn;
+  const legacyOwed = row.cells.some((cell) => !isCyclePeriod(cell.period) && isOwed(cellState(row, cell.period)))
+    || initialPeriods.some((period) => !isCyclePeriod(period));
+
   return <Modal open title={row.studentName} description={`${row.instrumentName} · ${row.teacherName} · ${COURSE_KIND_LABEL[row.courseKind]}`} onClose={onClose}>
     <form onSubmit={submit} className="space-y-4">
-      <section className="space-y-2" aria-label="Aylar">
+      {byCycle && <section className="space-y-2" aria-label="Dönemler">
+        <p className="text-micro text-[var(--muted)]">Hangi dönemler? <span className="font-semibold normal-case tracking-normal">· her dönem 4 ders</span></p>
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+          {cycleChoices(row).map((period) => {
+            const state = cycleCellState(row, period);
+            const on = selected.includes(period);
+            return <button
+              key={period}
+              type="button"
+              disabled={!isSelectable(state)}
+              aria-pressed={on}
+              aria-label={`${formatPeriod(period)}: ${CYCLE_LABEL[state]}`}
+              onClick={() => toggle(period)}
+              className={`pressable flex min-h-12 flex-col items-center justify-center rounded-xl border-[1.5px] px-1 py-1.5 ${chipClass(state, on)}`}
+            >
+              <span className="text-sm font-bold">{cycleNumber(period)}. dönem</span>
+              <span className={`text-[.68rem] font-bold ${on ? "" : chipTextClass(state)}`}>{CYCLE_LABEL[state]}</span>
+            </button>;
+          })}
+        </div>
+        <p className="text-meta text-xs">Henüz başlamamış dönem peşin alınır; ilk dersi işlenince o derse bağlanır.</p>
+      </section>}
+
+      {(!byCycle || legacyOwed) && <section className="space-y-2" aria-label="Aylar">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-micro text-[var(--muted)]">Hangi aylar?</p>
+          <p className="text-micro text-[var(--muted)]">{byCycle ? "Geçiş öncesi aylar" : "Hangi aylar?"}</p>
           <div className="flex items-center gap-1" role="group" aria-label="Yıl">
             <button type="button" onClick={() => setSheetYear((y) => y - 1)} className="icon-btn icon-btn-quiet !h-8 !w-8" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-3.5 w-3.5" /></button>
             <strong className="min-w-12 text-center text-sm tabular-nums">{sheetYear}</strong>
@@ -134,7 +167,7 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
             </button>;
           })}
         </div>
-      </section>
+      </section>}
 
       <section className="space-y-2" aria-label="İndirimler">
         <p className="text-micro text-[var(--muted)]">İndirimler <span className="font-semibold normal-case tracking-normal">· isteğe bağlı</span></p>
@@ -153,7 +186,7 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
           />
           <Toggle
             label={quote?.prepayPercent ? `Peşin ödeme %${trimPercent(quote.prepayPercent)}` : "Peşin ödeme"}
-            hint={quote?.prepayPercent ? "Diğer indirimin üstüne eklenir" : firstTier ? `${firstTier.minMonths} veya daha fazla ay seçince %${trimPercent(firstTier.percent)}` : "Fiyat politikasında kademe yok"}
+            hint={quote?.prepayPercent ? "Diğer indirimin üstüne eklenir" : firstTier ? `${firstTier.minMonths} veya daha fazla ${byCycle ? "dönem" : "ay"} seçince %${trimPercent(firstTier.percent)}` : "Fiyat politikasında kademe yok"}
             on={choice.prepay}
             onChange={(prepay) => setChoice((current) => ({ ...current, prepay }))}
           />
@@ -175,13 +208,13 @@ export function CollectSheet({ row, year, initialPeriods, onClose, onCollected }
       </div>
 
       <section className="space-y-2 rounded-xl border border-[var(--line)] bg-white p-3" aria-live="polite">
-        {!periods.length && <p className="text-meta">Tahsil edilecek ayları yukarıdan seç.</p>}
+        {!periods.length && <p className="text-meta">Tahsil edilecek {byCycle ? "dönemleri" : "ayları"} yukarıdan seç.</p>}
         {!!periods.length && !quote && <p className="text-meta">Hesaplanıyor…</p>}
         {quote && <>
           <ul className="space-y-1 text-sm tabular-nums">
             {quote.rows.map((item) => <li key={item.period} className="flex items-baseline justify-between gap-3">
               <span className="min-w-0">
-                <span className="font-semibold">{formatPeriod(item.period)}</span>
+                <span className="font-semibold">{periodLabels?.[item.period] ?? formatPeriod(item.period)}</span>
                 {item.blockedReason && <span className="ml-1.5 text-xs font-bold text-[var(--danger-strong)]">{item.blockedReason}</span>}
                 {!item.blockedReason && item.alreadyPaid > 0 && <span className="text-meta ml-1.5">kalan</span>}
                 {!item.blockedReason && item.discountReason && <span className="text-meta block truncate text-xs">{item.discountReason}</span>}
@@ -431,4 +464,91 @@ function EnrollmentDiscountBlock({
       {error && <p className="mt-2 text-xs font-medium text-[var(--danger-strong)]">{error}</p>}
     </form>
   );
+}
+
+// Yoklama kartının sade tahsilat penceresi: tarih ve tutar, o kadar. Aynı tek tahsilat yolunu
+// (POST /collections) kullanır, yalnızca seçenekleri gizler: dönemler karttan gelir, indirim
+// öğrencinin kayıtlı varsayılanıdır (peşin kademesi yok), ödeme şekli sorulmaz (Nakit yazılır).
+// Tutar sunucunun hesabıyla dolar ve değiştirilebilir: tek dönemde azı kısmi ödemedir (kalan borç
+// kalır), birden çok dönemde azı anlaşılan toplamdır (dönemler ödendi sayılır, M2). Fazlası alınmaz.
+export function QuickCollect({ enrollmentId, studentName, periods, periodLabels, onClose, onCollected }: {
+  enrollmentId: string;
+  studentName: string;
+  periods: string[];
+  periodLabels?: Record<string, string>;
+  onClose: () => void;
+  onCollected: (message: string) => void;
+}) {
+  const sorted = useMemo(() => [...periods].sort(), [periods]);
+  const params = new URLSearchParams();
+  for (const period of sorted) params.append("periods", period);
+  params.set("prepay", "false");
+  const preview = useQuery({
+    queryKey: ["collection-preview", enrollmentId, params.toString()],
+    queryFn: () => api.get<CollectionQuote>(`/api/enrollments/${enrollmentId}/collection-preview?${params.toString()}`),
+  });
+  const quote = preview.data;
+  const collect = useCollect();
+  const [paymentDate, setPaymentDate] = useState(todayInput);
+  const [amountText, setAmountText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const total = quote?.total ?? 0;
+  const text = amountText ?? (quote ? String(total) : "");
+  const amount = Number(text.replace(",", "."));
+  const valid = Number.isFinite(amount) && amount > 0 && amount <= total;
+  const less = valid && amount < total;
+  const blocked = !!quote && quote.blockers.length > 0;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!quote || !valid || blocked) return;
+    setError(null);
+    try {
+      const result = await collect.mutateAsync({
+        enrollmentId,
+        periods: sorted,
+        discounts: { sibling: quote.defaults.sibling, multiCourse: quote.defaults.multiCourse, prepay: false, manualPercent: quote.defaults.manualPercent },
+        paymentDate,
+        method: "Cash",
+        expectedTotal: quote.total,
+        partialAmount: less && sorted.length === 1 ? amount : undefined,
+        agreedTotal: less && sorted.length > 1 ? amount : undefined,
+      });
+      onCollected(`${studentName}: ${formatMoney(result.total, result.currency)} tahsil edildi`);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Tahsilat kaydedilemedi.");
+    }
+  }
+
+  return <Modal open size="sm" title="Ödeme al" description={studentName} onClose={onClose}>
+    <form onSubmit={submit} className="space-y-4">
+      <ul className="space-y-1 text-sm tabular-nums">
+        {(quote?.rows ?? sorted.map((period) => ({ period, due: 0, blockedReason: null }))).map((row) => <li key={row.period} className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 font-semibold">{periodLabels?.[row.period] ?? formatPeriod(row.period)}</span>
+          {row.blockedReason ? <span className="text-xs font-bold text-[var(--danger-strong)]">{row.blockedReason}</span> : quote && <span>{formatMoney(row.due, quote.currency)}</span>}
+        </li>)}
+      </ul>
+      <label className="block space-y-1">
+        <span className="form-label">Tarih</span>
+        <input type="date" required value={paymentDate} max={todayInput()} onChange={(event) => setPaymentDate(event.target.value)} className="field" />
+      </label>
+      <label className="block space-y-1">
+        <span className="form-label">Tutar</span>
+        <span className="flex items-center gap-2">
+          <input inputMode="decimal" required value={text} disabled={!quote} onChange={(event) => setAmountText(event.target.value)} aria-label="Alınan tutar" className="field text-lg font-bold tabular-nums" />
+          <span className="text-sm font-bold text-[var(--muted)]">{quote?.currency === "TRY" || !quote ? "₺" : quote.currency}</span>
+        </span>
+        {quote && amount > total && <span className="block text-xs font-semibold text-[var(--danger-strong)]">Tutar {formatMoney(total, quote.currency)} değerini aşamaz.</span>}
+        {quote && less && <span className="text-meta block text-xs">{sorted.length === 1
+          ? `Kalan ${formatMoney(total - amount, quote.currency)} borç olarak kalır.`
+          : `Dönemler ödendi sayılır; ${formatMoney(total - amount, quote.currency)} fark indirim olarak yazılır.`}</span>}
+      </label>
+      {blocked && <FormMessage tone="error">{quote!.blockers.join(" ")}</FormMessage>}
+      {error && <FormMessage tone="error">{error}</FormMessage>}
+      <button type="submit" disabled={!quote || !valid || blocked || collect.isPending} className="btn btn-primary w-full">
+        {collect.isPending ? "Kaydediliyor…" : quote && valid ? `${formatMoney(amount, quote.currency)} al` : "Ödeme al"}
+      </button>
+    </form>
+  </Modal>;
 }
