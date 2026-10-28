@@ -19,5 +19,6 @@ public static class PeopleModule
         app.MapGuardianPortalData();
         app.MapAttentionNeededStudents();
         app.MapInstrumentMaintenance();
+        app.MapStudentImport();
     }
 }

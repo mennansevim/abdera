@@ -22,6 +22,7 @@ public static class BillingModule
         app.MapPaymentCorrections();
         app.MapPrepayPlans();
         app.MapCollections();
+        app.MapPaymentHistoryImport();
         app.MapBillingBoard();
         app.MapAttendanceCards();
         app.MapExpenses();

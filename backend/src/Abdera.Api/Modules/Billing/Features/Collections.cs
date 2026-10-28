@@ -95,6 +95,27 @@ public static class Collections
         var replay = await db.Payments.AsNoTracking().SingleOrDefaultAsync(payment => payment.IdempotencyKey == idempotencyKey);
         if (replay is not null) return Results.Ok(new CreateResponse(replay.Amount, "TRY", replay.PrepayPlanId, [], Replayed: true));
 
+        var recorded = await RecordAsync(enrollmentId, request, idempotencyKey, AuthContext.GetUserId(principal), db, clock);
+        var ids = recorded.Settled.Select(receivable => receivable.Id).ToList();
+        var totals = await Receivables.ComputeTotalsPaidAsync(ids, db);
+        var payments = await Receivables.ComputePaymentsAsync(ids, db);
+        return Results.Ok(new CreateResponse(
+            recorded.Total,
+            recorded.Currency,
+            recorded.PrepayPlanId,
+            recorded.Settled.Select(receivable => Receivables.ToResponse(
+                receivable, totals.GetValueOrDefault(receivable.Id), payments.GetValueOrDefault(receivable.Id) ?? [])).ToList()));
+    }
+
+    internal sealed record Recorded(decimal Total, string Currency, Guid? PrepayPlanId, List<Receivable> Settled);
+
+    // Tahsilatın tek çekirdeği: HTTP tahsilatı ve Excel'den ödeme geçmişi içe aktarma
+    // (PaymentHistoryImport) aynı fiyatlama, engel ve audit kurallarından geçer. dryRun: tüm
+    // doğrulamalar yapılır, hiçbir şey eklenmez (içe aktarma önizlemesi).
+    internal static async Task<Recorded> RecordAsync(
+        Guid enrollmentId, CreateRequest request, string? idempotencyKey, Guid? actorId,
+        AbderaDbContext db, IClock clock, bool dryRun = false)
+    {
         var context = await LoadAsync(enrollmentId, db, clock);
         var built = await BuildQuoteAsync(context, request.Periods ?? [], request.Discounts, db);
         var quote = built.Quote;
@@ -145,8 +166,9 @@ public static class Collections
             }
         }
 
+        if (dryRun) return new Recorded(quote.Total, quote.Currency, null, []);
+
         var now = clock.UtcNow;
-        var actorId = AuthContext.GetUserId(principal);
         var months = priced.Count;
         // Tek ay bir "toplu ödeme" değil; plan kimliği yalnızca 2+ ayda üretilir (PrepayPlans ile aynı).
         var prepayPlanId = months > 1 ? Guid.NewGuid() : (Guid?)null;
@@ -221,15 +243,11 @@ public static class Collections
             throw new ConflictException("Bu aylar az önce başka bir işlemle değişti. Ekranı yenileyip tekrar deneyin.");
         }
 
-        var ids = settled.Select(receivable => receivable.Id).ToList();
-        var totals = await Receivables.ComputeTotalsPaidAsync(ids, db);
-        var payments = await Receivables.ComputePaymentsAsync(ids, db);
-        return Results.Ok(new CreateResponse(
+        return new Recorded(
             request.PartialAmount ?? settled.Sum(receivable => receivable.Amount) - priced.Sum(item => item.AlreadyPaid),
             quote.Currency,
             prepayPlanId,
-            settled.Select(receivable => Receivables.ToResponse(
-                receivable, totals.GetValueOrDefault(receivable.Id), payments.GetValueOrDefault(receivable.Id) ?? [])).ToList()));
+            settled);
     }
 
     private sealed record LoadedContext(Enrollment Enrollment, string StudentName, string InstrumentName, TuitionPricer Pricer, Defaults Defaults, DateOnly Today);

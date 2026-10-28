@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { AddButton, FormActions, FormMessage, Modal, PageHeader, SectionHeader } from "@/components/ui";
 import { TeacherAvailabilityDays } from "@/components/teacher-availability-days";
@@ -104,6 +105,15 @@ export default function SettingsPage() {
       <section className="app-card p-4">
         <SectionHeader title="Mesaj Merkezi" description="Ders hatırlatmaları, WhatsApp şablonları ve gönderim tercihleri Mesaj Merkezi'nde yönetilir." />
       </section>
+      {me?.role === "Admin" && (
+        <section className="app-card p-4">
+          <SectionHeader
+            title="Excel'den içe aktar"
+            description="Öğrencileri, velileri, kurs kayıtlarını ve geçmiş ödemeleri .xlsx dosyasından toplu olarak al."
+            actions={<Link href="/dashboard/settings/import" className="btn btn-quiet">İçe aktar</Link>}
+          />
+        </section>
+      )}
       {me?.role === "Admin" && <MaintenanceSettingsPanel />}
     </div>
   );

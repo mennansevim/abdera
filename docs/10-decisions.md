@@ -460,6 +460,19 @@ Kullanıcı kuralı (okulun kâğıt "Yoklama Listesi"nden): öğrenci her başa
 | AE11 | Asistan risk turu (27 Ekim) | Hedef: ders saati ve telafide modelin yanlış işlem önermemesi. **Kart notu:** açılan kartların parametreleri (kodlu) maskeli geçmişe yazılır; düzeltme ve devam mesajlarında model önceki kartı metinden yeniden yorumlamaz (benchmark K57). Not cevaba kopyalanırsa sunucu siler. **Model:** varsayılan `deepseek-flash`, düşünme modu kapalı (`deepseek-chat` eski ad). **Maliyet:** her yanıt token sayılarını loglar; benchmark `--log/--budget` ile dolara çevirir. **Benchmark:** yazma kartlarında söylenmeyen hedef/kapsam başarısızlık; `cases-risk.json` 46 vaka. Kural istemine ekleme yapılmadı (uyumu düşürür); düzeltmeler kodda. |
 | AE12 | Canlı öncesi iki açık (27 Ekim) | **Hız sınırı:** `/api/assistant/chat` kullanıcı başına sabit pencere, varsayılan 30 mesaj / 10 dk (`RateLimiting:AssistantPermitLimit`, `AssistantWindowMinutes`); her mesaj ücretli model çağrısı. Kullanıcıya göre bölünebilsin diye `UseRateLimiter` artık `UseAuthentication`dan sonra (IP bazlı politikalar etkilenmez). Geliştirmede 1000 (benchmark tek hesapla yüzlerce mesaj atar). **Haftalık taşıma:** seri kontrolü telafi ve tek seferlik taşınmış dersleri görmüyordu; `reschedule` artık yeni gün/saatte öğretmenin ya da öğrencinin tek derslerini de çakışma sayar (409). |
 
+## AF - Excel'den içe aktarma: öğrenci + veli + kurs kaydı ve ödeme geçmişi (2026-10-28)
+
+Kullanıcı isteği: "excel ile aktarım modülü". Netleştirme soruları sonrası kapsam: yalnızca **içeri alma**, gerçek **.xlsx**, yalnızca Admin, ekran Ayarlar → Excel'den içe aktar (`/dashboard/settings/import`).
+
+| # | Konu | Karar |
+|---|---|---|
+| AF1 | Bağımlılık | **ClosedXML** (MIT) eklendi - kullanıcı CSV yerine .xlsx seçti. Okuma ve şablon üretimi tek yerde: `Shared/SpreadsheetImport.cs`. Sütun genişliği elle verilir (`AdjustToContents` font ister). |
+| AF2 | Akış | Boş şablon indir → doldur → yükle → **önizleme** (hiçbir şey yazılmaz) → onay. Onayda aynı dosya yeniden gönderilir, sunucu baştan doğrular; önizlemeye güvenmez. Yalnızca "Hazır" satırlar yazılır; hatalı satır nedeniyle raporlanır, en çok 1000 satır / 2 MB. |
+| AF3 | Mükerrer = atla | Öğrenci: aynı ad soyad + aynı doğum tarihi ya da aynı ad soyad + aynı veli telefonu sistemde varsa satır atlanır, mevcut kayda dokunulmaz. Ödeme: ödenmiş ay atlanır. Güncelleme yok. |
+| AF4 | Öğrenci dosyası | Satır = öğrenci + isteğe bağlı bir kurs kaydı (enstrüman, öğretmen, Birebir/Grup, başlangıç). İki enstrüman iki satır; öğrenci bir kez açılır. Kayıtlı veli telefonu → öğrenci o veliye bağlanır (kardeş). Kurs kaydı `Enrollments.CreateAsync` kurallarıyla açılır (aktif öğretmen, öğretmen o enstrümanı öğretiyor, `enrollment.created` audit, bu ayın aidatı `EnrollmentReceivableOpener`). Veliye mesaj gitmez. |
+| AF5 | Ödeme dosyası | Satır = bir kurs kaydının ödenmiş ayı (öğrenci, enstrüman, isteğe bağlı öğretmen, ay, tutar, tarih, şekil). İkinci bir para yolu açılmadı: her satır `Collections.RecordAsync`'ten geçer (H17'nin tek tahsilat çekirdeği). Satırdaki tutar `AgreedTotal`dır (M2): tarifeden azsa fark indirim olarak donar, tarifeyi aşamaz. Birebir derste dönemle faturalanan aylar, tarifesi olmayan aylar ve belirsiz öğrenci/kurs eşleşmesi satır hatasıdır - tahmin yok (E1 ile aynı ilke). Her satır kendi savepoint'inde; hata o satırı geri alır. |
+| AF6 | Audit | Mevcut audit'ler aynen yazılır (`enrollment.created`, `receivable.collection_recorded`); ek olarak dosya başına `import.students` / `import.payments` özeti. Yeni tablo yok, `PersonEraser` değişmedi. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |
