@@ -1,4 +1,4 @@
-# Miralay — Okul başına bağımsız kurulum mimarisi
+# Miredo — Okul başına bağımsız kurulum mimarisi
 
 > **Durum: YALNIZCA MİMARİ TASLAK — GELİŞTİRİLMEYECEK, `main`'e MERGE EDİLMEYECEK.**
 > Bu belge `arch/multi-tenant` branch'inde tutulur. Kodda hiçbir değişiklik yapılmadı.
@@ -16,7 +16,7 @@ Bundan çıkan gereksinimler:
 | # | Gereksinim | Karşılığı |
 |---|---|---|
 | R1 | Her okulun kendi logosu ve adı | Okul uygulamasında `school_profile` + dinamik marka (§5.1) |
-| R2 | Okulları yöneten ayrı bir panel | **Miralay** — ayrı uygulama (§3) |
+| R2 | Okulları yöneten ayrı bir panel | **Miredo** — ayrı uygulama (§3) |
 | R3 | Orta boy kutucuklar, en sağda `+` | Platform ana ekranı (§4.1) |
 | R4 | `+` → veritabanı, docker, bağımsız uygulama, DNS | Kurulum durum makinesi + sunucu ajanı (§6) |
 | R5 | Modülleri adım adım (next-next) seçme | Kurulum sihirbazı (§4.2) + modül kataloğu (§5.2) |
@@ -72,10 +72,10 @@ flowchart TD
 Üç parça var:
 
 1. **Okul uygulaması (bugünkü Abdera)** — tek kiracılı kalır. Marka, modül anahtarları, kurulum ve telemetri uçları eklenir. Her okul bunun bir kopyasını çalıştırır.
-2. **Miralay** — yeni, ayrı uygulama. Okulları listeler, kurar, günceller, askıya alır, siler. Okulların kişisel verisine erişmez.
+2. **Miredo** — yeni, ayrı uygulama. Okulları listeler, kurar, günceller, askıya alır, siler. Okulların kişisel verisine erişmez.
 3. **Sunucu ajanı (`abdera-host`)** — her okul sunucusunda duran, yalnızca belirli komutları kabul eden betik. Bugünkü `deploy/hetzner/abdera-deploy` deseninin (`authorized_keys` `command=` + `restrict`) genelleştirilmiş hali.
 
-## 3. Miralay
+## 3. Miredo
 
 ### 3.1 Yer ve teknoloji
 - Repoda yeni klasör: `platform/api` (.NET 10 Minimal API, EF Core, PostgreSQL) ve `platform/web` (Next.js 16, Tailwind, TanStack Query). Okul uygulamasıyla aynı yığın, aynı alışkanlıklar.
@@ -112,7 +112,7 @@ flowchart TD
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
-│  Miralay            Okullar · Sunucular · Sürümler · Denetim     [ara…] (⚙) │
+│  Miredo            Okullar · Sunucular · Sürümler · Denetim     [ara…] (⚙) │
 ├─────────────────────────────────────────────────────────────────────────────────────┤
 │  [Tümü 12] [Aktif 10] [Sorunlu 1] [Kuruluyor 1] [Askıda 0]   Sırala: Ad ▾            │
 │                                                                                     │
@@ -470,7 +470,7 @@ flowchart LR
 
 | 2026-10-16 | §5.6 elle alan | Katalog dışı alan: okulda `branch_categories` (+ uçlar: oluştur/düzenle/boşsa sil), kurulum isteğinde `categories`, branş doğrulaması "katalog + okulun alanları". Platform: `customCategories` (anahtar kuralı ve ad çakışması denetimi), okulda alan adları; sihirbazda "+ Yeni alan", Ayarlar'da "+ Yeni alan" ve alan düzenleme. | Okul ve platform testleri; yerelde sihirbazdan "Yoga ve meditasyon" (terim "Seans") alanlı okul kuruldu, terim ve alt birimler doğru, kutucukta alan adı görünüyor |
 
-| 2026-10-16 | Marka: Miralay, okulda ürün adı yok | Platformun adı **Miralay** (panel başlığı, logo, TOTP etiketi). Okul uygulamasında ürün adı kaldırıldı: varsayılan kimlik platformun yazdığı `School__Name`'den ya da nötr "Okul"dan; sekme başlığı, manifest, ikon (kodla üretilen nötr ikon), gizlilik metni (veri sorumlusu okul), e-posta konuları, veliye giden giriş mesajı, parola yöneticisi adı okulun adıyla. Markalı görseller (logo, ürün ikonları, sahne şablonları, web sitesi tasarım vitrini) kaldırıldı. Kodda gömülü `abdera.app` alan adı kalktı (`Dns__BaseDomain` zorunlu). Hata bildiriminde iç görev bağlantısı okula gösterilmez. Eski sürümde opsiyonel seçilen, yeni sürümde standart olan modüller güncellemeyi artık engellemez. Yerel ortamda platform girişi parola ile (TOTP yalnız production'da zorunlu). | Okul 749/749, platform 32/32. Yerelde 4 okul 2026.10.16.6'ya güncellendi; giriş ve panel ekranlarında okulun adı ("Denge / YOGA STÜDYOSU", sekme "Denge"), Abdera yok; panel "Miralay". Bulunup düzeltilen: `public/` boşalınca web imajı derlenmiyordu; eski okul yeni sürüme geçemiyordu |
+| 2026-10-16 | Marka: Miredo, okulda ürün adı yok | Platformun adı **Miredo** (panel başlığı, logo, TOTP etiketi). Okul uygulamasında ürün adı kaldırıldı: varsayılan kimlik platformun yazdığı `School__Name`'den ya da nötr "Okul"dan; sekme başlığı, manifest, ikon (kodla üretilen nötr ikon), gizlilik metni (veri sorumlusu okul), e-posta konuları, veliye giden giriş mesajı, parola yöneticisi adı okulun adıyla. Markalı görseller (logo, ürün ikonları, sahne şablonları, web sitesi tasarım vitrini) kaldırıldı. Kodda gömülü `abdera.app` alan adı kalktı (`Dns__BaseDomain` zorunlu). Hata bildiriminde iç görev bağlantısı okula gösterilmez. Eski sürümde opsiyonel seçilen, yeni sürümde standart olan modüller güncellemeyi artık engellemez. Yerel ortamda platform girişi parola ile (TOTP yalnız production'da zorunlu). | Okul 749/749, platform 32/32. Yerelde 4 okul 2026.10.16.6'ya güncellendi; giriş ve panel ekranlarında okulun adı ("Denge / YOGA STÜDYOSU", sekme "Denge"), Abdera yok; panel "Miredo". Bulunup düzeltilen: `public/` boşalınca web imajı derlenmiyordu; eski okul yeni sürüme geçemiyordu |
 
 | 2026-10-20 | §8 özel alan adı | Okulun kendi alan adı: platformda kaydet → DNS denetimi (alan adı okulun sunucusuna çözülünce) → `DomainAttach` işlemi (ajan `route alias`, Caddy'de aynı blokta ikinci adres ya da asıl adresten yönlendirme; `/api` ve `/health` yönlenmez) → `https` duman testi → etkin. Kaldırma `DomainDetach`. Panelde "Alan adı" sekmesi ve müşteriye verilecek CNAME/A talimatı. Sertifika izleyicisi bağlı adresi de denetler; silinen okulun alan adı serbest kalır. | Platform 34/34 (alan adı akışı, sertifika alarmı, silinen okulun alanının yeniden kullanımı), ajan 93/93 (geçersiz girdi, Caddy reddinde eski hâle dönüş, askı/devamda korunma) |
 

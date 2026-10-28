@@ -158,7 +158,7 @@ Okul başına kurulumda (`docs/multi-tenant/ARCHITECTURE.md`) her okul hangi **�
 
 ## Ürün adı okul ekranlarında görünmez (yalnızca `arch/multi-tenant`)
 
-Çok kiracılı platformun adı **Miralay** (operatör paneli, `platform/`). Okulun (müşterinin) ekranlarında, e-postalarında, veliye giden metinlerde ve ikonlarında ürünün adı **hiç geçmez**; her yerde okulun kendi adı görünür (`useSchoolProfile()` / `SchoolProfile.ShortNameAsync`). Profil yoksa platformun yazdığı `School__Name`, o da yoksa nötr "Okul". Yeni bir kullanıcıya görünen metin, e-posta konusu, sekme başlığı ya da görsel eklerken buna uy; markalı görsel (logo basılı PNG) ekleme. Kod içi adlar (`AbderaDbContext`, namespace, depolama anahtarları) kullanıcıya görünmediği için kalabilir.
+Çok kiracılı platformun adı **Miredo** (operatör paneli, `platform/`). Okulun (müşterinin) ekranlarında, e-postalarında, veliye giden metinlerde ve ikonlarında ürünün adı **hiç geçmez**; her yerde okulun kendi adı görünür (`useSchoolProfile()` / `SchoolProfile.ShortNameAsync`). Profil yoksa platformun yazdığı `School__Name`, o da yoksa nötr "Okul". Yeni bir kullanıcıya görünen metin, e-posta konusu, sekme başlığı ya da görsel eklerken buna uy; markalı görsel (logo basılı PNG) ekleme. Kod içi adlar (`AbderaDbContext`, namespace, depolama anahtarları) kullanıcıya görünmediği için kalabilir.
 
 ## Genel eğitim alanları — yalnızca müzik okulu değil (yalnızca `arch/multi-tenant`)
 

@@ -45,7 +45,7 @@ export default function LoginPage() {
         <div className="mb-6 flex items-center justify-center gap-2.5 text-[var(--brand-strong)]">
           <span className="brand-mark font-serif text-sm font-bold italic" aria-hidden="true">M</span>
           <span className="leading-none">
-            <span className="block font-serif text-[1.35rem] font-bold italic tracking-[-0.03em]">Miralay</span>
+            <span className="block font-serif text-[1.35rem] font-bold italic tracking-[-0.03em]">Miredo</span>
             <span className="mt-1 block text-[.72rem] font-semibold tracking-[0.12em] text-[var(--muted)]">PLATFORM</span>
           </span>
         </div>

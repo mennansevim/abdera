@@ -34,10 +34,10 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Miralay",
-    template: "%s · Miralay",
+    default: "Miredo",
+    template: "%s · Miredo",
   },
-  description: "Miralay - okul kurulumlarını yöneten operatör paneli",
+  description: "Miredo - okul kurulumlarını yöneten operatör paneli",
   robots: { index: false, follow: false },
 };
 

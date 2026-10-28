@@ -1,4 +1,4 @@
-# Miralay — işletim kılavuzu
+# Miredo — işletim kılavuzu
 
 Bu belge `arch/multi-tenant` branch'indeki platformun nasıl kurulup işletileceğini anlatır. Tasarım ve
 gerekçeler `ARCHITECTURE.md`'dedir; burada yalnızca yapılacaklar var.
