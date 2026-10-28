@@ -54,6 +54,8 @@ export interface WizardState {
   pricePerSeat: string;
   addonPrices: Record<string, string>;
   pricingSeeded: boolean;
+  // Yıllık lisansın ilk günü (bitişi sunucu hesaplar).
+  licenseStartsOn: string;
   // Seçilen kategoriler (öneriler bunlara göre gösterilir) ve okulun alt birimleri.
   categories: Set<string>;
   customCategories: CustomCategoryDraft[];
@@ -91,6 +93,11 @@ export const STEPS = [
 
 export type StepKey = (typeof STEPS)[number]["key"];
 
+function todayIso(): string {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
+
 function firstDayOfThisMonth(): string {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
@@ -118,6 +125,7 @@ export function initialState(): WizardState {
     pricePerSeat: "",
     addonPrices: {},
     pricingSeeded: false,
+    licenseStartsOn: todayIso(),
     categories: new Set(),
     customCategories: [],
     branches: [],
@@ -233,6 +241,7 @@ export function validateStep(step: StepKey, state: WizardState, context: Validat
     case "package":
       if (!intIn(state.staffSeats, 1, MAX_STAFF_SEATS)) errors.staffSeats = `1 ile ${MAX_STAFF_SEATS} arasında bir tam sayı.`;
       if (!decimalIn(state.pricePerSeat, 0, MAX_PRICE)) errors.pricePerSeat = "Kullanıcı başı yıllık fiyatı gir (en fazla iki ondalık).";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(state.licenseStartsOn)) errors.licenseStartsOn = "Lisans başlangıç tarihini gir.";
       for (const key of optionalOnly(state.modules, context.catalog ?? [])) {
         if (!decimalIn(state.addonPrices[key] ?? "", 0, MAX_PRICE)) errors[`addon.${key}`] = "Yıllık fiyatı gir (ücretsizse 0).";
       }
@@ -362,6 +371,7 @@ export function buildRequest(state: WizardState, catalog: ModuleEntry[]): Create
       pricePerSeat: parseNumber(state.pricePerSeat),
       // Yalnızca seçilen eklentilerin fiyatı gönderilir (seçilmeyene fiyat verilirse sunucu reddeder).
       addonPrices: Object.fromEntries(optionalOnly(state.modules, catalog).map((key) => [key, parseNumber(state.addonPrices[key] ?? "")])),
+      licenseStartsOn: state.licenseStartsOn,
     },
     branches: state.branches.map((branch) => ({ category: branch.category, name: branch.name.trim() })),
     // Yalnızca altında ders olan özel alanlar gönderilir.

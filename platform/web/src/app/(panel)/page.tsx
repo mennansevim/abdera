@@ -6,7 +6,7 @@ import { Icon } from "@/components/icons";
 import { SchoolAvatar, StatusBadge } from "@/components/school-bits";
 import { LoadError, PageHeader, ProgressBar, SearchInput, Segmented, Skeleton } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
-import { formatAge, formatMoney, formatNumber, hoursSince } from "@/lib/format";
+import { formatAge, formatDate, formatMoney, formatNumber, hoursSince } from "@/lib/format";
 import { compareVersions, useReleaseCategories, useReleases } from "@/lib/releases";
 import { BACKUP_STALE_HOURS, RUN_KIND_LABEL, isRunOpen, useSchools, type SchoolTile } from "@/lib/schools";
 import { useNow } from "@/lib/use-now";
@@ -149,6 +149,8 @@ function SchoolTileCard({ school, now, categoryName }: { school: SchoolTile; now
         <SchoolAvatar name={school.shortName || school.displayName} color={school.primaryColor} />
         <div className="flex flex-wrap justify-end gap-1">
           {school.isCanary && <span className="rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[.68rem] font-bold text-[var(--warning-strong)]">Kanarya</span>}
+          {school.package?.licenseState === "Expired" && <span className="rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[.68rem] font-bold text-[var(--danger-strong)]">Lisans doldu</span>}
+          {school.package?.licenseState === "Expiring" && <span className="rounded-full bg-[var(--warning-soft)] px-2 py-0.5 text-[.68rem] font-bold text-[var(--warning-strong)]">Lisans {school.package.licenseDaysLeft} gün</span>}
           <StatusBadge status={school.status} />
         </div>
       </div>
@@ -189,6 +191,8 @@ function SchoolTileCard({ school, now, categoryName }: { school: SchoolTile; now
           </dd>
           <dt className="text-[var(--muted)]">Yıllık</dt>
           <dd className="text-right font-bold tabular-nums">{school.package?.staffSeats ? formatMoney(school.package.yearlyTotal, school.package.currency) : "—"}</dd>
+          <dt className="text-[var(--muted)]">Lisans bitişi</dt>
+          <dd className={`text-right font-bold ${school.package?.licenseState === "Expired" ? "text-[var(--danger-strong)]" : school.package?.licenseState === "Expiring" ? "text-[var(--warning-strong)]" : ""}`}>{formatDate(school.package?.licenseEndsOn)}</dd>
           <dt className="text-[var(--muted)]">Son yedek</dt>
           <dd className={`text-right font-bold ${school.status === "Active" && backupStale ? "text-[var(--danger-strong)]" : ""}`}>{formatAge(telemetry?.lastBackupAt, now)}</dd>
         </dl>

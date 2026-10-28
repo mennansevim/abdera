@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { ConfirmDialog, FormMessage, Panel, StatStrip } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
-import { formatMoney, formatNumber } from "@/lib/format";
+import { formatDate, formatMoney, formatNumber, formatShortDate } from "@/lib/format";
 import { useReleaseModules } from "@/lib/releases";
-import { isRunOpen, useSchoolPackage, type SchoolDetail } from "@/lib/schools";
+import { isRunOpen, licenseEndPreview, useRenewLicense, useSchoolPackage, type SchoolDetail } from "@/lib/schools";
 
 const MAX_STAFF_SEATS = 1000;
 
@@ -28,6 +28,11 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
   const [addonPrices, setAddonPrices] = useState<Record<string, string>>(() =>
     Object.fromEntries(detail.modules.map((key) => [key, pkg?.addonPrices[key] !== undefined ? String(pkg.addonPrices[key]) : "0"])));
   const [confirm, setConfirm] = useState(false);
+  const renew = useRenewLicense(detail.school.id);
+  const [renewing, setRenewing] = useState(false);
+  // Yeni dönem varsayılan olarak eskisinin ertesi günü başlar; okulla başka bir gün anlaşıldıysa değiştirilir.
+  const nextStart = pkg?.licenseEndsOn ? dayAfter(pkg.licenseEndsOn) : null;
+  const [renewStart, setRenewStart] = useState("");
 
   const currency = pkg?.currency ?? "TRY";
   const used = detail.school.telemetry?.activeStaffUsers ?? null;
@@ -65,8 +70,15 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
         items={[
           { key: "seats", label: "Kullanıcı", value: pkg?.staffSeats ? `${formatNumber(used)} / ${formatNumber(pkg.staffSeats)}` : "Sınırsız", tone: used !== null && pkg?.staffSeats && used >= pkg.staffSeats ? "warning" : undefined, hint: "etkin yönetici + öğretmen hesabı" },
           { key: "total", label: "Yıllık tutar", value: formatMoney(pkg?.yearlyTotal ?? 0, currency) },
+          {
+            key: "license", label: "Lisans bitişi", value: formatShortDate(pkg?.licenseEndsOn),
+            tone: pkg?.licenseState === "Expired" ? "danger" : pkg?.licenseState === "Expiring" ? "warning" : undefined,
+            hint: pkg?.licenseState === "Expired" ? `${-(pkg.licenseDaysLeft ?? 0)} gün önce doldu` : pkg?.licenseDaysLeft !== null && pkg?.licenseDaysLeft !== undefined ? `${pkg.licenseDaysLeft} gün kaldı` : "tarih tutulmuyor",
+          },
         ]}
       />
+      {pkg?.licenseState === "Expired" && <FormMessage tone="error">Lisansın süresi doldu. Okul çalışmaya devam eder; askıya almak ya da yenilemek senin kararın.</FormMessage>}
+      {pkg?.licenseState === "Expiring" && <FormMessage tone="info">Lisansın bitmesine {pkg.licenseDaysLeft} gün kaldı.</FormMessage>}
       {!pkg?.staffSeats && <FormMessage tone="info">Bu okulun paketi yok; kullanıcı sayısı sınırsız. Paket kaydedilince okulda sınır başlar.</FormMessage>}
       {used !== null && valid && seatCount < used && (
         <FormMessage tone="error">Okulda şu an {used} etkin personel hesabı var. Sınırı {seatCount}’a indirmek var olan hesapları kapatmaz, yalnızca yeni hesap açılmasını engeller.</FormMessage>
@@ -76,18 +88,18 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="form-label">
             Kullanıcı sayısı
-            <input className="form-input" inputMode="numeric" value={seats} onChange={(event) => setSeats(event.target.value)} disabled={!seatsEditable} />
+            <input className="field" inputMode="numeric" value={seats} onChange={(event) => setSeats(event.target.value)} disabled={!seatsEditable} />
             {errors.seats ? <span className="form-error">{errors.seats}</span> : !seatsEditable && <span className="text-meta">Yalnızca çalışan ve süren işlemi olmayan okulda değişir.</span>}
           </label>
           <label className="form-label">
             Kullanıcı başı yıllık fiyat ({currency})
-            <input className="form-input" inputMode="decimal" value={perSeat} onChange={(event) => setPerSeat(event.target.value)} />
+            <input className="field" inputMode="decimal" value={perSeat} onChange={(event) => setPerSeat(event.target.value)} />
             {errors.perSeat && <span className="form-error">{errors.perSeat}</span>}
           </label>
           {detail.modules.map((key) => (
             <label key={key} className="form-label">
-              {name(key)} ({currency}/ay)
-              <input className="form-input" inputMode="decimal" value={addonPrices[key] ?? ""} onChange={(event) => setAddonPrices((current) => ({ ...current, [key]: event.target.value }))} />
+              {name(key)} ({currency}/yıl)
+              <input className="field" inputMode="decimal" value={addonPrices[key] ?? ""} onChange={(event) => setAddonPrices((current) => ({ ...current, [key]: event.target.value }))} />
               {errors[key] && <span className="form-error">{errors[key]}</span>}
             </label>
           ))}
@@ -99,6 +111,38 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
           </button>
         </div>
       </Panel>
+
+      <Panel title="Yıllık lisans" meta={pkg?.licenseStartsOn ? `${formatDate(pkg.licenseStartsOn)} – ${formatDate(pkg.licenseEndsOn)}` : "Tarih tutulmuyor"}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <p className="text-meta max-w-prose">
+            Yenileme lisansı bir yıl uzatır. Yalnızca platform kaydıdır; okula dokunulmaz, fatura kesilmez.
+          </p>
+          <button type="button" className="btn" onClick={() => { renew.reset(); setRenewStart(nextStart ?? ""); setRenewing(true); }}>
+            Lisansı yenile
+          </button>
+        </div>
+      </Panel>
+
+      <ConfirmDialog
+        open={renewing}
+        title="Lisansı yenile"
+        description={detail.school.displayName}
+        confirmLabel="Bir yıl uzat"
+        pending={renew.isPending}
+        error={renew.error ? errorMessage(renew.error) : null}
+        onClose={() => setRenewing(false)}
+        onConfirm={() => renew.mutate({ startsOn: renewStart || null }, {
+          onSuccess: (result) => { setRenewing(false); onQueued(`Lisans ${formatDate(result.licenseEndsOn)} tarihine kadar uzatıldı.`); },
+        })}
+      >
+        <label className="form-label">
+          Yeni dönemin başlangıcı
+          <input className="field" type="date" value={renewStart} onChange={(event) => setRenewStart(event.target.value)} />
+          <span className="text-meta">
+            {licenseEndPreview(renewStart) ? `Bitiş: ${formatDate(licenseEndPreview(renewStart))}` : "Başlangıç tarihini gir."}
+          </span>
+        </label>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirm}
@@ -118,4 +162,10 @@ export function PackageTab({ detail, onQueued }: { detail: SchoolDetail; onQueue
       </ConfirmDialog>
     </div>
   );
+}
+
+function dayAfter(isoDate: string): string {
+  const day = new Date(`${isoDate}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + 1);
+  return day.toISOString().slice(0, 10);
 }

@@ -90,7 +90,9 @@ veri almadıysa sunucudaki her şey hemen silinir, DNS kaydı ve kapasite bırak
 **Paket ve fiyat:** fiyatın tek ekseni personel hesabı sayısıdır (yönetici + öğretmen; veli ve öğrenci
 sayılmaz). Sihirbazda kullanıcı sayısı, kullanıcı başı fiyat ve seçilen her ücretli eklentinin yıllık fiyatı
 girilir; liste fiyatı (`PRICE_*`) boş alanlara gelir, okulla anlaşılan fiyat elle yazılır. Paket okul kaydına
-donar. Okulda paket dolunca yeni personel hesabı açılmaz ve pasif öğretmen geri açılmaz; hesapsız öğretmen
+donar; lisans yıllıktır, sihirbazda başlangıç günü seçilir (bitişi bir yıl sonrasının bir gün öncesi). Okul detayı →
+**Paket → Lisansı yenile** bir yıl uzatır; bitişe 30 gün kala kutucukta uyarı çıkar, süre dolan okul kendiliğinden
+kapanmaz. Okulda paket dolunca yeni personel hesabı açılmaz ve pasif öğretmen geri açılmaz; hesapsız öğretmen
 kaydı ve var olan hesaplar etkilenmez. Sonradan okul detayı → **Paket**: kullanıcı sayısı değişirse okul
 yeniden yapılandırılır (~30 sn), yalnızca fiyat değişirse okula dokunulmaz. Sahiplenilen okulda paket
 girilmezse okul sınırsız kalır.

@@ -29,6 +29,8 @@ public class PlatformDbContext(DbContextOptions<PlatformDbContext> options) : Db
                 t.HasCheckConstraint("CK_schools_slug", "slug ~ '^[a-z][a-z0-9-]{2,30}$'");
                 t.HasCheckConstraint("CK_schools_staff_seat_limit", $"staff_seat_limit IS NULL OR staff_seat_limit BETWEEN 1 AND {SchoolPackage.MaxSeats}");
                 t.HasCheckConstraint("CK_schools_price_per_seat", "price_per_seat IS NULL OR price_per_seat >= 0");
+                t.HasCheckConstraint("CK_schools_license_period",
+                    "(license_starts_on IS NULL AND license_ends_on IS NULL) OR license_ends_on >= license_starts_on");
             });
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.Slug).IsUnique();

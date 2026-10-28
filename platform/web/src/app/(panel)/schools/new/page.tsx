@@ -14,7 +14,7 @@ import { formatDate, formatMoney, readableTextOn } from "@/lib/format";
 import { HOST_STATUS_LABEL, useHosts, type ServerHost } from "@/lib/hosts";
 import { INTEGRATION_FIELDS, INTEGRATION_TITLES, MODULE_DESCRIPTIONS, OPS_ALERT_FIELD, isModuleOn, optionalOnly } from "@/lib/modules";
 import { useReleaseCategories, useReleaseModules, useReleases, type CategoryEntry, type ModuleEntry } from "@/lib/releases";
-import { checkSlug, useCreateSchool, usePricingDefaults } from "@/lib/schools";
+import { checkSlug, licenseEndPreview, useCreateSchool, usePricingDefaults } from "@/lib/schools";
 import {
   LOGO_TYPES,
   MAX_LOGO_BYTES,
@@ -589,6 +589,9 @@ function PackageStep({ state, update, errors, catalog }: StepProps) {
         okulda yeni hesap açılmaz, var olan hesaplar etkilenmez. Paket sonradan okul detayından büyütülüp küçültülebilir.
       </p>
       <NumberField label="Kullanıcı sayısı" suffix="hesap" value={state.staffSeats} onChange={(value) => update({ staffSeats: value })} error={errors.staffSeats} hint={`Yönetici dahil, 1-${MAX_STAFF_SEATS}.`} />
+      <Field label="Lisans başlangıcı" error={errors.licenseStartsOn} hint={licenseEndPreview(state.licenseStartsOn) ? `Bitiş: ${formatDate(licenseEndPreview(state.licenseStartsOn))} (bir yıl)` : undefined}>
+        <input className="field" type="date" value={state.licenseStartsOn} onChange={(event) => update({ licenseStartsOn: event.target.value })} />
+      </Field>
       <NumberField label="Kullanıcı başı yıllık fiyat" suffix={currency} value={state.pricePerSeat} onChange={(value) => update({ pricePerSeat: value })} error={errors.pricePerSeat} hint={pricing.data && pricing.data.pricePerSeat > 0 ? `Liste fiyatı ${formatMoney(pricing.data.pricePerSeat, currency)}` : undefined} />
       {addons.length > 0 && (
         <fieldset className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
@@ -820,6 +823,7 @@ function SummaryStep({ state, slugCheck, catalog, invalidSteps, onGoTo }: StepPr
         </SummaryRow>
       </SummarySection>
       <SummarySection title="Paket ve fiyat" step="package" onGoTo={onGoTo}>
+        <SummaryRow label="Lisans">{formatDate(state.licenseStartsOn)} – {formatDate(licenseEndPreview(state.licenseStartsOn))}</SummaryRow>
         <SummaryRow label="Kullanıcı">{state.staffSeats} personel hesabı × {money(state.pricePerSeat)}</SummaryRow>
         {optional.map((key) => <SummaryRow key={key} label={name(key)}>{money(state.addonPrices[key] ?? "")}</SummaryRow>)}
         <SummaryRow label="Yıllık toplam"><b>{packagePreview(state, entries) === null ? "—" : formatMoney(packagePreview(state, entries))}</b></SummaryRow>

@@ -89,7 +89,7 @@ export interface StatItem {
 export function StatStrip({ label, items }: { label: string; items: StatItem[] }) {
   return (
     <section aria-label={label} className="app-card overflow-hidden">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
         {items.map((item) => (
           <div key={item.key} className="min-w-0 border-b border-r border-[var(--line)] px-4 py-2.5">
             <span className="block text-xs font-bold leading-snug text-[var(--muted)]">{item.label}</span>

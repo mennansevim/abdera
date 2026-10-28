@@ -27,8 +27,11 @@ public static class Schools
         IReadOnlyList<CustomCategoryRequest>? CustomCategories = null, PackageRequest? Package = null);
     // Kullanıcı paketi (SchoolPackage): personel hesabı sınırı, kullanıcı başı fiyat ve seçilen eklentilerin
     // yıllık fiyatı. Sihirbazdan kurulan okulda zorunlu; sahiplenmede boşsa okul sınırsız kalır.
-    public record PackageRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices);
-    public record PackageResponse(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal> AddonPrices, string Currency, decimal YearlyTotal);
+    // Lisans yıllıktır: başlangıç boşsa bugün (okulun saat diliminde) başlar, bitişi SchoolPackage hesaplar.
+    public record PackageRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices, DateOnly? LicenseStartsOn = null);
+    // LicenseState/LicenseDaysLeft yalnızca liste ve detay cevabında dolu (bugüne göre hesaplanır); audit kaydında boş.
+    public record PackageResponse(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal> AddonPrices, string Currency, decimal YearlyTotal,
+        DateOnly? LicenseStartsOn, DateOnly? LicenseEndsOn, LicenseState? LicenseState = null, int? LicenseDaysLeft = null);
     // Okulun alt birimi (branş): kategori sürümün kataloğundan (Releases.CategoryEntry) ya da okulun
     // kendi açtığı alandan (CustomCategories), ad serbest.
     public record BranchRequest(string Category, string Name);
@@ -54,7 +57,9 @@ public static class Schools
         IReadOnlyList<RunResponse> Runs, IReadOnlyList<TelemetryResponse> TelemetryHistory, IReadOnlyList<AlertResponse> Alerts, DateTimeOffset CreatedAt,
         SchoolDomains.DomainResponse? Domain = null);
     // Sınır değişikliği okulun .env'ini yeniden yazar (Reconfigure); yalnızca fiyat değişikliği okula gitmez.
-    public record PackageUpdateRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices);
+    public record PackageUpdateRequest(int? StaffSeats, decimal? PricePerSeat, IReadOnlyDictionary<string, decimal>? AddonPrices, DateOnly? LicenseStartsOn = null);
+    // Yeni dönem boşsa bir önceki dönemin bitişinin ertesi günü başlar (SchoolPackage.RenewalStart).
+    public record LicenseRenewRequest(DateOnly? StartsOn);
     public record UpgradeRequest(string Version);
     public record FlagsRequest(bool IsCanary, bool IsVersionPinned);
     public record ModulesRequest(IReadOnlyList<string> Modules, IReadOnlyDictionary<string, string>? Integrations);
@@ -94,6 +99,7 @@ public static class Schools
         group.MapPut("/{id:guid}/flags", FlagsAsync);
         group.MapPut("/{id:guid}/modules", ModulesAsync);
         group.MapPut("/{id:guid}/package", PackageAsync);
+        group.MapPost("/{id:guid}/license/renew", RenewLicenseAsync);
     }
 
     private static string DomainFor(IConfiguration config, string slug, string? custom) =>
@@ -133,6 +139,7 @@ public static class Schools
         var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
         if (request.IsCanary) school.SetCanary(true, now);
         school.SetPackage(request.Package.StaffSeats, request.Package.PricePerSeat, request.Package.AddonPrices ?? new Dictionary<string, decimal>(), now);
+        school.SetLicense(request.Package.LicenseStartsOn ?? Today(config, time), now);
         school.SetCategories(branches.Select(branch => branch.Category), now,
             customCategories.Where(c => branches.Any(b => b.Category == c.Key)).ToDictionary(c => c.Key, c => c.Name));
         db.Schools.Add(school);
@@ -192,7 +199,11 @@ public static class Schools
 
         var school = School.Create(request.Slug, request.DisplayName, request.ShortName, domain, release.Version, modules, request.PrimaryColor, now);
         if (request.IsCanary) school.SetCanary(true, now);
-        if (request.Package is { } package) school.SetPackage(package.StaffSeats, package.PricePerSeat, package.AddonPrices ?? new Dictionary<string, decimal>(), now);
+        if (request.Package is { } package)
+        {
+            school.SetPackage(package.StaffSeats, package.PricePerSeat, package.AddonPrices ?? new Dictionary<string, decimal>(), now);
+            if (package.LicenseStartsOn is { } licenseStart) school.SetLicense(licenseStart, now);
+        }
         db.Schools.Add(school);
         await vault.SetAsync(school.Id, SecretNames.AdoptDumpName, request.DumpName!);
         foreach (var (key, value) in request.Integrations ?? new Dictionary<string, string>())
@@ -269,13 +280,13 @@ public static class Schools
             throw ValidationFailedException.For("integrations", "Ayar değerleri tek satır ve en fazla 2000 karakter olmalı.");
     }
 
-    private static async Task<IResult> ListAsync(PlatformDbContext db, ProvisioningEngine engine)
+    private static async Task<IResult> ListAsync(PlatformDbContext db, ProvisioningEngine engine, IConfiguration config, TimeProvider time)
     {
         var schools = await db.Schools.Where(s => s.Status != SchoolStatus.Destroyed).OrderBy(s => s.DisplayName).ToListAsync();
-        return Results.Ok(await TilesAsync(db, engine, schools));
+        return Results.Ok(await TilesAsync(db, engine, schools, Today(config, time)));
     }
 
-    private static async Task<List<TileResponse>> TilesAsync(PlatformDbContext db, ProvisioningEngine engine, List<School> schools)
+    private static async Task<List<TileResponse>> TilesAsync(PlatformDbContext db, ProvisioningEngine engine, List<School> schools, DateOnly today)
     {
         var ids = schools.Select(s => s.Id).ToList();
         var hosts = await db.Hosts.ToDictionaryAsync(h => h.Id, h => h.Name);
@@ -292,7 +303,7 @@ public static class Schools
             openRuns.TryGetValue(s.Id, out var r) && (r.IsOpen || s.Status == SchoolStatus.Failed) ? Summary(r, engine) : null,
             alerts.GetValueOrDefault(s.Id), s.Categories,
             s.CustomCategoryNames.Select(pair => new CategoryName(pair.Key, pair.Value)).OrderBy(c => c.Name).ToList(),
-            s.PublicDomain, ToPackage(s))).ToList();
+            s.PublicDomain, ToPackage(s, today))).ToList();
     }
 
     private static RunSummary Summary(ProvisioningRun run, ProvisioningEngine engine)
@@ -306,13 +317,22 @@ public static class Schools
         t.TakenAt, t.Reachable, t.Health, t.HealthDetail, t.AppVersion, t.ActiveStudents, t.ActiveTeachers, t.ActiveEnrollments,
         t.LastBackupAt, t.DatabaseSizeBytes, t.PendingNotifications, t.FailedNotifications, t.Error, t.ActiveStaffUsers);
 
-    private static PackageResponse ToPackage(School school) =>
-        new(school.StaffSeatLimit, school.PricePerSeat, school.AddonPrices, school.Currency, school.YearlyTotal);
+    private static PackageResponse ToPackage(School school, DateOnly? today = null) =>
+        new(school.StaffSeatLimit, school.PricePerSeat, school.AddonPrices, school.Currency, school.YearlyTotal,
+            school.LicenseStartsOn, school.LicenseEndsOn,
+            today is { } day ? SchoolPackage.StateOn(school.LicenseEndsOn, day) : null,
+            today is { } d ? SchoolPackage.DaysLeft(school.LicenseEndsOn, d) : null);
 
-    private static async Task<IResult> DetailAsync(Guid id, PlatformDbContext db, ProvisioningEngine engine)
+    // Platformun "bugün"ü okulların saat dilimindedir (Platform:TimeZone, varsayılan Europe/Istanbul): lisans
+    // gün sınırı UTC gece yarısında değil, yerel gece yarısında döner.
+    private static DateOnly Today(IConfiguration config, TimeProvider time) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(),
+            TimeZoneInfo.FindSystemTimeZoneById(config["Platform:TimeZone"] is { Length: > 0 } zone ? zone : "Europe/Istanbul")).DateTime);
+
+    private static async Task<IResult> DetailAsync(Guid id, PlatformDbContext db, ProvisioningEngine engine, IConfiguration config, TimeProvider time)
     {
         var school = await db.Schools.SingleOrDefaultAsync(s => s.Id == id) ?? throw new NotFoundException("Okul bulunamadı.");
-        var tile = (await TilesAsync(db, engine, [school])).Single();
+        var tile = (await TilesAsync(db, engine, [school], Today(config, time))).Single();
         var runs = await db.Runs.Where(r => r.SchoolId == id).OrderByDescending(r => r.CreatedAt).Take(10).ToListAsync();
         var runIds = runs.Select(r => r.Id).ToList();
         var steps = await db.Steps.Where(s => runIds.Contains(s.RunId)).OrderBy(s => s.Step).ThenBy(s => s.Attempt).ToListAsync();
@@ -443,7 +463,8 @@ public static class Schools
     // Paket değişikliği. Kullanıcı sınırı okulun .env'ine yazıldığından sınır değişince okul yeniden
     // yapılandırılır (yalnızca etkin okulda); fiyat değişikliği yalnızca platform kaydıdır. Sınırı
     // kullanılan hesap sayısının altına indirmek var olan hesapları kapatmaz, yalnızca yenisini engeller.
-    private static async Task<IResult> PackageAsync(Guid id, PackageUpdateRequest request, ClaimsPrincipal principal, PlatformDbContext db, TimeProvider time)
+    private static async Task<IResult> PackageAsync(Guid id, PackageUpdateRequest request, ClaimsPrincipal principal, PlatformDbContext db,
+        IConfiguration config, TimeProvider time)
     {
         var school = await db.Schools.SingleOrDefaultAsync(s => s.Id == id) ?? throw new NotFoundException("Okul bulunamadı.");
         if (school.Status is SchoolStatus.Destroyed or SchoolStatus.PendingDestroy) throw new ConflictException("Silinen okulun paketi değiştirilemez.");
@@ -457,6 +478,7 @@ public static class Schools
 
         var before = JsonSerializer.Serialize(ToPackage(school));
         school.SetPackage(request.StaffSeats, request.PricePerSeat, request.AddonPrices ?? new Dictionary<string, decimal>(), time.GetUtcNow());
+        if (request.LicenseStartsOn is { } licenseStart && licenseStart != school.LicenseStartsOn) school.SetLicense(licenseStart, time.GetUtcNow());
         ProvisioningRun? run = null;
         if (seatsChanged)
         {
@@ -466,6 +488,20 @@ public static class Schools
         db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.package_changed", id, time.GetUtcNow(),
             beforeJson: before, afterJson: JsonSerializer.Serialize(ToPackage(school))));
         await db.SaveChangesAsync();
-        return Results.Ok(new { package = ToPackage(school), runId = run?.Id });
+        return Results.Ok(new { package = ToPackage(school, Today(config, time)), runId = run?.Id });
+    }
+
+    // Lisansı bir yıl uzatır. Yalnızca platform kaydıdır, okula gitmez; süresi dolmuş okul da yenilenebilir.
+    private static async Task<IResult> RenewLicenseAsync(Guid id, LicenseRenewRequest request, ClaimsPrincipal principal, PlatformDbContext db,
+        IConfiguration config, TimeProvider time)
+    {
+        var school = await db.Schools.SingleOrDefaultAsync(s => s.Id == id) ?? throw new NotFoundException("Okul bulunamadı.");
+        if (school.Status is SchoolStatus.Destroyed or SchoolStatus.PendingDestroy) throw new ConflictException("Silinen okulun lisansı yenilenemez.");
+        var before = JsonSerializer.Serialize(new { school.LicenseStartsOn, school.LicenseEndsOn });
+        school.RenewLicense(request.StartsOn, time.GetUtcNow());
+        db.AuditLogs.Add(PlatformAuditLog.Record(Auth.UserId(principal), "school.license_renewed", id, time.GetUtcNow(),
+            beforeJson: before, afterJson: JsonSerializer.Serialize(new { school.LicenseStartsOn, school.LicenseEndsOn })));
+        await db.SaveChangesAsync();
+        return Results.Ok(ToPackage(school, Today(config, time)));
     }
 }

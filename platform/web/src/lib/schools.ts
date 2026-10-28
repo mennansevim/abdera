@@ -36,12 +36,20 @@ export interface SchoolPackage {
   addonPrices: Record<string, number>;
   currency: string;
   yearlyTotal: number;
+  // Yıllık lisansın geçerli dönemi (bitiş günü dahil). Durum ve kalan gün sunucunun bugüne göre hesabıdır.
+  licenseStartsOn: string | null;
+  licenseEndsOn: string | null;
+  licenseState?: LicenseState | null;
+  licenseDaysLeft?: number | null;
 }
+
+export type LicenseState = "None" | "Active" | "Expiring" | "Expired";
 
 export interface PackageInput {
   staffSeats: number;
   pricePerSeat: number;
   addonPrices: Record<string, number>;
+  licenseStartsOn?: string;
 }
 
 // Liste fiyatı (Pricing ayarı): sihirbazın başlangıç değerleri.
@@ -328,6 +336,22 @@ export function usePricingDefaults() {
 export function useSchoolPackage(id: string) {
   return useSchoolMutation((input: PackageInput) =>
     api.put<{ package: SchoolPackage; runId: string | null }>(`/api/schools/${id}/package`, input));
+}
+
+// Lisansı bir yıl uzatır; startsOn boşsa yeni dönem eskisinin ertesi günü başlar. Okula dokunmaz.
+export function useRenewLicense(id: string) {
+  return useSchoolMutation((input: { startsOn: string | null }) => api.post<SchoolPackage>(`/api/schools/${id}/license/renew`, input));
+}
+
+// Sihirbazdaki önizleme için: sunucu SchoolPackage.LicenseEnd ile aynı kural (bir yıl sonrasının bir gün öncesi).
+export function licenseEndPreview(startsOn: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn)) return null;
+  const [year, month, day] = startsOn.split("-").map(Number);
+  const end = new Date(Date.UTC(year + 1, month - 1, day));
+  // 29 Şubat + 1 yıl JavaScript'te 1 Mart'a taşar; .NET 28 Şubat'a yuvarlar - aynı sonucu ver.
+  if (end.getUTCMonth() !== month - 1) end.setUTCDate(0);
+  end.setUTCDate(end.getUTCDate() - 1);
+  return end.toISOString().slice(0, 10);
 }
 
 export function useSetSchoolDomain(id: string) {

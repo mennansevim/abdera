@@ -110,4 +110,34 @@ public class PlatformPackageTests(PlatformFactory factory) : IClassFixture<Platf
         var pricing = await client.GetFromJsonAsync<JsonElement>("/api/pricing");
         Assert.Equal("TRY", pricing.GetProperty("currency").GetString());
     }
+
+    [Fact]
+    public async Task License_is_yearly_from_the_wizard_and_renewal_continues_the_previous_period()
+    {
+        var client = await ReadyAsync();
+        var body = JsonSerializer.SerializeToNode(PlatformFactory.SchoolRequest("lisansli", "2026.10.15.1"), PlatformFactory.Json)!.AsObject();
+        body["package"]!["licenseStartsOn"] = "2026-11-01";
+        var created = await client.PostAsync("/api/schools", new StringContent(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        var school = await SchoolAsync(id);
+        Assert.Equal(new DateOnly(2026, 11, 1), school.LicenseStartsOn);
+        Assert.Equal(new DateOnly(2027, 10, 31), school.LicenseEndsOn);
+        var package = (await client.GetFromJsonAsync<JsonElement>($"/api/schools/{id}")).GetProperty("school").GetProperty("package");
+        Assert.Equal("2027-10-31", package.GetProperty("licenseEndsOn").GetString());
+        Assert.Equal("Active", package.GetProperty("licenseState").GetString());
+
+        // Yenileme bir önceki dönemin ertesi gününden başlar ve audit'e yazılır.
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"/api/schools/{id}/license/renew", new { startsOn = (string?)null })).StatusCode);
+        school = await SchoolAsync(id);
+        Assert.Equal(new DateOnly(2027, 11, 1), school.LicenseStartsOn);
+        Assert.Equal(new DateOnly(2028, 10, 31), school.LicenseEndsOn);
+        await using (var db = factory.Db())
+            Assert.True(await db.AuditLogs.AnyAsync(a => a.SchoolId == id && a.Action == "school.license_renewed"));
+
+        // Başlangıcı verilmeyen okulun lisansı bugün başlar.
+        var today = await factory.CreateSchoolAsync(client, PlatformFactory.SchoolRequest("bugunlu", "2026.10.15.1"));
+        Assert.NotNull((await SchoolAsync(today)).LicenseStartsOn);
+    }
 }

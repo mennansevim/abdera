@@ -427,6 +427,14 @@ namespace Abdera.Platform.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_seen_at");
 
+                    b.Property<DateOnly?>("LicenseEndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("license_ends_on");
+
+                    b.Property<DateOnly?>("LicenseStartsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("license_starts_on");
+
                     b.PrimitiveCollection<List<string>>("Modules")
                         .IsRequired()
                         .HasColumnType("text[]")
@@ -497,6 +505,8 @@ namespace Abdera.Platform.Api.Persistence.Migrations
 
                     b.ToTable("schools", null, t =>
                         {
+                            t.HasCheckConstraint("CK_schools_license_period", "(license_starts_on IS NULL AND license_ends_on IS NULL) OR license_ends_on >= license_starts_on");
+
                             t.HasCheckConstraint("CK_schools_price_per_seat", "price_per_seat IS NULL OR price_per_seat >= 0");
 
                             t.HasCheckConstraint("CK_schools_slug", "slug ~ '^[a-z][a-z0-9-]{2,30}$'");

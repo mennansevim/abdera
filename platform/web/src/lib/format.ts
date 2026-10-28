@@ -11,6 +11,12 @@ export function formatDate(value: string | null | undefined): string {
   return value ? dateOnly.format(new Date(value)) : "—";
 }
 
+// Dar alanlar (istatistik şeridi) için: "14.11.2026".
+const dateShort = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short" });
+export function formatShortDate(value: string | null | undefined): string {
+  return value ? dateShort.format(new Date(value)) : "—";
+}
+
 export function formatNumber(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : number.format(value);
 }

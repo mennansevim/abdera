@@ -51,6 +51,9 @@ public class School
         System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, decimal>>(AddonPricesJson) ?? [];
     // Fiyat yalnızca açık eklentiler için tutulur (SetPackage doğrular); modül kapatılınca fiyatı da düşer.
     public decimal YearlyTotal => SchoolPackage.YearlyTotal(StaffSeatLimit, PricePerSeat, AddonPrices, Modules);
+    // Yıllık lisansın geçerli dönemi (bitiş günü dahil). Boşsa lisans tarihi tutulmuyor.
+    public DateOnly? LicenseStartsOn { get; private set; }
+    public DateOnly? LicenseEndsOn { get; private set; }
     // Filo güncellemesinde ilk dalga (kanarya) ve güncellemeden muaf tutma (§7).
     public bool IsCanary { get; private set; }
     public bool IsVersionPinned { get; private set; }
@@ -179,6 +182,21 @@ public class School
         AddonPricesJson = System.Text.Json.JsonSerializer.Serialize(
             addonPrices.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary(pair => pair.Key, pair => pair.Value));
         UpdatedAt = now;
+    }
+
+    public void SetLicense(DateOnly startsOn, DateTimeOffset now)
+    {
+        LicenseStartsOn = startsOn;
+        LicenseEndsOn = SchoolPackage.LicenseEnd(startsOn);
+        UpdatedAt = now;
+    }
+
+    public void RenewLicense(DateOnly? startsOn, DateTimeOffset now)
+    {
+        var start = startsOn ?? (LicenseEndsOn is { } end
+            ? SchoolPackage.RenewalStart(end)
+            : throw ValidationFailedException.For("startsOn", "Lisans tarihi tutulmayan okulda yeni dönemin başlangıcı girilmeli."));
+        SetLicense(start, now);
     }
 
     public void Seen(DateTimeOffset now) => LastSeenAt = now;

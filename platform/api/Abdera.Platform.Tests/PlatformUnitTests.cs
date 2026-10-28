@@ -108,6 +108,25 @@ public class PlatformUnitTests
     }
 
     [Fact]
+    public void License_runs_one_year_and_warns_in_its_last_month()
+    {
+        Assert.Equal(new DateOnly(2027, 10, 31), SchoolPackage.LicenseEnd(new DateOnly(2026, 11, 1)));
+        // Artık yıl: 29 Şubat'ta başlayan lisans ertesi yıl 27 Şubat'ta biter (28 Şubat yeni dönemin ilk günü).
+        Assert.Equal(new DateOnly(2029, 2, 27), SchoolPackage.LicenseEnd(new DateOnly(2028, 2, 29)));
+        Assert.Equal(new DateOnly(2027, 11, 1), SchoolPackage.RenewalStart(new DateOnly(2027, 10, 31)));
+
+        var end = new DateOnly(2027, 10, 31);
+        Assert.Equal(LicenseState.None, SchoolPackage.StateOn(null, end));
+        Assert.Equal(LicenseState.Active, SchoolPackage.StateOn(end, end.AddDays(-SchoolPackage.LicenseWarningDays)));
+        Assert.Equal(LicenseState.Expiring, SchoolPackage.StateOn(end, end.AddDays(-SchoolPackage.LicenseWarningDays + 1)));
+        Assert.Equal(LicenseState.Expiring, SchoolPackage.StateOn(end, end));
+        Assert.Equal(LicenseState.Expired, SchoolPackage.StateOn(end, end.AddDays(1)));
+        Assert.Equal(0, SchoolPackage.DaysLeft(end, end));
+        Assert.Equal(-3, SchoolPackage.DaysLeft(end, end.AddDays(3)));
+        Assert.Null(SchoolPackage.DaysLeft(null, end));
+    }
+
+    [Fact]
     public void Seat_limit_is_written_to_the_school_env_and_empty_means_unlimited()
     {
         var school = School.Create("paket", "Paket", "Paket", "paket.abdera.app", "2026.10.15.1", ["whatsapp"], null, DateTimeOffset.UtcNow);
