@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { IntegrationFields } from "@/components/integration-fields";
 import { ModulePicker } from "@/components/module-picker";
 import { AuditTable } from "@/components/audit-table";
-import { Badge, ConfirmDialog, CopyField, EmptyState, FormMessage, LoadError, Panel, ProgressBar, Skeleton, StatStrip, type Tone } from "@/components/ui";
+import { Badge, ConfirmDialog, CopyField, EmptyState, FormMessage, LoadError, Panel, ProgressBar, Skeleton, type Tone } from "@/components/ui";
 import { alertKindLabel, alertTone, useAcknowledgeAlert } from "@/lib/alerts";
 import { errorMessage } from "@/lib/api";
 import { useAudit } from "@/lib/audit";
@@ -35,39 +35,25 @@ const RUN_TONE: Record<RunStatus, Tone> = {
 
 // --- Genel ---
 
-export function GeneralTab({ detail }: { detail: SchoolDetail }) {
+export function GeneralTab({ detail, release }: { detail: SchoolDetail; release?: React.ReactNode }) {
   const now = useNow();
   const telemetry = detail.school.telemetry;
   const backupAge = hoursSince(telemetry?.lastBackupAt, now);
   const reveal = useRevealAdminPassword(detail.school.id);
   const [confirmReveal, setConfirmReveal] = useState(false);
   const integrationSecrets = detail.secretNames.filter((name) => name.startsWith("integration:")).map((name) => name.slice("integration:".length));
+  const unhealthy = !!telemetry && (!telemetry.reachable || (!!telemetry.health && telemetry.health !== "Healthy"));
 
   return (
-    <div className="grid gap-4">
-      {telemetry ? (
-        <StatStrip
-          label="Son telemetri"
-          items={[
-            { key: "health", label: "Sağlık", value: telemetry.reachable ? telemetry.health ?? "—" : "Ulaşılamıyor", tone: !telemetry.reachable || (telemetry.health && telemetry.health !== "Healthy") ? "danger" : "success", hint: formatAge(telemetry.takenAt, now) },
-            { key: "students", label: "Aktif öğrenci", value: formatNumber(telemetry.activeStudents) },
-            { key: "teachers", label: "Aktif öğretmen", value: formatNumber(telemetry.activeTeachers) },
-            { key: "staff", label: "Kullanıcı", value: detail.school.package?.staffSeats ? `${formatNumber(telemetry.activeStaffUsers)} / ${formatNumber(detail.school.package.staffSeats)}` : formatNumber(telemetry.activeStaffUsers), hint: "yönetici + öğretmen hesabı" },
-            { key: "enrollments", label: "Kurs kaydı", value: formatNumber(telemetry.activeEnrollments) },
-            { key: "backup", label: "Son yedek", value: formatAge(telemetry.lastBackupAt, now), tone: backupAge === null || backupAge > BACKUP_STALE_HOURS ? "danger" : undefined, hint: formatDateTime(telemetry.lastBackupAt) },
-            { key: "db", label: "Veritabanı", value: formatBytes(telemetry.databaseSizeBytes), hint: `${formatNumber(telemetry.pendingNotifications)} bekleyen · ${formatNumber(telemetry.failedNotifications)} hatalı bildirim` },
-          ]}
-        />
-      ) : (
-        <Panel><p className="text-meta">Henüz telemetri yok. Okul kurulduktan sonra platform düzenli olarak sağlık ve sayıları okur.</p></Panel>
-      )}
+    <div className="grid gap-5">
       {telemetry && (telemetry.error || telemetry.healthDetail) && (
         <FormMessage tone="error">{telemetry.error ?? telemetry.healthDetail}</FormMessage>
       )}
+      {!telemetry && <Panel><p className="text-meta">Henüz telemetri yok. Okul kurulduktan sonra platform düzenli olarak sağlık ve sayıları okur.</p></Panel>}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Okul">
-          <dl className="grid gap-2 text-sm">
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Panel title="Okul" flush>
+          <dl className="px-4 py-1 text-sm">
             <Row label="Adres"><a className="font-mono text-[var(--brand-strong)] hover:underline" href={`https://${detail.school.publicDomain ?? detail.school.primaryDomain}`} target="_blank" rel="noreferrer">https://{detail.school.publicDomain ?? detail.school.primaryDomain}</a></Row>
             <Row label="Kısaltma"><span className="font-mono">{detail.school.slug}</span></Row>
             <Row label="Kısa ad">{detail.school.shortName}</Row>
@@ -76,11 +62,36 @@ export function GeneralTab({ detail }: { detail: SchoolDetail }) {
             <Row label="Entegrasyonlar">{integrationSecrets.length === 0 ? "Girilmedi" : <span className="font-mono text-xs">{integrationSecrets.join(", ")}</span>}</Row>
           </dl>
         </Panel>
-        <Panel title="Okul yöneticisi">
-          <dl className="grid gap-2 text-sm">
+        {telemetry && (
+          <>
+            <Panel title="Kullanım" flush>
+              <dl className="px-4 py-1 text-sm">
+                <Row label="Sağlık"><span className={`font-bold ${unhealthy ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}`}>{telemetry.reachable ? telemetry.health ?? "—" : "Ulaşılamıyor"} · {formatAge(telemetry.takenAt, now)}</span></Row>
+                <Row label="Aktif öğrenci">{formatNumber(telemetry.activeStudents)}</Row>
+                <Row label="Aktif öğretmen">{formatNumber(telemetry.activeTeachers)}</Row>
+                <Row label="Kullanıcı">{detail.school.package?.staffSeats ? `${formatNumber(telemetry.activeStaffUsers)} / ${formatNumber(detail.school.package.staffSeats)}` : formatNumber(telemetry.activeStaffUsers)}</Row>
+                <Row label="Kurs kaydı">{formatNumber(telemetry.activeEnrollments)}</Row>
+              </dl>
+            </Panel>
+            <Panel title="Yedek ve veritabanı" flush>
+              <dl className="px-4 py-1 text-sm">
+                <Row label="Son yedek"><span className={backupAge === null || backupAge > BACKUP_STALE_HOURS ? "font-bold text-[var(--danger-strong)]" : ""}>{formatAge(telemetry.lastBackupAt, now)}</span></Row>
+                <Row label="Yedek zamanı">{formatDateTime(telemetry.lastBackupAt)}</Row>
+                <Row label="Veritabanı">{formatBytes(telemetry.databaseSizeBytes)}</Row>
+                <Row label="Bekleyen bildirim">{formatNumber(telemetry.pendingNotifications)}</Row>
+                <Row label="Hatalı bildirim">{formatNumber(telemetry.failedNotifications)}</Row>
+              </dl>
+            </Panel>
+          </>
+        )}
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <Panel title="Okul yöneticisi" flush>
+          <dl className="px-4 py-1 text-sm">
             <Row label="E-posta">{detail.adminEmail ?? "—"}</Row>
           </dl>
-          <div className="mt-3 grid gap-2">
+          <div className="grid gap-2 px-4 pb-4 pt-2">
             {reveal.data ? (
               <>
                 <CopyField label="Geçici parola" value={reveal.data.temporaryPassword} />
@@ -94,6 +105,7 @@ export function GeneralTab({ detail }: { detail: SchoolDetail }) {
             {reveal.error && !confirmReveal && <FormMessage tone="error">{errorMessage(reveal.error)}</FormMessage>}
           </div>
         </Panel>
+        {release}
       </div>
 
       <ConfirmDialog
@@ -114,9 +126,9 @@ export function GeneralTab({ detail }: { detail: SchoolDetail }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-0.5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-3">
-      <dt className="text-xs font-bold text-[var(--muted)]">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
+    <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2.5 last:border-b-0">
+      <dt className="text-[var(--muted)]">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium">{children}</dd>
     </div>
   );
 }

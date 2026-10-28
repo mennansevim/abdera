@@ -31,9 +31,9 @@ function isActive(pathname: string, href: string) {
 function BrandMark() {
   return (
     <span className="inline-flex items-center gap-2.5">
-      <span className="brand-mark font-serif text-sm font-bold italic" aria-hidden="true">M</span>
+      <span className="brand-mark text-sm font-bold" aria-hidden="true">M</span>
       <span className="min-w-0 leading-none">
-        <span className="block truncate font-serif text-[1.15rem] font-bold italic tracking-[-0.03em]">Miralay</span>
+        <span className="block truncate text-[1.05rem] font-bold tracking-[-0.01em]">Miredo</span>
         <span className="mt-1 block truncate text-[.7rem] font-semibold tracking-[0.12em] opacity-70">PLATFORM</span>
       </span>
     </span>
@@ -64,12 +64,12 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
             href={link.href}
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
-            className={`pressable flex min-h-11 items-center gap-3 rounded-2xl px-3 text-sm font-bold ${active ? "bg-white/22 text-white shadow-[inset_0_1px_0_rgba(255,255,255,.2)]" : "text-white/80 hover:bg-white/12 hover:text-white"}`}
+            className={`pressable flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-semibold ${active ? "bg-[var(--brand-soft)] text-[var(--brand-strong)]" : "text-[var(--foreground)]/80 hover:bg-[var(--surface-muted)]"}`}
           >
             <Icon name={link.icon} className="h-[1.1rem] w-[1.1rem] shrink-0" />
             <span className="truncate">{link.label}</span>
             {link.href === "/alerts" && alertCount > 0 && (
-              <span className="ml-auto rounded-full bg-[#ffe27a] px-1.5 text-[.7rem] font-bold text-[#5c3a0a]" aria-label={`${alertCount} açık alarm`}>{alertCount}</span>
+              <span className="ml-auto rounded-full bg-[var(--danger-soft)] px-1.5 text-[.7rem] font-bold text-[var(--danger-strong)]" aria-label={`${alertCount} açık alarm`}>{alertCount}</span>
             )}
           </Link>
         );
@@ -78,48 +78,57 @@ export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
   );
 
   const footer = (
-    <div className="border-t border-white/25 pt-4">
+    <div className="border-t border-[var(--line)] pt-4">
       <div className="flex items-center gap-2.5 px-2">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/25 text-xs font-bold" aria-hidden="true">{me.email.slice(0, 1).toUpperCase()}</span>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--surface-muted)] text-xs font-bold" aria-hidden="true">{me.email.slice(0, 1).toUpperCase()}</span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-bold">{me.email}</span>
-          <span className="flex items-center gap-1 text-[.72rem] text-white/70"><Icon name="shield" className="h-3 w-3" /> İki adımlı doğrulandı</span>
+          <span className="flex items-center gap-1 text-[.72rem] text-[var(--muted)]"><Icon name="shield" className="h-3 w-3" /> İki adımlı doğrulandı</span>
         </span>
-        <button type="button" onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/75 hover:bg-white/15 hover:text-white" aria-label="Çıkış yap" title="Çıkış yap">
+        <button type="button" onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-10 w-10 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]" aria-label="Çıkış yap" title="Çıkış yap">
           <Icon name="logout" className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
 
-  const gradient = "bg-[linear-gradient(160deg,var(--sidebar-from)_0%,#c15a4a_45%,var(--sidebar-to)_100%)]";
+  const topbar = "bg-[var(--sidebar-from)] text-white";
 
   return (
-    <div className="min-h-dvh bg-[var(--background)] lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className={`sticky top-0 hidden h-dvh flex-col gap-6 overflow-y-auto px-3 py-5 text-white lg:flex ${gradient}`}>
-        <Link href="/" className="pl-2 text-white" aria-label="Okullar"><BrandMark /></Link>
-        <div className="flex-1">{nav()}</div>
-        {footer}
-      </aside>
+    <div className="min-h-dvh bg-[var(--background)]">
+      <header className={`sticky top-0 z-30 hidden h-[52px] items-center gap-4 px-5 lg:flex ${topbar}`}>
+        <Link href="/" className="text-white" aria-label="Okullar"><BrandMark /></Link>
+        <div className="flex-1" />
+        <span className="flex items-center gap-2 text-[.8125rem] text-white/80"><Icon name="shield" className="h-4 w-4" />{me.email} · İki adımlı doğrulandı</span>
+        <button type="button" onClick={handleLogout} disabled={logout.isPending} className="pressable grid h-9 w-9 place-items-center rounded-md text-white/80 hover:bg-white/10 hover:text-white" aria-label="Çıkış yap" title="Çıkış yap">
+          <Icon name="logout" className="h-4 w-4" />
+        </button>
+      </header>
 
-      <div className="min-w-0">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[var(--line)] bg-[var(--background)]/95 px-4 py-2.5 backdrop-blur lg:hidden">
-          <Link href="/" className="text-[var(--brand-strong)]" aria-label="Okullar"><BrandMark /></Link>
-          <button type="button" onClick={() => setMenuOpen(true)} className="icon-btn icon-btn-quiet relative" aria-label="Menüyü aç" aria-expanded={menuOpen}>
-            <Icon name="menu" className="h-5 w-5" />
-            {alertCount > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--danger)]" aria-hidden="true" />}
-          </button>
-        </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-7">{children}</main>
+      <div className="lg:grid lg:grid-cols-[14.5rem_minmax(0,1fr)]">
+        <aside className="sticky top-[52px] hidden h-[calc(100dvh-52px)] flex-col gap-6 overflow-y-auto border-r border-[var(--line)] bg-[var(--surface)] px-3 py-4 lg:flex">
+          <div className="flex-1">{nav()}</div>
+        </aside>
+
+        <div className="min-w-0">
+          <header className={`sticky top-0 z-30 flex items-center justify-between gap-3 px-4 py-2.5 lg:hidden ${topbar}`}>
+            <Link href="/" className="text-white" aria-label="Okullar"><BrandMark /></Link>
+            <button type="button" onClick={() => setMenuOpen(true)} className="icon-btn relative text-white hover:bg-white/10" aria-label="Menüyü aç" aria-expanded={menuOpen}>
+              <Icon name="menu" className="h-5 w-5" />
+              {alertCount > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[var(--danger)]" aria-hidden="true" />}
+            </button>
+          </header>
+          <main className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-6">{children}</main>
+        </div>
       </div>
 
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button type="button" aria-label="Menüyü kapat" onClick={() => setMenuOpen(false)} className="absolute inset-0 bg-[var(--overlay)] backdrop-blur-[2px]" />
-          <section className={`absolute inset-y-0 right-0 flex w-[min(20rem,86vw)] flex-col gap-6 overflow-y-auto px-3 py-5 text-white ${gradient}`} role="dialog" aria-modal="true" aria-label="Menü">
+          <section className={`absolute inset-y-0 right-0 flex w-[min(20rem,86vw)] flex-col gap-6 overflow-y-auto bg-[var(--surface)] px-3 py-5 text-[var(--foreground)]`} role="dialog" aria-modal="true" aria-label="Menü">
             <div className="flex items-center justify-between pl-2">
               <BrandMark />
-              <button type="button" onClick={() => setMenuOpen(false)} className="pressable grid h-10 w-10 place-items-center rounded-lg text-white/80 hover:bg-white/15" aria-label="Kapat">
+              <button type="button" onClick={() => setMenuOpen(false)} className="pressable grid h-10 w-10 place-items-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-muted)]" aria-label="Kapat">
                 <Icon name="close" className="h-4 w-4" />
               </button>
             </div>

@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Miralay operatör paneli. Görsel dil okul uygulamasının "Sıcak Atölye" kimliğinden
+/* Miredo operatör paneli. Görsel dil okul uygulamasının "Sıcak Atölye" kimliğinden
    (frontend/src/app/globals.css) kopyalandı - klasörler arası içe aktarma yok, iki uygulama
    ayrı derlenir. Fark: panel karanlık modu da destekler; tüm renkler CSS değişkeninden okunur,
    bileşenler sabit renk yazmaz. */
@@ -10,19 +10,19 @@ html {
 
 :root {
   color-scheme: light;
-  --background: #fdf3e7;
-  --foreground: #3a2a1f;
+  --background: #f2f3f5;
+  --foreground: #1f2430;
   --surface: #ffffff;
-  --surface-muted: #fbeadb;
+  --surface-muted: #f2f3f5;
   --field-bg: rgba(255, 255, 255, .9);
   --field-bg-focus: #ffffff;
-  --line: #f0ddc4;
-  --line-strong: #e0c39d;
-  --muted: #74604f;
-  --brand: #d9662a;
-  --brand-strong: #a84e1f;
-  --brand-strong-hover: #8a3f18;
-  --brand-soft: #fce4d0;
+  --line: #e1e4e9;
+  --line-strong: #cfd3da;
+  --muted: #5b6270;
+  --brand: #d50c2d;
+  --brand-strong: #b00a26;
+  --brand-strong-hover: #8f081f;
+  --brand-soft: #fdecef;
   --on-brand: #ffffff;
   --success: #3f9142;
   --success-soft: #e3f3df;
@@ -36,13 +36,13 @@ html {
   --info: #3b6fb6;
   --info-soft: #e1ecfa;
   --info-strong: #2c5590;
-  --shadow-card: 0 2px 4px rgba(120, 70, 30, 0.05), 0 14px 34px rgba(120, 70, 30, 0.08);
-  --overlay: rgba(42, 28, 20, .35);
-  --skeleton: #eeeae5;
+  --shadow-card: 0 1px 2px rgba(20, 24, 32, 0.05);
+  --overlay: rgba(20, 24, 32, .4);
+  --skeleton: #e6e8ec;
 
   /* Okul uygulamasıyla aynı sıcak turuncu->erik gradyan kenar çubuğu. */
-  --sidebar-from: #e2793c;
-  --sidebar-to: #7d3a56;
+  --sidebar-from: #1c1f26;
+  --sidebar-to: #1c1f26;
 
   --text-display: 1.5rem;
   --text-title: 1rem;
@@ -55,19 +55,19 @@ html {
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --background: #1d1612;
-    --foreground: #f3e6d8;
-    --surface: #2a201a;
-    --surface-muted: #352920;
-    --field-bg: #231b16;
-    --field-bg-focus: #2a201a;
-    --line: #4a3a2e;
-    --line-strong: #6a5444;
-    --muted: #c3ac97;
-    --brand: #ec8a52;
-    --brand-strong: #c8612c;
-    --brand-strong-hover: #db7038;
-    --brand-soft: #4a2c1c;
+    --background: #12151a;
+    --foreground: #e6e9ef;
+    --surface: #1a1e25;
+    --surface-muted: #222831;
+    --field-bg: #12151a;
+    --field-bg-focus: #1a1e25;
+    --line: #2a303a;
+    --line-strong: #3a414d;
+    --muted: #9aa3b2;
+    --brand: #ff5a75;
+    --brand-strong: #d50c2d;
+    --brand-strong-hover: #e5173f;
+    --brand-soft: #3a1520;
     --on-brand: #ffffff;
     --success: #6cc070;
     --success-soft: #1f3a22;
@@ -81,11 +81,11 @@ html {
     --info: #7fa9e6;
     --info-soft: #1d2d45;
     --info-strong: #a9c7f2;
-    --shadow-card: 0 2px 4px rgba(0, 0, 0, .25), 0 14px 34px rgba(0, 0, 0, .3);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, .3);
     --overlay: rgba(0, 0, 0, .55);
-    --skeleton: #3a2e25;
-    --sidebar-from: #9a4a22;
-    --sidebar-to: #4a2234;
+    --skeleton: #2a303a;
+    --sidebar-from: #0e1115;
+    --sidebar-to: #0e1115;
   }
 }
 
@@ -111,8 +111,8 @@ body {
 }
 
 ::selection {
-  background: #fbd3ac;
-  color: #5c2f0f;
+  background: #f8c4cd;
+  color: #5c0a18;
 }
 
 button,
@@ -156,15 +156,14 @@ textarea:focus-visible:not(.field) {
     width: 2.2rem;
     align-items: center;
     justify-content: center;
-    border-radius: 0.9rem;
+    border-radius: 0.4rem;
     color: white;
-    background: linear-gradient(145deg, #ea8a4c, #a84e1f);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 8px 20px rgba(168,78,31,.22);
+    background: #d50c2d;
   }
 
   .app-card {
     border: 1px solid var(--line);
-    border-radius: 1.1rem;
+    border-radius: 0.4rem;
     background: var(--surface);
     box-shadow: var(--shadow-card);
   }
@@ -244,8 +243,8 @@ textarea:focus-visible:not(.field) {
     align-items: center;
     justify-content: center;
     gap: .4rem;
-    min-height: 2.5rem;
-    border-radius: .8rem;
+    min-height: 2.25rem;
+    border-radius: .35rem;
     padding: 0 .9rem;
     font-size: var(--text-meta);
     font-weight: 700;

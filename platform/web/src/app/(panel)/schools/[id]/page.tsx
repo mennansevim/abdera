@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { SchoolAvatar, StatusBadge } from "@/components/school-bits";
-import { Badge, ConfirmDialog, FormMessage, LoadError, Modal, Notice, Skeleton, Toggle } from "@/components/ui";
+import { Badge, ConfirmDialog, FormMessage, LoadError, Modal, Notice, Panel, Skeleton, Toggle } from "@/components/ui";
 import { errorMessage } from "@/lib/api";
 import { compareVersions, useReleases } from "@/lib/releases";
 import {
@@ -106,6 +106,7 @@ export default function SchoolDetailPage() {
   const school = data.school;
   const openRun = data.runs.some((run) => isRunOpen(run.status));
   const actions = availableActions(data);
+  const dangerActions = actions.filter((kind) => ACTIONS[kind].danger);
   const config = confirming ? ACTIONS[confirming] : null;
 
   function runAction(kind: SchoolAction) {
@@ -124,12 +125,12 @@ export default function SchoolDetailPage() {
         <Link href="/" className="text-meta inline-flex items-center gap-1 hover:text-[var(--brand)]"><Icon name="arrow-left" className="h-3.5 w-3.5" />Okullar</Link>
       </div>
 
-      <header className="app-card grid gap-4 p-4 sm:p-5">
-        <div className="flex flex-wrap items-start gap-4">
+      <header className="app-card grid gap-0 overflow-hidden">
+        <div className="flex flex-wrap items-start gap-4 p-4 sm:p-5 pb-3">
           <SchoolAvatar name={school.shortName || school.displayName} color={school.primaryColor} size="lg" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-display font-serif">{school.displayName}</h1>
+              <h1 className="text-display">{school.displayName}</h1>
               <StatusBadge status={school.status} />
               {school.isCanary && <Badge tone="warning">Kanarya</Badge>}
               {school.isVersionPinned && <Badge tone="info">Sürüm sabit</Badge>}
@@ -142,41 +143,27 @@ export default function SchoolDetailPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-4 sm:px-5">
           {school.status === "Active" && (
             <button type="button" className="btn btn-primary" disabled={openRun} onClick={() => setUpgradeOpen(true)}>
               <Icon name="rocket" className="h-4 w-4" />Güncelle
             </button>
           )}
-          {actions.map((kind) => (
+          {actions.filter((kind) => !ACTIONS[kind].danger).map((kind) => (
             <button
               key={kind}
               type="button"
               disabled={openRun && kind !== "retry"}
               onClick={() => { action.reset(); setConfirming(kind); }}
-              className={`btn btn-quiet ${ACTIONS[kind].danger ? "!text-[var(--danger-strong)] hover:!border-[var(--danger)]" : ""}`}
+              className="btn btn-quiet"
             >
               {ACTIONS[kind].label}
             </button>
           ))}
-          <div className="ml-auto flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2 text-xs font-bold text-[var(--muted)]">
-              <Toggle checked={school.isCanary} disabled={flags.isPending} label="Kanarya" onChange={(value) => flags.mutate({ isCanary: value, isVersionPinned: school.isVersionPinned })} />
-              Kanarya
-            </label>
-            <label className="flex items-center gap-2 text-xs font-bold text-[var(--muted)]" title="Sabit sürümlü okul filo güncellemelerine katılmaz.">
-              <Toggle checked={school.isVersionPinned} disabled={flags.isPending} label="Sürümü sabitle" onChange={(value) => flags.mutate({ isCanary: school.isCanary, isVersionPinned: value })} />
-              Sürümü sabitle
-            </label>
-          </div>
         </div>
-        {openRun && <p className="text-meta">Süren bir işlem var; bitene kadar yeni işlem başlatılamaz.</p>}
-        {flags.error && <FormMessage tone="error">{errorMessage(flags.error)}</FormMessage>}
-      </header>
-
-      {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
-
-      <div role="tablist" aria-label="Okul sekmeleri" className="flex gap-1 overflow-x-auto border-b border-[var(--line)]">
+        {openRun && <p className="text-meta px-4 pb-3 sm:px-5">Süren bir işlem var; bitene kadar yeni işlem başlatılamaz.</p>}
+        {flags.error && <div className="px-4 pb-3 sm:px-5"><FormMessage tone="error">{errorMessage(flags.error)}</FormMessage></div>}
+      <div role="tablist" aria-label="Okul sekmeleri" className="flex gap-1 overflow-x-auto border-t border-[var(--line)] px-3">
         {TABS.map((item) => (
           <button
             key={item.key}
@@ -193,8 +180,30 @@ export default function SchoolDetailPage() {
         ))}
       </div>
 
+      </header>
+
+      {notice && <Notice onDismiss={() => setNotice(null)}>{notice}</Notice>}
+
       <div role="tabpanel">
-        {tab === "general" && <GeneralTab detail={data} />}
+        {tab === "general" && (
+          <GeneralTab
+            detail={data}
+            release={
+              <Panel title="Yayın ayarları" flush>
+                <div className="grid gap-0 px-4 py-1 text-sm">
+                  <label className="flex items-center justify-between gap-4 border-b border-[var(--line)] py-2.5">
+                    <span className="text-[var(--muted)]">Kanarya kanalı</span>
+                    <Toggle checked={school.isCanary} disabled={flags.isPending} label="Kanarya" onChange={(value) => flags.mutate({ isCanary: value, isVersionPinned: school.isVersionPinned })} />
+                  </label>
+                  <label className="flex items-center justify-between gap-4 py-2.5" title="Sabit sürümlü okul filo güncellemelerine katılmaz.">
+                    <span className="text-[var(--muted)]">Sürümü sabitle</span>
+                    <Toggle checked={school.isVersionPinned} disabled={flags.isPending} label="Sürümü sabitle" onChange={(value) => flags.mutate({ isCanary: school.isCanary, isVersionPinned: value })} />
+                  </label>
+                </div>
+              </Panel>
+            }
+          />
+        )}
         {tab === "runs" && <RunsTab detail={data} />}
         {tab === "modules" && <ModulesTab detail={data} onQueued={() => { setNotice("Yapılandırma sıraya alındı; okul ~30 sn yeniden başlayacak."); setTab("runs"); }} />}
         {tab === "package" && <PackageTab detail={data} onQueued={(message) => { setNotice(message); if (message.includes("yeniden başlayacak")) setTab("runs"); }} />}
@@ -205,6 +214,22 @@ export default function SchoolDetailPage() {
         {tab === "alerts" && <AlertsTab detail={data} />}
         {tab === "audit" && <AuditTab schoolId={id} />}
       </div>
+
+      {dangerActions.length > 0 && (
+        <section className="flex flex-wrap items-center gap-4 rounded-md border border-[var(--danger)]/50 bg-[var(--surface)] px-5 py-4">
+          <div className="min-w-0 flex-1 basis-72">
+            <h2 className="text-sm font-bold text-[var(--danger-strong)]">Tehlikeli bölge</h2>
+            <p className="text-meta mt-1">Bu işlemler onay ister ve denetim günlüğüne yazılır.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dangerActions.map((kind) => (
+              <button key={kind} type="button" disabled={openRun} onClick={() => { action.reset(); setConfirming(kind); }} className="btn btn-quiet !border-[var(--danger)]/60 !text-[var(--danger-strong)]">
+                <Icon name="trash" className="h-4 w-4" />{ACTIONS[kind].label}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {config && confirming && (
         <ConfirmDialog
