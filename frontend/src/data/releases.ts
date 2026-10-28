@@ -22,6 +22,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.29.3",
+    date: "2026-10-29",
+    items: [
+      { audience: "all", text: "Yeni Ses Defteri: \"Bugün\" ekranındaki ders kartında Kayıt düğmesiyle öğrencinin çalışından 60 saniyeye kadar kısa bir kayıt alabilirsin. Kayıtlar Gelişim ekranında dinlenir; yıldızladığın kayıt kalıcı olarak saklanır." },
+      { audience: "all", text: "Bir kaydı \"Veliye göster\" ile işaretlersen veli portalındaki Gelişim sekmesinde dinlenebilir; işaretlemediğin kayıtları yalnızca okul ekibi görür." },
+      { audience: "admin", text: "Kayıt alınabilmesi için velinin izni gerekir: veli portaldan, sen Gelişim ekranındaki Ses Defteri bölümünden açabilirsin. İzin kapatılırsa o öğrencinin kayıtları silinir. Yedekler sayfasında seslerin kapladığı alanı görebilirsin." },
+    ],
+  },
+  {
     version: "2026.10.29.2",
     date: "2026-10-29",
     items: [],
