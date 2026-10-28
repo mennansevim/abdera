@@ -25,7 +25,7 @@ public class ProvisioningWorker(IServiceScopeFactory scopes, IConfiguration conf
             {
                 while (await RunNextAsync(stoppingToken)) { }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Kurulum turu başarısız oldu.");
             }
@@ -84,7 +84,7 @@ public class ProvisioningWorker(IServiceScopeFactory scopes, IConfiguration conf
                 {
                     throw;
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     logger.LogWarning(ex, "{Kind} {Slug}: '{Step}' adımı hata verdi.", run.Kind, school.Slug, plan[step].Name);
                     outcome = StepOutcome.Fail(ex.Message);
@@ -130,7 +130,7 @@ public class RolloutWorker(IServiceScopeFactory scopes, IConfiguration config, T
         do
         {
             try { await TickAsync(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Dağıtım turu başarısız oldu."); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { logger.LogError(ex, "Dağıtım turu başarısız oldu."); }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
@@ -212,7 +212,7 @@ public class TelemetryPoller(IServiceScopeFactory scopes, IConfiguration config,
         do
         {
             try { await PollAllAsync(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Telemetri turu başarısız oldu."); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { logger.LogError(ex, "Telemetri turu başarısız oldu."); }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
@@ -234,7 +234,7 @@ public class TelemetryPoller(IServiceScopeFactory scopes, IConfiguration config,
                 db.Telemetry.Add(TelemetrySnapshot.From(school.Id, telemetry, now));
                 school.Seen(now);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 db.Telemetry.Add(TelemetrySnapshot.Unreachable(school.Id, ex.Message, now));
             }
@@ -257,7 +257,7 @@ public class HostStatsPoller(IServiceScopeFactory scopes, IConfiguration config,
         do
         {
             try { await PollAllAsync(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Sunucu ölçüm turu başarısız oldu."); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { logger.LogError(ex, "Sunucu ölçüm turu başarısız oldu."); }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
@@ -276,7 +276,7 @@ public class HostStatsPoller(IServiceScopeFactory scopes, IConfiguration config,
                 var result = await agent.RunAsync(host, AgentCommand.For("host-stats"), cancellationToken);
                 db.HostSnapshots.Add(result.Ok ? HostSnapshot.Parse(host.Id, result.Output, now) : HostSnapshot.Unreachable(host.Id, result.Describe(), now));
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 db.HostSnapshots.Add(HostSnapshot.Unreachable(host.Id, ex.Message, now));
             }
@@ -302,7 +302,7 @@ public class CertificateWatcher(IServiceScopeFactory scopes, IConfiguration conf
         do
         {
             try { await CheckAllAsync(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Sertifika turu başarısız oldu."); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { logger.LogError(ex, "Sertifika turu başarısız oldu."); }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
@@ -333,7 +333,7 @@ public class CertificateWatcher(IServiceScopeFactory scopes, IConfiguration conf
             {
                 CertificateInfo info;
                 try { info = await probe.GetAsync(domain, cancellationToken); }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     logger.LogInformation("Sertifika okunamadı: {Domain} ({Error})", domain, ex.Message);
                     continue;
@@ -377,7 +377,7 @@ public class LicenseWatcher(IServiceScopeFactory scopes, IConfiguration config, 
         do
         {
             try { await CheckAllAsync(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { logger.LogError(ex, "Lisans turu başarısız oldu."); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested) { logger.LogError(ex, "Lisans turu başarısız oldu."); }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }

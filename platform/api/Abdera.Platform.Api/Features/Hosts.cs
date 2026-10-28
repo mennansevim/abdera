@@ -51,7 +51,7 @@ public static class Hosts
         var host = await db.Hosts.SingleOrDefaultAsync(h => h.Id == id) ?? throw new NotFoundException("Sunucu bulunamadı.");
         AgentResult result;
         try { result = await agent.RunAsync(host, AgentCommand.For("host-info"), cancellationToken); }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             return Results.Problem(title: "Sunucuya ulaşılamadı", detail: ex.Message, statusCode: 502);
         }

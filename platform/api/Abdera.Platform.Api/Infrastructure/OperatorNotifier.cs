@@ -33,7 +33,7 @@ public class WebhookOperatorNotifier(IHttpClientFactory clients, IConfiguration 
             using var response = await client.PostAsJsonAsync(url, new { text, content = text }, cancellationToken);
             if (!response.IsSuccessStatusCode) logger.LogWarning("Operatör bildirimi reddedildi: {Status}", (int)response.StatusCode);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
         {
             logger.LogWarning("Operatör bildirimi gönderilemedi: {Error}", ex.Message);
         }

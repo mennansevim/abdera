@@ -184,6 +184,6 @@ public static class Monitoring
     private static async Task<AgentResult> RunAsync(IHostAgent agent, ServerHost host, AgentCommand command, CancellationToken cancellationToken)
     {
         try { return await agent.RunAsync(host, command, cancellationToken); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { return new AgentResult(-1, "", ex.Message); }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested) { return new AgentResult(-1, "", ex.Message); }
     }
 }
