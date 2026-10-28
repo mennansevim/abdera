@@ -44,6 +44,7 @@ export default function GuardianLoginPage() {
 
   const [phoneNumber, setPhoneNumber] = useState(DEMO_ENABLED ? EXAMPLE_GUARDIAN_PHONE : "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<Mode>("password");
   const [debugCode, setDebugCode] = useState<string | null>(null);
@@ -96,86 +97,105 @@ export default function GuardianLoginPage() {
   }
 
   const title =
-    mode === "otp-code" ? "Telefonuna gelen kodu gir" : "Veli girişi";
+    mode === "otp-code" ? "Kodu gir" : "Veli girişi";
   const subtitle =
     mode === "password"
-      ? "Kayıtlı telefon numaran ve okulun verdiği şifreyle giriş yap."
+      ? "Okula kayıtlı telefon numaran ve şifrenle gir."
       : mode === "otp-phone"
         ? "Kayıtlı telefon numarana WhatsApp üzerinden tek kullanımlık bir kod gönderelim."
         : `${phoneNumber} numarasına gönderilen 6 haneli kodu gir.`;
 
-  return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#efede6] sm:p-6">
-      <section className="min-h-dvh w-full max-w-[420px] overflow-hidden border-[#ddd7ce] bg-[#fbf8f3] shadow-[0_8px_28px_rgba(46,37,30,.07)] sm:min-h-0 sm:border">
-        <div className="px-4 pb-5 pt-8 sm:px-6 sm:pb-6 sm:pt-9">
-          <div className="mb-8 flex justify-center text-[var(--brand-strong)]">
-            <BrandMark />
-          </div>
+  const errorBox = error && <p role="alert" className="mt-4 rounded-xl bg-[var(--danger-soft)] px-3.5 py-3 text-sm font-semibold text-[var(--danger-strong)]">{error}</p>;
+  const labelClass = "mb-1.5 block text-sm font-semibold";
+  // 16px: iOS Safari daha küçük yazılı alana odaklanınca sayfayı yakınlaştırıyor.
+  const inputClass = "field min-h-13 text-base";
+  const primaryClass = "pressable mt-5 flex min-h-13 w-full items-center justify-center rounded-2xl bg-[var(--brand-strong)] text-base font-bold text-white shadow-[0_8px_20px_rgba(168,78,31,.25)] disabled:cursor-wait disabled:opacity-70";
+  const secondaryClass = "pressable mt-2 flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl text-sm font-semibold text-[var(--muted)]";
 
+  return (
+    <main className="flex min-h-dvh flex-col bg-[var(--background)] sm:items-center sm:justify-center sm:p-6">
+      <section className="flex w-full flex-1 flex-col sm:max-w-[420px] sm:flex-none sm:overflow-hidden sm:rounded-[1.6rem] sm:bg-white sm:shadow-[var(--shadow-card)] sm:ring-1 sm:ring-[var(--line)]">
+        <div className="bg-[linear-gradient(150deg,#fbe2cb,#fdf3e7)] px-5 pb-8 pt-[max(1rem,env(safe-area-inset-top))]">
           <button
             type="button"
             onClick={() => router.push("/login")}
-            className="pressable -ml-2 mb-5 flex min-h-11 items-center gap-1.5 px-2 text-[.75rem] font-semibold text-[var(--muted)]"
+            className="pressable -ml-2 flex min-h-11 items-center gap-1 px-2 text-sm font-semibold text-[var(--muted)]"
           >
-            <Icon name="arrow-left" className="h-3.5 w-3.5" /> Ana sayfaya dön
+            <Icon name="arrow-left" className="h-4 w-4" /> Geri
           </button>
-
-          <div className="mb-6">
-            <h1 className="text-[1.05rem] font-bold tracking-[-0.015em]">{title}</h1>
-            <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{subtitle}</p>
-            {sessionExpired && (
-              <p role="status" className="mt-3 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-xs font-medium text-[var(--warning-strong)]">
-                Oturumun sona erdi. Devam etmek için tekrar giriş yap.
-              </p>
-            )}
+          <div className="mt-4 text-[var(--brand-strong)]">
+            <BrandMark />
           </div>
+          <h1 className="mt-5 text-[1.75rem] font-bold leading-tight tracking-[-0.015em]">{title}</h1>
+          <p className="mt-1.5 text-[.9375rem] leading-relaxed text-[var(--muted)]">{subtitle}</p>
+        </div>
+
+        <div className="flex-1 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-6">
+          {sessionExpired && (
+            <p role="status" className="mb-5 rounded-xl bg-[var(--warning-soft)] px-3.5 py-3 text-sm font-semibold text-[var(--warning-strong)]">
+              Oturumun sona erdi. Devam etmek için tekrar giriş yap.
+            </p>
+          )}
 
           {/* --- Birincil: telefon + şifre --- */}
           {mode === "password" && (
             <form onSubmit={handlePasswordLogin}>
-              <label htmlFor="phoneNumber" className="mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Telefon numarası</label>
+              <label htmlFor="phoneNumber" className={labelClass}>Telefon numarası</label>
               <input
                 id="phoneNumber"
                 type="tel"
                 inputMode="tel"
                 required
-                autoFocus
                 autoComplete="username"
                 value={phoneNumber}
                 onChange={(event) => setPhoneNumber(event.target.value)}
                 placeholder="0555 123 45 67"
-                className="field text-sm"
+                className={inputClass}
               />
 
-              <label htmlFor="password" className="mb-1.5 mt-4 block text-[.75rem] font-semibold text-[var(--muted)]">Şifre</label>
-              <input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Şifren"
-                className="field text-sm"
-              />
+              <label htmlFor="password" className={`${labelClass} mt-4`}>Şifre</label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Şifren"
+                  className={`${inputClass} pr-20`}
+                />
+                {/* Etiket bilerek "Şifre" kelimesini içermiyor: getByLabel("Şifre") alanın kendisini bulmalı. */}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-pressed={showPassword}
+                  className="pressable absolute inset-y-0 right-1 my-auto h-10 rounded-lg px-3 text-sm font-bold text-[var(--brand-strong)]"
+                >
+                  {showPassword ? "Gizle" : "Göster"}
+                </button>
+              </div>
 
-              {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+              {errorBox}
 
-              <button type="submit" disabled={login.isPending} className="btn btn-primary mt-4 w-full text-sm disabled:cursor-wait">
+              <button type="submit" disabled={login.isPending} className={primaryClass}>
                 {login.isPending ? "Giriş yapılıyor…" : "Giriş yap"}
               </button>
 
               {/* docs/10-decisions.md AA: şifreyi okul yönetir. "WhatsApp ile kod al" kaldırıldı -
                   kod şablonu Meta'da açılamadığı için (R2) kod veliye hiç ulaşmıyordu. OTP akışı
                   kodda duruyor; şablon açılırsa bu giriş noktası geri eklenebilir. */}
-              <p className="mt-3 text-center text-xs text-[var(--muted)]">Şifreni bilmiyor ya da unuttuysan okul yönetiminden yeni şifre iste.</p>
+              <p className="mt-5 flex gap-2 rounded-xl bg-[var(--surface-muted)] px-3.5 py-3 text-sm text-[var(--muted)]">
+                <Icon name="shield" className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>Şifreni bilmiyor ya da unuttuysan okul yönetiminden yeni şifre iste.</span>
+              </p>
             </form>
           )}
 
           {/* --- İkincil: OTP telefon adımı --- */}
           {mode === "otp-phone" && (
             <form onSubmit={handleRequestOtp}>
-              <label htmlFor="otpPhone" className="mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Telefon numarası</label>
+              <label htmlFor="otpPhone" className={labelClass}>Telefon numarası</label>
               <input
                 id="otpPhone"
                 type="tel"
@@ -186,21 +206,17 @@ export default function GuardianLoginPage() {
                 value={phoneNumber}
                 onChange={(event) => setPhoneNumber(event.target.value)}
                 placeholder="0555 123 45 67"
-                className="field text-sm"
+                className={inputClass}
               />
 
-              {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+              {errorBox}
 
-              <button type="submit" disabled={requestOtp.isPending} className="btn btn-primary mt-4 w-full text-sm disabled:cursor-wait">
+              <button type="submit" disabled={requestOtp.isPending} className={primaryClass}>
                 {requestOtp.isPending ? "Kod gönderiliyor…" : "Kod gönder"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => { setMode("password"); setError(null); }}
-                className="pressable mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-[var(--muted)]"
-              >
-                <Icon name="arrow-left" className="h-3.5 w-3.5" /> Şifreyle girişe dön
+              <button type="button" onClick={() => { setMode("password"); setError(null); }} className={secondaryClass}>
+                <Icon name="arrow-left" className="h-4 w-4" /> Şifreyle girişe dön
               </button>
             </form>
           )}
@@ -208,7 +224,7 @@ export default function GuardianLoginPage() {
           {/* --- İkincil: OTP kod adımı --- */}
           {mode === "otp-code" && (
             <form onSubmit={handleVerifyOtp}>
-              <label htmlFor="code" className="mb-1.5 block text-[.75rem] font-semibold text-[var(--muted)]">Doğrulama kodu</label>
+              <label htmlFor="code" className={labelClass}>Doğrulama kodu</label>
               <input
                 ref={codeRef}
                 id="code"
@@ -221,27 +237,23 @@ export default function GuardianLoginPage() {
                 value={code}
                 onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
                 placeholder="••••••"
-                className="field text-center text-lg tracking-[.5em]"
+                className="field min-h-14 text-center text-xl tracking-[.5em]"
               />
 
               {debugCode && (
-                <p className="mt-2 rounded-xl bg-[#fff9e8] px-3 py-2 text-center text-[.75rem] font-semibold text-[#7f5d0d]">
+                <p className="mt-2 rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-center text-sm font-semibold text-[var(--warning-strong)]">
                   Geliştirme kodu: {debugCode}
                 </p>
               )}
 
-              {error && <p role="alert" className="mt-3 rounded-xl bg-[#fff0ef] px-3 py-2.5 text-xs font-medium text-[#b84545]">{error}</p>}
+              {errorBox}
 
-              <button type="submit" disabled={verifyOtp.isPending || code.length !== 6} className="btn btn-primary mt-4 w-full text-sm disabled:cursor-wait">
+              <button type="submit" disabled={verifyOtp.isPending || code.length !== 6} className={primaryClass}>
                 {verifyOtp.isPending ? "Giriş yapılıyor…" : "Giriş yap"}
               </button>
 
-              <button
-                type="button"
-                onClick={() => { setMode("otp-phone"); setCode(""); setError(null); setDebugCode(null); }}
-                className="pressable mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl text-xs font-semibold text-[var(--muted)]"
-              >
-                <Icon name="arrow-left" className="h-3.5 w-3.5" /> Farklı bir numara kullan
+              <button type="button" onClick={() => { setMode("otp-phone"); setCode(""); setError(null); setDebugCode(null); }} className={secondaryClass}>
+                <Icon name="arrow-left" className="h-4 w-4" /> Farklı bir numara kullan
               </button>
             </form>
           )}
@@ -253,7 +265,7 @@ export default function GuardianLoginPage() {
               type="button"
               onClick={handleDebugLogin}
               disabled={debugLogin.isPending}
-              className="pressable mt-6 min-h-11 w-full rounded-lg border border-[#e3ddd3] bg-[#f4f1ea] px-4 text-xs font-bold text-[var(--muted)] hover:bg-[#eee9df] disabled:cursor-wait disabled:opacity-60"
+              className="pressable mt-6 min-h-12 w-full rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--muted)] disabled:cursor-wait disabled:opacity-60"
             >
               {debugLogin.isPending ? "Demo veli açılıyor…" : "Demo veli olarak devam et"}
             </button>
