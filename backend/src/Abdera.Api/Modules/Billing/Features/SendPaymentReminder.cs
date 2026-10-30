@@ -1,3 +1,4 @@
+using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People;
@@ -10,7 +11,7 @@ namespace Abdera.Api.Modules.Billing.Features;
 // yokken ertelenmişti (docs/10-decisions.md), Phase 5 ile birlikte tamamlanıyor.
 public static class SendPaymentReminder
 {
-    public record Response(bool Scheduled);
+    public record Response(bool Scheduled, ReminderScheduleOutcome Outcome);
 
     public static void MapSendPaymentReminder(this IEndpointRouteBuilder app)
     {
@@ -24,19 +25,20 @@ public static class SendPaymentReminder
         var receivable = await db.Receivables.SingleOrDefaultAsync(r => r.Id == receivableId)
             ?? throw new NotFoundException("Aidat bulunamadı.");
 
+        if (receivable.Status is ReceivableStatus.Paid or ReceivableStatus.Cancelled)
+            throw new ConflictException("Ödenmiş veya iptal edilmiş aidat için hatırlatma gönderilemez.");
+
         var enrollment = await db.Enrollments.SingleAsync(e => e.Id == receivable.EnrollmentId);
         var primaryGuardianId = await PrimaryGuardianResolver.ResolveAsync(db, enrollment.StudentId);
 
-        var scheduled = false;
-        if (primaryGuardianId is { } guardianId)
-        {
-            // Elle tetiklenen bir hatırlatma - A6 sessiz saat kontrolü yine de uygulanır
-            // (NotificationScheduler PaymentReminder tipini otomatik öteler).
-            scheduled = await scheduler.ScheduleAsync(
-                NotificationJobType.PaymentReminder, "receivable", receivable.Id, guardianId, clock.UtcNow);
-        }
+        // Elle tetiklenen bir hatırlatma - A6 sessiz saat kontrolü yine de uygulanır
+        // (NotificationDispatcher PaymentReminder tipini otomatik öteler).
+        var outcome = primaryGuardianId is { } guardianId
+            ? await scheduler.ScheduleRepeatableAsync(
+                NotificationJobType.PaymentReminder, "receivable", receivable.Id, guardianId, clock.UtcNow)
+            : ReminderScheduleOutcome.NoGuardian;
 
         await db.SaveChangesAsync();
-        return Results.Ok(new Response(scheduled));
+        return Results.Ok(new Response(outcome == ReminderScheduleOutcome.Scheduled, outcome));
     }
 }

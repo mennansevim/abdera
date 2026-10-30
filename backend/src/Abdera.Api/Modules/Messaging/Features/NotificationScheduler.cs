@@ -9,10 +9,25 @@ namespace Abdera.Api.Modules.Messaging.Features;
 // docs/06-whatsapp.md: "Scheduling/Billing doğrudan Meta API çağırmaz - INotificationScheduler
 // benzeri bir port üzerinden NotificationJob oluşturur." Bu, diğer modüllerin Messaging'e
 // bağımlı olduğu TEK nokta - port burada, kullanımı Scheduling/Billing'in kendi handler'larında.
+public enum ReminderScheduleOutcome
+{
+    Scheduled,
+    AlreadyQueued,
+    NoGuardian,
+    NoConsent,
+}
+
 public interface INotificationScheduler
 {
     /// <returns>Job gerçekten oluşturulduysa true; rıza kapalıysa veya zaten varsa false.</returns>
     Task<bool> ScheduleAsync(
+        NotificationJobType type, string referenceType, Guid referenceId, Guid guardianId, DateTimeOffset scheduledAt);
+
+    /// <summary>
+    /// Elle tekrarlanabilen hatırlatma: job gönderilmiş, başarısız ya da iptal edilmişse aynı satır
+    /// yeniden kuyruğa alınır. Yalnızca gönderim sırasındaki job tekrarlanmaz.
+    /// </summary>
+    Task<ReminderScheduleOutcome> ScheduleRepeatableAsync(
         NotificationJobType type, string referenceType, Guid referenceId, Guid guardianId, DateTimeOffset scheduledAt);
 
     /// <summary>docs/10-decisions.md A4: ders değişince/iptal olunca bekleyen job iptal edilir.</summary>
@@ -59,6 +74,29 @@ public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotifica
         // job'ın YENİDEN sessiz saate düşüp düşmediğini asla tekrar kontrol edemezdik.
         db.NotificationJobs.Add(NotificationJob.Create(type, guardian.PhoneNumber, referenceType, referenceId, scheduledAt, clock.UtcNow));
         return true;
+    }
+
+    public async Task<ReminderScheduleOutcome> ScheduleRepeatableAsync(
+        NotificationJobType type, string referenceType, Guid referenceId, Guid guardianId, DateTimeOffset scheduledAt)
+    {
+        var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.Id == guardianId);
+        if (guardian is null) return ReminderScheduleOutcome.NoGuardian;
+        if (!guardian.NotificationConsent) return ReminderScheduleOutcome.NoConsent;
+
+        var now = clock.UtcNow;
+        var job = await db.NotificationJobs.SingleOrDefaultAsync(j =>
+            j.Type == type && j.ReferenceType == referenceType && j.ReferenceId == referenceId);
+        if (job is null)
+        {
+            db.NotificationJobs.Add(NotificationJob.Create(type, guardian.PhoneNumber, referenceType, referenceId, scheduledAt, now));
+            return ReminderScheduleOutcome.Scheduled;
+        }
+
+        if (job.Status is NotificationJobStatus.Pending or NotificationJobStatus.Processing)
+            return ReminderScheduleOutcome.AlreadyQueued;
+
+        job.Requeue(guardian.PhoneNumber, scheduledAt, now);
+        return ReminderScheduleOutcome.Scheduled;
     }
 
     public async Task CancelPendingAsync(string referenceType, Guid referenceId)

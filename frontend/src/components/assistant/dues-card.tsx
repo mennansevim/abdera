@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { DUE_BUCKET_LABEL, openDueLines, type AssistantStudent, type DueBucket, type DueLine } from "@/lib/assistant";
-import { COURSE_KIND_LABEL, useBillingDues, useSendPaymentReminder } from "@/lib/billing";
+import { COURSE_KIND_LABEL, PAYMENT_REMINDER_OUTCOME_TEXT, useBillingDues, useSendPaymentReminder, type PaymentReminderOutcome } from "@/lib/billing";
 import { formatDay, formatMoney, formatPeriod } from "@/lib/billing-format";
 import { errorMessage } from "@/lib/library";
 import { Actions, AssistantCard, ConfirmBox, DoneLine, ErrorLine, GoLink, Loading, StudentHeading } from "./shared";
@@ -20,7 +20,7 @@ export function DuesCard({ student }: { student: AssistantStudent | null }) {
   const dues = useBillingDues();
   const reminder = useSendPaymentReminder();
   const [confirming, setConfirming] = useState<Reminder | null>(null);
-  const [sent, setSent] = useState<Record<string, "sent" | "skipped">>({});
+  const [sent, setSent] = useState<Record<string, PaymentReminderOutcome>>({});
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +38,7 @@ export function DuesCard({ student }: { student: AssistantStudent | null }) {
     for (const id of target.ids) {
       try {
         const response = await reminder.mutateAsync(id);
-        setSent((current) => ({ ...current, [id]: response.scheduled ? "sent" : "skipped" }));
+        setSent((current) => ({ ...current, [id]: response.outcome }));
         if (response.scheduled) delivered += 1;
       } catch (err) {
         setError(errorMessage(err, "Hatırlatma gönderilemedi."));
@@ -48,7 +48,7 @@ export function DuesCard({ student }: { student: AssistantStudent | null }) {
     setConfirming(null);
     setResult(delivered === target.ids.length
       ? `${delivered} hatırlatma sıraya alındı.`
-      : `${delivered}/${target.ids.length} hatırlatma sıraya alındı. Diğerleri gönderilmedi: velinin WhatsApp bildirim izni yok, veli kayıtlı değil ya da bu aidat için hatırlatma zaten sırada.`);
+      : `${delivered}/${target.ids.length} hatırlatma sıraya alındı. Gönderilmeyenlerin nedeni satırlarında yazıyor.`);
   }
 
   if (lines.length === 0) {
@@ -122,7 +122,7 @@ export function DuesCard({ student }: { student: AssistantStudent | null }) {
   );
 }
 
-function DueRow({ line, state, busy, onRemind }: { line: DueLine; state?: "sent" | "skipped"; busy: boolean; onRemind: () => void }) {
+function DueRow({ line, state, busy, onRemind }: { line: DueLine; state?: PaymentReminderOutcome; busy: boolean; onRemind: () => void }) {
   const { due } = line;
   const collectHref = `/dashboard/billing?collect=${due.enrollmentId}&period=${encodeURIComponent(due.period)}&name=${encodeURIComponent(due.studentName)}`;
   return (
@@ -144,7 +144,7 @@ function DueRow({ line, state, busy, onRemind }: { line: DueLine; state?: "sent"
       </div>
       <div className="flex flex-wrap gap-2">
         {state
-          ? <span className="text-meta text-xs font-semibold">{state === "sent" ? "Hatırlatma sıraya alındı" : "Gönderilmedi: velinin WhatsApp izni yok ya da hatırlatma zaten sırada"}</span>
+          ? <span className="text-meta text-xs font-semibold">{PAYMENT_REMINDER_OUTCOME_TEXT[state]}</span>
           : <button type="button" onClick={onRemind} disabled={busy} className="pressable inline-flex min-h-9 items-center rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--brand-strong)] hover:border-[var(--brand)] disabled:opacity-50">Hatırlatma gönder</button>}
         <GoLink href={collectHref}>Ödeme al</GoLink>
       </div>

@@ -487,6 +487,13 @@ Kullanıcı isteği: rakip taramasından çıkan "Ses Defteri + Müzik Yolculuğ
 | AG6 | Rıza (KVKK) | `students.audio_recording_consent`, varsayılan kapalı. Veli portaldan, yönetici Gelişim ekranından açar/kapatır; değişiklik audit'e yazılır. Rıza kapanınca öğrencinin bütün kayıtları (satır + dosya) silinir - işlemenin durması. Rıza yoksa kayıt `409`. |
 | AG7 | Görünürlük | Kaydı yalnızca dersin öğretmeni alır (yönetici `403`). Varsayılan yalnızca ekip görür; öğretmen/yönetici "Veliye göster" derse veli portalının Gelişim sekmesine düşer (`audio_clip.shared` audit). Paylaşılmamış kayıt veliye `404` - varlığı sızmaz. Dosya `private, immutable` önbellekle sunulur; liste açılınca hiçbir ses inmez (`preload="none"`). |
 
+## AH - Elle aidat hatırlatması tekrarlanabilir (2026-10-30)
+
+| # | Karar | Gerekçe ve kapsam |
+|---|---|---|
+| AH1 | Hatırlat sonucu nedeniyle döner | `send-reminder` yanıtındaki `outcome` (`Scheduled`, `AlreadyQueued`, `NoGuardian`, `NoConsent`) arayüzde tek metne bağlıdır. Önceki `false` yanıtı "veli ya da izin yok" diye gösteriliyor, zaten gönderilmiş ya da başarısız aidatı da aynı metinle gizliyordu. |
+| AH2 | Aynı aidata yeniden gönderim aynı job satırıyla yapılır | `UNIQUE (type, reference_type, reference_id)` korunur; `Sent`, `Failed` ve `Cancelled` job `Requeue` ile yeniden kuyruğa alınır, önceki gönderimler `whatsapp_messages`'ta kalır. Yalnızca `Pending`/`Processing` job tekrarlanmaz. Ödenmiş veya iptal aidata hatırlatma 409 döner. Otomatik aidat hatırlatması bu kararın kapsamında değildir. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

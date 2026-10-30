@@ -109,6 +109,29 @@ public class MessagingDomainTests
         Assert.Equal(NotificationJobStatus.Pending, job.Status);
     }
 
+    [Fact]
+    public void NotificationJob_Requeue_throws_while_job_is_queued()
+    {
+        var job = CreateJob();
+
+        Assert.Throws<ConflictException>(() => job.Requeue("+905551234567", Now, Now));
+    }
+
+    [Fact]
+    public void NotificationJob_Requeue_resets_a_sent_job_for_a_new_send()
+    {
+        var job = CreateJob();
+        job.Claim(Now);
+        job.MarkSent(Now);
+
+        job.Requeue("+905559876543", Now.AddMinutes(5), Now.AddMinutes(5));
+
+        Assert.Equal(NotificationJobStatus.Pending, job.Status);
+        Assert.Equal("+905559876543", job.RecipientPhoneNumber);
+        Assert.Equal(0, job.AttemptCount);
+        Assert.Null(job.SentAt);
+    }
+
     [Theory]
     [InlineData(NotificationJobType.Birthday)]
     [InlineData(NotificationJobType.PackageEnding)]

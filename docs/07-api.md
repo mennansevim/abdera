@@ -96,7 +96,7 @@ POST   /api/receivables/monthly-run             ✅ dönemin aidatını tüm akt
                                                     bu uç yalnızca AdminOnly elle telafi/kaçış kapısı olarak duruyor)
 POST   /api/payments/{paymentId}/corrections    ✅ değiştirilemez düzeltme satırı; fazla ödeme reddi + audit
 GET    /api/students/{studentId}/billing        ✅ tüm kayıtların aidat/ödeme geçmişi tek ekranda
-POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar
+POST   /api/receivables/{receivableId}/send-reminder   ✅ Phase 5 - elle PAYMENT_REMINDER job'ı kurar; `outcome` sonucu söyler (Scheduled/AlreadyQueued/NoGuardian/NoConsent), gönderilmiş/başarısız/iptal job aynı satırda yeniden kuyruğa alınır, ödenmiş/iptal aidatta 409
 
 GET    /api/students/{studentId}/makeup-credits  ✅ A2
 POST   /api/makeup-credits/{creditId}/use        ✅ yeni bir MAKEUP dersi açar

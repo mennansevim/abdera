@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { EmptyState, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardLesson } from "@/lib/attendance";
-import { useCorrectPaymentDates, useSendPaymentReminder } from "@/lib/billing";
+import { PAYMENT_REMINDER_OUTCOME_TEXT, useCorrectPaymentDates, useSendPaymentReminder } from "@/lib/billing";
 import { cycleKey, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
 import { QuickCollect } from "./collect-sheet";
 
@@ -274,9 +274,7 @@ function HistoryModal({ card, entriesFrom, onClose, onCollect, onFullCollect }: 
     setMessage(null);
     try {
       const result = await reminder.mutateAsync(remindTarget.id);
-      setMessage(result.scheduled
-        ? { tone: "success", text: "Veliye WhatsApp hatırlatması sıraya alındı." }
-        : { tone: "error", text: "Hatırlatma gönderilemedi: öğrencinin birincil velisi ya da mesaj izni yok." });
+      setMessage({ tone: result.scheduled ? "success" : "error", text: PAYMENT_REMINDER_OUTCOME_TEXT[result.outcome] });
     } catch (err) {
       setMessage({ tone: "error", text: err instanceof ApiError ? (err.detail ?? err.title) : "Hatırlatma gönderilemedi." });
     }

@@ -581,8 +581,17 @@ export function useCollect() {
 
 // Ödenmemiş aidat için veliye WhatsApp hatırlatması (SendPaymentReminder.cs) - sessiz saat ve
 // rıza kuralları sunucuda uygulanır.
+export type PaymentReminderOutcome = "Scheduled" | "AlreadyQueued" | "NoGuardian" | "NoConsent";
+
+export const PAYMENT_REMINDER_OUTCOME_TEXT: Record<PaymentReminderOutcome, string> = {
+  Scheduled: "Hatırlatma sıraya alındı.",
+  AlreadyQueued: "Bu aidat için hatırlatma zaten gönderim sırasında.",
+  NoGuardian: "Gönderilmedi: öğrenciye bağlı veli yok.",
+  NoConsent: "Gönderilmedi: velinin WhatsApp izni kapalı.",
+};
+
 export function useSendPaymentReminder() {
   return useMutation({
-    mutationFn: (receivableId: string) => api.post<{ scheduled: boolean }>(`/api/receivables/${receivableId}/send-reminder`, {}),
+    mutationFn: (receivableId: string) => api.post<{ scheduled: boolean; outcome: PaymentReminderOutcome }>(`/api/receivables/${receivableId}/send-reminder`, {}),
   });
 }

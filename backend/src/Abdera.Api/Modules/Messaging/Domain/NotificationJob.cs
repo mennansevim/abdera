@@ -102,6 +102,23 @@ public class NotificationJob
         UpdatedAt = now;
     }
 
+    // Aidat hatırlatması aynı aidat için tekrar gönderilebilir. UNIQUE (type, reference_type,
+    // reference_id) ikinci satıra izin vermediği için aynı satır yeniden kuyruğa alınır; önceki
+    // gönderimler whatsapp_messages'ta kalır.
+    public void Requeue(string recipientPhoneNumber, DateTimeOffset scheduledAt, DateTimeOffset now)
+    {
+        if (Status is NotificationJobStatus.Pending or NotificationJobStatus.Processing)
+            throw new ConflictException($"'{Status}' durumundaki bir job yeniden kuyruğa alınamaz.");
+
+        RecipientPhoneNumber = recipientPhoneNumber;
+        ScheduledAt = scheduledAt;
+        Status = NotificationJobStatus.Pending;
+        AttemptCount = 0;
+        LastError = null;
+        SentAt = null;
+        UpdatedAt = now;
+    }
+
     // Master prompt: "failed jobs must remain visible" - Admin, deneme limitine bakmaksızın
     // elle yeniden kuyruğa alabilir.
     public void RetryManually(DateTimeOffset now)

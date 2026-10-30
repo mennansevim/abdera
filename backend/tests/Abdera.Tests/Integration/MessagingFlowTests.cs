@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using Abdera.Api.Modules.Attendance.Domain;
+using Abdera.Api.Modules.Billing.Domain;
+using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
@@ -328,6 +330,76 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var outbound = await db.WhatsAppMessages.AsNoTracking()
             .SingleAsync(m => m.NotificationJobId == job.Id);
         Assert.Contains("Ders Hatırlatması", outbound.BodySnapshot);
+    }
+
+    [Fact]
+    public async Task Payment_reminder_reports_when_it_is_already_queued_and_can_be_resent_on_the_same_job()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "reminder1");
+        var receivable = await CreateReceivableAsync(admin, seeded);
+
+        var farFuture = DateTimeOffset.UtcNow.AddYears(1);
+        var phone = PhoneNumberNormalizer.Normalize(seeded.GuardianPhone);
+        db.NotificationJobs.Add(NotificationJob.Create(
+            NotificationJobType.PaymentReminder, phone, "receivable", receivable.Id, farFuture, DateTimeOffset.UtcNow));
+        await db.SaveChangesAsync();
+        var jobs = db.NotificationJobs.Where(j => j.Type == NotificationJobType.PaymentReminder && j.ReferenceId == receivable.Id);
+
+        var queued = await SendPaymentReminderAsync(admin, receivable.Id);
+        Assert.False(queued.Scheduled);
+        Assert.Equal(ReminderScheduleOutcome.AlreadyQueued, queued.Outcome);
+
+        foreach (var status in new[] { NotificationJobStatus.Sent, NotificationJobStatus.Failed, NotificationJobStatus.Cancelled })
+        {
+            await jobs.ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, status).SetProperty(j => j.ScheduledAt, farFuture));
+
+            var resent = await SendPaymentReminderAsync(admin, receivable.Id);
+
+            Assert.True(resent.Scheduled);
+            Assert.Equal(ReminderScheduleOutcome.Scheduled, resent.Outcome);
+            Assert.True((await jobs.AsNoTracking().SingleAsync()).ScheduledAt < farFuture);
+        }
+    }
+
+    [Fact]
+    public async Task Payment_reminder_reports_missing_consent_and_missing_guardian()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "reminder2");
+        var receivable = await CreateReceivableAsync(admin, seeded);
+
+        (await admin.PatchAsJsonAsync($"/api/guardians/{seeded.GuardianId}",
+            new Guardians.UpdateRequest("Velireminder2", "Soyad", seeded.GuardianPhone, NotificationConsent: false)))
+            .EnsureSuccessStatusCode();
+        var noConsent = await SendPaymentReminderAsync(admin, receivable.Id);
+        Assert.False(noConsent.Scheduled);
+        Assert.Equal(ReminderScheduleOutcome.NoConsent, noConsent.Outcome);
+
+        await db.StudentGuardians.Where(sg => sg.StudentId == seeded.StudentId).ExecuteDeleteAsync();
+        var noGuardian = await SendPaymentReminderAsync(admin, receivable.Id);
+        Assert.False(noGuardian.Scheduled);
+        Assert.Equal(ReminderScheduleOutcome.NoGuardian, noGuardian.Outcome);
+
+        Assert.False(await db.NotificationJobs.AnyAsync(j => j.ReferenceId == receivable.Id));
+    }
+
+    [Fact]
+    public async Task Payment_reminder_is_refused_for_a_paid_receivable()
+    {
+        await using var db = await _factory.CreateDbContextAsync();
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "reminder3");
+        var receivable = await CreateReceivableAsync(admin, seeded);
+        await db.Receivables.Where(r => r.Id == receivable.Id)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, ReceivableStatus.Paid));
+
+        var response = await admin.PostAsJsonAsync($"/api/receivables/{receivable.Id}/send-reminder", new { });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.False(await db.NotificationJobs.AnyAsync(j => j.ReferenceId == receivable.Id));
     }
 
     [Fact]
@@ -1045,6 +1117,20 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         var anonymous = _factory.CreateClient();
         var response = await anonymous.GetAsync("/api/notifications/webhook-events");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    private static async Task<Receivables.ReceivableResponse> CreateReceivableAsync(HttpClient admin, SeededLesson seeded)
+    {
+        var response = await admin.PostAsJsonAsync("/api/receivables", new Receivables.CreateRequest(seeded.EnrollmentId, "2099-05"));
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<Receivables.ReceivableResponse>(TestJson.Options))!;
+    }
+
+    private static async Task<SendPaymentReminder.Response> SendPaymentReminderAsync(HttpClient admin, Guid receivableId)
+    {
+        var response = await admin.PostAsJsonAsync($"/api/receivables/{receivableId}/send-reminder", new { });
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<SendPaymentReminder.Response>(TestJson.Options))!;
     }
 
     private async Task<HttpResponseMessage> PostSignedWebhookAsync(string body, HttpClient? client = null)
