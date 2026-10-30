@@ -12,6 +12,7 @@ Kural: her izin **sunucu tarafında** zorlanır (endpoint/handler seviyesinde). 
 | Kaynak / işlem | ADMIN | TEACHER | GUARDIAN |
 |---|---|---|---|
 | Öğrenci/veli oluşturma, düzenleme | ✅ tümü | ✅ yalnızca kendi öğrencisi ve onun velisi (J1) | ❌ |
+| Öğrenciyi pasife alma (kurs kayıtları biter, gelecek dersler kalkar) | ✅ tümü | ✅ yalnızca dersleri tümüyle kendisinde olan öğrenci (AI5) | ❌ |
 | Öğrenci silme | ✅ doğrudan | ⏳ gerekçeli talep açar, yönetici karara bağlar (J2) | ❌ |
 | Kurs kaydı açma | ✅ | ✅ yalnızca kendi adına ve zaten kendi öğrencisine | ❌ |
 | Kurs kaydı kaldırma | ✅ | ❌ (bir silmedir) | ❌ |

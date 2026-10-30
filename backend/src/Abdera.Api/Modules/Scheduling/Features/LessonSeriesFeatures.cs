@@ -78,6 +78,8 @@ public static class LessonSeriesFeatures
             ?? throw new NotFoundException("Kayıt (enrollment) bulunamadı.");
         if (enrollment.Status != EnrollmentStatus.Active)
             throw new ValidationFailedException(new Dictionary<string, string[]> { ["enrollmentId"] = ["Bu kayıt aktif değil."] });
+        if (!await IsStudentActiveAsync(enrollment.StudentId, db))
+            throw new ValidationFailedException(new Dictionary<string, string[]> { ["enrollmentId"] = ["Bu öğrenci pasif; program açmak için önce yeniden aktif edin."] });
 
         await SchedulingAuthorization.EnsureActsAsSelfAsync(enrollment.TeacherId, principal, db);
 
@@ -325,6 +327,11 @@ public static class LessonSeriesFeatures
         LessonSeries series, Enrollment enrollment, AbderaDbContext db, IClock clock, IConfiguration config,
         INotificationScheduler scheduler)
     {
+        // Ders üretiminin tek noktası: pasif öğrenciye hiçbir yoldan ders açılmaz (AI). Öğrenci
+        // bu kural gelmeden pasife alınmış ve serisi açık kalmış olabilir.
+        if (!await IsStudentActiveAsync(enrollment.StudentId, db))
+            return new GenerationSummary(0, [], []);
+
         var weeks = config.GetValue("Scheduling:GenerationWeeks", 10);
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
         var windowStart = series.EffectiveFrom > today ? series.EffectiveFrom : today;
@@ -378,6 +385,9 @@ public static class LessonSeriesFeatures
 
         return new GenerationSummary(plan.ToCreate.Count, plan.SkippedHolidays, plan.SkippedTeacherTimeOff);
     }
+
+    private static Task<bool> IsStudentActiveAsync(Guid studentId, AbderaDbContext db) =>
+        db.Students.AnyAsync(student => student.Id == studentId && student.Status == StudentStatus.Active);
 
     internal static async Task EnsureWithinAvailabilityAsync(
         Guid teacherId, DayOfWeek dayOfWeek, TimeOnly startTime, TimeOnly endTime, AbderaDbContext db)

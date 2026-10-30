@@ -37,6 +37,25 @@ public class ChangeRequestAndMakeupCreditTests
     }
 
     [Fact]
+    public void MakeupCredit_ReleaseLesson_returns_a_used_credit_and_ignores_others()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var used = MakeupCredit.Earn(Guid.NewGuid(), Guid.NewGuid(), MakeupCreditEarnedReason.SchoolCancelled, now, 60);
+        used.Use(Guid.NewGuid(), now);
+
+        used.ReleaseLesson();
+
+        Assert.Equal(MakeupCreditStatus.Available, used.Status);
+        Assert.Null(used.UsedLessonId);
+        Assert.Null(used.UsedAt);
+
+        var revoked = MakeupCredit.Earn(Guid.NewGuid(), Guid.NewGuid(), MakeupCreditEarnedReason.Excused, now, 21);
+        revoked.Revoke();
+        revoked.ReleaseLesson();
+        Assert.Equal(MakeupCreditStatus.Revoked, revoked.Status);
+    }
+
+    [Fact]
     public void MakeupCredit_Use_transitions_to_used()
     {
         var credit = MakeupCredit.Earn(Guid.NewGuid(), Guid.NewGuid(), MakeupCreditEarnedReason.GuardianCancelled24H, Now, validDays: 60);

@@ -2,9 +2,10 @@ using System.Security.Claims;
 using System.Text.Json;
 using Abdera.Api.Modules.Auth.Domain;
 using Abdera.Api.Modules.Billing.Infrastructure;
-using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
+using Abdera.Api.Modules.Scheduling.Features;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -138,20 +139,22 @@ public static class Enrollments
     }
 
     private static Task<IResult> EndWithReasonAsync(
-        Guid studentId, Guid enrollmentId, EndRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid studentId, Guid enrollmentId, EndRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        INotificationScheduler scheduler)
     {
         if (!Enum.IsDefined(request.Reason))
             throw new ValidationFailedException(new Dictionary<string, string[]> { ["reason"] = ["Geçerli bir ayrılma nedeni seçin."] });
-        return EndCoreAsync(studentId, enrollmentId, request.Reason, request.Note, principal, db, clock);
+        return EndCoreAsync(studentId, enrollmentId, request.Reason, request.Note, principal, db, clock, scheduler);
     }
 
     private static Task<IResult> EndAsync(
-        Guid studentId, Guid enrollmentId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock) =>
-        EndCoreAsync(studentId, enrollmentId, null, null, principal, db, clock);
+        Guid studentId, Guid enrollmentId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        INotificationScheduler scheduler) =>
+        EndCoreAsync(studentId, enrollmentId, null, null, principal, db, clock, scheduler);
 
     private static async Task<IResult> EndCoreAsync(
         Guid studentId, Guid enrollmentId, EnrollmentEndReason? reason, string? note,
-        ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        ClaimsPrincipal principal, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
     {
         var enrollment = await db.Enrollments.SingleOrDefaultAsync(e => e.Id == enrollmentId && e.StudentId == studentId)
             ?? throw new NotFoundException("Kurs kaydı bulunamadı.");
@@ -159,11 +162,31 @@ public static class Enrollments
         if (enrollment.Status == EnrollmentStatus.Ended)
             return Results.NoContent();
 
+        var seriesIds = await EndAndCloseSeriesAsync(
+            enrollment, reason, note, AuthContext.GetUserId(principal), db, clock, scheduler);
+
+        var now = clock.UtcNow;
+        var futureLessons = await db.Lessons
+            .Where(lesson => lesson.LessonSeriesId.HasValue && seriesIds.Contains(lesson.LessonSeriesId.Value))
+            .Where(lesson => lesson.StartAt > now && lesson.Status == LessonStatus.Normal)
+            .ToListAsync();
+        await FutureLessonRemoval.RemoveAsync(futureLessons, db, now);
+
+        await db.SaveChangesAsync();
+        return Results.NoContent();
+    }
+
+    // Kurs kaydını bitirmenin tek yolu: kayıt + audit + haftalık seriler. Öğrenciyi pasife almak
+    // da buradan geçer (StudentDeactivation). Kaydetmek çağıranın işi.
+    internal static async Task<List<Guid>> EndAndCloseSeriesAsync(
+        Enrollment enrollment, EnrollmentEndReason? reason, string? note, Guid? actorUserId,
+        AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
+    {
         var now = clock.UtcNow;
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
         enrollment.End(today < enrollment.StartedAt ? enrollment.StartedAt : today, now, reason, note);
         db.AuditLogs.Add(AuditLog.Record(
-            AuthContext.GetUserId(principal),
+            actorUserId,
             "enrollment.ended",
             nameof(Enrollment),
             enrollment.Id,
@@ -178,35 +201,17 @@ public static class Enrollments
             })));
 
         var series = await db.LessonSeries
-            .Where(item => item.EnrollmentId == enrollmentId && item.Status == LessonSeriesStatus.Active)
+            .Where(item => item.EnrollmentId == enrollment.Id && item.Status == LessonSeriesStatus.Active)
             .ToListAsync();
         foreach (var item in series)
         {
             var endDate = today < item.EffectiveFrom ? item.EffectiveFrom : today;
             item.EndAs(endDate, now);
+            // Bu programın henüz gönderilmemiş "program değişti" mesajı artık geçersiz.
+            await scheduler.CancelPendingAsync("lesson_series", item.Id);
         }
 
-        var seriesIds = series.Select(item => item.Id).ToList();
-        if (seriesIds.Count > 0)
-        {
-            var futureLessons = await db.Lessons
-                .Where(lesson => lesson.LessonSeriesId.HasValue && seriesIds.Contains(lesson.LessonSeriesId.Value))
-                .Where(lesson => lesson.StartAt > now && lesson.Status == LessonStatus.Normal)
-                .ToListAsync();
-            var futureLessonIds = futureLessons.Select(lesson => lesson.Id).ToList();
-            if (futureLessonIds.Count > 0)
-            {
-                var pendingJobs = await db.NotificationJobs
-                    .Where(job => job.ReferenceType == "lesson" && futureLessonIds.Contains(job.ReferenceId))
-                    .Where(job => job.Status == NotificationJobStatus.Pending || job.Status == NotificationJobStatus.Processing)
-                    .ToListAsync();
-                foreach (var job in pendingJobs) job.Cancel(now);
-                db.Lessons.RemoveRange(futureLessons);
-            }
-        }
-
-        await db.SaveChangesAsync();
-        return Results.NoContent();
+        return series.Select(item => item.Id).ToList();
     }
 
     private static async Task<IResult> UpdateAsync(

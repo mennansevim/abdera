@@ -78,6 +78,17 @@ public class MakeupCredit
         UsedLessonId = lessonId;
     }
 
+    // Planlanmış telafi dersi takvimden kaldırıldı (FutureLessonRemoval): ders yapılmayacağı için
+    // hak harcanmamış sayılır. Süresi değişmez, ExpireIfPastDue kendi takvimiyle işler.
+    public void ReleaseLesson()
+    {
+        if (Status != MakeupCreditStatus.Used) return;
+
+        Status = MakeupCreditStatus.Available;
+        UsedLessonId = null;
+        UsedAt = null;
+    }
+
     // Yalnızca henüz kullanılmamış hak geri alınır: telafi dersi zaten planlandıysa o ders
     // takvimde durur, hak "Used" kalır.
     public bool Revoke()

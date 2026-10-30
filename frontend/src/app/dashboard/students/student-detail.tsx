@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAssistant } from "@/components/assistant/assistant-provider";
+import { DeactivateStudentDialog } from "@/components/deactivate-student-dialog";
 import { Icon } from "@/components/icons";
 import { FormActions, FormMessage, Modal, Notice, RowMenu, RowMenuItem, RowMenuSeparator } from "@/components/ui";
 import { ApiError } from "@/lib/api";
@@ -56,6 +57,7 @@ export function StudentDetail({
   const [showGuardianForm, setShowGuardianForm] = useState(false);
   const [showEnrollmentForm, setShowEnrollmentForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
   const [editingGuardian, setEditingGuardian] = useState<StudentGuardianLink | null>(null);
   const resetGuardianPassword = useResetGuardianPassword();
   const [guardianCredential, setGuardianCredential] = useState<{ ok: boolean; text: string } | null>(null);
@@ -89,18 +91,25 @@ export function StudentDetail({
   const selectedProgramInstrument = instruments?.find((item) => item.id === selectedProgramEnrollment?.instrumentId);
   const selectedProgramTeacher = teachers?.find((item) => item.id === selectedProgramEnrollment?.teacherId);
 
+  // Pasife almak dersleri takvimden kaldırdığı için önce onay ister; yeniden aktif etmek
+  // yalnızca durumu değiştirir (dersler geri gelmez).
   function toggleStatus() {
+    if (student.status === "Active") {
+      setDeactivating(true);
+      return;
+    }
     updateStudent.mutate({
       studentId,
       firstName: student.firstName,
       lastName: student.lastName,
       birthDate: student.birthDate,
-      status: student.status === "Active" ? "Inactive" : "Active",
+      status: "Active",
     });
   }
 
   return (
     <div className="space-y-3 border-t border-[var(--line)] bg-[var(--surface-muted)]/30 p-3">
+      {deactivating && <DeactivateStudentDialog student={student} onClose={() => setDeactivating(false)} />}
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-meta mr-auto">{ageOf(student.birthDate) !== null && `${ageOf(student.birthDate)} yaş · `}<span className={student.status === "Active" ? "font-bold text-[var(--success-strong)]" : "font-bold"}>{student.status === "Active" ? "Aktif öğrenci" : "Pasif öğrenci"}</span></p>
         <Link href={`/dashboard/progress?studentId=${studentId}`} className="btn btn-quiet text-xs"><Icon name="activity" className="h-3.5 w-3.5" /> Gelişim</Link>

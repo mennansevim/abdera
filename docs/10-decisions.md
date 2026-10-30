@@ -352,7 +352,7 @@ Kod incelemesinden çıkan özellik önerisi, kullanıcı onayıyla. Task: [menn
 | X1 | Sinyaller | "İlgi gerektirebilecek öğrenciler" (`/api/students/attention-needed`) mevcut devamsızlık kuralına ek olarak: son 4 haftada 2+ "gelemiyorum" ya da 3+ "geç kalacağım" katılım cevabı; düzenli tutulan pratik günlüğünün 3 haftadır boş kalması; son 60 günde düşen yetenek puanı; 3+ ay gecikmiş aidat. Her sinyal skor değil okunabilir bir neden üretir. Kurallar ve eşikler tek yerde: `AttentionSignal` (saf, birim testli). |
 | X2 | Gürültü | Pratik günlüğü sinyali yalnızca önceki 8 haftada en az 2 kaydı olan öğrencide çalışır: günlüğü hiç kullanmayan aile uyarı üretmez. Aidat eşiği 3 ay (kullanıcı kararı): 1-2 ay geç ödeme sık, 2 aylık eşikte liste aidat listesine dönüşürdü. Ana ekrandaki gecikmiş aidat kartının kaldırılma kararı (sürüm 2026.10.01) bununla çelişmez; gecikme takibi yine Aidatlar ekranında. |
 | X3 | Yetki | Aidat sinyali yalnızca Admin için hesaplanır (aidat verisi Admin'e özel). Öğretmen yalnızca kendi aktif öğrencilerini, kendi derslerindeki devamsızlık/katılım cevaplarıyla görür. Pasif öğrenci ve sonlanmış kurs kaydı listede yer almaz. |
-| X4 | Ayrılma nedeni | Kurs kaydı arayüzden yalnızca nedenle bitirilir (`POST .../enrollments/{id}/end`): Taşındı / Maddi / İlgisini kaybetti / Program uymadı / Başka kursa geçti / Diğer + isteğe bağlı not (≤500). Neden ve not `enrollments`'ta ve `audit_log`'da saklanır. Eski `DELETE` ucu duruyor, nedeni boş bırakır. Öğrenciyi "Pasife al" kurs kayıtlarını bitirmediği için neden sormaz. |
+| X4 | Ayrılma nedeni | Kurs kaydı arayüzden yalnızca nedenle bitirilir (`POST .../enrollments/{id}/end`): Taşındı / Maddi / İlgisini kaybetti / Program uymadı / Başka kursa geçti / Diğer + isteğe bağlı not (≤500). Neden ve not `enrollments`'ta ve `audit_log`'da saklanır. Eski `DELETE` ucu duruyor, nedeni boş bırakır. Öğrenciyi "Pasife al" da kurs kayıtlarını bitirdiği için (AI) aynı nedeni sorar. |
 | X5 | Sonra | Ayrılma nedenlerinin dökümü ve kârlılıktaki varsayılan kalış süresinin (V5) gerçek bitişlerle değiştirilmesi bu adımın dışında; veri birikince ele alınacak. |
 
 ## Y — Öğretmen için hızlı ders akışı ve kendi haftası (2026-10-11)
@@ -493,6 +493,21 @@ Kullanıcı isteği: rakip taramasından çıkan "Ses Defteri + Müzik Yolculuğ
 |---|---|---|
 | AH1 | Hatırlat sonucu nedeniyle döner | `send-reminder` yanıtındaki `outcome` (`Scheduled`, `AlreadyQueued`, `NoGuardian`, `NoConsent`) arayüzde tek metne bağlıdır. Önceki `false` yanıtı "veli ya da izin yok" diye gösteriliyor, zaten gönderilmiş ya da başarısız aidatı da aynı metinle gizliyordu. |
 | AH2 | Aynı aidata yeniden gönderim aynı job satırıyla yapılır | `UNIQUE (type, reference_type, reference_id)` korunur; `Sent`, `Failed` ve `Cancelled` job `Requeue` ile yeniden kuyruğa alınır, önceki gönderimler `whatsapp_messages`'ta kalır. Yalnızca `Pending`/`Processing` job tekrarlanmaz. Ödenmiş veya iptal aidata hatırlatma 409 döner. Otomatik aidat hatırlatması bu kararın kapsamında değildir. |
+
+## AI - Pasife alınan öğrencinin dersleri takvimden kalkar (2026-10-30)
+
+Kullanıcı isteği: "pasife alırken ilgili öğrencinin kayıtlı derslerini takvimden kaldır. confirm mesajı ile bunu yap... ilgili öğretmenin üzerinden de çıksın".
+
+| # | Konu | Karar |
+|---|---|---|
+| AI1 | Kapsam | `PATCH /api/students/{id}` ile `Active → Inactive` geçişi her istemcide aynı işi yapar (`StudentDeactivation`, tek transaction): aktif kurs kayıtları `Enrollments.EndAndCloseSeriesAsync` ile biter, seriler kapanır, `StartAt > şimdi` olan Normal ve Telafi dersleri kalkar, bekleyen hatırlatmalar iptal olur. Aidat, ödeme, geçmiş ders ve yoklamaya dokunulmaz; öğretmen ödemesi yalnızca Completed derse baktığı için etkilenmez. |
+| AI2 | İptal değil kaldırma | Takvim iptal dersi üstü çizili gösteriyor, istenen "takvimden kalksın". Gelecek planlı ders satırı, kurs bitirmedeki mevcut davranışla aynı şekilde silinir (`FutureLessonRemoval`, iki yol da bundan geçer). Velinin o derse verdiği yanıt silinir, bekleyen ders değişikliği talebi reddedilir. İleri tarihli derse not/ödev/değerlendirme/ses bağlıysa içerik korunur, ders `Cancelled` olur ve takvimde üstü çizili kalır. |
+| AI3 | Telafi | Bu kaldırmalar yeni telafi hakkı doğurmaz. Planlanmış telafi dersi kalkınca harcanan hak `Available`'a döner (`MakeupCredit.ReleaseLesson`), son kullanma tarihi değişmez. |
+| AI4 | Grup dersi | Her üyenin kendi serisi ve ders satırı var; yalnızca bu öğrenci çıkar, grup ve diğer üyeler değişmez. |
+| AI5 | Yetki | Kurs bitirmek öğretmende değil (J1). Öğretmen yalnızca dersleri ve kayıtları tümüyle kendisinde olan öğrenciyi pasife alır; başka öğretmen varsa `403` ve onay penceresi yöneticiye yönlendirir. |
+| AI6 | Onay ve bildirim | Onay penceresi sayıları `GET /api/students/{id}/deactivation-impact`'ten alır; vazgeçilirse hiçbir şey değişmez. Kurs kaydı varsa ayrılma nedeni zorunludur (X4). Ders başına değil öğretmen başına tek ekran içi bildirim + e-posta (M4'ün gürültüsüz biçimi). Audit: `student.deactivated` (kaldırılan dersler, biten kayıtlar) + kayıt başına `enrollment.ended`. Veliye mesaj gitmez. |
+| AI7 | Üretim | `LessonSeriesFeatures.GenerateForSeriesAsync` ders üretiminin tek noktası: pasif öğrenciye ders üretmez, yeni program açma da reddedilir. Periyodik ders üretim işi yok. |
+| AI8 | Yeniden aktif etme | Kapsam dışı: yalnızca durum döner, biten kurs kaydı ve dersler geri gelmez; kurs ve program yeniden girilir. Onay penceresi bunu söyler. Bu karardan önce pasife alınmış öğrencilerin takvimde kalan dersleri kendiliğinden temizlenmez. |
 
 ## Master prompt'un "Required First Response" listesiyle eşleme
 

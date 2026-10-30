@@ -92,6 +92,24 @@ internal static class LessonChangeNotice
             teacherId, actorUserId, StaffNotificationType.MakeupScheduled, "Telafi dersi planlandı", body, "lesson", makeupLessonId);
     }
 
+    // Öğrenci pasife alındı: öğretmen başına tek özet (docs/10-decisions.md AI). Referans,
+    // kaldırılan ilk dersin id'si - yeni bir pasife alma yeni bir bildirim olsun diye.
+    public static async Task NotifyStudentLessonsRemovedAsync(
+        IStaffNotifier notifier,
+        AbderaDbContext db,
+        Guid? actorUserId,
+        Guid teacherId,
+        Guid studentId,
+        int removedLessons,
+        Guid firstRemovedLessonId)
+    {
+        var body = $"{await StudentNameAsync(db, studentId)} pasife alındı · {removedLessons} gelecek ders programdan kaldırıldı";
+
+        await notifier.NotifyLessonStaffAsync(
+            teacherId, actorUserId, StaffNotificationType.LessonCancelled, "Öğrencinin dersleri kaldırıldı", body,
+            "student_deactivation", firstRemovedLessonId);
+    }
+
     internal static async Task<string> StudentNameAsync(AbderaDbContext db, Guid studentId) =>
         await db.Students
             .Where(student => student.Id == studentId)

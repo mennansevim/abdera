@@ -8,7 +8,8 @@ import { AddButton, EmptyState, FormActions, FormMessage, Modal, Notice, PageHea
 import { ApiError } from "@/lib/api";
 import { useMe } from "@/lib/use-auth";
 import { useSessionState } from "@/lib/use-session-state";
-import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, useUpdateStudent, type RecentAttendanceWeek, type Student, type StudentStatus } from "@/lib/people";
+import { useCreateStudent, useCreateStudentForTeacher, useInstruments, useStudentOverviews, type RecentAttendanceWeek, type Student, type StudentStatus } from "@/lib/people";
+import { DeactivateStudentDialog } from "@/components/deactivate-student-dialog";
 import { DeleteStudentDialog, RequestStudentDeletionDialog } from "@/components/delete-person-dialog";
 import { StudentDetail } from "./student-detail";
 
@@ -26,7 +27,7 @@ export default function StudentsPage() {
   // toplu istekten (overview) besleniyor, N+1 sorgu açmadan.
   const { data: overviews, isLoading, isError, isFetching, refetch } = useStudentOverviews();
   const [deleting, setDeleting] = useState<Student | null>(null);
-  const updateStudent = useUpdateStudent();
+  const [deactivating, setDeactivating] = useState<Student | null>(null);
   const [expandedId, setExpandedId] = useSessionState<string | null>("abdera:students:expanded", null);
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useSessionState("abdera:students:search", "");
@@ -150,7 +151,7 @@ export default function StudentsPage() {
           onClose={() => setDeleting(null)}
           onDeleted={() => setExpandedId(null)}
           onDeactivate={deleting.status === "Active"
-            ? () => updateStudent.mutateAsync({ studentId: deleting.id, firstName: deleting.firstName, lastName: deleting.lastName, birthDate: deleting.birthDate, status: "Inactive" })
+            ? async () => setDeactivating(deleting)
             : undefined}
         />
       ) : (
@@ -160,6 +161,8 @@ export default function StudentsPage() {
           onClose={() => setDeleting(null)}
         />
       ))}
+
+      {deactivating && <DeactivateStudentDialog student={deactivating} onClose={() => setDeactivating(null)} />}
 
       {canManage && (
         <Modal open={showCreate} title="Öğrenci ekle" onClose={() => setShowCreate(false)} size="sm">

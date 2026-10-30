@@ -230,13 +230,37 @@ export function useUpdateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
     // siblingDiscount gönderilmezse sunucu alana DOKUNMAZ - öğretmenin künye düzenlemesi
-    // kardeş indirimini sessizce kapatmasın diye bilinçli olarak opsiyonel.
-    mutationFn: ({ studentId, ...body }: { studentId: string; firstName: string; lastName: string; birthDate: string; status: StudentStatus; siblingDiscount?: boolean }) =>
+    // kardeş indirimini sessizce kapatmasın diye bilinçli olarak opsiyonel. endReason/endNote
+    // yalnızca pasife alırken anlamlıdır: biten kurs kayıtlarının ayrılma nedeni.
+    mutationFn: ({ studentId, ...body }: { studentId: string; firstName: string; lastName: string; birthDate: string; status: StudentStatus; siblingDiscount?: boolean; endReason?: EnrollmentEndReason; endNote?: string }) =>
       api.patch<Student>(`/api/students/${studentId}`, body),
-    onSuccess: () => {
+    onSuccess: (_student, variables) => {
+      // Pasife alma takvimi, öğretmen programını ve kurs kayıtlarını da değiştirir.
+      if (variables.status === "Inactive") {
+        queryClient.invalidateQueries();
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["students"] });
       queryClient.invalidateQueries({ queryKey: ["student-overviews"] });
     },
+  });
+}
+
+// "Pasife al" onay penceresinin sayıları (docs/10-decisions.md AI). requiresAdmin: öğrencinin
+// başka öğretmenle de dersi var, öğretmen bu öğrenciyi pasife alamaz.
+export interface StudentDeactivationImpact {
+  futureLessons: number;
+  activeEnrollments: number;
+  teachers: string[];
+  requiresAdmin: boolean;
+}
+
+export function useStudentDeactivationImpact(studentId: string) {
+  return useQuery({
+    queryKey: ["student-deactivation-impact", studentId],
+    queryFn: () => api.get<StudentDeactivationImpact>(`/api/students/${studentId}/deactivation-impact`),
+    // Sayılar her açılışta taze olmalı: onay metni "kaç ders kalkacak" sorusunun cevabı.
+    gcTime: 0,
   });
 }
 

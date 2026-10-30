@@ -139,7 +139,7 @@ export function DeleteStudentDialog({
 
         {onDeactivate && (
           <DeactivateInstead
-            description="Öğrenci aktif listeden çıkar; dersleri, yoklamaları, aidat ve ödeme geçmişi olduğu gibi kalır."
+            description="Öğrenci aktif listeden çıkar, gelecekteki dersleri takvimden kalkar; geçmiş dersleri, yoklamaları, aidat ve ödemeleri olduğu gibi kalır."
             onDeactivate={onDeactivate}
             onDone={onClose}
           />

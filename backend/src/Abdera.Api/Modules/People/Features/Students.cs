@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Abdera.Api.Modules.Attendance.Features;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,10 @@ public static class Students
     // Admin değiştirebilir - öğretmen künye düzenlerken alanı hiç göndermez ve gönderse
     // bile handler yok sayar; bu para etkileyen bir alan.
     public record CreateRequest(string FirstName, string LastName, DateOnly BirthDate, bool SiblingDiscount = false);
-    public record UpdateRequest(string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status, bool? SiblingDiscount = null);
+    // EndReason/EndNote: pasife alınırken biten kurs kayıtlarının ayrılma nedeni (X4, AI).
+    public record UpdateRequest(
+        string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status, bool? SiblingDiscount = null,
+        EnrollmentEndReason? EndReason = null, string? EndNote = null);
     public record StudentResponse(Guid Id, string FirstName, string LastName, DateOnly BirthDate, StudentStatus Status, bool SiblingDiscount);
     // Satır başına bir KURS KAYDI döner (öğrenci × enstrüman × öğretmen), öğrenci başına
     // değil: aidat ve toplu ödeme hep kurs kaydı üzerinden işler. EnrollmentId ve CourseKind
@@ -49,6 +53,8 @@ public static class Students
         group.MapGet("/overview", OverviewAsync);
         group.MapGet("/search", SearchAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapGet("/{studentId:guid}", GetAsync);
+        // "Pasife al" onay penceresinin sayıları: kaç gelecek ders, hangi öğretmenler (AI).
+        group.MapGet("/{studentId:guid}/deactivation-impact", DeactivationImpactAsync);
         group.MapPost("", CreateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         // Öğretmen kendi öğrencisini düzenleyebilir (J1); kapsam handler içinde doğrulanır.
         group.MapPatch("/{studentId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
@@ -191,6 +197,17 @@ public static class Students
         return Results.Ok(new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status, student.SiblingDiscount));
     }
 
+    private static async Task<IResult> DeactivationImpactAsync(
+        Guid studentId, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+    {
+        if (!await db.Students.AnyAsync(s => s.Id == studentId))
+            throw new NotFoundException("Öğrenci bulunamadı.");
+        await EnsureTeacherCanAccessAsync(studentId, principal, db);
+
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        return Results.Ok(await StudentDeactivation.DescribeAsync(studentId, teacherScope, db, clock));
+    }
+
     private static async Task<IResult> CreateAsync(CreateRequest request, AbderaDbContext db, IClock clock)
     {
         var student = Student.Create(request.FirstName, request.LastName, request.BirthDate, clock.UtcNow, request.SiblingDiscount);
@@ -202,7 +219,8 @@ public static class Students
     }
 
     private static async Task<IResult> UpdateAsync(
-        Guid studentId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
+        Guid studentId, UpdateRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        INotificationScheduler scheduler, IStaffNotifier staffNotifier)
     {
         // Öğretmen yalnızca kendine atanmış öğrenciyi düzenleyebilir (J1).
         await EnsureTeacherCanAccessAsync(studentId, principal, db);
@@ -210,13 +228,30 @@ public static class Students
         var student = await db.Students.SingleOrDefaultAsync(s => s.Id == studentId)
             ?? throw new NotFoundException("Öğrenci bulunamadı.");
 
+        // Pasife geçiş bu uçtan geçen her istemci için aynı sonucu doğurur: durum değişip dersler
+        // takvimde kalamaz. Zaten pasif öğrencinin künye düzenlemesi tekrar çalıştırmaz.
+        var deactivating = student.Status == StudentStatus.Active && request.Status == StudentStatus.Inactive;
+        if (deactivating)
+        {
+            if (request.EndReason is { } endReason && !Enum.IsDefined(endReason))
+                throw new ValidationFailedException(new Dictionary<string, string[]> { ["endReason"] = ["Geçerli bir ayrılma nedeni seçin."] });
+            await StudentDeactivation.EnsureAllowedAsync(
+                studentId, await AuthContext.ResolveTeacherScopeAsync(principal, db), db, clock);
+        }
+
         student.Update(request.FirstName, request.LastName, request.BirthDate, clock.UtcNow);
         student.SetStatus(request.Status, clock.UtcNow);
+        if (deactivating)
+        {
+            await StudentDeactivation.ApplyAsync(
+                student, request.EndReason, request.EndNote, AuthContext.GetUserId(principal), db, clock, scheduler, staffNotifier);
+        }
         // Alan yalnızca Admin tarafından ve yalnızca AÇIKÇA gönderildiğinde değişir:
         // öğretmenin künye düzenlemesi kardeş indirimini sessizce kapatmamalı.
         if (request.SiblingDiscount is { } siblingDiscount && AuthContext.IsAdmin(principal))
             student.SetSiblingDiscount(siblingDiscount, clock.UtcNow);
         await db.SaveChangesAsync();
+        await staffNotifier.FlushEmailsAsync();
 
         return Results.Ok(new StudentResponse(student.Id, student.FirstName, student.LastName, student.BirthDate, student.Status, student.SiblingDiscount));
     }
