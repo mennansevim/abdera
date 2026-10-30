@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.30",
+    date: "2026-10-30",
+    items: [
+      { audience: "admin", text: "Aidat hatırlatması gönderilemediğinde artık nedenini açıkça görürsün: velinin WhatsApp izni kapalı, öğrenciye bağlı veli yok ya da hatırlatma zaten sırada." },
+      { audience: "admin", text: "Daha önce hatırlatma gönderilmiş ya da gönderimi başarısız olmuş bir aidat için Hatırlat düğmesiyle yeniden mesaj gönderebilirsin." },
+    ],
+  },
+  {
     version: "2026.10.29.3",
     date: "2026-10-29",
     items: [
