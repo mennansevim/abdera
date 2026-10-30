@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.30.2",
+    date: "2026-10-30",
+    items: [
+      { audience: "all", text: "Bir öğrenciyi pasife alırken artık onay penceresi çıkar ve kaç dersin kalkacağını gösterir. Onaylayınca öğrencinin kursları biter, gelecekteki dersleri takvimden ve öğretmenin programından kalkar, o saatler boşalır." },
+      { audience: "all", text: "Geçmiş dersler, yoklamalar, aidat ve ödemeler olduğu gibi kalır. Öğrenciyi yeniden aktif edersen dersler kendiliğinden geri gelmez; kurs ve ders programı yeniden girilir." },
+    ],
+  },
+  {
     version: "2026.10.30",
     date: "2026-10-30",
     items: [
