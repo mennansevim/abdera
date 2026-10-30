@@ -16,6 +16,7 @@ using Abdera.Api.Modules.Ops;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Infrastructure;
 using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.People.Infrastructure;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Profitability;
 using Abdera.Api.Modules.Profitability.Domain;
@@ -555,6 +556,7 @@ if (app.Environment.IsDevelopment())
 await DatabaseMigrator.RunAsync(app);
 await AdminBootstrapper.RunAsync(app);
 await GroupDuesRepriceBackfill.RunOnceAsync(app);
+await InactiveStudentScheduleBackfill.RunOnceAsync(app);
 
 app.Run();
 

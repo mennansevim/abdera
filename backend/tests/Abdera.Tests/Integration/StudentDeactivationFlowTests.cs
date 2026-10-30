@@ -4,8 +4,10 @@ using Abdera.Api.Modules.Auth.Features;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Billing.Features;
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.People.Features;
+using Abdera.Api.Modules.People.Infrastructure;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Modules.Scheduling.Features;
 using Abdera.Api.Shared;
@@ -161,6 +163,57 @@ public class StudentDeactivationFlowTests : IClassFixture<AbderaWebApplicationFa
 
         Assert.Equal(0, generation.Created);
         Assert.Empty(await CalendarAsync(admin, seeded.TeacherId));
+    }
+
+    [Fact]
+    public async Task Backfill_clears_the_schedule_of_students_deactivated_before_the_rule_and_frees_the_slot()
+    {
+        var admin = await AdminAsync();
+        var seeded = await MessagingFlowTests.SeedLessonAsync(admin, "gecmis" + Guid.NewGuid().ToString("N")[..8]);
+        var active = await MessagingFlowTests.SeedLessonAsync(admin, "aktif" + Guid.NewGuid().ToString("N")[..8]);
+
+        LessonSeries oldSeries;
+        Guid pianoId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AbderaDbContext>();
+            var student = await db.Students.SingleAsync(s => s.Id == seeded.StudentId);
+            student.SetStatus(StudentStatus.Inactive, DateTimeOffset.UtcNow);
+            oldSeries = await db.LessonSeries.SingleAsync(s => s.EnrollmentId == seeded.EnrollmentId);
+            pianoId = await db.Enrollments.Where(e => e.Id == seeded.EnrollmentId).Select(e => e.InstrumentId).SingleAsync();
+            await db.SaveChangesAsync();
+        }
+        Assert.NotEmpty(await CalendarAsync(admin, seeded.TeacherId));
+
+        var newcomer = await ReadAsync<Students.StudentResponse>(await admin.PostAsJsonAsync("/api/students",
+            new Students.CreateRequest("Yeni", "Ogrenci", new DateOnly(2015, 3, 3))));
+        var enrollment = await ReadAsync<Enrollments.EnrollmentResponse>(await admin.PostAsJsonAsync(
+            $"/api/students/{newcomer.Id}/enrollments", new Enrollments.CreateRequest(seeded.TeacherId, pianoId, new DateOnly(2026, 8, 1))));
+        var sameSlot = new LessonSeriesFeatures.CreateRequest(
+            enrollment.Id, oldSeries.DayOfWeek, oldSeries.StartTime, oldSeries.DurationMinutes, DateOnly.FromDateTime(DateTime.UtcNow), null);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync("/api/lesson-series", sameSlot)).StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            var db = services.GetRequiredService<AbderaDbContext>();
+            var cleared = await InactiveStudentScheduleBackfill.ClearAllAsync(
+                db, services.GetRequiredService<IClock>(), services.GetRequiredService<INotificationScheduler>());
+            await db.SaveChangesAsync();
+            // Sınıfın veritabanı paylaşımlı: başka testin eski pasif öğrencisi de sayılabilir.
+            Assert.True(cleared >= 1);
+
+            Assert.Equal(LessonSeriesStatus.Ended, (await db.LessonSeries.SingleAsync(s => s.Id == oldSeries.Id)).Status);
+            // Para kararı: eski pasif öğrencinin kurs kaydı kendiliğinden bitmez (AI9).
+            Assert.Equal(EnrollmentStatus.Active, (await db.Enrollments.SingleAsync(e => e.Id == seeded.EnrollmentId)).Status);
+            Assert.Equal(1, await db.AuditLogs.CountAsync(a => a.Action == "student.schedule_cleared" && a.EntityId == seeded.StudentId));
+            Assert.Equal(StudentStatus.Active, (await db.Students.SingleAsync(s => s.Id == active.StudentId)).Status);
+        }
+
+        Assert.Empty(await CalendarAsync(admin, seeded.TeacherId));
+        Assert.NotEmpty(await CalendarAsync(admin, active.TeacherId));
+        (await admin.PostAsJsonAsync("/api/lesson-series", sameSlot)).EnsureSuccessStatusCode();
+        Assert.NotEmpty(await CalendarAsync(admin, seeded.TeacherId));
     }
 
     [Fact]

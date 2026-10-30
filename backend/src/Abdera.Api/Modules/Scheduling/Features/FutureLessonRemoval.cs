@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Abdera.Api.Modules.Scheduling.Features;
 
 // Kurs kaydı bitince ya da öğrenci pasife alınınca gelecekteki planlı dersler takvimden kalkar
-// (docs/10-decisions.md AI). Takvim iptal edilmiş dersi üstü çizili gösterdiği için ders Cancel
-// edilmez, satır kaldırılır. Bu dersler öğrenci adına "doğmuş" bir telafi hakkı üretmez.
+// (docs/10-decisions.md AI). Satır kaldırılır: veli portalı ve ders listeleri iptal dersi hâlâ
+// gösterir, öğrenci okuldan ayrılmışken geride ders kalmasın. Telafi hakkı üretilmez.
 // Değişiklikler yalnızca izlenir; SaveChanges çağıranın transaction'ındadır.
 internal static class FutureLessonRemoval
 {

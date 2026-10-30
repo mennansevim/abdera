@@ -61,8 +61,7 @@ public static class StudentDeactivation
             await Enrollments.EndAndCloseSeriesAsync(enrollment, reason, note, actorUserId, db, clock, scheduler);
         }
 
-        var lessons = await FutureLessons(student.Id, now, db).OrderBy(lesson => lesson.StartAt).ToListAsync();
-        var removed = await FutureLessonRemoval.RemoveAsync(lessons, db, now);
+        var removed = await ClearScheduleAsync(student.Id, db, clock, scheduler);
 
         db.AuditLogs.Add(AuditLog.Record(
             actorUserId,
@@ -94,6 +93,28 @@ public static class StudentDeactivation
             await LessonChangeNotice.NotifyStudentLessonsRemovedAsync(
                 staffNotifier, db, actorUserId, group.Key, student.Id, group.Count(), group.First().LessonId);
         }
+    }
+
+    // Öğrencinin takvimde kalan her şeyi: açık seriler (kurs kaydı bitmiş olsa bile, öğretmenin
+    // saatini tutmasın) ve gelecekteki planlı dersler. Kaydetmek çağıranın işi.
+    internal static async Task<List<FutureLessonRemoval.Result>> ClearScheduleAsync(
+        Guid studentId, AbderaDbContext db, IClock clock, INotificationScheduler scheduler)
+    {
+        var now = clock.UtcNow;
+        var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
+        var seriesList = await db.LessonSeries
+            .Where(series => db.Enrollments.Any(e => e.Id == series.EnrollmentId && e.StudentId == studentId))
+            .ToListAsync();
+        // Bellekte süzülür: aynı istekte biten kaydın serisi izleniyor ve zaten Ended.
+        foreach (var series in seriesList.Where(series => series.Status == LessonSeriesStatus.Active))
+        {
+            var endDate = today < series.EffectiveFrom ? series.EffectiveFrom : today;
+            series.EndAs(series.EffectiveUntil is { } until && until < endDate ? until : endDate, now);
+            await scheduler.CancelPendingAsync("lesson_series", series.Id);
+        }
+
+        var lessons = await FutureLessons(studentId, now, db).OrderBy(lesson => lesson.StartAt).ToListAsync();
+        return await FutureLessonRemoval.RemoveAsync(lessons, db, now);
     }
 
     private static IQueryable<Enrollment> ActiveEnrollments(Guid studentId, AbderaDbContext db) =>
