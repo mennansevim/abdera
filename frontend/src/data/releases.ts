@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.31.2",
+    date: "2026-10-31",
+    items: [
+      { audience: "admin", text: "Ayarlar → Excel ile aktar ekranından tüm veriyi tek Excel dosyasına indirebilirsin: öğrenciler, veliler, öğretmenler, aidatlar, tahsilatlar, dersler ve giderler. Dosya arka planda hazırlanır, bitince kendiliğinden iner; son üç dosya listede kalır." },
+      { audience: "admin", text: "İndirdiğin dosyanın Öğrenciler ve Ödemeler sayfaları içe aktarma şablonlarıyla aynıdır; dosyayı olduğu gibi içe aktarmaya verebilirsin. Pasif öğrenciler ve bitmiş kurslar da öyle aktarılır, bitmiş kursa yeni aidat açılmaz." },
+    ],
+  },
+  {
     version: "2026.10.31",
     date: "2026-10-31",
     items: [
