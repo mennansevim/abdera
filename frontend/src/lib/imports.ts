@@ -1,7 +1,7 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiBaseUrl, ApiError } from "./api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, apiBaseUrl, ApiError } from "./api";
 
 // Excel'den içe aktarma (docs/10-decisions.md AF). Aynı dosya önce önizlemeye, onaydan sonra
 // içe aktarmaya gönderilir; sunucu ikinci seferde dosyayı baştan doğrular.
@@ -49,4 +49,43 @@ export function useSpreadsheetImport(kind: ImportKind) {
       if (report.committed) void queryClient.invalidateQueries();
     },
   });
+}
+
+// Tüm verinin Excel dökümü (docs/10-decisions.md AJ). Sunucu arka planda üretir; liste döküm
+// sürerken kısa aralıkla yoklanır. Yalnızca son üç döküm tutulur.
+export type DataExportStatus = "Pending" | "Running" | "Completed" | "Failed";
+export type DataExport = {
+  id: string;
+  status: DataExportStatus;
+  fileName: string | null;
+  sizeBytes: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+const dataExportsKey = ["data-exports"] as const;
+
+export function isExportInProgress(item: DataExport) {
+  return item.status === "Pending" || item.status === "Running";
+}
+
+export function useDataExports() {
+  return useQuery({
+    queryKey: dataExportsKey,
+    queryFn: () => api.get<DataExport[]>("/api/data-exports"),
+    refetchInterval: (query) => (query.state.data?.some(isExportInProgress) ? 2_000 : false),
+  });
+}
+
+export function useRequestDataExport() {
+  const queryClient = useQueryClient();
+  return useMutation<DataExport, ApiError>({
+    mutationFn: () => api.post<DataExport>("/api/data-exports"),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: dataExportsKey }),
+  });
+}
+
+export function dataExportFileUrl(id: string) {
+  return `${apiBaseUrl()}/api/data-exports/${id}/file`;
 }

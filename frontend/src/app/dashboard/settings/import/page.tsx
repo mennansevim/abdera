@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormMessage, PageHeader, SectionHeader } from "@/components/ui";
 import { Icon } from "@/components/icons";
-import { importTemplateUrl, useSpreadsheetImport, type ImportKind, type ImportReport, type ImportRowStatus } from "@/lib/imports";
+import { formatBytes } from "@/lib/audio-clips";
+import {
+  dataExportFileUrl, importTemplateUrl, isExportInProgress, useDataExports, useRequestDataExport, useSpreadsheetImport,
+  type DataExport, type ImportKind, type ImportReport, type ImportRowStatus,
+} from "@/lib/imports";
 import { errorMessage } from "@/lib/library";
 import { useMe } from "@/lib/use-auth";
 
@@ -36,15 +40,15 @@ export default function ImportPage() {
   const [kind, setKind] = useState<ImportKind>("students");
 
   if (me && me.role !== "Admin") {
-    return <FormMessage tone="error">Excel&apos;den içe aktarma yalnızca yöneticiye açık.</FormMessage>;
+    return <FormMessage tone="error">Excel ile aktarım yalnızca yöneticiye açık.</FormMessage>;
   }
 
   const current = KINDS.find((item) => item.value === kind)!;
   return (
     <div className="mx-auto max-w-4xl space-y-3">
       <PageHeader
-        title="Excel'den içe aktar"
-        description="Öğrencileri, velileri ve geçmiş ödemeleri toplu olarak al."
+        title="Excel ile aktar"
+        description="Öğrencileri, velileri ve geçmiş ödemeleri toplu olarak al ya da tüm veriyi Excel'e indir."
         actions={<Link href="/dashboard/settings" className="btn btn-quiet"><Icon name="arrow-left" className="h-4 w-4" />Ayarlar</Link>}
       />
 
@@ -64,6 +68,8 @@ export default function ImportPage() {
       </div>
 
       <ImportPanel key={kind} kind={kind} title={current.label} description={current.description} />
+
+      <ExportPanel />
     </div>
   );
 }
@@ -111,7 +117,7 @@ function ImportPanel({ kind, title, description }: { kind: ImportKind; title: st
       <div className="space-y-3 p-4">
         <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-[var(--line)] px-4 py-6 text-center hover:border-[var(--brand)]/60">
           <span className="text-sm font-bold">{file ? file.name : "Excel dosyasını seç (.xlsx)"}</span>
-          <span className="text-meta">Şablondaki başlık satırı korunmalı. En fazla 1000 satır, 2 MB.</span>
+          <span className="text-meta">Şablondaki ya da tüm veri dökümündeki başlık satırı korunmalı. En fazla 5000 satır, 10 MB.</span>
           <input
             ref={input}
             type="file"
@@ -179,4 +185,86 @@ function ImportPanel({ kind, title, description }: { kind: ImportKind; title: st
 
 function Chip({ status, count }: { status: ImportRowStatus; count: number }) {
   return <span className={`rounded-full px-2.5 py-1 ${STATUS[status].className}`}>{STATUS[status].label}: {count}</span>;
+}
+
+// Tüm verinin Excel dökümü (docs/10-decisions.md AJ). Sunucu arka planda üretir; bu ekranda
+// istenen döküm hazır olunca kendiliğinden iner. Son üç döküm listede kalır.
+function ExportPanel() {
+  const exports = useDataExports();
+  const request = useRequestDataExport();
+  const [requested, setRequested] = useState<string | null>(null);
+  const downloaded = useRef<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const items = exports.data;
+  const inProgress = items?.some(isExportInProgress) ?? false;
+  const waiting = items?.some((item) => item.id === requested && isExportInProgress(item)) ?? false;
+
+  useEffect(() => {
+    const ready = items?.find((item) => item.id === requested);
+    if (!ready || ready.status !== "Completed" || downloaded.current === ready.id) return;
+    downloaded.current = ready.id;
+    const link = document.createElement("a");
+    link.href = dataExportFileUrl(ready.id);
+    link.download = ready.fileName ?? "";
+    link.click();
+  }, [items, requested]);
+
+  async function start() {
+    setError(null);
+    try {
+      setRequested((await request.mutateAsync()).id);
+    } catch (err) {
+      setError(errorMessage(err, "Döküm başlatılamadı."));
+    }
+  }
+
+  return (
+    <section className="app-card overflow-hidden">
+      <div className="border-b border-[var(--line)] px-4 py-2.5">
+        <SectionHeader
+          title="Tüm veriyi dışa aktar"
+          description="Öğrenciler, veliler, öğretmenler, aidatlar, tahsilatlar, dersler ve giderler tek Excel dosyasında. Öğrenciler ve Ödemeler sayfaları yukarıdaki şablonlarla aynı; dosyayı olduğu gibi içe aktarmaya verebilirsin."
+          actions={
+            <button type="button" onClick={() => void start()} disabled={inProgress || request.isPending} className="btn btn-primary">
+              <Icon name="download" className="h-4 w-4" />
+              {inProgress ? "Hazırlanıyor…" : "Excel'e aktar"}
+            </button>
+          }
+        />
+      </div>
+      <div className="space-y-2 p-4">
+        {error && <FormMessage tone="error">{error}</FormMessage>}
+        {waiting && <p role="status" className="text-meta">Dosya hazırlanıyor; bitince kendiliğinden inecek. Bu sayfadan ayrılırsan aşağıdaki listeden indirebilirsin.</p>}
+        {!items?.length ? (
+          <p className="text-meta">{exports.isLoading ? "Yükleniyor…" : "Henüz döküm alınmadı."}</p>
+        ) : (
+          <ul className="divide-y divide-[var(--line)] rounded-xl border border-[var(--line)]">
+            {items.map((item) => <ExportRow key={item.id} item={item} />)}
+          </ul>
+        )}
+        <p className="text-meta">Yer kaplamasın diye yalnızca son üç döküm saklanır.</p>
+      </div>
+    </section>
+  );
+}
+
+function ExportRow({ item }: { item: DataExport }) {
+  const created = new Date(item.createdAt).toLocaleString("tr-TR", { dateStyle: "medium", timeStyle: "short" });
+  return (
+    <li className="flex items-center gap-3 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">{created}</p>
+        <p className="text-meta mt-0.5">
+          {isExportInProgress(item) && "Hazırlanıyor…"}
+          {item.status === "Failed" && (item.errorMessage ? `Üretilemedi: ${item.errorMessage}` : "Üretilemedi.")}
+          {item.status === "Completed" && `${item.fileName}${item.sizeBytes ? ` · ${formatBytes(item.sizeBytes)}` : ""}`}
+        </p>
+      </div>
+      {item.status === "Completed" && (
+        <a href={dataExportFileUrl(item.id)} download={item.fileName ?? ""} className="btn btn-quiet shrink-0">
+          <Icon name="download" className="h-4 w-4" />İndir
+        </a>
+      )}
+    </li>
+  );
 }

@@ -14,8 +14,10 @@ namespace Abdera.Api.Shared;
 // güvenmez. Yalnızca "Hazır" satırlar yazılır; hatalı ve mükerrer satırlar atlanıp raporlanır.
 public static class SpreadsheetImport
 {
-    public const long MaxBytes = 2 * 1024 * 1024;
-    public const int MaxRows = 1000;
+    // Veri dökümü (AJ) ders ve tahsilat sayfalarıyla birlikte gelir; dosya büyük olabilir ama
+    // yalnızca içe aktarmanın kendi sayfası okunur.
+    public const long MaxBytes = 10 * 1024 * 1024;
+    public const int MaxRows = 5000;
 
     public enum RowStatus
     {
@@ -147,12 +149,13 @@ public static class SpreadsheetImport
         return builder.ToString();
     }
 
-    public static async Task<List<Row>> ReadAsync(IFormFile? file, IReadOnlyList<Column> columns)
+    // sheetName adındaki sayfa okunur (veri dökümü birden çok sayfa taşır); yoksa ilk sayfa.
+    public static async Task<List<Row>> ReadAsync(IFormFile? file, IReadOnlyList<Column> columns, string sheetName)
     {
         if (file is null || file.Length == 0)
             throw Invalid("Excel dosyası gönderilmedi.");
         if (file.Length > MaxBytes)
-            throw Invalid("Dosya en fazla 2 MB olabilir.");
+            throw Invalid("Dosya en fazla 10 MB olabilir.");
 
         using var buffer = new MemoryStream();
         await file.CopyToAsync(buffer);
@@ -170,7 +173,8 @@ public static class SpreadsheetImport
 
         using (workbook)
         {
-            var sheet = workbook.Worksheets.FirstOrDefault()
+            var sheet = workbook.Worksheets.FirstOrDefault(sheet => Fold(sheet.Name) == Fold(sheetName))
+                ?? workbook.Worksheets.FirstOrDefault()
                 ?? throw Invalid("Dosyada sayfa yok.");
             var used = sheet.RangeUsed();
             if (used is null) throw Invalid("Dosya boş.");

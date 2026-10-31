@@ -372,3 +372,11 @@ students + audio_recording_consent boolean default false, audio_consent_updated_
 
 Kayıt finansal/audit verisi değildir: rıza geri alınınca, öğretmen silince ve budamada satır
 silinir (`PersonEraser` öğrenci silmede satırı, çağıran commit'ten sonra dosyayı kaldırır).
+
+## data_exports (Tüm verinin Excel dökümü, AJ)
+
+**AddDataExports** (Ops): arka planda üretilen `.xlsx` dökümünün durumu ve dosyası
+(`id, status, requested_by, file_name, content bytea, size_bytes, error_message, completed_at,
+created_at, updated_at`, `INDEX (created_at)`). Yalnızca son 3 bitmiş döküm tutulur, eskisi
+`DataExportWorker` tarafından silinir; finansal/audit kaydı değildir. Kişi silmede (`PersonEraser`)
+bütün dökümler silinir - içlerinde silinen kişinin verisi var. `Down()` tabloyu düşürür.

@@ -108,9 +108,9 @@ export default function SettingsPage() {
       {me?.role === "Admin" && (
         <section className="app-card p-4">
           <SectionHeader
-            title="Excel'den içe aktar"
-            description="Öğrencileri, velileri, kurs kayıtlarını ve geçmiş ödemeleri .xlsx dosyasından toplu olarak al."
-            actions={<Link href="/dashboard/settings/import" className="btn btn-quiet">İçe aktar</Link>}
+            title="Excel ile aktar"
+            description="Öğrencileri, velileri, kurs kayıtlarını ve geçmiş ödemeleri .xlsx dosyasından toplu olarak al ya da tüm veriyi Excel'e indir."
+            actions={<Link href="/dashboard/settings/import" className="btn btn-quiet">Aç</Link>}
           />
         </section>
       )}

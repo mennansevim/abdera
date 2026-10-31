@@ -264,6 +264,8 @@ public static class PersonEraser
         DELETE FROM virtual_ibans WHERE guardian_id IN (SELECT id FROM _gua);
         DELETE FROM guardians WHERE id IN (SELECT id FROM _gua);
 
+        -- Excel dökümleri silinen kişinin verisini de taşır (AJ5), hepsi gider, yenisi alınabilir.
+        DELETE FROM data_exports;
         DELETE FROM students WHERE id = @student_id;
         """;
 
@@ -357,6 +359,8 @@ public static class PersonEraser
         UPDATE library_pieces SET created_by_user_id = NULL WHERE created_by_user_id IN (SELECT id FROM _tuser);
         -- Hata bildirimi okulun kaydıdır ve kalır; yalnızca gönderen bağı kopar.
         UPDATE bug_reports SET created_by_user_id = NULL WHERE created_by_user_id IN (SELECT id FROM _tuser);
+        -- Excel dökümleri silinen kişinin verisini de taşır (AJ5), hepsi gider, yenisi alınabilir.
+        DELETE FROM data_exports;
         DELETE FROM teachers WHERE id = @teacher_id;
         DELETE FROM users WHERE id IN (SELECT id FROM _tuser);
         """;

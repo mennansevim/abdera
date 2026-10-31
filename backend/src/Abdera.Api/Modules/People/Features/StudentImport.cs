@@ -31,6 +31,12 @@ public static class StudentImport
     private const string Teacher = "Öğretmen";
     private const string Kind = "Ders Türü";
     private const string StartDate = "Başlangıç Tarihi";
+    private const string StudentStatusHeader = "Öğrenci Durumu";
+    private const string SiblingDiscount = "Kardeş İndirimi";
+    private const string CourseStatus = "Kurs Durumu";
+    private const string CourseEndDate = "Kurs Bitiş Tarihi";
+
+    public const string SheetName = "Öğrenciler";
 
     public static readonly IReadOnlyList<Column> Columns =
     [
@@ -45,24 +51,36 @@ public static class StudentImport
         new(Teacher, false, "Öğretmenin adı soyadı. Enstrüman yazıldıysa zorunlu.", "Ali Yılmaz"),
         new(Kind, false, "Birebir ya da Grup. Boşsa Birebir.", "Birebir"),
         new(StartDate, false, "Kurs başlangıcı. Boşsa bugün.", "01.09.2026"),
+        // Veri dökümünün (AJ) geri yüklenebilmesi için: boş bırakılırsa eski davranış.
+        new(StudentStatusHeader, false, "Aktif ya da Pasif. Boşsa Aktif.", "Aktif"),
+        new(SiblingDiscount, false, "Evet ise öğrenciye kardeş indirimi işaretlenir. Boşsa Hayır.", "Hayır"),
+        new(CourseStatus, false, "Aktif, Durduruldu ya da Bitti. Boşsa Aktif. Bitmiş kursa aidat açılmaz.", "Aktif"),
+        new(CourseEndDate, false, "Kurs Durumu Bitti ise zorunlu.", ""),
     ];
 
     public static void MapStudentImport(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/imports/students").RequireAuthorization(AuthorizationPolicies.AdminOnly);
-        group.MapGet("/template", () => Template("ogrenci-veli-sablonu.xlsx", "Öğrenciler", Columns));
+        group.MapGet("/template", () => Template("ogrenci-veli-sablonu.xlsx", SheetName, Columns));
         group.MapPost("/preview", (IFormFile? file, ClaimsPrincipal principal, AbderaDbContext db, IClock clock) =>
             HandleAsync(file, commit: false, principal, db, clock)).DisableAntiforgery();
         group.MapPost("", (IFormFile? file, ClaimsPrincipal principal, AbderaDbContext db, IClock clock) =>
             HandleAsync(file, commit: true, principal, db, clock)).DisableAntiforgery();
     }
 
+    private static bool? YesNo(string? text) => Fold(text) switch
+    {
+        "" or "hayır" or "hayir" => false,
+        "evet" => true,
+        _ => null,
+    };
+
     private sealed record ExistingStudent(Guid Id, DateOnly BirthDate, List<string> GuardianPhones);
     private sealed record PlannedStudent(Student Student, Guardian? Guardian);
 
     private static async Task<IResult> HandleAsync(IFormFile? file, bool commit, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
-        var rows = await ReadAsync(file, Columns);
+        var rows = await ReadAsync(file, Columns, SheetName);
         var now = clock.UtcNow;
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
         var actorId = AuthContext.GetUserId(principal);
@@ -128,6 +146,18 @@ public static class StudentImport
             Teacher? teacher = null;
             var courseKind = CourseKind.Individual;
             var startedAt = today;
+            var courseStatus = EnrollmentStatus.Active;
+            DateOnly? endedAt = null;
+
+            var studentStatus = Fold(row.Text(StudentStatusHeader)) switch
+            {
+                "" or "aktif" => StudentStatus.Active,
+                "pasif" => StudentStatus.Inactive,
+                _ => (StudentStatus?)null,
+            };
+            if (studentStatus is null) errors.Add($"{StudentStatusHeader} Aktif ya da Pasif olmalı.");
+            var siblingDiscount = YesNo(row.Text(SiblingDiscount));
+            if (siblingDiscount is null) errors.Add($"{SiblingDiscount} Evet ya da Hayır olmalı.");
             if (instrumentName is not null)
             {
                 instrument = instruments.FirstOrDefault(i => Fold(i.Name) == Fold(instrumentName));
@@ -155,6 +185,18 @@ public static class StudentImport
                 var start = row.Date(StartDate, out var startError);
                 if (startError is not null) errors.Add(startError);
                 else if (start is { } value) startedAt = value;
+
+                switch (Fold(row.Text(CourseStatus)))
+                {
+                    case "" or "aktif": break;
+                    case "durduruldu": courseStatus = EnrollmentStatus.Paused; break;
+                    case "bitti": courseStatus = EnrollmentStatus.Ended; break;
+                    default: errors.Add($"{CourseStatus} Aktif, Durduruldu ya da Bitti olmalı."); break;
+                }
+                endedAt = row.Date(CourseEndDate, out var endError);
+                if (endError is not null) errors.Add(endError);
+                else if (courseStatus == EnrollmentStatus.Ended && endedAt is null) errors.Add($"Kurs bittiyse {CourseEndDate} zorunlu.");
+                else if (endedAt < startedAt) errors.Add($"{CourseEndDate} başlangıçtan önce olamaz.");
             }
             else if (teacherName is not null)
             {
@@ -185,7 +227,12 @@ public static class StudentImport
             {
                 try
                 {
-                    newStudent = Student.Create(firstName!, lastName!, birthDate!.Value, now);
+                    newStudent = Student.Create(firstName!, lastName!, birthDate!.Value, now, siblingDiscount!.Value);
+                    if (studentStatus == StudentStatus.Inactive)
+                    {
+                        newStudent.SetStatus(StudentStatus.Inactive, now);
+                        notes.Add("pasif");
+                    }
                     if (phone is not null)
                     {
                         if (guardiansByPhone.TryGetValue(phone, out var known))
@@ -235,7 +282,8 @@ public static class StudentImport
                     results.Add(new RowResult(row.Number, label, RowStatus.Skipped, "Aynı kurs kaydı dosyada iki kez geçiyor."));
                     continue;
                 }
-                notes.Add($"{instrument.Name} · {teacher.FirstName} {teacher.LastName} · {(courseKind == CourseKind.Group ? "Grup" : "Birebir")}");
+                notes.Add($"{instrument.Name} · {teacher.FirstName} {teacher.LastName} · {(courseKind == CourseKind.Group ? "Grup" : "Birebir")}"
+                    + (courseStatus == EnrollmentStatus.Ended ? " · bitmiş" : courseStatus == EnrollmentStatus.Paused ? " · durdurulmuş" : ""));
             }
 
             if (planned is null)
@@ -256,6 +304,10 @@ public static class StudentImport
             if (instrument is not null)
             {
                 enrollment = Enrollment.Create(planned.Student.Id, teacher!.Id, instrument.Id, courseKind, startedAt, now);
+                // Bitmiş/durdurulmuş kurs öyle açılır: EnrollmentReceivableOpener yalnızca aktif
+                // kayda aidat açar, geçmiş kurs bugüne borç doğurmaz.
+                if (courseStatus == EnrollmentStatus.Ended) enrollment.End(endedAt!.Value, now);
+                else if (courseStatus == EnrollmentStatus.Paused) enrollment.SetStatus(EnrollmentStatus.Paused, now);
                 if (commit)
                 {
                     db.Enrollments.Add(enrollment);

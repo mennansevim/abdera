@@ -511,6 +511,18 @@ Kullanıcı isteği: "pasife alırken ilgili öğrencinin kayıtlı derslerini t
 | AI8 | Yeniden aktif etme | Kapsam dışı: yalnızca durum döner, biten kurs kaydı ve dersler geri gelmez; kurs ve program yeniden girilir. Onay penceresi bunu söyler. |
 | AI9 | Eski pasif öğrenciler | Kullanıcı isteği: "pasife aldığımda seri de olsa dersleri kaldırmalısın". Bu karardan önce pasife alınan öğrencilerin açık serileri kapatılır ve gelecek dersleri açılışta bir kez temizlenir (`InactiveStudentScheduleBackfill`, işaret `maintenance.inactive_students_schedule_cleared`, öğrenci başına `student.schedule_cleared` audit). Serisi kapanınca öğretmenin saati boşalır. Kurs kayıtlarına dokunulmaz: geçmişe dönük ayrılma kaydı açmak ve aidat akışını kendiliğinden kesmek para kararıdır, ayrı karar ister. Geçiş işlemi olduğu için bildirim gitmez. |
 
+## AJ - Tüm verinin Excel dökümü, içe aktarmayla aynı biçimde (2026-10-31)
+
+Kullanıcı isteği: "tüm datayı export ekle excele. öğretmenler öğrenciler aidatlar geçmişe ait vs. asenkron bir iş olsun, bitince export alsın doğrudan ve yer kaplamasın max last 3 export görünebilsin. bu data import şablonu ile benzer olmalı, aynısını import için verebilmeliyim".
+
+| # | Konu | Karar |
+|---|---|---|
+| AJ1 | Dosya | Tek `.xlsx`, sayfalar: **Öğrenciler**, **Ödemeler** (içe aktarma şablonlarıyla aynı başlıklar - `StudentImport.Columns` / `PaymentHistoryImport.Columns`'tan okunur), Öğretmenler, Veliler, Aidatlar, Tahsilatlar, Dersler, Giderler, "Bu dosya hakkında". Üretim tek yerde: `Ops/Infrastructure/DataExportWorkbook.cs`. Yeni bağımlılık yok (ClosedXML, AF1). |
+| AJ2 | Asenkron | `POST /api/data-exports` satırı açar, kimliği bellek içi kuyruğa (`DataExportQueue`, `Channel`) bırakır, hemen `202` döner; `DataExportWorker` (BackgroundService, tek okuyucu) dosyayı üretip satıra yazar. Açılışta bekleyen/yarıda kalan satırlar yeniden kuyruğa alınır. Aynı anda tek döküm: sürmekte olan varken yeni istek onu döndürür. Ekran listeyi döküm sürerken 2 sn'de bir yoklar, kendi istediği döküm hazır olunca dosyayı kendiliğinden indirir. Hangfire/Quartz yok. |
+| AJ3 | Yer | Dosya `data_exports.content` (bytea) - dosya küçük, StudentPhoto/ScoreFile ile aynı gerekçe. Yalnızca son **3** bitmiş döküm tutulur, her üretimden sonra eskiler silinir. Liste en çok 3 bitmiş + sürmekte olanı gösterir. |
+| AJ4 | Geri yükleme | İçe aktarma kendi adındaki sayfayı okur (yoksa ilk sayfa), dosya olduğu gibi iki ekrana da verilebilir. Öğrenci şablonuna isteğe bağlı **Öğrenci Durumu**, **Kardeş İndirimi**, **Kurs Durumu**, **Kurs Bitiş Tarihi** eklendi - boşsa eski davranış. Bitmiş/durdurulmuş kurs öyle açılır; `EnrollmentReceivableOpener` yalnızca aktif kayda aidat açtığı için geçmiş kurs bugüne borç doğurmaz. Ödemeler sayfası yalnızca tam ödenmiş **aylık** aidatları taşır (AF5'in kapsamı); dönem aidatı ve kısmi ödeme başvuru sayfalarında. Öğretmen içe aktarması yok - hedef sistemde öğretmenler aynı adla açılmış olmalı. Elle indirim içe aktarılmaz (bilgi sütunu). Döküm dosyası büyük olabileceği için sınır 2 MB/1000 satırdan **10 MB/5000 satıra** çıktı (AF2). |
+| AJ5 | KVKK | Yalnızca Admin. İstek (`data_export.requested`) ve indirme (`data_export.downloaded`) `audit_log`'a yazılır. Döküm kişisel verinin kopyası olduğundan kalıcı kişi silmede (`PersonEraser`, I1) **bütün** dökümler silinir; yenisi alınabilir. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

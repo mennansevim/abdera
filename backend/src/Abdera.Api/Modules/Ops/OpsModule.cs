@@ -21,6 +21,8 @@ public static class OpsModule
         services.AddSingleton<JobHeartbeatRecorder>();
         services.AddHostedService(sp => sp.GetRequiredService<BackupService>());
         services.AddHostedService(sp => sp.GetRequiredService<SystemHealthMonitor>());
+        services.AddSingleton<DataExportQueue>();
+        services.AddHostedService<DataExportWorker>();
     }
 
     public static void MapOpsModule(this WebApplication app)
@@ -28,5 +30,6 @@ public static class OpsModule
         app.MapBackupRuns();
         app.MapSystemHealth();
         app.MapBugReports();
+        app.MapDataExports();
     }
 }

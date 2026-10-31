@@ -30,6 +30,8 @@ public static class PaymentHistoryImport
     private const string Method = "Ödeme Şekli";
     private const string Note = "Not";
 
+    public const string SheetName = "Ödemeler";
+
     public static readonly IReadOnlyList<Column> Columns =
     [
         new(FirstName, true, "Sistemdeki öğrencinin adı.", "Zeynep"),
@@ -46,7 +48,7 @@ public static class PaymentHistoryImport
     public static void MapPaymentHistoryImport(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/imports/payments").RequireAuthorization(AuthorizationPolicies.AdminOnly);
-        group.MapGet("/template", () => Template("odeme-gecmisi-sablonu.xlsx", "Ödemeler", Columns));
+        group.MapGet("/template", () => Template("odeme-gecmisi-sablonu.xlsx", SheetName, Columns));
         group.MapPost("/preview", (IFormFile? file, ClaimsPrincipal principal, AbderaDbContext db, IClock clock) =>
             HandleAsync(file, commit: false, principal, db, clock)).DisableAntiforgery();
         group.MapPost("", (IFormFile? file, ClaimsPrincipal principal, AbderaDbContext db, IClock clock) =>
@@ -58,7 +60,7 @@ public static class PaymentHistoryImport
 
     private static async Task<IResult> HandleAsync(IFormFile? file, bool commit, ClaimsPrincipal principal, AbderaDbContext db, IClock clock)
     {
-        var rows = await ReadAsync(file, Columns);
+        var rows = await ReadAsync(file, Columns, SheetName);
         var now = clock.UtcNow;
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(now).Date);
         var actorId = AuthContext.GetUserId(principal);
