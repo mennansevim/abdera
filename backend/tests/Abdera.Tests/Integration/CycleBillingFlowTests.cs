@@ -171,6 +171,50 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Equal(ReceivableStatus.Unpaid, reopened.Status);
     }
 
+    // Canlıda Esma Aydın: kartı ödenmiş öğrencinin dersi yanlışlıkla Gelmedi girilmiş (AD19).
+    [Fact]
+    public async Task Correcting_a_wrong_absence_fills_the_paid_card_and_moves_the_opening_lesson()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "YanlisGelmedi", 4);
+        await MarkAsync(admin, seeded.LessonIds[0], AttendanceStatus.Absent);
+        foreach (var lessonId in seeded.LessonIds.Skip(1)) await MarkAsync(admin, lessonId, AttendanceStatus.Present);
+        await PayAsync(admin, seeded.EnrollmentId, "D001", 6000m);
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(3, card.FilledInCurrent);
+        Assert.Equal(AttendanceStatus.Absent, Assert.Single(card.Cycles[0].Misses).Status);
+
+        await MarkAsync(admin, seeded.LessonIds[0], AttendanceStatus.Present);
+
+        card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(4, card.FilledInCurrent);
+        Assert.Empty(card.Cycles[0].Misses);
+        Assert.Equal(AttendanceCards.CardState.AwaitingPayment, card.State);
+        var cycle = Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+        Assert.Equal(ReceivableStatus.Paid, cycle.Status);
+        Assert.Equal(seeded.LessonIds[0], cycle.AccruedLessonId);
+        await using var db = await _factory.CreateDbContextAsync();
+        var attendance = await db.LessonAttendances.AsNoTracking().SingleAsync(a => a.LessonId == seeded.LessonIds[0]);
+        var audit = await db.AuditLogs.AsNoTracking().SingleAsync(log => log.Action == "lesson.attendance_corrected" && log.EntityId == attendance.Id);
+        Assert.Contains("Absent", audit.BeforeJson);
+        Assert.Contains("Present", audit.AfterJson);
+    }
+
+    [Fact]
+    public async Task Correcting_a_lesson_to_absent_does_not_cancel_a_paid_cycle()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "OdenmisGeriAl", 1);
+        await MarkAsync(admin, seeded.LessonIds[0], AttendanceStatus.Present);
+        await PayAsync(admin, seeded.EnrollmentId, "D001", 6000m);
+
+        await MarkAsync(admin, seeded.LessonIds[0], AttendanceStatus.Absent);
+
+        var cycle = Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+        Assert.Equal(ReceivableStatus.Paid, cycle.Status);
+        Assert.Null(cycle.AccruedOn);
+    }
+
     [Fact]
     public async Task A_prepaid_next_cycle_is_accrued_by_its_first_lesson_instead_of_opening_a_new_row()
     {

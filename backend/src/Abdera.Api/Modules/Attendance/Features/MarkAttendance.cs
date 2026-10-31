@@ -80,7 +80,8 @@ public static class MarkAttendance
         var before = System.Text.Json.JsonSerializer.Serialize(new { status = existing.Status.ToString(), note = existing.Note });
         var wasExcused = existing.Status == AttendanceStatus.Excused;
         existing.Correct(request.Status, lesson.TeacherId, request.Note, clock.UtcNow);
-        db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_corrected", nameof(LessonAttendance), existing.Id, clock.UtcNow, beforeJson: before));
+        db.AuditLogs.Add(AuditLog.Record(actorUserId, "lesson.attendance_corrected", nameof(LessonAttendance), existing.Id, clock.UtcNow, beforeJson: before,
+            afterJson: System.Text.Json.JsonSerializer.Serialize(new { status = existing.Status.ToString(), note = existing.Note })));
 
         // Düzeltme Mazeretli'ye giriyor ya da ondan çıkıyorsa telafi hakkı da izler.
         var isExcused = request.Status == AttendanceStatus.Excused;

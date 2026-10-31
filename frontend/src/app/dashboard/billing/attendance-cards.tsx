@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { EmptyState, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { useAddCardEntry, useAttendanceCards, useChangeCardEntry, useRemoveCardEntry, type AttendanceCard, type CardCycle, type CardLesson } from "@/lib/attendance";
+import { ATTENDANCE_LABELS, useAddCardEntry, useAttendanceCards, useChangeCardEntry, useMarkAttendance, useRemoveCardEntry, type AttendanceCard, type AttendanceStatus, type CardCycle, type CardLesson } from "@/lib/attendance";
 import { PAYMENT_REMINDER_OUTCOME_TEXT, useCorrectPaymentDates, useSendPaymentReminder } from "@/lib/billing";
 import { cycleKey, formatMoney, formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
 import { QuickCollect } from "./collect-sheet";
@@ -293,7 +293,7 @@ function HistoryModal({ card, entriesFrom, onClose, onCollect, onFullCollect }: 
         <button type="button" onClick={onFullCollect} className="btn btn-quiet text-xs" title="İndirim, ödeme şekli, peşin kampanya">Ayrıntılı ödeme</button>
         <button type="button" onClick={onCollect} className={`btn ${status === "owed" ? "btn-primary" : "btn-quiet"}`}>{status === "owed" ? `Ödeme al · ${formatMoney(card.unpaidAmount, card.currency)}` : "Peşin ödeme al"}</button>
       </div>
-      <p className="text-meta text-xs">Tarihi düzeltmek için deliğe ya da ödemeye dokun.</p>
+      <p className="text-meta text-xs">Düzeltmek için derse ya da ödemeye dokun.</p>
       {message && <p role="status" className={`text-xs font-semibold ${message.tone === "success" ? "text-[var(--success-strong)]" : "text-[var(--danger-strong)]"}`}>{message.text}</p>}
 
       {blocks.map((cycle) => <HistoryCard
@@ -361,7 +361,7 @@ function HistoryCard({ card, cycle, current, awaiting, editing, entriesFrom, onE
         const slot = String(index);
         if (lesson) {
           const target: EditTarget = lesson.entryId ? { kind: "entry", entryId: lesson.entryId, date: lesson.date } : { kind: "system", lesson };
-          return <button key={slot} type="button" onClick={() => onEdit(slot, target)} aria-expanded={editing?.slot === slot} aria-label={`${index + 1}. ders ${short(lesson.date)}, tarihi düzelt`} className={slotClass(slot)}>
+          return <button key={slot} type="button" onClick={() => onEdit(slot, target)} aria-expanded={editing?.slot === slot} aria-label={`${index + 1}. ders ${short(lesson.date)}, düzelt`} className={slotClass(slot)}>
             <Hole filled label="" size="lg" />
             <span className="font-bold tabular-nums underline decoration-[var(--muted)] decoration-dotted underline-offset-4">{short(lesson.date)}</span>
           </button>;
@@ -386,18 +386,56 @@ function HistoryCard({ card, cycle, current, awaiting, editing, entriesFrom, onE
     </div>
 
     {cycle.misses.length > 0 && <div className="flex flex-wrap gap-1">
-      {cycle.misses.map((lesson) => <span key={lesson.lessonId ?? lesson.entryId} className={`rounded-md px-1.5 text-[.68rem] font-semibold ${lesson.status === "Excused" ? "bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>{lesson.status === "Excused" ? "Mazeretli" : "Gelmedi"} {short(lesson.date)}</span>)}
+      {cycle.misses.map((lesson) => {
+        const slot = `miss-${lesson.lessonId}`;
+        const label = `${ATTENDANCE_LABELS[lesson.status]} ${short(lesson.date)}`;
+        return <button key={slot} type="button" onClick={() => onEdit(slot, { kind: "system", lesson })} aria-expanded={editing?.slot === slot} aria-label={`${label}, düzelt`} className={`pressable min-h-7 rounded-md px-2 text-[.68rem] font-semibold underline decoration-dotted underline-offset-2 ${lesson.status === "Excused" ? "bg-[var(--warning-soft)] text-[var(--warning-strong)]" : "bg-[var(--danger-soft)] text-[var(--danger-strong)]"}`}>{label}</button>;
+      })}
     </div>}
 
-    {editing && <DateEditor key={editing.slot} card={card} target={editing.target} entriesFrom={entriesFrom} onDone={onDone} />}
+    {editing && (editing.target.kind === "system"
+      ? <AttendanceEditor key={editing.slot} lesson={editing.target.lesson} onDone={onDone} />
+      : <DateEditor key={editing.slot} card={card} target={editing.target} entriesFrom={entriesFrom} onDone={onDone} />)}
   </section>;
 }
 
+// Yoklamadan gelen dersin durumu kartta düzeltilir (AD19); takvimdeki düzeltmeyle aynı uç nokta,
+// kartı ve dönem aidatını sunucu baştan sayar. Dersin günü dersin kendisidir, takvimde değişir.
+function AttendanceEditor({ lesson, onDone }: { lesson: CardLesson; onDone: () => void }) {
+  const mark = useMarkAttendance(lesson.lessonId!);
+  const [error, setError] = useState<string | null>(null);
+
+  async function choose(status: AttendanceStatus) {
+    setError(null);
+    try {
+      await mark.mutateAsync({ status });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Kaydedilemedi.");
+    }
+  }
+
+  return <div className="grid gap-2 rounded-xl bg-[var(--brand-soft)] px-3 py-2.5 text-sm">
+    <p><strong>{short(lesson.date)}</strong> dersinin yoklaması</p>
+    <div className="grid grid-cols-3 gap-1.5">
+      {(["Present", "Absent", "Excused"] as const).map((status) => {
+        const active = lesson.status === status;
+        return <button key={status} type="button" aria-pressed={active} disabled={active || mark.isPending} onClick={() => void choose(status)} className={`pressable min-h-11 rounded-xl border px-2 text-xs font-bold ${active ? "border-[color:var(--brand)] bg-[var(--surface)] text-[var(--brand-strong)]" : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]"}`}>{ATTENDANCE_LABELS[status]}</button>;
+      })}
+    </div>
+    <p className="text-meta text-xs">Yalnızca Geldi kartı doldurur; değişince kart ve aidat yeniden sayılır.</p>
+    <div className="flex flex-wrap gap-1.5">
+      {lesson.lessonId && <Link href={`/dashboard/calendar?lesson=${lesson.lessonId}`} className="btn btn-quiet">Takvimde aç</Link>}
+      <button type="button" onClick={onDone} className="btn btn-quiet">Kapat</button>
+    </div>
+    {error && <p role="alert" className="text-xs font-semibold text-[var(--danger-strong)]">{error}</p>}
+  </div>;
+}
+
 // Kartın altında açılan tarih kutusu. Elle yazılmış ders (AD10) değişir ya da kaldırılır, boş deliğe
-// geçmiş ders eklenir; tarih geçen ayın 1'i ile bugün arasında olmalı (AD11). Sistemdeki yoklamadan
-// gelen dersin günü dersin kendisidir, burada değişmez: takvimde açılır. Ödeme tarihi düzeltmesi
+// geçmiş ders eklenir; tarih geçen ayın 1'i ile bugün arasında olmalı (AD11). Ödeme tarihi düzeltmesi
 // ödemeyi değiştirmez, ayrı kayıt olarak yazılır (PaymentCorrections.cs). Kuralları sunucu da denetler.
-function DateEditor({ card, target, entriesFrom, onDone }: { card: AttendanceCard; target: EditTarget; entriesFrom: string; onDone: () => void }) {
+function DateEditor({ card, target, entriesFrom, onDone }: { card: AttendanceCard; target: Exclude<EditTarget, { kind: "system" }>; entriesFrom: string; onDone: () => void }) {
   const add = useAddCardEntry();
   const change = useChangeCardEntry();
   const remove = useRemoveCardEntry();
@@ -406,14 +444,6 @@ function DateEditor({ card, target, entriesFrom, onDone }: { card: AttendanceCar
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const busy = add.isPending || change.isPending || remove.isPending || correct.isPending;
-
-  if (target.kind === "system") return <div className="grid gap-2 rounded-xl bg-[var(--brand-soft)] px-3 py-2.5 text-sm">
-    <p><strong>{short(target.lesson.date)}</strong> dersi yoklamadan geldi; günü takvimdeki dersin kendisi.</p>
-    <div className="flex flex-wrap gap-1.5">
-      {target.lesson.lessonId && <Link href={`/dashboard/calendar?lesson=${target.lesson.lessonId}`} className="btn btn-primary">Takvimde aç</Link>}
-      <button type="button" onClick={onDone} className="btn btn-quiet">Kapat</button>
-    </div>
-  </div>;
 
   async function run(action: () => Promise<unknown>) {
     setError(null);
