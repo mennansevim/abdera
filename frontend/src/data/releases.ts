@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.10.31",
+    date: "2026-10-31",
+    items: [
+      { audience: "admin", text: "Aidatlar'da öğrencinin kartını açıp yanlış girilmiş yoklamayı düzeltebilirsin: Gelmedi ya da Mazeretli yazısına veya dolu deliğe dokun, doğrusunu seç. Kart ve aidat kendiliğinden yeniden sayılır, alınmış ödemeler korunur." },
+    ],
+  },
+  {
     version: "2026.10.30.2",
     date: "2026-10-30",
     items: [
