@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.01",
+    date: "2026-11-01",
+    items: [
+      { audience: "all", text: "Gelişim ekranındaki yapay zekâ yorumu açıldı. Öğretmen notlarından öğrencinin dönem boyunca nasıl ilerlediğini, güçlü yanını, üzerinde durulacak konuyu ve önümüzdeki dönem için bir odak önerisini kısaca anlatır." },
+      { audience: "admin", text: "Bildirimler listesi mesaj türüne ve veliye göre gruplanır; aynı veliye giden mesajları bir arada görürsün." },
+    ],
+  },
+  {
     version: "2026.10.31.2",
     date: "2026-10-31",
     items: [
