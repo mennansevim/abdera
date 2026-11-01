@@ -121,7 +121,7 @@ function DailyQuoteLine() {
   const quote = dailyQuote();
   return (
     <figure className="mt-1.5 max-w-[38rem]">
-      <blockquote className="text-[.8rem] italic leading-snug text-[var(--muted)]">“{quote.text}”{quote.author && <span className="not-italic"> — {quote.author}</span>}</blockquote>
+      <blockquote className="text-body italic text-[var(--foreground)]">“{quote.text}”{quote.author && <span className="not-italic text-[var(--muted)]"> — {quote.author}</span>}</blockquote>
     </figure>
   );
 }
