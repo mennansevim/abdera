@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.02",
+    date: "2026-11-02",
+    items: [
+      { audience: "admin", text: "Asistan bilgisayarda artık sayfanın yanında açılır: ekranı kapatmadan takvime ya da öğrenci listesine bakarak sohbet edebilirsin. Geniş ekranda sayfa panele yer açar, gittiğin ekran panelin altında kalmaz." },
+      { audience: "admin", text: "Asistanın açılış ekranı sadeleşti: bulunduğun ekrana uygun üç iş önerir, diğerleri \"Tüm yapabileceklerim\" altındadır." },
+    ],
+  },
+  {
     version: "2026.11.01",
     date: "2026-11-01",
     items: [
