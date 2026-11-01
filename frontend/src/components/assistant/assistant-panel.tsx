@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "@/components/icons";
 import { errorMessage } from "@/lib/library";
@@ -36,14 +37,23 @@ interface Task {
   send?: string;
 }
 
-const ADMIN_TASKS: Task[] = [
-  { icon: "clock", title: "Ders saatini değiştir", hint: "Tek ders ya da her hafta", prefix: "Ders saatini değiştir: " },
-  { icon: "calendar", title: "Telafi planla", hint: "Hakkın süresindeki boş saatler", prefix: "Telafi aç: " },
-  { icon: "activity", title: "Gelişimi göster", hint: "Devam, notlar, çalışılan eserler", prefix: "Gelişimini göster: " },
-  { icon: "wallet", title: "Aidat günü gelenler", hint: "Vadesi geçen ve yaklaşan", send: "Aidat günü gelenleri listele" },
-];
-const TEACHER_TASKS: Task[] = ADMIN_TASKS.filter((task) => task.icon !== "wallet");
+const MOVE: Task = { icon: "clock", title: "Ders saatini değiştir", hint: "Tek ders ya da her hafta", prefix: "Ders saatini değiştir: " };
+const MAKEUP: Task = { icon: "calendar", title: "Telafi planla", hint: "Hakkın süresindeki boş saatler", prefix: "Telafi aç: " };
+const PROGRESS: Task = { icon: "activity", title: "Gelişimi göster", hint: "Devam, notlar, çalışılan eserler", prefix: "Gelişimini göster: " };
+const LESSONS: Task = { icon: "students", title: "Derslerini göster", hint: "Yaklaşan ve geçmiş dersler", prefix: "Derslerini göster: " };
+const DUES_LIST: Task = { icon: "wallet", title: "Aidat günü gelenler", hint: "Vadesi geçen ve yaklaşan", send: "Aidat günü gelenleri listele" };
+const STUDENT_DUES: Task = { icon: "wallet", title: "Aidatını göster", hint: "Öğrencinin ödenmemiş aidatları", prefix: "Aidatını göster: " };
+const ALL_TASKS = [MOVE, MAKEUP, PROGRESS, LESSONS, DUES_LIST, STUDENT_DUES];
 const QUESTIONS = ["Yoklamayı nereden alırım?", "Fiyat politikası nerede?", "Yeni öğrenci nasıl kaydedilir?"];
+
+// Açılışta bulunulan ekrana göre üç öneri. Yalnızca asistanın araçlarıyla cevaplanabilen işler
+// önerilir: toplu analiz aracı yok, "bu ayın tahsilatı" gibi bir soru burada yer alamaz.
+function pageTasks(pathname: string, isAdmin: boolean): Task[] {
+  if (isAdmin && pathname.startsWith("/dashboard/billing")) return [STUDENT_DUES, PROGRESS, MAKEUP];
+  if (pathname.startsWith("/dashboard/calendar")) return [MOVE, MAKEUP, LESSONS];
+  if (pathname.startsWith("/dashboard/students")) return [PROGRESS, LESSONS, MAKEUP];
+  return [MOVE, MAKEUP, PROGRESS];
+}
 
 // Tanıtımın son adımındaki "Hemen dene" örnekleri. Asistanın araçları öğrenci başına çalışır;
 // okulun gerçek bir öğrencisiyle kurulan örnek her zaman çalışan bir cevap gösterir. Ad ek almaz
@@ -58,8 +68,9 @@ function introExamples(isAdmin: boolean, student: MentionCandidate | undefined):
   ];
 }
 
-export function AssistantPanel({ open, onClose, request }: { open: boolean; onClose: () => void; request: AssistantRequest | null }) {
+export function AssistantPanel({ open, modal, onClose, request }: { open: boolean; modal: boolean; onClose: () => void; request: AssistantRequest | null }) {
   const { data: me } = useMe();
+  const pathname = usePathname();
   const isAdmin = me?.role === "Admin";
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState("");
@@ -80,6 +91,8 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingCaret = useRef<number | null>(null);
+  // Kullanıcı eski bir mesajı okurken yeni cevap onu alta atmasın.
+  const followLatest = useRef(true);
   const listId = useId();
 
   const mention = open ? resolveMention(candidates, input, caret) : null;
@@ -98,7 +111,11 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
         push({ role: "assistant", text: response.reply, cards: response.cards });
       },
       onError: (error) => push({ role: "assistant", text: errorMessage(error, "Asistan şu an yanıt veremiyor; biraz sonra tekrar dene."), cards: [], retry: { text, studentId } }),
-      onSettled: () => inputRef.current?.focus(),
+      onSettled: () => {
+        // Panel sayfanın yanındayken kullanıcı sayfada bir alana yazıyor olabilir; odağı çalma.
+        const focused = document.activeElement;
+        if (focused === document.body || inputRef.current?.closest("[role=dialog]")?.contains(focused)) inputRef.current?.focus();
+      },
     });
   }
 
@@ -107,9 +124,13 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
     if (!trimmed || chat.isPending) return;
     const picked = [...new Map(mentions.filter((item) => trimmed.includes(item.fullName)).map((item) => [item.id, item])).values()];
     push({ role: "user", text: trimmed });
-    setInput("");
-    setCaret(0);
-    setMentions([]);
+    followLatest.current = true;
+    // Sayfadan gelen kısayol kutudaki yarım mesajı silmesin.
+    if (text === input) {
+      setInput("");
+      setCaret(0);
+      setMentions([]);
+    }
     run(trimmed, studentId ?? (picked.length === 1 ? picked[0]?.id : undefined));
   }
 
@@ -119,16 +140,17 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
     run(again.text, again.studentId);
   }
 
-  // Kısayoldan gelen istek (öğrenci satırı, kart düğmesi) bir kez gönderilir.
+  // Kısayoldan gelen istek (öğrenci satırı, kart düğmesi) bir kez gönderilir. Asistan cevap
+  // beklerken sayfa açık kaldığı için istek gelebilir; cevap bitince sıra ona gelir.
   useEffect(() => {
-    if (!request || request.id === handledRequest.current) return;
+    if (!request || request.id === handledRequest.current || chat.isPending) return;
     handledRequest.current = request.id;
     send(request.text, request.studentId);
   });
 
   useEffect(() => {
     const element = scrollRef.current;
-    if (element) element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    if (element && followLatest.current) element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
   }, [entries.length, chat.isPending]);
 
   // Kutu yazdıkça büyür (en çok ~6 satır).
@@ -219,11 +241,13 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
 
   const firstName = me ? meDisplayName(me).split(/\s+/)[0] : undefined;
   const empty = entries.length === 0 && !chat.isPending;
+  const suggested = pageTasks(pathname, isAdmin);
+  const otherTasks = ALL_TASKS.filter((task) => !suggested.includes(task) && (isAdmin || task.icon !== "wallet"));
 
   return (
-    <AssistantSheet open={open} onClose={onClose}>
+    <AssistantSheet open={open} modal={modal} onClose={onClose}>
       <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-        <AssistantMark size="sm" />
+        <AssistantMark />
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-[.95rem] font-extrabold">Abdera Asistanı <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[.65rem] font-bold uppercase tracking-wide text-[var(--brand-strong)]">Beta</span></h2>
           <p className="text-meta truncate text-xs">Okulunun verisiyle çalışır · değişiklikler senin onayınla</p>
@@ -241,7 +265,14 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
         </button>
       </header>
 
-      <div ref={scrollRef} aria-live="polite" className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+      <div
+        ref={scrollRef}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          followLatest.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5"
+      >
         {showIntro ? (
           <AssistantIntro
             examples={introExamples(isAdmin, candidates.find((candidate) => !candidate.inactive))}
@@ -249,59 +280,49 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
             onExample={(example) => { closeIntro(); send(example.text, example.studentId); }}
           />
         ) : empty ? (
-          <div className="assistant-rise mx-auto flex max-w-md flex-col gap-5">
-            <div className="flex flex-col items-center gap-3 pt-2 text-center">
-              <AssistantMark size="lg" />
-              <div>
-                <p className="text-xl font-extrabold tracking-tight">Merhaba{firstName ? ` ${firstName}` : ""}, ne yapalım?</p>
-                <p className="text-meta mt-1 text-sm">Öğrencinin adını yazmaya başla, ben tamamlarım.</p>
-              </div>
-            </div>
+          <div className="assistant-rise mx-auto flex max-w-md flex-col gap-4">
+            <p className="text-lg font-extrabold tracking-tight">Merhaba{firstName ? ` ${firstName}` : ""}, ne yapalım?</p>
             {me && <WelcomeSummary isAdmin={isAdmin} />}
-            <div className="grid grid-cols-2 gap-2">
-              {(isAdmin ? ADMIN_TASKS : TEACHER_TASKS).map((task) => (
-                <button key={task.title} type="button" onClick={() => startTask(task)} className="pressable group flex flex-col items-start gap-2 rounded-2xl border border-[var(--line)] bg-white p-3 text-left hover:border-[var(--brand)] hover:shadow-[0_8px_24px_rgba(84,43,28,.08)]">
-                  <span className="grid h-8 w-8 place-items-center rounded-xl bg-[var(--brand-soft)] text-[var(--brand-strong)]"><Icon name={task.icon} className="h-4 w-4" /></span>
-                  <span>
-                    <span className="block text-sm font-bold leading-snug">{task.title}</span>
-                    <span className="text-meta block text-xs">{task.hint}</span>
-                  </span>
-                </button>
-              ))}
+            <div>
+              {suggested.map((task) => <TaskRow key={task.title} task={task} onPick={startTask} />)}
             </div>
-            <div className="space-y-1.5">
-              <p className="text-meta px-1 text-xs font-semibold">Ya da sor</p>
+            <details className="group">
+              <summary className="text-meta flex min-h-11 cursor-pointer list-none items-center gap-1.5 px-2 text-xs font-semibold [&::-webkit-details-marker]:hidden">
+                Tüm yapabileceklerim<Icon name="chevron" className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+              </summary>
+              {otherTasks.map((task) => <TaskRow key={task.title} task={task} onPick={startTask} />)}
               {QUESTIONS.map((question) => (
-                <button key={question} type="button" onClick={() => send(question)} className="pressable flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--surface-muted)]">
+                <button key={question} type="button" onClick={() => send(question)} className="pressable flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-2 py-2 text-left text-sm hover:bg-[var(--surface-muted)]">
                   {question}<Icon name="arrow-right" className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
                 </button>
               ))}
+            </details>
+          </div>
+        ) : null}
+        {/* Konuşma günlüğü baştan yerinde durur: ekran okuyucu yalnız yeni eklenen mesajı okur. */}
+        <div role="log" aria-label="Konuşma" aria-relevant="additions" aria-busy={chat.isPending} className={`mx-auto max-w-2xl flex-col gap-4 ${showIntro ? "hidden" : "flex"}`}>
+          {entries.map((entry) => entry.role === "user" ? (
+            <div key={entry.id} className="assistant-rise flex justify-end">
+              <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-[var(--brand-strong)] px-3.5 py-2 text-sm leading-relaxed text-white">{entry.text}</p>
             </div>
-          </div>
-        ) : (
-          <div className="mx-auto flex max-w-2xl flex-col gap-4">
-            {entries.map((entry) => entry.role === "user" ? (
-              <div key={entry.id} className="assistant-rise flex justify-end">
-                <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-[var(--brand-strong)] px-3.5 py-2 text-sm leading-relaxed text-white">{entry.text}</p>
-              </div>
-            ) : (
-              <AssistantTurn key={entry.id}>
-                {entry.retry ? (
-                  <div className="space-y-2 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-sm text-[var(--danger-strong)]" role="alert">
-                    <p>{entry.text}</p>
-                    <button type="button" onClick={() => entry.retry && retry(entry.id, entry.retry)} disabled={chat.isPending} className="btn btn-quiet text-xs">Tekrar dene</button>
-                  </div>
-                ) : (
-                  <>
-                    {entry.text && <div className="space-y-2 text-sm leading-relaxed"><RichText text={entry.text} /></div>}
-                    {entry.cards.map((card, index) => <Fragment key={index}>{renderCard(card)}</Fragment>)}
-                  </>
-                )}
-              </AssistantTurn>
-            ))}
-            {chat.isPending && <AssistantTurn><Thinking /></AssistantTurn>}
-          </div>
-        )}
+          ) : (
+            <AssistantTurn key={entry.id}>
+              {entry.retry ? (
+                <div className="space-y-2 rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-sm text-[var(--danger-strong)]" role="alert">
+                  <p>{entry.text}</p>
+                  <button type="button" onClick={() => entry.retry && retry(entry.id, entry.retry)} disabled={chat.isPending} className="btn btn-quiet text-xs">Tekrar dene</button>
+                </div>
+              ) : (
+                <>
+                  {entry.text && <div className="space-y-2 text-sm leading-relaxed"><RichText text={entry.text} /></div>}
+                  {entry.cards.map((card, index) => <Fragment key={index}>{renderCard(card)}</Fragment>)}
+                </>
+              )}
+            </AssistantTurn>
+          ))}
+          {chat.isPending && <AssistantTurn><Thinking /></AssistantTurn>}
+        </div>
+        <p role="status" className="sr-only">{chat.isPending ? "Asistan cevap hazırlıyor" : ""}</p>
       </div>
 
       <footer className="border-t border-[var(--line)] bg-[var(--surface)] px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-4">
@@ -321,7 +342,6 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
                 onKeyDown={onKeyDown}
                 maxLength={1000}
                 placeholder="Sor ya da iste… (öğrenci için @)"
-                autoFocus
                 role="combobox"
                 aria-expanded={showMentions}
                 aria-controls={showMentions ? listId : undefined}
@@ -330,23 +350,25 @@ export function AssistantPanel({ open, onClose, request }: { open: boolean; onCl
                 className="assistant-input block max-h-40 w-full resize-none bg-transparent py-1.5 text-base leading-6 outline-none placeholder:text-[var(--muted)] sm:text-sm"
               />
             </label>
-            <button type="button" onClick={() => { const position = inputRef.current?.selectionStart ?? input.length; const gap = position > 0 && !/\s$/.test(input.slice(0, position)) ? " " : ""; place(`${input.slice(0, position)}${gap}@${input.slice(position)}`, position + gap.length + 1); }} aria-label="Öğrenci ekle" title="Öğrenci ekle (@)" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--brand-strong)]">
+            <button type="button" onClick={() => { const position = inputRef.current?.selectionStart ?? input.length; const gap = position > 0 && !/\s$/.test(input.slice(0, position)) ? " " : ""; place(`${input.slice(0, position)}${gap}@${input.slice(position)}`, position + gap.length + 1); }} aria-label="Öğrenci ekle" title="Öğrenci ekle (@)" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[var(--muted)] sm:h-9 sm:w-9 hover:bg-[var(--surface-muted)] hover:text-[var(--brand-strong)]">
               <Icon name="students" className="h-4 w-4" />
             </button>
-            <button type="submit" disabled={!input.trim() || chat.isPending} aria-label="Gönder" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-strong)] text-white transition disabled:bg-[var(--line)] disabled:text-[var(--muted)]">
+            <button type="submit" disabled={!input.trim() || chat.isPending} aria-label="Gönder" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--brand-strong)] text-white transition sm:h-9 sm:w-9 disabled:bg-[var(--line)] disabled:text-[var(--muted)]">
               <Icon name="arrow-right" className="h-4 w-4" />
             </button>
           </div>
-          <p className="text-meta mt-1.5 px-1 text-center text-[.7rem]">Asistan hata yapabilir. Ders ve telafi değişiklikleri yalnızca onay kutusundan yapılır.</p>
+          <p className="text-meta mt-1.5 px-1 text-center text-[.75rem]">Asistan hata yapabilir. Ders ve telafi değişiklikleri yalnızca onay kutusundan yapılır.</p>
         </form>
       </footer>
     </AssistantSheet>
   );
 }
 
-// Masaüstünde sağda duran panel, telefonda tam ekran. Modal ile aynı erişilebilirlik kuralları:
-// Esc kapatır, açıkken sayfa kaymaz, kapanınca odak düğmeye döner.
-function AssistantSheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+// Masaüstünde sayfanın yanında duran panel: arka plan kullanılmaya devam eder, Esc yalnızca odak
+// paneldeyken kapatır (sayfadaki pencerenin Esc'i asistanı kapatmasın) ve sayfanın pencereleri
+// panelin üstünde açılır. Telefon ve tablette pencere: açıkken sayfa kaymaz, arka plan klavyeye
+// kapalıdır (AssistantProvider inert). Kapanınca odak, başka bir yere geçmediyse açan düğmeye döner.
+function AssistantSheet({ open, modal, onClose, children }: { open: boolean; modal: boolean; onClose: () => void; children: ReactNode }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -356,32 +378,43 @@ function AssistantSheet({ open, onClose, children }: { open: boolean; onClose: (
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();
-    const { overflow } = document.body.style;
-    document.body.style.overflow = "hidden";
-    function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") onCloseRef.current();
-    }
-    document.addEventListener("keydown", onKeyDown);
+    // autoFocus kullanılmaz: açan düğmeyi okumadan odak mesaj kutusuna geçmiş olurdu.
+    (panelRef.current?.querySelector("textarea") ?? panelRef.current)?.focus();
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = overflow;
-      previouslyFocused?.focus();
+      if (document.activeElement === document.body) previouslyFocused?.focus();
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape" && (modal || panelRef.current?.contains(document.activeElement))) onCloseRef.current();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, modal]);
+
+  useEffect(() => {
+    if (!open || !modal) return;
+    const { overflow } = document.body.style;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = overflow;
+    };
+  }, [open, modal]);
 
   if (!open || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <button type="button" onClick={onClose} aria-label="Asistanı kapat" className="absolute inset-0 bg-[#2a1c14]/25 backdrop-blur-[1px]" />
+    <div className={`fixed inset-0 flex justify-end ${modal ? "z-50" : "pointer-events-none z-40"}`}>
+      {modal && <button type="button" onClick={onClose} tabIndex={-1} aria-hidden="true" className="absolute inset-0 bg-[#2a1c14]/25 backdrop-blur-[1px]" />}
       <div
         ref={panelRef}
         tabIndex={-1}
         role="dialog"
-        aria-modal="true"
+        aria-modal={modal || undefined}
         aria-label="Abdera Asistanı"
-        className="assistant-sheet-in relative z-10 flex h-dvh w-full flex-col bg-[var(--surface)] focus:outline-none sm:m-3 sm:h-[calc(100dvh-1.5rem)] sm:w-[30rem] sm:overflow-hidden sm:rounded-3xl sm:border sm:border-[var(--line)] sm:shadow-[0_24px_64px_rgba(84,43,28,.22)]"
+        className="assistant-sheet-in pointer-events-auto relative z-10 flex h-dvh w-full flex-col bg-[var(--surface)] focus:outline-none sm:m-3 sm:h-[calc(100dvh-1.5rem)] sm:w-[30rem] sm:overflow-hidden sm:rounded-3xl sm:border sm:border-[var(--line)] sm:shadow-[0_24px_64px_rgba(84,43,28,.22)]"
       >
         {children}
       </div>
@@ -390,12 +423,25 @@ function AssistantSheet({ open, onClose, children }: { open: boolean; onClose: (
   );
 }
 
-function AssistantMark({ size }: { size: "sm" | "lg" }) {
-  const box = size === "lg" ? "h-14 w-14 rounded-2xl" : "h-9 w-9 rounded-xl";
+function AssistantMark() {
   return (
-    <span aria-hidden className={`grid shrink-0 place-items-center bg-gradient-to-br from-[var(--brand)] to-[var(--brand-strong)] text-white shadow-[0_8px_20px_rgba(168,78,31,.28)] ${box}`}>
-      <Icon name="sparkles" className={size === "lg" ? "h-7 w-7" : "h-[1.1rem] w-[1.1rem]"} />
+    <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[var(--brand)] to-[var(--brand-strong)] text-white shadow-[0_8px_20px_rgba(168,78,31,.28)]">
+      <Icon name="sparkles" className="h-[1.1rem] w-[1.1rem]" />
     </span>
+  );
+}
+
+// Açılıştaki iş satırı: kart değil, çerçevesiz bir liste öğesi. Güçlü çerçeve onay kutusunundur.
+function TaskRow({ task, onPick }: { task: Task; onPick: (task: Task) => void }) {
+  return (
+    <button type="button" onClick={() => onPick(task)} className="pressable flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-[var(--surface-muted)]">
+      <Icon name={task.icon} className="h-4 w-4 shrink-0 text-[var(--brand-strong)]" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold leading-snug">{task.title}</span>
+        <span className="text-meta block truncate text-xs">{task.hint}</span>
+      </span>
+      <Icon name="arrow-right" className="h-3.5 w-3.5 shrink-0 text-[var(--muted)]" />
+    </button>
   );
 }
 
@@ -453,7 +499,7 @@ function inline(text: string) {
 
 function Thinking() {
   return (
-    <span className="inline-flex h-7 items-center gap-1 text-[var(--muted)]" role="status" aria-label="Asistan düşünüyor">
+    <span aria-hidden className="inline-flex h-7 items-center gap-1 text-[var(--muted)]">
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-240ms]" />
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:-120ms]" />
       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current" />

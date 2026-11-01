@@ -241,6 +241,8 @@ textarea:focus-visible:not(.field) {
 .assistant-sheet-in { animation: assistant-sheet-in .24s cubic-bezier(.2,.8,.2,1); }
 @media (min-width: 640px) { .assistant-sheet-in { animation-name: assistant-sheet-in-side; } }
 .assistant-rise { animation: assistant-rise .22s ease-out both; }
+/* Geniş ekranda sayfa panele yer açar: 30rem panel + iki yanındaki .75rem boşluk. */
+@media (min-width: 90rem) { .assistant-open { padding-right: 31.5rem; } }
 /* Mesaj kutusunun odak halkası çevresindeki çerçevede (focus-within); iç halka çift görünürdü. */
 textarea.assistant-input:focus-visible { outline: none; }
 /* Asistan tanıtımı: yazılan metin soldan açılır, imleç yanıp söner, onay düğmesine basılır. */

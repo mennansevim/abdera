@@ -449,3 +449,110 @@ test("the first open shows a short intro whose examples use a real student and i
   await dialog.getByRole("button", { name: "Geç" }).click();
   await expect(dialog.getByText("ne yapalım?")).toBeVisible();
 });
+
+test("the docked panel leaves the page usable and only Esc inside it closes it", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await mockApi(page, ADMIN, {});
+  await page.goto("/dashboard/releases");
+
+  const opener = page.getByRole("button", { name: "Abdera Asistanı (⌘K)" });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "Abdera Asistanı" });
+  await expect(dialog.getByLabel("Asistana yaz")).toBeFocused();
+  await expect(dialog).not.toHaveAttribute("aria-modal", "true");
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+  // Sayfa panele yer açar: içerik panelin altında kalmaz.
+  const panel = (await dialog.boundingBox())!;
+  const content = (await page.locator("main").boundingBox())!;
+  expect(content.x + content.width).toBeLessThanOrEqual(panel.x);
+
+  // Arka plan tıklanabilir, panel kapanmaz; Esc odak sayfadayken asistanı kapatmaz.
+  await page.getByRole("heading", { level: 1 }).first().click();
+  await opener.focus();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByLabel("Asistana yaz").focus();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
+
+test("links stay beside the panel on a wide screen and close it on a narrow one", async ({ page }) => {
+  await mockApi(page, ADMIN, {
+    "POST /api/assistant/chat": () => ({ reply: "Burada.", cards: [{ kind: "navigate", student: null, move: null, navigation: { key: "calendar", label: "Takvim ekranına git", path: "/dashboard/calendar" } }], history: [] }),
+  });
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/dashboard/releases");
+  const dialog = await ask(page, "Takvim nerede?");
+  await dialog.getByRole("link", { name: "Takvim ekranına git" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/calendar/);
+  await expect(dialog).toBeVisible();
+
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await dialog.getByRole("link", { name: "Takvim ekranına git" }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test("on a phone the panel is a modal and the page behind it is inert", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockApi(page, ADMIN, {});
+  await page.goto("/dashboard/releases");
+
+  await page.getByRole("button", { name: "Abdera Asistanı", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Abdera Asistanı" });
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(page.locator(".assistant-open")).toHaveAttribute("inert", "");
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("hidden");
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator("[inert]")).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).not.toBe("hidden");
+});
+
+test("a shortcut used while a reply is pending waits its turn and keeps the draft", async ({ page }) => {
+  const messages: string[] = [];
+  await mockApi(page, ADMIN, {});
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/assistant/chat", async (route) => {
+    const message = (route.request().postDataJSON() as { message: string }).message;
+    messages.push(message);
+    if (messages.length === 2) await held;
+    await route.fulfill({ json: messages.length === 1 ? chat("lessons", {}, "İlk cevap.") : { reply: `Cevap ${messages.length}.`, cards: [], history: [] } });
+  });
+
+  await page.goto("/dashboard/releases");
+  const dialog = await ask(page, "Dersleri göster");
+  const shortcut = dialog.getByRole("button", { name: "Telafi planla" });
+  await expect(shortcut).toBeVisible();
+
+  const input = dialog.getByLabel("Asistana yaz");
+  await input.fill("İkinci soru");
+  await dialog.getByRole("button", { name: "Gönder", exact: true }).click();
+  await expect.poll(() => messages.length).toBe(2);
+  await shortcut.click();
+  await input.fill("Yarım kalan mesaj");
+  release();
+
+  await expect(dialog.getByText("Cevap 3.")).toBeVisible();
+  expect(messages).toHaveLength(3);
+  await expect(input).toHaveValue("Yarım kalan mesaj");
+});
+
+test("the opening screen suggests work for the current page and lists the rest on demand", async ({ page }) => {
+  await mockApi(page, ADMIN, {});
+  await page.goto("/dashboard/calendar");
+  await page.getByRole("button", { name: "Abdera Asistanı (⌘K)" }).click();
+  const dialog = page.getByRole("dialog", { name: "Abdera Asistanı" });
+
+  await expect(dialog.getByRole("button", { name: /Ders saatini değiştir/ })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Derslerini göster/ })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /Aidat günü gelenler/ })).toBeHidden();
+
+  await dialog.getByText("Tüm yapabileceklerim").click();
+  await expect(dialog.getByRole("button", { name: /Aidat günü gelenler/ })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Fiyat politikası nerede?" })).toBeVisible();
+});

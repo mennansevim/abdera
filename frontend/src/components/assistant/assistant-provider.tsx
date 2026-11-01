@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { AssistantPanel } from "./assistant-panel";
 
 // Asistanı her ekrandan açmak için: üst menüdeki düğme, ⌘K / Ctrl+K ve öğrenci satırındaki
@@ -18,6 +18,8 @@ interface AssistantContextValue {
   isOpen: boolean;
   open: () => void;
   close: () => void;
+  // Ekrana giden bağlantılar: panelin yanında sayfaya yer varsa panel açık kalır.
+  closeForPage: () => void;
   ask: (text: string, studentId?: string) => void;
 }
 
@@ -29,12 +31,34 @@ export function useAssistant() {
   return value;
 }
 
+// Panel lg'den itibaren sayfanın yanında durur (pencere değildir); 90rem'den itibaren sayfa da
+// ona yer açar (globals.css .assistant-open). Daha dar masaüstünde panel sayfanın üstüne biner.
+const DOCKED_QUERY = "(min-width: 64rem)";
+const ROOMY_QUERY = "(min-width: 90rem)";
+
+function useMediaQuery(query: string) {
+  return useSyncExternalStore(
+    (onChange) => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
+
 export function AssistantProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [request, setRequest] = useState<AssistantRequest | null>(null);
+  const docked = useMediaQuery(DOCKED_QUERY);
+  const roomy = useMediaQuery(ROOMY_QUERY);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
+  const closeForPage = useCallback(() => {
+    if (!roomy) setIsOpen(false);
+  }, [roomy]);
   const ask = useCallback((text: string, studentId?: string) => {
     if (!enabled) return;
     setRequest((current) => ({ id: (current?.id ?? 0) + 1, text, studentId }));
@@ -53,12 +77,13 @@ export function AssistantProvider({ enabled, children }: { enabled: boolean; chi
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [enabled]);
 
-  const value = useMemo(() => ({ enabled, isOpen, open, close, ask }), [enabled, isOpen, open, close, ask]);
+  const value = useMemo(() => ({ enabled, isOpen, open, close, closeForPage, ask }), [enabled, isOpen, open, close, closeForPage, ask]);
 
   return (
     <AssistantContext.Provider value={value}>
-      {children}
-      {enabled && <AssistantPanel open={isOpen} onClose={close} request={request} />}
+      {/* Panel pencere gibi açıldığında (telefon, tablet) arkadaki uygulama klavyeye de kapanır. */}
+      <div className={isOpen ? "assistant-open" : undefined} inert={isOpen && !docked}>{children}</div>
+      {enabled && <AssistantPanel open={isOpen} modal={!docked} onClose={close} request={request} />}
     </AssistantContext.Provider>
   );
 }

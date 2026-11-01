@@ -26,11 +26,11 @@ export function StudentHeading({ student, meta }: { student: AssistantStudent; m
   );
 }
 
-// İlgili ekrana gider ve paneli kapatır.
+// İlgili ekrana gider; panel yalnızca sayfanın önünü kapatıyorsa kapanır.
 export function GoLink({ href, children }: { href: string; children: ReactNode }) {
-  const { close } = useAssistant();
+  const { closeForPage } = useAssistant();
   return (
-    <Link href={href} onClick={close} className="pressable inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--brand-strong)] hover:border-[var(--brand)]">
+    <Link href={href} onClick={closeForPage} className="pressable inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--line)] bg-white px-3 text-xs font-bold text-[var(--brand-strong)] hover:border-[var(--brand)]">
       {children}<Icon name="arrow-right" className="h-3.5 w-3.5" />
     </Link>
   );

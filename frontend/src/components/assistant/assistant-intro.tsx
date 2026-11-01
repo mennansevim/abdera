@@ -98,7 +98,7 @@ export function AssistantIntro({ examples, onDone, onExample }: {
     <section aria-labelledby="assistant-intro-title" className="assistant-rise mx-auto flex max-w-md flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-meta text-xs font-semibold">Kısa tanıtım · {index + 1}/{SLIDES.length}</p>
-        <button type="button" onClick={onDone} className="text-meta rounded-lg px-2 py-1 text-xs font-semibold hover:bg-[var(--surface-muted)] hover:text-[var(--brand-strong)]">Geç</button>
+        <button type="button" onClick={onDone} className="text-meta min-h-11 rounded-lg px-3 text-xs font-semibold hover:bg-[var(--surface-muted)] hover:text-[var(--brand-strong)]">Geç</button>
       </div>
 
       <div key={index} className="assistant-rise flex flex-col gap-4">
@@ -111,18 +111,22 @@ export function AssistantIntro({ examples, onDone, onExample }: {
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5" role="tablist" aria-label="Tanıtım adımları">
-        {SLIDES.map((item, dot) => (
-          <button
-            key={item.title}
-            type="button"
-            role="tab"
-            aria-selected={dot === index}
-            aria-label={`${dot + 1}. adım: ${item.title}`}
-            onClick={() => setIndex(dot)}
-            className={`h-1.5 rounded-full transition-all ${dot === index ? "w-6 bg-[var(--brand-strong)]" : "w-1.5 bg-[var(--line)] hover:bg-[var(--muted)]"}`}
-          />
-        ))}
+      <div className="flex items-center gap-1.5">
+        {/* Nokta küçük kalır, dokunma alanı düğmenin tamamıdır (44 px). */}
+        <div className="-ml-3 flex" role="group" aria-label="Tanıtım adımları">
+          {SLIDES.map((item, dot) => (
+            <button
+              key={item.title}
+              type="button"
+              aria-current={dot === index ? "step" : undefined}
+              aria-label={`${dot + 1}. adım: ${item.title}`}
+              onClick={() => setIndex(dot)}
+              className="group grid h-11 w-11 place-items-center"
+            >
+              <span className={`h-1.5 rounded-full transition-all ${dot === index ? "w-6 bg-[var(--brand-strong)]" : "w-1.5 bg-[var(--line)] group-hover:bg-[var(--muted)]"}`} />
+            </button>
+          ))}
+        </div>
         <span className="flex-1" />
         {index > 0 && (
           <button type="button" onClick={() => setIndex(index - 1)} className="btn btn-quiet text-sm">Geri</button>
