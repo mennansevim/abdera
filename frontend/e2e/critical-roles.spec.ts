@@ -235,14 +235,15 @@ test.describe.serial("Abdera critical role flows", () => {
       "grup kaydının bu ayın aidatı otomatik açılmalı",
     ).toBeTruthy();
 
-    // Aidatlar ekranı (docs/10-decisions.md H17): Liste görünümünde öğrenciyi ara, ismine
-    // dokun; ödeme penceresi bu ay seçili açılır. "Farklı tutar alındı" ile 1 TL alınır ve
-    // "Kalanı borç kalsın" (varsayılan) kısmi ödeme olarak kaydedilir.
+    // Aidatlar ekranı tek görünüm (docs/10-decisions.md H17, AD18): grup kaydı alttaki
+    // "Aylık aidatlar" listesindedir; öğrenciyi ara, ismine dokun; ödeme penceresi bu ay seçili
+    // açılır. "Farklı tutar alındı" ile 1 TL alınır ve "Kalanı borç kalsın" (varsayılan) kısmi
+    // ödeme olarak kaydedilir.
     await page.goto("/dashboard/billing");
     await expect(page.getByRole("heading", { name: "Aidatlar", level: 1 })).toBeVisible();
-    await page.getByRole("button", { name: "Liste", exact: true }).click();
     await page.getByLabel("Öğrenci, öğretmen veya veli ara").fill(`Grup Öğrenci ${suffix}`);
-    await page.getByRole("listitem").filter({ hasText: `Grup Öğrenci ${suffix}` }).getByRole("button").first().click();
+    const monthlyDues = page.getByRole("region", { name: /Aylık aidatlar/ });
+    await monthlyDues.getByRole("listitem").filter({ hasText: `Grup Öğrenci ${suffix}` }).getByRole("button").first().click();
     const paymentForm = page.getByRole("dialog", { name: `Grup Öğrenci ${suffix}` });
     await paymentForm.getByRole("button", { name: "Farklı tutar alındı" }).click();
     await paymentForm.getByLabel("Alınan tutar").fill("1");
@@ -258,7 +259,7 @@ test.describe.serial("Abdera critical role flows", () => {
     expect(afterPayment.flatMap((row: { receivables: { period: string; status: string }[] }) => row.receivables)
       .some((receivable: { period: string; status: string }) => receivable.period === currentPeriod && receivable.status === "Partial")).toBeTruthy();
     await expect(paymentForm).toHaveCount(0);
-    await expect(page.getByRole("listitem").filter({ hasText: `Grup Öğrenci ${suffix}` }).getByText(/kısmi ödendi/)).toBeVisible();
+    await expect(monthlyDues.getByRole("listitem").filter({ hasText: `Grup Öğrenci ${suffix}` }).getByText(/kısmi ödendi/)).toBeVisible();
   });
 
   // Kullanıcı isteği: "takvimde ders taşındığında ilgili öğretmenin ekranına bildirim
