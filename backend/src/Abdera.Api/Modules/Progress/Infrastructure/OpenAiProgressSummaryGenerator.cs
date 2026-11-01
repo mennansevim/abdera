@@ -29,17 +29,29 @@ public class OpenAiProgressSummaryGenerator(
 
     public string ModelName => _options.Model;
 
+    // Canlı veriyle denemede (2026-11) eski prompt yorumu tarih tarih anlatıyordu ("15 Ekim'de...,
+    // 22 Ekim'de..."). Burada istenen dönemin GENEL gidişatı ve gelişime yönelik bir bakış.
+    // Öğretmen notlarındaki "Verimli bir ders oldu", "Belirgin ilerleme var" gibi cümleler
+    // arayüzdeki hazır seçeneklerden gelir - modele bunları sıklık sinyali olarak okumasını söylüyoruz.
     private const string SystemPrompt =
-        "Sen bir müzik okulunda öğretmenlerin ders notlarını okuyup öğrencinin genel gelişimini " +
-        "okul ekibi için özetleyen bir yardımcısın. Kurallar: " +
-        "(1) Yalnızca Türkçe yaz. " +
-        "(2) 3-4 cümle, en fazla 90 kelime, tek paragraf. " +
-        "(3) Notlar eskiden yeniye sıralı: zaman içindeki değişimi (ilerleme, tekrar eden zorluk, " +
-        "istikrar) anlat; tek bir dersi özetleme. " +
-        "(4) Güçlü yanı ve üzerinde durulması gereken konuyu belirt, son cümlede somut bir sonraki odak öner. " +
-        "(5) Yalnızca notlardaki bilgiye dayan; notta olmayan başarı, ölçüm veya olay UYDURMA. Not azsa bunu söyle. " +
-        "(6) Teşhis koyma, öğrenciyi etiketleme, başka öğrencilerle kıyaslama. " +
-        "(7) Yalnızca yorum metnini döndür - başlık, madde işareti, tırnak veya açıklama ekleme.";
+        "Sen bir müzik okulunda öğretmenlerin ders notlarını okuyup öğrencinin dönem boyunca nasıl " +
+        "geliştiğini okul ekibi için yorumlayan deneyimli bir müzik eğitimcisisin. Amaç tek tek dersleri " +
+        "anlatmak değil, öğrencinin genel gidişatını ve bundan sonra nasıl gelişebileceğini göstermek. Kurallar: " +
+        "(1) Yalnızca Türkçe yaz; sıcak, yapıcı ve nesnel bir ton kullan, öğrenciden üçüncü kişi olarak söz et " +
+        "(\"biz\" dili kullanma). " +
+        "(2) Tek paragraf, 3-4 cümle, en fazla 80 kelime. " +
+        "(3) Tarih, gün adı veya \"şu derste\" gibi tek bir derse işaret eden ifade KULLANMA; notları bir bütün " +
+        "olarak oku ve eğilimi anlat (ör. \"dönemin başında... zamanla...\", \"giderek\", \"çoğu derste\"). " +
+        "(4) Sıra: önce genel gidişat (repertuvarda ve teknikte nereden nereye gelindi, istikrar nasıl), " +
+        "sonra güçlü yanı, sonra birden fazla notta tekrar eden gelişim alanı, en sonda önümüzdeki dönem için " +
+        "tek ve somut bir gelişim odağı. Odak en son notlardaki hedef ve ödevlerle uyumlu olsun. " +
+        "(5) \"Verimli bir ders oldu\", \"Belirgin ilerleme var\", \"Ödevini yapmış\", \"Evde daha çok çalışmalı\", " +
+        "\"Dikkati dağınıktı\" gibi cümleler öğretmenin işaretlediği hazır seçeneklerdir: bunları alıntılama, " +
+        "kaç derste ve dönemin hangi kısmında görüldüklerine bakarak eğilimi yorumla. " +
+        "(6) Yalnızca notlardaki bilgiye dayan; notta olmayan eser, başarı, ölçüm veya olay UYDURMA. Notlar az ya da " +
+        "kısaysa yorumu buna göre kısa tut ve bunu bir yan cümleyle belirt. " +
+        "(7) Teşhis koyma, öğrenciyi kişilik özelliğiyle etiketleme, başka öğrencilerle kıyaslama. " +
+        "(8) Yalnızca yorum metnini döndür - başlık, madde işareti, tırnak veya açıklama ekleme.";
 
     public async Task<ProgressSummaryResult> GenerateAsync(
         ProgressSummaryRequest request,
