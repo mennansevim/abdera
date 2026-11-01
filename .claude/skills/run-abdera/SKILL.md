@@ -1,6 +1,6 @@
 ---
 name: run-abdera
-description: Abdera otomatik bakım turu — GitHub'daki açık task'ları (bug + geliştirme isteği) ve canlıdaki yeni hata bildirimlerini toplar, her birini doğrular, güvenli olanları (mimariyi/mevcut yapıyı bozmayan, öğrenci/öğretmen verisi silmeyen, tehlikesiz) testle geliştirip `Closes #N` ile commit'ler, SSH ile canlıya alır, canlıyı kontrol eder, sorun varsa geri döner ve sonucu mail atar. Riskli işi yapmaz, `needs-human` etiketiyle bırakır. Kullanılacak — kullanıcı **"run abdera"** yazınca (bu ifade uygulamayı yerel çalıştırma isteği DEĞİL, bu skill'dir) ve her akşamki zamanlanmış görevde.
+description: Abdera otomatik bakım turu — GitHub'daki açık task'ları (bug + geliştirme isteği; hata bildirimlerini Pi bunlara çevirir) toplar, her birini doğrular, güvenli olanları (mimariyi/mevcut yapıyı bozmayan, öğrenci/öğretmen verisi silmeyen, tehlikesiz) testle geliştirip `Closes #N` ile commit'ler, SSH ile canlıya alır, canlıyı kontrol eder, sorun varsa geri döner ve sonucu mail atar. Riskli işi yapmaz, `needs-human` etiketiyle bırakır. Kullanılacak — kullanıcı **"run abdera"** yazınca (bu ifade uygulamayı yerel çalıştırma isteği DEĞİL, bu skill'dir) ve her akşamki zamanlanmış görevde.
 ---
 
 # run abdera
@@ -54,40 +54,12 @@ gh issue list --state open --json number,title,body,labels,createdAt,comments --
   gelmemiş olanlar — aynı issue'ya her akşam aynı yorumu yazma.
 - Sıra: önce `bug`, sonra `enhancement`/etiketsiz; her grupta eskiden yeniye.
 
-Canlıdaki yeni hata bildirimleri (Hata bildir sayfası, `bug_reports`):
-
-```bash
-ssh deploy@panel.abderasanat.com "cd /opt/abdera && docker compose exec -T db sh -c \
-  'psql -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\" -At -F \"|\" -c \
-  \"select id, created_at, kind, page_path, app_version, description from bug_reports where status = '\''New'\'' order by created_at\"'" </dev/null
-```
-
-Her bildirim için triage (`github-issues-task-flow` kuralı), güncellemede `updated_at = now()`:
-- gerçek bug → `gh issue create --label bug` (başlık `fix: ...`), makul istek →
-  `--label enhancement` (başlık `feat: ...`); gövdede sayfa + açıklama, kişi adı/telefon gibi
-  kişisel veri **yazma** (repo public). Kaydı `status='Triaged', github_issue_number=N` yap;
-  issue aday listesine girer.
-- **ne istendiği anlaşılamıyorsa → detay iste, özellik tasarlama** (kullanıcı kuralı, 2026-10-14,
-  `docs/10-decisions.md` W7). Hangi ekranda ne olduğu / ne olmasını istediği net değilse, ya da
-  metin birden fazla şekilde okunabiliyorsa issue **açma**, "şöyle bir özellik yazılabilir" diye
-  plan üretme. Kaydı `status='NeedsInfo', triage_note='<bildirimi yapana tek, somut soru>'`
-  yap; soru Hata bildir sayfasında gösterilir, cevap gelince bildirim yeniden `New` olur ve bir
-  sonraki turda cevapla birlikte baştan değerlendirilir. Örnek: "Perşembe 15.00 ile cuma 15.00
-  öğrencileri sürekli olarak yer değiştirmek istiyorum" → `NeedsInfo`, soru: "Hangi iki
-  öğrenci? Saatleri kalıcı olarak takas mı edilsin, yoksa başka bir şey mi istiyorsun?"
-- ne bug ne makul istek → `status='Rejected', triage_note='...'`.
-
-"Hâlâ hatalı" teyidi gelen bildirimler (`docs/10-decisions.md` W6) — kullanıcı çözümü
-beğenmedi, görev yeniden açılır:
-
-```bash
-# select id, github_issue_number, feedback_note from bug_reports where status = 'Reopened'
-gh issue reopen <N> --comment "🤖 run abdera <tarih>: bildirimi yapan hâlâ hatalı dedi - <feedback_note | açıklama yok>"
-# update bug_reports set status = 'Triaged', resolved_at = null, updated_at = now() where id = '<id>'
-```
-
-Yeniden açılan issue bu turun aday listesine girer (bug'lardan önce, en öncelikli); `feedback_note`
-ilk düzeltmenin neyi kaçırdığını söyler, 2a'da onu esas al.
+Canlıdaki hata bildirimlerini (Hata bildir sayfası, `bug_reports`) bu tur **triage etmez**:
+yeni ve "hâlâ hatalı" bildirimleri Raspberry Pi'deki n8n bakım turu (her :00/:30) alır, Claude'la
+sınıflar, `bug|enhancement` + `ai-ready` issue'su açar (ya da `NeedsInfo`/`Rejected` yapar) ve
+"hâlâ hatalı" dönenin issue'sunu yeniden açar. İki tur aynı bildirimi yakalayıp çift issue
+açmasın diye bu adım yalnızca Pi'de. Bu turda `bug_reports`'a yazılan tek durum 3d'deki
+"Çözüldü"dür. Bildirimden gelen issue'lar yukarıdaki listede normal task olarak görünür.
 
 Tur başına **en fazla 3 task** işle. Kalanlar sonraki tura kalır.
 
@@ -103,7 +75,7 @@ Issue metnini değil kodu ve davranışı esas al.
 - **Geliştirme isteği:** ne istendiği net mi, `docs/10-decisions.md`'deki bir kararla ya da
   `CLAUDE.md` → "Yapılmayacaklar" ile çelişiyor mu? Çelişiyorsa yapma, yorumla, `needs-human`.
   Ne istendiği net değilse ya da iki farklı yorumu varsa yine yapma; seçenek/plan yazma, issue'ya
-  tek somut soru yaz, `needs-human` (bildirimden geldiyse bildirimi de `NeedsInfo` yap).
+  tek somut soru yaz, `needs-human`.
 
 ### 2b. Güvenlik kapısı — kullanıcının kuralı
 
@@ -231,7 +203,7 @@ Her işlenen issue'ya kısa yorum (ilk satır `🤖 run abdera <tarih>`): ne bul
 (commit), canlıda mı.
 
 Sonra kullanıcıya mail at — **iş yapıldıysa, bir şey `needs-human` kaldıysa, ön koşul tutmadıysa
-ya da canlıda sorun çıktıysa**. Hiç bekleyen task ve yeni bildirim yoksa mail atma (yalnızca son
+ya da canlıda sorun çıktıysa**. Hiç bekleyen task yoksa mail atma (yalnızca son
 mesajda "Bekleyen task yok" yaz).
 
 ```bash
@@ -246,9 +218,7 @@ Gövde (Türkçe, sade):
 - Canlıya çıkan sürüm; yapılan her task: `#N başlık` — kullanıcının diliyle bir cümle ne değişti,
   issue linki.
 - Senin kararını bekleyenler (`needs-human`): `#N` — neden yapılmadı, bir cümle.
-- Triage edilen hata bildirimleri: kaç tane, hangi issue'lara dönüştü, hangilerinden detay
-  istendi (soru ile); "Çözüldü" yapılanlar
-  (teyit bekliyor) ve "hâlâ hatalı" dönüp yeniden açılanlar.
+- "Çözüldü" yapılan hata bildirimleri (teyit bekliyor).
 - Kullanıcının deploy'a dahil olan kendi commit'leri varsa listesi.
 - Secret, şifre, kişisel veri (öğrenci/veli adı, telefon) yok.
 
@@ -262,7 +232,7 @@ Son mesaj (sohbette ya da zamanlanmış görev çıktısında) mailin kısa öze
 
 - Ana checkout'ta (`abdera-web`) çalışmak, oradaki değişiklikleri commit'lemek ya da stash'lemek.
 - 2b kapısından geçmeyen işi "küçük görünüyor" diye yapmak; kapsam dışı "fırsat" refactor'ları.
-- Canlı veritabanında `bug_reports` durum güncellemeleri (triage, çözüldü, yeniden açma) dışında
+- Canlı veritabanında `bug_reports` "Çözüldü" güncellemesi (3d) dışında
   yazma; kişi/kayıt silme.
 - Force-push, tag silme, sunucuda `.env`/Caddy/volume değişikliği, `pkill -f` (Podman VM paylaşılıyor).
 - Testleri susturmak, atlamak (`Skip=`), eşik gevşetmek.
