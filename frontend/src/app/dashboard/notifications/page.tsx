@@ -9,6 +9,7 @@ import {
   useRetryNotification,
   useUpdateAutomationSettings,
   useWebhookEvents,
+  type NotificationJob,
   type NotificationJobStatus,
   type NotificationJobType,
   type WebhookEventStatus,
@@ -41,6 +42,36 @@ const TYPE_LABELS: Record<NotificationJobType, string> = {
   InstrumentMaintenance: "Enstrüman bakımı",
   LessonScheduleChanged: "Ders programı değişti",
 };
+
+const JOB_COLUMN_COUNT = 8;
+
+// Gruplama yalnızca yüklü sayfanın içindedir; sunucu sıralaması ve sayfalama aynen kalır. API veli
+// kimliği taşımaz, veli adı da alıcı telefonundan bulunur: bu yüzden anahtar telefondur (adaşlar
+// karışmaz, adı bulunamayan alıcı da gruplanır). Satırlar en yeniden eskiye dizildiği ve Map ekleme
+// sırasını koruduğu için gruplar da en yeni kaydına göre sıralı çıkar; eşit tarihte id sırayı sabitler.
+function groupJobs(jobs: NotificationJob[]) {
+  const newestFirst = [...jobs].sort((a, b) => Date.parse(b.scheduledAt) - Date.parse(a.scheduledAt) || (a.id < b.id ? -1 : 1));
+  const groups = new Map<string, NotificationJob[]>();
+  for (const job of newestFirst) {
+    const key = `${job.type}:${job.recipientPhoneNumber}`;
+    groups.set(key, [...(groups.get(key) ?? []), job]);
+  }
+  return [...groups].map(([key, groupedJobs]) => ({ key, jobs: groupedJobs }));
+}
+
+function JobGroupHeading({ jobs }: { jobs: NotificationJob[] }) {
+  const [{ type, guardianName, recipientPhoneNumber }] = jobs;
+  const failedCount = jobs.filter((job) => job.status === "Failed").length;
+  return (
+    <div className="flex items-center justify-between gap-2 bg-[var(--surface-muted)] px-4 py-2">
+      <span className="min-w-0 text-sm font-bold break-words">{TYPE_LABELS[type] ?? type} · {guardianName ?? recipientPhoneNumber}</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        {failedCount > 0 && <span className="rounded-full bg-[var(--danger-soft)] px-2 py-0.5 text-[.7rem] font-bold text-[var(--danger-strong)] tabular-nums">{failedCount} başarısız</span>}
+        <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-[.7rem] font-bold text-[var(--muted)] tabular-nums">{jobs.length} kayıt</span>
+      </span>
+    </div>
+  );
+}
 
 export default function NotificationsPage() {
   return <AdminGate><NotificationsPageContent /></AdminGate>;
@@ -76,6 +107,7 @@ function ActivityPanel() {
   const [page, setPage] = useState(1);
   const { data, isLoading } = useNotifications(filter === "all" ? undefined : filter, page, 50);
   const jobs = data?.items;
+  const groups = groupJobs(jobs ?? []);
   const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / data.pageSize)) : 1;
   const retry = useRetryNotification();
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -111,16 +143,23 @@ function ActivityPanel() {
       {/* Telefonda 8 sütunluk tablo yana kayıyordu: aynı bilgi satır kartı olarak listelenir. */}
       {!isLoading && !!jobs?.length && (
         <ul className="divide-y divide-[var(--line)] md:hidden">
-          {jobs.map((job) => (
-            <li key={job.id} className="space-y-0.5 px-4 py-2.5 text-sm">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate font-semibold">{TYPE_LABELS[job.type] ?? job.type}</span>
-                <span className={`shrink-0 text-xs font-bold ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</span>
-              </div>
-              <p className="text-meta truncate">{[job.studentName, job.guardianName ?? job.recipientPhoneNumber].filter(Boolean).join(" · ")}</p>
-              <p className="text-meta">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")} · {new Date(job.scheduledAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
-              {job.lastError && <details className="group text-meta"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>}
-              {job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet mt-1 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}
+          {groups.map((group) => (
+            <li key={group.key}>
+              <JobGroupHeading jobs={group.jobs} />
+              <ul className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
+                {group.jobs.map((job) => (
+                  <li key={job.id} className="space-y-0.5 px-4 py-2.5 text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate font-semibold">{TYPE_LABELS[job.type] ?? job.type}</span>
+                      <span className={`shrink-0 text-xs font-bold ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</span>
+                    </div>
+                    <p className="text-meta truncate">{[job.studentName, job.guardianName ?? job.recipientPhoneNumber].filter(Boolean).join(" · ")}</p>
+                    <p className="text-meta">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")} · {new Date(job.scheduledAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>
+                    {job.lastError && <details className="group text-meta"><summary className="line-clamp-2 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>}
+                    {job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet mt-1 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}
+                  </li>
+                ))}
+              </ul>
             </li>
           ))}
         </ul>
@@ -140,24 +179,30 @@ function ActivityPanel() {
                 <th className="sticky right-0 bg-[var(--surface)] px-3 py-2 shadow-[-1px_0_0_var(--line)]"><span className="sr-only">İşlem</span></th>
               </tr>
             </thead>
-            <tbody>
-              {jobs.map((job) => (
-                <tr key={job.id} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--surface-muted)]/50">
-                  <td className="px-4 py-2 font-semibold whitespace-nowrap">{TYPE_LABELS[job.type] ?? job.type}</td>
-                  <td className="px-3 py-2">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")}</td>
-                  <td className="px-3 py-2">{job.guardianName ?? job.recipientPhoneNumber}</td>
-                  <td className="px-3 py-2">{job.studentName ?? "—"}</td>
-                  <td className="text-meta px-3 py-2 whitespace-nowrap">{new Date(job.scheduledAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
-                  <td className={`px-3 py-2 font-bold whitespace-nowrap ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</td>
-                  <td className="text-meta max-w-xs px-3 py-2">
-                    {job.lastError
-                      ? <details className="group"><summary className="line-clamp-1 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>
-                      : "—"}
-                  </td>
-                  <td className="sticky right-0 bg-[var(--surface)] px-3 py-2 shadow-[-1px_0_0_var(--line)]">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet min-h-8 pointer-coarse:min-h-11 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}</td>
+            {/* Sütunlar tek tabloda hizalı kalsın diye her grup ayrı <tbody>. */}
+            {groups.map((group) => (
+              <tbody key={group.key}>
+                <tr className="border-b border-[var(--line)]">
+                  <th colSpan={JOB_COLUMN_COUNT} scope="colgroup" className="p-0 text-left font-normal"><JobGroupHeading jobs={group.jobs} /></th>
                 </tr>
-              ))}
-            </tbody>
+                {group.jobs.map((job) => (
+                  <tr key={job.id} className="border-b border-[var(--line)] hover:bg-[var(--surface-muted)]/50">
+                    <td className="px-4 py-2 font-semibold whitespace-nowrap">{TYPE_LABELS[job.type] ?? job.type}</td>
+                    <td className="px-3 py-2">{job.lessonType ?? (job.referenceType === "receivable" ? "Aidat" : "—")}</td>
+                    <td className="px-3 py-2">{job.guardianName ?? job.recipientPhoneNumber}</td>
+                    <td className="px-3 py-2">{job.studentName ?? "—"}</td>
+                    <td className="text-meta px-3 py-2 whitespace-nowrap">{new Date(job.scheduledAt).toLocaleString("tr-TR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
+                    <td className={`px-3 py-2 font-bold whitespace-nowrap ${STATUS_COLORS[job.status]}`}>{STATUS_LABELS[job.status]}</td>
+                    <td className="text-meta max-w-xs px-3 py-2">
+                      {job.lastError
+                        ? <details className="group"><summary className="line-clamp-1 cursor-pointer break-words group-open:line-clamp-none">{job.lastError}</summary></details>
+                        : "—"}
+                    </td>
+                    <td className="sticky right-0 bg-[var(--surface)] px-3 py-2 shadow-[-1px_0_0_var(--line)]">{job.status === "Failed" && <button type="button" onClick={() => handleRetry(job.id)} disabled={retry.isPending} className="btn btn-quiet min-h-8 pointer-coarse:min-h-11 px-2.5 text-xs text-[var(--brand)]">Yeniden dene</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            ))}
           </table>
         </div>
       )}
