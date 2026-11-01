@@ -14,7 +14,7 @@ import { dailyQuote } from "@/lib/daily-quote";
 import { useCalendar, type CalendarLesson } from "@/lib/scheduling";
 import type { Me } from "@/lib/api";
 import { meDisplayName, meInitials, useMe } from "@/lib/use-auth";
-import { Panel, StatStrip } from "@/components/ui";
+import { Panel } from "@/components/ui";
 import { TeacherTodayLessons } from "./teacher-today-lessons";
 import { TeacherWeekCard } from "./teacher-week-card";
 function weekStartFor(date: Date) {
@@ -50,8 +50,7 @@ function AdminDashboard({ me }: { me: Me }) {
   const [weekStart, setWeekStart] = useState(() => weekStartFor(new Date()));
   const weekEnd = useMemo(() => addDays(weekStart, 7), [weekStart]);
   const { data: lessons, isLoading: lessonsLoading, isError: lessonsError, isFetching: lessonsFetching, refetch: refetchLessons } = useCalendar(weekStart.toISOString(), weekEnd.toISOString());
-  const { data: today, isLoading: statsLoading } = useDashboardToday();
-  const { data: failedNotifications } = useNotifications("Failed", 1, 1);
+  const { data: today } = useDashboardToday();
   // Yan panel (talepler, banka, doğum günleri...) her açılışta KAPALI başlar: ilk görünen ekran
   // geniş takvim olsun (kullanıcı isteği). Kapalıyken dar şeritteki rozetler bekleyen iş olduğunu
   // söyler; tercih bilerek saklanmıyor ki ekran her seferinde geniş takvimle açılsın.
@@ -61,15 +60,6 @@ function AdminDashboard({ me }: { me: Me }) {
     <>
       <DashboardTopbar me={me} />
       <SystemHealthBanner />
-
-      <StatStrip
-        label="Günün özeti"
-        items={[
-          { key: "today", label: "Bugünkü ders", value: today?.todayLessons ?? 0, loading: statsLoading, href: "/dashboard/calendar" },
-          { key: "requests", label: "Bekleyen değişiklik talebi", value: today?.pendingChangeRequests ?? 0, tone: today?.pendingChangeRequests ? "warning" : undefined, loading: statsLoading, href: "/dashboard/change-requests" },
-          { key: "failed", label: "Gönderilemeyen bildirim", value: failedNotifications?.totalCount ?? 0, tone: failedNotifications?.totalCount ? "danger" : undefined, loading: statsLoading, href: "/dashboard/notifications" },
-        ]}
-      />
 
       <div className={`grid items-start gap-3 ${railOpen ? "xl:grid-cols-[minmax(0,1fr)_20rem]" : "xl:grid-cols-[minmax(0,1fr)_3.5rem]"}`}>
         <WeeklySummary weekStart={weekStart} lessons={lessons ?? []} loading={lessonsLoading} error={lessonsError} retrying={lessonsFetching} onRetry={() => void refetchLessons()} onWeekChange={(offset) => setWeekStart(offset === 0 ? weekStartFor(new Date()) : addDays(weekStart, offset * 7))} />
