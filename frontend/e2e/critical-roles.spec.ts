@@ -202,20 +202,49 @@ test.describe.serial("Abdera critical role flows", () => {
     // Demo seed merkezi ücret tarifesini kurar; kayıt bazlı FeePlan artık yoktur. Kurs kaydı
     // açılırken o ayın aidatı sunucuda otomatik açılır (EnrollmentReceivableOpener) - elle
     // açmaya çalışmak artık 409 döner, bu yüzden burada yalnızca var olduğu doğrulanır.
+    //
+    // Birebir/grup ayrımı (docs/10-decisions.md AD4): geçiş günü (cycle_billing_starts_on,
+    // migration 2026-11-01) ve sonrasında birebir kayda aylık aidat AÇILMAZ; aidat yoklama
+    // kartındaki 4 dersin dolmasıyla dönem (D00n) olarak açılır. Grup dersi aylık kalır.
+    // Test önceden piyano (birebir) kaydında bu ayın aylık aidatını bekliyordu ve geçiş günü
+    // gelince kırıldı. Artık iki davranış ayrı ayrı doğrulanır.
     const currentPeriod = localDateString(new Date()).slice(0, 7);
-    const billingRows = await (await page.request.get(`${apiUrl}/api/students/${student.id}/billing`)).json();
-    expect(billingRows.flatMap((row: { receivables: { period: string }[] }) => row.receivables)
-      .some((receivable: { period: string }) => receivable.period === currentPeriod)).toBeTruthy();
+    const individualBilling = await (await page.request.get(`${apiUrl}/api/students/${student.id}/billing`)).json();
+    expect(
+      individualBilling.flatMap((row: { receivables: { period: string }[] }) => row.receivables)
+        .some((receivable: { period: string }) => receivable.period === currentPeriod),
+      "birebir kayda geçiş gününden sonra aylık aidat açılmamalı (AD4)",
+    ).toBeFalsy();
 
-    // Aidatlar ekranı (docs/10-decisions.md H17): Liste görünümünde öğrenciyi ara, ismine
-    // dokun; ödeme penceresi bu ay seçili açılır. "Farklı tutar alındı" ile 1 TL alınır ve
-    // "Kalanı borç kalsın" (varsayılan) kısmi ödeme olarak kaydedilir.
+    // Aylık aidat yolu grup kaydıyla sınanır. Ayrı öğrenci: çoklu kurs indirimi ve birebir
+    // yoklama kartları aynı isimle karışmasın.
+    const groupStudentResponse = await page.request.post(`${apiUrl}/api/students`, {
+      data: { firstName: "Grup", lastName: `Öğrenci ${suffix}`, birthDate: "2014-01-01" },
+    });
+    expect(groupStudentResponse.status()).toBe(201);
+    const groupStudent = await groupStudentResponse.json();
+    const groupEnrollmentResponse = await page.request.post(`${apiUrl}/api/students/${groupStudent.id}/enrollments`, {
+      data: { teacherId: teacher.id, instrumentId: piano.id, startedAt: localDateString(new Date()), courseKind: "Group" },
+    });
+    expect(groupEnrollmentResponse.status()).toBe(201);
+    expect((await groupEnrollmentResponse.json()).courseKind).toBe("Group");
+    const billingRows = await (await page.request.get(`${apiUrl}/api/students/${groupStudent.id}/billing`)).json();
+    expect(
+      billingRows.flatMap((row: { receivables: { period: string }[] }) => row.receivables)
+        .some((receivable: { period: string }) => receivable.period === currentPeriod),
+      "grup kaydının bu ayın aidatı otomatik açılmalı",
+    ).toBeTruthy();
+
+    // Aidatlar ekranı tek görünüm (docs/10-decisions.md H17, AD18): grup kaydı alttaki
+    // "Aylık aidatlar" listesindedir; öğrenciyi ara, ismine dokun; ödeme penceresi bu ay seçili
+    // açılır. "Farklı tutar alındı" ile 1 TL alınır ve "Kalanı borç kalsın" (varsayılan) kısmi
+    // ödeme olarak kaydedilir.
     await page.goto("/dashboard/billing");
     await expect(page.getByRole("heading", { name: "Aidatlar", level: 1 })).toBeVisible();
-    await page.getByRole("button", { name: "Liste", exact: true }).click();
-    await page.getByLabel("Öğrenci, öğretmen veya veli ara").fill(`Öğrenci ${suffix}`);
-    await page.getByRole("listitem").filter({ hasText: `Deneme Öğrenci ${suffix}` }).getByRole("button").first().click();
-    const paymentForm = page.getByRole("dialog", { name: `Deneme Öğrenci ${suffix}` });
+    await page.getByLabel("Öğrenci, öğretmen veya veli ara").fill(`Grup Öğrenci ${suffix}`);
+    const monthlyDues = page.getByRole("region", { name: /Aylık aidatlar/ });
+    await monthlyDues.getByRole("listitem").filter({ hasText: `Grup Öğrenci ${suffix}` }).getByRole("button").first().click();
+    const paymentForm = page.getByRole("dialog", { name: `Grup Öğrenci ${suffix}` });
     await paymentForm.getByRole("button", { name: "Farklı tutar alındı" }).click();
     await paymentForm.getByLabel("Alınan tutar").fill("1");
     await expect(paymentForm.getByRole("radio", { name: /Kalanı borç kalsın/ })).toBeChecked();
@@ -226,11 +255,11 @@ test.describe.serial("Abdera critical role flows", () => {
       response.request().method() === "POST");
     await paymentForm.getByRole("button", { name: /tahsil et$/ }).click();
     expect((await paymentSaved).ok()).toBeTruthy();
-    const afterPayment = await (await page.request.get(`${apiUrl}/api/students/${student.id}/billing`)).json();
+    const afterPayment = await (await page.request.get(`${apiUrl}/api/students/${groupStudent.id}/billing`)).json();
     expect(afterPayment.flatMap((row: { receivables: { period: string; status: string }[] }) => row.receivables)
       .some((receivable: { period: string; status: string }) => receivable.period === currentPeriod && receivable.status === "Partial")).toBeTruthy();
     await expect(paymentForm).toHaveCount(0);
-    await expect(page.getByRole("listitem").filter({ hasText: `Deneme Öğrenci ${suffix}` }).getByText(/kısmi ödendi/)).toBeVisible();
+    await expect(monthlyDues.getByRole("listitem").filter({ hasText: `Grup Öğrenci ${suffix}` }).getByText(/kısmi ödendi/)).toBeVisible();
   });
 
   // Kullanıcı isteği: "takvimde ders taşındığında ilgili öğretmenin ekranına bildirim
