@@ -22,4 +22,13 @@ internal static class TestPeriods
         var today = clock.ToSchoolLocal(clock.UtcNow);
         return BillingPeriod.Format(today.Year, today.Month);
     }
+
+    // Gelecek ayın ilk günü. Aidatın vadesi ayın 1'i olduğundan bu dönemin vadesi her zaman ileride
+    // kalır: vadesi geçmemiş davranışı (Partial, Unpaid) sınayan test takvime bağlı bozulmaz.
+    public static DateOnly NextMonthStart(IServiceProvider services)
+    {
+        var clock = services.GetRequiredService<IClock>();
+        var today = clock.ToSchoolLocal(clock.UtcNow);
+        return new DateOnly(today.Year, today.Month, 1).AddMonths(1);
+    }
 }

@@ -279,19 +279,21 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         var student = await CreateStudentAsync(admin, "Tahsilat");
         var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
 
+        var dueDate = TestPeriods.NextMonthStart(_factory.Services);
+        var period = BillingPeriod.Format(dueDate.Year, dueDate.Month);
         var receivable = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
-            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2026-11")));
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, period)));
         Assert.Equal(6000m, receivable.Amount);
-        Assert.Equal(new DateOnly(2026, 11, 1), receivable.DueDate);
+        Assert.Equal(dueDate, receivable.DueDate);
 
         // Aynı dönem için ikinci aidat reddedilir (UNIQUE enrollment_id + period).
         var duplicate = await admin.PostAsJsonAsync(
-            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, "2026-11"));
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, period));
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
 
         var partialRequest = new Payments.CreateRequest(
-            2000m, new DateOnly(2026, 11, 3), PaymentMethod.Cash, null, "peşinat");
-        const string partialKey = "test-partial-payment-2026-11";
+            2000m, dueDate.AddDays(2), PaymentMethod.Cash, null, "peşinat");
+        const string partialKey = "test-partial-payment";
         var partial = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
             admin, receivable.Id, partialRequest, partialKey));
         Assert.Equal(ReceivableStatus.Partial,
@@ -306,7 +308,7 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
 
         var rest = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
             admin, receivable.Id,
-            new Payments.CreateRequest(4000m, new DateOnly(2026, 11, 10), PaymentMethod.Transfer, "TR123", null)));
+            new Payments.CreateRequest(4000m, dueDate.AddDays(9), PaymentMethod.Transfer, "TR123", null)));
         db.ChangeTracker.Clear();
         Assert.Equal(ReceivableStatus.Paid,
             (await db.Receivables.AsNoTracking().SingleAsync(r => r.Id == receivable.Id)).Status);
