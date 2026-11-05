@@ -13,7 +13,8 @@ export type NotificationJobType =
   | "Birthday"
   | "PackageEnding"
   | "InstrumentMaintenance"
-  | "LessonScheduleChanged";
+  | "LessonScheduleChanged"
+  | "TeacherRsvpAlert";
 
 export type NotificationJobStatus = "Pending" | "Processing" | "Sent" | "Failed" | "Cancelled";
 

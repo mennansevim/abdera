@@ -105,7 +105,7 @@ public static class Webhooks
 
             if (message.ButtonPayload is { } buttonPayload)
             {
-                await HandleRsvpButtonAsync(buttonPayload, guardian.Id, db, clock, config, staffNotifier);
+                await HandleRsvpButtonAsync(buttonPayload, guardian.Id, db, clock, config, staffNotifier, scheduler);
             }
             else
             {
@@ -123,7 +123,8 @@ public static class Webhooks
     }
 
     private static async Task HandleRsvpButtonAsync(
-        string buttonPayload, Guid guardianId, AbderaDbContext db, IClock clock, IConfiguration config, IStaffNotifier staffNotifier)
+        string buttonPayload, Guid guardianId, AbderaDbContext db, IClock clock, IConfiguration config, IStaffNotifier staffNotifier,
+        INotificationScheduler scheduler)
     {
         var signingKey = config["WhatsApp:PayloadSigningKey"] ?? "";
         if (!RsvpButtonPayload.TryVerify(buttonPayload, signingKey, out var action, out var lessonId))
@@ -152,7 +153,7 @@ public static class Webhooks
         var previous = rsvp.Response;
         rsvp.Respond(response, RsvpSource.WhatsApp, clock.UtcNow);
         // "Gelemiyor" / "gecikecek" yanıtı dersin öğretmenine ekran içi bildirim düşer.
-        await RsvpStaffNotice.NotifyAsync(staffNotifier, db, clock, lessonId, previous, response);
+        await RsvpStaffNotice.NotifyAsync(staffNotifier, scheduler, db, clock, lessonId, previous, response);
     }
 
     // docs/00-master-prompt.md deterministik intent'ler: ders/aidat/telafi/okula yaz.

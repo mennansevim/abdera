@@ -2,6 +2,7 @@ using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Messaging.Features;
 using Abdera.Api.Modules.Ops.Domain;
 using Abdera.Api.Modules.Ops.Infrastructure;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -129,19 +130,37 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
             return;
         }
 
-        var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.PhoneNumber == job.RecipientPhoneNumber, cancellationToken);
-        if (guardian is null)
+        Guid? guardianId = null;
+        if (NotificationJobRecipients.IsTeacher(job.Type))
         {
-            job.MarkFailed("Alıcı telefon numarasına ait veli bulunamadı.", maxAttempts, now);
-            return;
+            // Öğretmene giden job (AK): numara job açıldıktan sonra silindiyse/değiştiyse ya da
+            // öğretmen pasife alındıysa yeniden denemek anlamsız - iptal et.
+            var isActiveTeacher = await db.Teachers.AnyAsync(
+                t => t.PhoneNumber == job.RecipientPhoneNumber && t.Status == TeacherStatus.Active, cancellationToken);
+            if (!isActiveTeacher)
+            {
+                job.Cancel(now);
+                return;
+            }
         }
-
-        if (!guardian.NotificationConsent)
+        else
         {
-            // Onay kapalıyken bekleyen job'lar zaten iptal edilir (Guardians.UpdateAsync, opt-out);
-            // buraya düşen bir job'ı yeniden denemek anlamsız - retry'ları tüketmeden iptal et.
-            job.Cancel(now);
-            return;
+            var guardian = await db.Guardians.SingleOrDefaultAsync(g => g.PhoneNumber == job.RecipientPhoneNumber, cancellationToken);
+            if (guardian is null)
+            {
+                job.MarkFailed("Alıcı telefon numarasına ait veli bulunamadı.", maxAttempts, now);
+                return;
+            }
+
+            if (!guardian.NotificationConsent)
+            {
+                // Onay kapalıyken bekleyen job'lar zaten iptal edilir (Guardians.UpdateAsync, opt-out);
+                // buraya düşen bir job'ı yeniden denemek anlamsız - retry'ları tüketmeden iptal et.
+                job.Cancel(now);
+                return;
+            }
+
+            guardianId = guardian.Id;
         }
 
         var template = await db.MessageTemplates.SingleOrDefaultAsync(t => t.Name == message.TemplateName && t.IsActive, cancellationToken);
@@ -164,8 +183,10 @@ public class NotificationDispatcher(IServiceScopeFactory scopeFactory, ILogger<N
         if (result.Success)
         {
             job.MarkSent(now);
-            db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(
-                job.Id, guardian.Id, template.Id, template.Render(message.Parameters), result.ProviderMessageId, now));
+            // whatsapp_messages velinin konuşma geçmişidir; öğretmene giden mesaj job satırında kalır.
+            if (guardianId is { } recipientGuardianId)
+                db.WhatsAppMessages.Add(WhatsAppMessage.CreateOutbound(
+                    job.Id, recipientGuardianId, template.Id, template.Render(message.Parameters), result.ProviderMessageId, now));
         }
         else
         {

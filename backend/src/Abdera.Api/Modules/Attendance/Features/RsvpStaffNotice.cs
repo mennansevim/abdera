@@ -13,11 +13,13 @@ namespace Abdera.Api.Modules.Attendance.Features;
 // Ders başına TEK satır (UNIQUE user+type+reference): yanıt değiştikçe aynı satır tazelenir ve
 // okunmamışa döner. "Geliyor" yalnızca önceki yanıt olumsuzken bildirilir - öğretmen "gelemiyor"
 // bilgisini almışsa düzeltmeyi de almalı; ilk yanıtı zaten "geliyor" olan ders gürültü yaratmaz.
+// Öğretmenin künyesinde telefon numarası varsa aynı yanıt ona WhatsApp ile de gider
+// (docs/10-decisions.md AK) - yalnızca henüz başlamamış dersler için; geçmiş dersin yanıtı haber değil.
 // Kaydı ekler ama SaveChanges ÇAĞIRMAZ (IStaffNotifier sözleşmesi) - çağıran handler kaydeder.
 internal static class RsvpStaffNotice
 {
     public static async Task NotifyAsync(
-        IStaffNotifier notifier, AbderaDbContext db, IClock clock, Guid lessonId,
+        IStaffNotifier notifier, INotificationScheduler scheduler, AbderaDbContext db, IClock clock, Guid lessonId,
         RsvpResponse previous, RsvpResponse current)
     {
         if (previous == current) return;
@@ -48,6 +50,10 @@ internal static class RsvpStaffNotice
         await notifier.RemindTeacherAsync(
             lesson.TeacherId, StaffNotificationType.GuardianRsvp, title, $"{studentName} · {when}",
             "lesson", lessonId, resurfaceIfSurfacedBefore: DateTimeOffset.MaxValue);
+
+        var now = clock.UtcNow;
+        if (lesson.StartAt > now)
+            await scheduler.ScheduleForTeacherAsync(NotificationJobType.TeacherRsvpAlert, "lesson", lessonId, lesson.TeacherId, now);
     }
 
     // Takvimdeki ünlem işaretiyle aynı koşul (frontend: rsvpNeedsAttention).

@@ -328,6 +328,7 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
   const [firstName, setFirstName] = useState(teacher.firstName);
   const [lastName, setLastName] = useState(teacher.lastName);
   const [status, setStatus] = useState<TeacherStatus>(teacher.status);
+  const [phoneNumber, setPhoneNumber] = useState(teacher.phoneNumber ?? "");
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>(teacher.instrumentIds);
   const [error, setError] = useState<string | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
@@ -340,7 +341,7 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
     event.preventDefault();
     setError(null);
     try {
-      await updateTeacher.mutateAsync({ firstName, lastName, status, instrumentIds: selectedInstruments });
+      await updateTeacher.mutateAsync({ firstName, lastName, status, instrumentIds: selectedInstruments, phoneNumber: phoneNumber.trim() });
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? (err.detail ?? err.title) : "Öğretmen güncellenemedi.");
@@ -364,6 +365,7 @@ function EditTeacherForm({ teacher, instruments, onClose }: { teacher: Teacher; 
         <label className="form-label">Ad<input value={firstName} onChange={(e) => setFirstName(e.target.value)} required className="field text-sm" /></label>
         <label className="form-label">Soyad<input value={lastName} onChange={(e) => setLastName(e.target.value)} required className="field text-sm" /></label>
       </div>
+      <TeacherPhoneField value={phoneNumber} onChange={setPhoneNumber} />
 
       <div className="inline-flex rounded-xl border border-[var(--line)] p-1" role="group" aria-label="Durum">
         {([["Active", "Aktif"], ["Inactive", "Pasif"]] as const).map(([value, label]) => (
@@ -511,11 +513,23 @@ function AddStudentToTeacherForm({
   );
 }
 
+// Veli "gelemiyor"/"gecikecek" dediğinde öğretmene WhatsApp bu numaraya gider (sunucu:
+// RsvpStaffNotice). Boş bırakılırsa öğretmen yalnızca ekran içi bildirimi alır.
+function TeacherPhoneField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="form-label">WhatsApp numarası <span className="font-medium">· opsiyonel</span>
+      <input type="tel" inputMode="tel" autoComplete="tel" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0555 123 45 67" className="field text-sm" />
+      <span className="mt-1 block text-[.75rem] font-medium text-[var(--muted)]">Veli “gelemiyor” ya da “gecikecek” derse öğretmene bu numaradan WhatsApp mesajı gider.</span>
+    </label>
+  );
+}
+
 function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: { id: string; name: string }[]; onClose: () => void; onCreated: (temporaryPassword: string | null, name: string) => void }) {
   const createTeacher = useCreateTeacher();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedInstruments, setSelectedInstruments] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -532,6 +546,7 @@ function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: {
         lastName,
         instrumentIds: selectedInstruments,
         email: email || undefined,
+        phoneNumber: phoneNumber.trim() || undefined,
       });
       onCreated(result.temporaryPassword ?? null, `${firstName} ${lastName}`);
     } catch (err) {
@@ -548,6 +563,7 @@ function CreateTeacherForm({ instruments, onClose, onCreated }: { instruments: {
       <label className="form-label">E-posta <span className="font-medium">· giriş hesabı için, opsiyonel</span>
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="field text-sm" />
       </label>
+      <TeacherPhoneField value={phoneNumber} onChange={setPhoneNumber} />
 
       <div>
         <p className="form-label">Enstrümanlar</p>

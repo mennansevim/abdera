@@ -373,6 +373,13 @@ students + audio_recording_consent boolean default false, audio_consent_updated_
 Kayıt finansal/audit verisi değildir: rıza geri alınınca, öğretmen silince ve budamada satır
 silinir (`PersonEraser` öğrenci silmede satırı, çağıran commit'ten sonra dosyayı kaldırır).
 
+## teachers.phone_number + teacher_rsvp_alert şablonu (AK)
+
+**AddTeacherPhoneAndRsvpAlertTemplate** (paylaşılan `Persistence/Migrations` - People + Messaging):
+`teachers + phone_number varchar(20) NULL` ve `message_templates`'e `teacher_rsvp_alert` satırı
+(`ON CONFLICT (name) DO NOTHING`). `Down()` şablon satırını siler, kolonu düşürür. Kişi silmede kolon
+satırla birlikte gider; öğretmene giden job'lar ders referansıyla zaten temizlenir (`PersonEraser`).
+
 ## data_exports (Tüm verinin Excel dökümü, AJ)
 
 **AddDataExports** (Ops): arka planda üretilen `.xlsx` dökümünün durumu ve dosyası

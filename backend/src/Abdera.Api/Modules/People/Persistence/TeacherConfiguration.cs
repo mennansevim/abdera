@@ -14,6 +14,7 @@ public class TeacherConfiguration : IEntityTypeConfiguration<Teacher>
         builder.Property(t => t.UserId).HasColumnName("user_id");
         builder.Property(t => t.FirstName).HasColumnName("first_name").HasMaxLength(100).IsRequired();
         builder.Property(t => t.LastName).HasColumnName("last_name").HasMaxLength(100).IsRequired();
+        builder.Property(t => t.PhoneNumber).HasColumnName("phone_number").HasMaxLength(20);
         builder.Property(t => t.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(t => t.CreatedAt).HasColumnName("created_at");
         builder.Property(t => t.UpdatedAt).HasColumnName("updated_at");

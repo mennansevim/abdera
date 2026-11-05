@@ -1304,7 +1304,7 @@ function LessonGroupDialog({ lessons, title, subtitle, colors, isAdmin, now, onO
                 <span className="relative min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
                     <span className={`truncate text-sm font-bold ${lesson.status === "Cancelled" ? "line-through" : ""}`}>{lesson.studentName}</span>
-                    <RsvpAlertBadge lesson={lesson} />
+                    <RsvpAlertBadge lesson={lesson} labeled />
                     {active && <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--brand)]" aria-hidden="true" />}
                   </span>
                   <span className="mt-0.5 block truncate text-[.75rem] tabular-nums opacity-80">
@@ -1334,6 +1334,7 @@ function AgendaLessonCard({ lesson, tone, showTeacher, active = false, onOpen }:
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
           <span className="block truncate text-xs font-bold">{lesson.studentName}</span>
+          <RsvpAlertBadge lesson={lesson} labeled />
           {active && <span className="shrink-0 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[.75rem] font-extrabold uppercase text-white">Şimdi</span>}
         </span>
         <span className="block truncate text-[.75rem] text-[var(--muted)]">
@@ -1495,16 +1496,26 @@ function UpcomingLessonItem({ lesson, tone, now, first }: { lesson: DisplayLesso
 // Veli "gelemiyor" ya da "gecikecek" dediyse ders kartında ünlem görünür (kullanıcı isteği);
 // aynı durum öğretmene bildirim olarak da düşer (sunucu: RsvpStaffNotice). Yalnızca henüz
 // yapılmamış derslerde: tamamlanmış dersin RSVP'si artık uyarı değil.
-function rsvpAlert(lesson: CalendarLesson): { label: string; className: string } | null {
+function rsvpAlert(lesson: CalendarLesson): { label: string; shortLabel: string; className: string } | null {
   if (lesson.status !== "Normal" && lesson.status !== "Makeup") return null;
-  if (lesson.rsvpResponse === "NotAttending") return { label: "Veli: gelemiyor", className: "bg-[var(--danger)]" };
-  if (lesson.rsvpResponse === "AttendingLate") return { label: "Veli: gecikecek", className: "bg-[var(--warning-strong)]" };
+  if (lesson.rsvpResponse === "NotAttending") return { label: "Veli: gelemiyor", shortLabel: "Gelemiyor", className: "bg-[var(--danger)]" };
+  if (lesson.rsvpResponse === "AttendingLate") return { label: "Veli: gecikecek", shortLabel: "Gecikecek", className: "bg-[var(--warning-strong)]" };
   return null;
 }
 
-function RsvpAlertBadge({ lesson }: { lesson: CalendarLesson }) {
+// Izgaradaki dar kartta yalnızca ünlem sığar; açılan listede, ajandada ve ders ayrıntısında
+// (labeled) yanıt yazıyla görünür - kullanıcı isteği: "açıldığında öğrencinin üzerinde yazı".
+function RsvpAlertBadge({ lesson, labeled = false }: { lesson: CalendarLesson; labeled?: boolean }) {
   const alert = rsvpAlert(lesson);
   if (!alert) return null;
+  if (labeled) {
+    return (
+      <span title={alert.label} className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[.75rem] font-extrabold leading-tight text-white ${alert.className}`}>
+        <span aria-hidden="true">!</span>
+        <span className="sr-only">Veli: </span>{alert.shortLabel}
+      </span>
+    );
+  }
   return (
     <span role="img" aria-label={alert.label} title={alert.label} className={`grid h-4 w-4 shrink-0 place-items-center rounded-full text-[.7rem] font-black leading-none text-white ${alert.className}`}>!</span>
   );
@@ -1672,7 +1683,7 @@ function LessonDetailsDialog({ lesson, isAdmin, canManage, now, onUpdated, onPla
         <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
           <div>
             <p className="text-micro text-[var(--brand-strong)]">Ders ayrıntısı</p>
-            <h2 className="mt-1 font-serif text-xl font-bold">{lesson.studentName}</h2>
+            <h2 className="mt-1 flex flex-wrap items-center gap-2 font-serif text-xl font-bold">{lesson.studentName}<RsvpAlertBadge lesson={lesson} labeled /></h2>
             <p className="text-meta mt-1">{lesson.instrumentName} · {lesson.status === "Makeup" ? "Telafi dersi" : "Düzenli ders"}</p>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} className="icon-btn icon-btn-quiet shrink-0" aria-label="Kapat"><Icon name="close" className="h-4 w-4" /></button>

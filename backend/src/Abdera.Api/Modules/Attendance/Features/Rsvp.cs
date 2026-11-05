@@ -38,7 +38,7 @@ public static class Rsvp
     }
 
     private static async Task<IResult> SetAsync(
-        Guid lessonId, SetRequest request, AbderaDbContext db, IClock clock, IStaffNotifier staffNotifier)
+        Guid lessonId, SetRequest request, AbderaDbContext db, IClock clock, IStaffNotifier staffNotifier, INotificationScheduler scheduler)
     {
         var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == lessonId)
             ?? throw new NotFoundException("Ders bulunamadı.");
@@ -60,7 +60,7 @@ public static class Rsvp
 
         var previous = rsvp.Response;
         rsvp.Respond(request.Response, RsvpSource.Admin, clock.UtcNow);
-        await RsvpStaffNotice.NotifyAsync(staffNotifier, db, clock, lessonId, previous, request.Response);
+        await RsvpStaffNotice.NotifyAsync(staffNotifier, scheduler, db, clock, lessonId, previous, request.Response);
         await db.SaveChangesAsync();
 
         var guardian = await db.Guardians.SingleAsync(g => g.Id == request.GuardianId);

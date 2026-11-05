@@ -104,6 +104,29 @@ Ayrı bir şablon onaylatılmadı: Meta'da onaylı `lesson_rescheduled` kullanı
 görür. Meta değişkenleri satır sonu içeremediği için bu metin tek satırdır. Tek bir dersin
 taşınmasında aynı değişken yalnızca tarih/saati taşır ("02 Ekim 18:15").
 
+### Veli yanıtı öğretmene — `teacher_rsvp_alert` (AK)
+
+Veli "gelemiyor" ya da "gecikecek" dediğinde (veya olumsuz yanıtını "geliyor"a çevirdiğinde) dersin
+öğretmenine, künyesinde numarası varsa gider. Alıcı veli değil öğretmendir; onay kapısında yalnızca
+bu şablon için istisna vardır (`docs/10-decisions.md` AK5). Kategori: Utility.
+
+```
+Ad: teacher_rsvp_alert
+Dil: tr
+
+🔔 Veli Yanıtı
+
+Merhaba {{teacher_name}},
+
+{{student_name}} öğrencinizin {{lesson_time}} dersi için veli yanıtı: {{rsvp_answer}}.
+
+Ayrıntılar okul takviminde.
+```
+
+Meta'ya yazarken sıra: `{{1}}` öğretmen adı, `{{2}}` öğrenci, `{{3}}` ders günü/saati
+("5 Kasım Perşembe 18:00"), `{{4}}` yanıt ("gelemiyor", "biraz gecikecek", "geliyor (önceki
+yanıtını değiştirdi)"). Butonsuz.
+
 ## Buton payload güvenliği
 
 Payload'da tahmin edilebilir dahili id kullanılmaz (`lesson_id=42` gibi). Bunun yerine imzalı/opak referans:

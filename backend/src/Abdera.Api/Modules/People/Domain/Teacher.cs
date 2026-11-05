@@ -1,3 +1,5 @@
+using Abdera.Api.Shared;
+
 namespace Abdera.Api.Modules.People.Domain;
 
 public enum TeacherStatus
@@ -20,6 +22,9 @@ public class Teacher
     public string FirstName { get; private set; } = null!;
     public string LastName { get; private set; } = null!;
     public TeacherStatus Status { get; private set; } = TeacherStatus.Active;
+    // Veli "gelemiyor"/"gecikecek" yanıtı verdiğinde öğretmene WhatsApp ile haber verilen numara
+    // (docs/10-decisions.md AK). Boşsa öğretmen yalnızca ekran içi bildirimi alır.
+    public string? PhoneNumber { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -47,6 +52,13 @@ public class Teacher
 
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
+        UpdatedAt = now;
+    }
+
+    // Boş/null numara alanı temizler; dolu numara velidekiyle aynı biçime (E.164) normalize edilir.
+    public void SetPhoneNumber(string? rawPhoneNumber, DateTimeOffset now)
+    {
+        PhoneNumber = string.IsNullOrWhiteSpace(rawPhoneNumber) ? null : PhoneNumberNormalizer.Normalize(rawPhoneNumber);
         UpdatedAt = now;
     }
 

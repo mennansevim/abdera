@@ -105,6 +105,8 @@ export interface Teacher {
   status: TeacherStatus;
   instrumentIds: string[];
   hasLoginAccount: boolean;
+  // Yalnızca yöneticiye döner. Veli "gelemiyor"/"gecikecek" dediğinde öğretmene WhatsApp bu numaraya gider.
+  phoneNumber?: string | null;
 }
 
 export interface TeacherStudentEnrollment {
@@ -433,7 +435,7 @@ export interface CreateTeacherResponse {
 export function useCreateTeacher() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { firstName: string; lastName: string; instrumentIds: string[]; email?: string }) =>
+    mutationFn: (body: { firstName: string; lastName: string; instrumentIds: string[]; email?: string; phoneNumber?: string }) =>
       api.post<CreateTeacherResponse>("/api/teachers", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teachers"] });
@@ -449,7 +451,8 @@ export function useCreateTeacher() {
 export function useUpdateTeacher(teacherId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: { firstName: string; lastName: string; status: TeacherStatus; instrumentIds: string[] }) =>
+    // phoneNumber gönderilmezse numaraya dokunulmaz; boş metin numarayı siler.
+    mutationFn: (body: { firstName: string; lastName: string; status: TeacherStatus; instrumentIds: string[]; phoneNumber?: string }) =>
       api.patch<Teacher>(`/api/teachers/${teacherId}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["teachers"] });

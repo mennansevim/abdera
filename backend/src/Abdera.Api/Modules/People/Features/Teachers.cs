@@ -16,9 +16,12 @@ public static class Teachers
 {
     // email verilirse öğretmen için bir giriş hesabı da açılır (docs/10-decisions.md B4 -
     // yönetici geçici şifre üretir, öğretmen ilk girişte kalıcısını belirler).
-    public record CreateRequest(string FirstName, string LastName, Guid[] InstrumentIds, string? Email);
-    public record UpdateRequest(string FirstName, string LastName, TeacherStatus Status, Guid[] InstrumentIds);
-    public record TeacherResponse(Guid Id, string FirstName, string LastName, TeacherStatus Status, Guid[] InstrumentIds, bool HasLoginAccount);
+    public record CreateRequest(string FirstName, string LastName, Guid[] InstrumentIds, string? Email, string? PhoneNumber = null);
+    // PhoneNumber: gönderilmezse (null) numaraya dokunulmaz - durum değiştiren kısa PATCH'ler
+    // numarayı silmesin; boş metin numarayı temizler.
+    public record UpdateRequest(string FirstName, string LastName, TeacherStatus Status, Guid[] InstrumentIds, string? PhoneNumber = null);
+    // PhoneNumber yalnızca Admin'e döner: liste öğretmenlere de açık ve orada kişisel veri yok.
+    public record TeacherResponse(Guid Id, string FirstName, string LastName, TeacherStatus Status, Guid[] InstrumentIds, bool HasLoginAccount, string? PhoneNumber = null);
     public record CreateResponse(TeacherResponse Teacher, string? TemporaryPassword);
     public record TeacherStudentResponse(
         Guid StudentId, string FirstName, string LastName, Guid EnrollmentId,
@@ -42,15 +45,15 @@ public static class Teachers
         group.MapPost("/{teacherId:guid}/reset-password", ResetPasswordAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
     }
 
-    private static async Task<IResult> ListAsync(AbderaDbContext db)
+    private static async Task<IResult> ListAsync(AbderaDbContext db, ClaimsPrincipal principal)
     {
-        var teachers = await LoadTeacherResponsesAsync(db, t => true);
+        var teachers = await LoadTeacherResponsesAsync(db, t => true, includePhoneNumber: AuthContext.IsAdmin(principal));
         return Results.Ok(teachers);
     }
 
     private static async Task<IResult> OverviewAsync(AbderaDbContext db)
     {
-        var teachers = await LoadTeacherResponsesAsync(db, teacher => true);
+        var teachers = await LoadTeacherResponsesAsync(db, teacher => true, includePhoneNumber: true);
         var teacherIds = teachers.Select(teacher => teacher.Id).ToList();
         var students = await db.Enrollments
             .Where(enrollment => teacherIds.Contains(enrollment.TeacherId) && enrollment.Status == EnrollmentStatus.Active)
@@ -100,6 +103,7 @@ public static class Teachers
         }
 
         var teacher = Teacher.Create(request.FirstName, request.LastName, clock.UtcNow, userId);
+        SetPhoneNumber(teacher, request.PhoneNumber, clock.UtcNow);
         db.Teachers.Add(teacher);
         foreach (var instrument in instruments)
         {
@@ -110,7 +114,7 @@ public static class Teachers
 
         var response = new TeacherResponse(
             teacher.Id, teacher.FirstName, teacher.LastName, teacher.Status,
-            instruments.Select(i => i.Id).ToArray(), userId is not null);
+            instruments.Select(i => i.Id).ToArray(), userId is not null, teacher.PhoneNumber);
 
         return Results.Created($"/api/teachers/{teacher.Id}", new CreateResponse(response, temporaryPassword));
     }
@@ -184,6 +188,7 @@ public static class Teachers
 
         teacher.Update(request.FirstName, request.LastName, clock.UtcNow);
         teacher.SetStatus(request.Status, clock.UtcNow);
+        if (request.PhoneNumber is not null) SetPhoneNumber(teacher, request.PhoneNumber, clock.UtcNow);
 
         // Canlı QA turunda bulunan gerçek bug: bir öğretmen Inactive yapıldığında yalnızca
         // bu domain durumu değişiyordu, giriş hesabı (User.IsActive) hiç etkilenmiyordu -
@@ -212,7 +217,7 @@ public static class Teachers
 
         var response = new TeacherResponse(
             teacher.Id, teacher.FirstName, teacher.LastName, teacher.Status,
-            instruments.Select(i => i.Id).ToArray(), teacher.UserId is not null);
+            instruments.Select(i => i.Id).ToArray(), teacher.UserId is not null, teacher.PhoneNumber);
 
         return Results.Ok(response);
     }
@@ -235,7 +240,7 @@ public static class Teachers
     }
 
     private static async Task<List<TeacherResponse>> LoadTeacherResponsesAsync(
-        AbderaDbContext db, System.Linq.Expressions.Expression<Func<Teacher, bool>> predicate)
+        AbderaDbContext db, System.Linq.Expressions.Expression<Func<Teacher, bool>> predicate, bool includePhoneNumber)
     {
         var teachers = await db.Teachers.Where(predicate)
             .OrderBy(t => t.LastName).ThenBy(t => t.FirstName)
@@ -249,6 +254,19 @@ public static class Teachers
         return teachers.Select(t => new TeacherResponse(
             t.Id, t.FirstName, t.LastName, t.Status,
             instrumentsByTeacher.Where(ti => ti.TeacherId == t.Id).Select(ti => ti.InstrumentId).ToArray(),
-            t.UserId is not null)).ToList();
+            t.UserId is not null,
+            includePhoneNumber ? t.PhoneNumber : null)).ToList();
+    }
+
+    private static void SetPhoneNumber(Teacher teacher, string? rawPhoneNumber, DateTimeOffset now)
+    {
+        try
+        {
+            teacher.SetPhoneNumber(rawPhoneNumber, now);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ValidationFailedException(new Dictionary<string, string[]> { ["phoneNumber"] = [ex.Message] });
+        }
     }
 }

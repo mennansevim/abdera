@@ -524,6 +524,19 @@ Kullanıcı isteği: "tüm datayı export ekle excele. öğretmenler öğrencile
 | AJ4 | Geri yükleme | İçe aktarma kendi adındaki sayfayı okur (yoksa ilk sayfa), dosya olduğu gibi iki ekrana da verilebilir. Öğrenci şablonuna isteğe bağlı **Öğrenci Durumu**, **Kardeş İndirimi**, **Kurs Durumu**, **Kurs Bitiş Tarihi** eklendi - boşsa eski davranış. Bitmiş/durdurulmuş kurs öyle açılır; `EnrollmentReceivableOpener` yalnızca aktif kayda aidat açtığı için geçmiş kurs bugüne borç doğurmaz. Ödemeler sayfası yalnızca tam ödenmiş **aylık** aidatları taşır (AF5'in kapsamı); dönem aidatı ve kısmi ödeme başvuru sayfalarında. Öğretmen içe aktarması yok - hedef sistemde öğretmenler aynı adla açılmış olmalı. Elle indirim içe aktarılmaz (bilgi sütunu). Döküm dosyası büyük olabileceği için sınır 2 MB/1000 satırdan **10 MB/5000 satıra** çıktı (AF2). |
 | AJ5 | KVKK | Yalnızca Admin. İstek (`data_export.requested`) ve indirme (`data_export.downloaded`) `audit_log`'a yazılır. Döküm kişisel verinin kopyası olduğundan kalıcı kişi silmede (`PersonEraser`, I1) **bütün** dökümler silinir; yenisi alınabilir. |
 
+## AK - Veli yanıtı takvimde yazıyla görünür, öğretmene WhatsApp ile gider (2026-11-05)
+
+Kullanıcı isteği: "wp üzerinde geliyor gecikeceğim gelemiyorum cevapları takvimde açıldığında öğrencinin üzerinde görünür bir yazı olarak çıksın. eğer gelemiyor ve gecikeceğim cevabı verdiyse wp üzerinden öğretmenlere bildirim olarak gitsin".
+
+| # | Konu | Karar |
+|---|---|---|
+| AK1 | Takvim | Izgaradaki dar kart ünlemi korur. Çakışan dersler listesi, ajanda ve ders ayrıntısı öğrenci adının yanında **Gelemiyor** / **Gecikecek** etiketini yazıyla gösterir (`RsvpAlertBadge labeled`). Yalnızca Normal/Telafi derste - tamamlanmış dersin yanıtı uyarı değil. |
+| AK2 | Numara | `teachers.phone_number` (opsiyonel, velidekiyle aynı E.164 normalizasyonu). Öğretmen künyesinde yönetici girer; liste uç noktası numarayı yalnızca Admin'e döndürür. `PATCH`'te alan gönderilmezse dokunulmaz, boş metin siler. Numarası yoksa öğretmen yalnızca ekran içi bildirimi alır. |
+| AK3 | Ne zaman | `RsvpStaffNotice` - ekran içi bildirimle aynı koşul (gelemiyor, gecikecek, olumsuzdan "geliyor"a dönüş) ve yalnızca henüz başlamamış ders. Üç yanıt yolu (WhatsApp butonu, veli portalı, yöneticinin girişi) aynı noktadan geçer. |
+| AK4 | Job | `NotificationJobType.TeacherRsvpAlert`, `reference_type = "lesson"`: ders başına tek satır (A5). Gönderildikten sonra yanıt yeniden değişirse aynı satır yeniden kuyruğa alınır (`ScheduleForTeacherAsync`); bekliyorsa dokunulmaz, mesaj gönderim anındaki yanıtı yazar. Ders iptal/taşınınca A4 ile iptal olur. Olay tetiklemeli, sessiz saate tabi değil. |
+| AK5 | Rıza kapısı | `ConsentGatedWhatsAppClient`'ın ikinci istisnası: yalnızca `teacher_rsvp_alert` şablonu ve yalnızca aktif bir öğretmene kayıtlı numara. Dispatcher bu tipte veli/rıza aramaz; öğretmen pasif ya da numara değişmişse job iptal olur. Mesaj `whatsapp_messages`'a (velinin konuşma geçmişi) yazılmaz, kaydı job satırıdır. |
+| AK6 | Şablon | Öğretmenin 24 saatlik penceresi hiç açık olmadığı için serbest metin değil şablon: `teacher_rsvp_alert` (Utility). Meta onayı gelene kadar canlıda gönderim `FAILED` görünür (D2). Gövde `docs/06-whatsapp.md`'de. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

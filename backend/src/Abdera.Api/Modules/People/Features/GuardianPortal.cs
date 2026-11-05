@@ -114,7 +114,7 @@ public static class GuardianPortal
 
     private static async Task<IResult> SetRsvpAsync(
         Guid lessonId, SetRsvpRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
-        IStaffNotifier staffNotifier)
+        IStaffNotifier staffNotifier, INotificationScheduler scheduler)
     {
         if (request.Response == RsvpResponse.Unknown)
         {
@@ -149,7 +149,7 @@ public static class GuardianPortal
         // uygulanıyor, backend invariant'ını bozmuyor.
         var previous = rsvp.Response;
         rsvp.Respond(request.Response, RsvpSource.GuardianWeb, clock.UtcNow);
-        await RsvpStaffNotice.NotifyAsync(staffNotifier, db, clock, lessonId, previous, request.Response);
+        await RsvpStaffNotice.NotifyAsync(staffNotifier, scheduler, db, clock, lessonId, previous, request.Response);
         await db.SaveChangesAsync();
 
         return Results.Ok(new SetRsvpResponse(lessonId, rsvp.Response, rsvp.RespondedAt!.Value));

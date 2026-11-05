@@ -41,6 +41,7 @@ const TYPE_LABELS: Record<NotificationJobType, string> = {
   PackageEnding: "Paket bitiyor",
   InstrumentMaintenance: "Enstrüman bakımı",
   LessonScheduleChanged: "Ders programı değişti",
+  TeacherRsvpAlert: "Öğretmene veli yanıtı",
 };
 
 const JOB_COLUMN_COUNT = 8;

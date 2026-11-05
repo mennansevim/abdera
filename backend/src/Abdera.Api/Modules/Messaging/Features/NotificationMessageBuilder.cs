@@ -1,3 +1,4 @@
+using Abdera.Api.Modules.Attendance.Domain;
 using Abdera.Api.Modules.Billing.Domain;
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
@@ -28,6 +29,7 @@ public static class NotificationMessageBuilder
             NotificationJobType.PaymentReminder => await BuildPaymentMessageAsync(job, db, clock),
             NotificationJobType.InstrumentMaintenance => await BuildMaintenanceMessageAsync(job, db),
             NotificationJobType.LessonScheduleChanged => await BuildScheduleChangeMessageAsync(job, db, clock),
+            NotificationJobType.TeacherRsvpAlert => await BuildTeacherRsvpAlertAsync(job, db, clock),
             // ARC-2: Birthday/PackageEnding tanımlı ama hiçbir use-case tarafından
             // üretilmiyor (Faz 7'ye kaldı) - sessizce null dönüp yanıltıcı bir "kayıt
             // bulunamadı" hatasına düşmek yerine dispatcher'ın yakalayıp okunur bir
@@ -36,6 +38,43 @@ public static class NotificationMessageBuilder
                 throw new NotImplementedNotificationTypeException(job.Type),
             _ => null,
         };
+    }
+
+    // Öğretmene giden veli yanıtı (AK). Yanıt job açıldığı andaki değil GÖNDERİM anındaki
+    // durumdur: veli bir dakika içinde fikir değiştirdiyse öğretmen son hali okur. Birden fazla
+    // velinin yanıtı varsa en son verilen sayılır. Yanıt artık yoksa (Unknown) mesaj kurulmaz.
+    private static async Task<BuiltMessage?> BuildTeacherRsvpAlertAsync(NotificationJob job, AbderaDbContext db, IClock clock)
+    {
+        var lesson = await db.Lessons.SingleOrDefaultAsync(l => l.Id == job.ReferenceId);
+        if (lesson is null) return null;
+
+        var response = await db.LessonRsvps
+            .Where(r => r.LessonId == lesson.Id && r.RespondedAt != null)
+            .OrderByDescending(r => r.RespondedAt)
+            .Select(r => (RsvpResponse?)r.Response)
+            .FirstOrDefaultAsync();
+        var answer = response switch
+        {
+            RsvpResponse.NotAttending => "gelemiyor",
+            RsvpResponse.AttendingLate => "biraz gecikecek",
+            RsvpResponse.Attending => "geliyor (önceki yanıtını değiştirdi)",
+            _ => null,
+        };
+        if (answer is null) return null;
+
+        var student = await db.Students.SingleAsync(s => s.Id == lesson.StudentId);
+        var teacher = await db.Teachers.SingleAsync(t => t.Id == lesson.TeacherId);
+        // Öğretmene görünen metin: tr-TR bilinçli (bkz. BuildPaymentMessageAsync notu).
+        var lessonTime = clock.ToSchoolLocal(lesson.StartAt)
+            .ToString("d MMMM dddd HH:mm", new System.Globalization.CultureInfo("tr-TR"));
+
+        return new BuiltMessage(WhatsAppTemplateNames.TeacherRsvpAlert, new Dictionary<string, string>
+        {
+            ["teacher_name"] = teacher.FirstName,
+            ["student_name"] = $"{student.FirstName} {student.LastName}",
+            ["lesson_time"] = lessonTime,
+            ["rsvp_answer"] = answer,
+        });
     }
 
     private static async Task<BuiltMessage?> BuildMaintenanceMessageAsync(NotificationJob job, AbderaDbContext db)

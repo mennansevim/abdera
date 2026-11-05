@@ -2418,6 +2418,11 @@ namespace Abdera.Api.Modules.Auth.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("last_name");
 
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone_number");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)

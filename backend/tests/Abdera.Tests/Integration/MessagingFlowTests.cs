@@ -609,6 +609,79 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
         Assert.Null(corrected.ReadAt);
     }
 
+    // docs/10-decisions.md AK: "gelemiyor"/"gecikecek" yanıtı öğretmenin künyesindeki numaraya
+    // WhatsApp ile de gider. Ders başına tek job; gönderildikten sonra yanıt yeniden değişirse
+    // aynı satır yeniden kuyruğa alınır. Mesaj velinin konuşma geçmişine (whatsapp_messages) yazılmaz.
+    [Fact]
+    public async Task Negative_rsvp_sends_a_whatsapp_alert_to_the_teacher_phone()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "rsvpwa", "rsvp.wa@test.local");
+        var teachers = await admin.GetFromJsonAsync<List<Teachers.TeacherResponse>>("/api/teachers", TestJson.Options);
+        var teacher = teachers!.Single(t => t.Id == seeded.TeacherId);
+        var patch = await admin.PatchAsJsonAsync($"/api/teachers/{seeded.TeacherId}",
+            new Teachers.UpdateRequest(teacher.FirstName, teacher.LastName, teacher.Status, teacher.InstrumentIds, "0532 765 43 21"));
+        Assert.True(patch.IsSuccessStatusCode, await patch.Content.ReadAsStringAsync());
+        // Durum değiştiren kısa PATCH (numarasız) numarayı silmez.
+        (await admin.PatchAsJsonAsync($"/api/teachers/{seeded.TeacherId}",
+            new Teachers.UpdateRequest(teacher.FirstName, teacher.LastName, teacher.Status, teacher.InstrumentIds))).EnsureSuccessStatusCode();
+
+        using var client = _factory.CreateClient();
+        async Task TapAsync(string action) => (await client.PostAsJsonAsync("/api/dev/whatsapp/simulate-rsvp", new
+        {
+            fromPhoneNumber = seeded.GuardianPhone,
+            action,
+            lessonId = seeded.LessonId,
+        })).EnsureSuccessStatusCode();
+
+        await using var db = await _factory.CreateDbContextAsync();
+        async Task<NotificationJob> WaitForSentAsync()
+        {
+            for (var i = 0; i < 30; i++)
+            {
+                var current = await db.NotificationJobs.AsNoTracking()
+                    .SingleAsync(j => j.Type == NotificationJobType.TeacherRsvpAlert && j.ReferenceId == seeded.LessonId);
+                if (current.Status is NotificationJobStatus.Sent or NotificationJobStatus.Failed or NotificationJobStatus.Cancelled) return current;
+                await Task.Delay(500);
+            }
+            throw new TimeoutException("Öğretmen bildirimi gönderilmedi.");
+        }
+
+        await TapAsync(RsvpButtonPayload.AttendingAction);
+        Assert.False(await db.NotificationJobs.AnyAsync(j => j.Type == NotificationJobType.TeacherRsvpAlert && j.ReferenceId == seeded.LessonId));
+
+        await TapAsync(RsvpButtonPayload.NotAttendingAction);
+        var sent = await WaitForSentAsync();
+        Assert.True(sent.Status == NotificationJobStatus.Sent, sent.LastError);
+        Assert.Equal("+905327654321", sent.RecipientPhoneNumber);
+        Assert.Equal("lesson", sent.ReferenceType);
+        Assert.False(await db.WhatsAppMessages.AnyAsync(m => m.NotificationJobId == sent.Id));
+
+        await TapAsync(RsvpButtonPayload.AttendingLateAction);
+        var resent = await WaitForSentAsync();
+        Assert.Equal(sent.Id, resent.Id);
+        Assert.True(resent.Status == NotificationJobStatus.Sent, resent.LastError);
+        Assert.True(resent.SentAt > sent.SentAt);
+    }
+
+    [Fact]
+    public async Task Negative_rsvp_opens_no_whatsapp_job_when_the_teacher_has_no_phone()
+    {
+        var admin = await CreateAdminClientAsync();
+        var seeded = await SeedLessonAsync(admin, "rsvpnophone", "rsvp.nophone@test.local");
+        using var client = _factory.CreateClient();
+        (await client.PostAsJsonAsync("/api/dev/whatsapp/simulate-rsvp", new
+        {
+            fromPhoneNumber = seeded.GuardianPhone,
+            action = RsvpButtonPayload.NotAttendingAction,
+            lessonId = seeded.LessonId,
+        })).EnsureSuccessStatusCode();
+
+        await using var db = await _factory.CreateDbContextAsync();
+        Assert.True(await db.StaffNotifications.AnyAsync(n => n.Type == StaffNotificationType.GuardianRsvp && n.ReferenceId == seeded.LessonId));
+        Assert.False(await db.NotificationJobs.AnyAsync(j => j.Type == NotificationJobType.TeacherRsvpAlert && j.ReferenceId == seeded.LessonId));
+    }
+
     // Kullanıcı geri bildirimi: liste ekrandaki "Planlanan" sütununa göre kesintisiz, yeniden
     // eskiye akmalı - duruma göre gruplamak tarihi ortada atlatıyordu. Tek ayrım iptaller:
     // aylar sonrasına planlanmış iptal satırları başı doldurmasın diye en sonda kalır.

@@ -1,4 +1,5 @@
 using Abdera.Api.Modules.Messaging.Domain;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +16,10 @@ namespace Abdera.Api.Modules.Messaging.Infrastructure;
 // (guardians.welcome_message_pending) açıkken geçer; borcu kapatmak çağıranın işidir
 // (Guardians.ResetPasswordAsync). İstisna burada durur ki "onaysız ne gidebilir" sorusunun
 // yanıtı tek dosyada kalsın - yeni bir istisna eklemeden önce onay al.
+//
+// İkinci istisna (docs/10-decisions.md AK, kullanıcı isteği): veli yanıtı (gelemiyor/gecikecek)
+// dersin öğretmenine teacher_rsvp_alert şablonuyla gider. Yalnızca bu şablon ve yalnızca numara
+// aktif bir öğretmene kayıtlıysa geçer; numarayı öğretmen künyesine yönetici yazar.
 public class ConsentGatedWhatsAppClient(IWhatsAppClient inner, AbderaDbContext db, ILogger<ConsentGatedWhatsAppClient> logger)
     : IWhatsAppClient
 {
@@ -27,6 +32,14 @@ public class ConsentGatedWhatsAppClient(IWhatsAppClient inner, AbderaDbContext d
         IReadOnlyList<string>? buttonPayloads = null,
         CancellationToken cancellationToken = default)
     {
+        if (templateName == WhatsAppTemplateNames.TeacherRsvpAlert)
+        {
+            var isActiveTeacher = await db.Teachers.AsNoTracking().AnyAsync(
+                t => t.PhoneNumber == toPhoneNumber && t.Status == TeacherStatus.Active, cancellationToken);
+            if (!isActiveTeacher) return Blocked(templateName);
+            return await inner.SendTemplateAsync(toPhoneNumber, templateName, parameters, buttonPayloads, cancellationToken);
+        }
+
         var isWelcome = templateName == WhatsAppTemplateNames.GuardianWelcome;
         if (!await HasConsentAsync(toPhoneNumber, isWelcome, cancellationToken)) return Blocked(templateName);
         return await inner.SendTemplateAsync(toPhoneNumber, templateName, parameters, buttonPayloads, cancellationToken);

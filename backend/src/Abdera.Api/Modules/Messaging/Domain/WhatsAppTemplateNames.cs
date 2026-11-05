@@ -8,4 +8,8 @@ public static class WhatsAppTemplateNames
     // "şifrenizi okul yönetiminden öğrenebilirsiniz". Şifre İÇERMEZ, bu yüzden Utility
     // kategorisinde onaylanır. Onay kapalıyken de bir kez gider - bkz. ConsentGatedWhatsAppClient (R2).
     public const string GuardianWelcome = "welcome_student";
+
+    // Veli yanıtı (gelemiyor/gecikecek) dersin öğretmenine. Veliye değil öğretmene gider; onay
+    // kapısındaki öğretmen istisnası yalnızca bu şablona açıktır (docs/10-decisions.md AK).
+    public const string TeacherRsvpAlert = "teacher_rsvp_alert";
 }

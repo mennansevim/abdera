@@ -1,5 +1,6 @@
 using Abdera.Api.Modules.Messaging.Domain;
 using Abdera.Api.Modules.People;
+using Abdera.Api.Modules.People.Domain;
 using Abdera.Api.Modules.Scheduling.Domain;
 using Abdera.Api.Shared;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,15 @@ public interface INotificationScheduler
     /// </summary>
     Task<ReminderScheduleOutcome> ScheduleRepeatableAsync(
         NotificationJobType type, string referenceType, Guid referenceId, Guid guardianId, DateTimeOffset scheduledAt);
+
+    /// <summary>
+    /// Öğretmene giden job (docs/10-decisions.md AK). Öğretmenin numarası yoksa veya öğretmen
+    /// pasifse açılmaz. Aynı referansın job'ı gönderilmiş/iptal edilmişse yeniden kuyruğa alınır;
+    /// henüz bekliyorsa dokunulmaz - mesaj gönderim anındaki durumu yazar.
+    /// </summary>
+    /// <returns>Job kuyrukta (yeni ya da zaten bekleyen) ise true.</returns>
+    Task<bool> ScheduleForTeacherAsync(
+        NotificationJobType type, string referenceType, Guid referenceId, Guid teacherId, DateTimeOffset scheduledAt);
 
     /// <summary>docs/10-decisions.md A4: ders değişince/iptal olunca bekleyen job iptal edilir.</summary>
     Task CancelPendingAsync(string referenceType, Guid referenceId);
@@ -97,6 +107,27 @@ public class NotificationScheduler(AbderaDbContext db, IClock clock) : INotifica
 
         job.Requeue(guardian.PhoneNumber, scheduledAt, now);
         return ReminderScheduleOutcome.Scheduled;
+    }
+
+    public async Task<bool> ScheduleForTeacherAsync(
+        NotificationJobType type, string referenceType, Guid referenceId, Guid teacherId, DateTimeOffset scheduledAt)
+    {
+        var teacher = await db.Teachers.SingleOrDefaultAsync(t => t.Id == teacherId);
+        if (teacher is not { Status: TeacherStatus.Active, PhoneNumber: { } phoneNumber }) return false;
+
+        var now = clock.UtcNow;
+        var job = await db.NotificationJobs.SingleOrDefaultAsync(j =>
+            j.Type == type && j.ReferenceType == referenceType && j.ReferenceId == referenceId);
+        if (job is null)
+        {
+            db.NotificationJobs.Add(NotificationJob.Create(type, phoneNumber, referenceType, referenceId, scheduledAt, now));
+            return true;
+        }
+
+        if (job.Status is NotificationJobStatus.Pending or NotificationJobStatus.Processing) return true;
+
+        job.Requeue(phoneNumber, scheduledAt, now);
+        return true;
     }
 
     public async Task CancelPendingAsync(string referenceType, Guid referenceId)
