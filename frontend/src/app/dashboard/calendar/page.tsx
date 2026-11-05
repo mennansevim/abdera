@@ -1503,10 +1503,19 @@ function rsvpAlert(lesson: CalendarLesson): { label: string; shortLabel: string;
   return null;
 }
 
-// Izgaradaki dar kartta yalnızca ünlem sığar; açılan listede, ajandada ve ders ayrıntısında
-// (labeled) yanıt yazıyla görünür - kullanıcı isteği: "açıldığında öğrencinin üzerinde yazı".
+// Izgaradaki dar kartta yalnızca olumsuz yanıtın ünlemi sığar; açılan listede, ajandada ve ders
+// ayrıntısında (labeled) üç yanıtın üçü de yazıyla görünür - kullanıcı isteği: "geliyor,
+// gecikeceğim, gelemiyorum cevapları açıldığında öğrencinin üzerinde yazı olarak çıksın".
 function RsvpAlertBadge({ lesson, labeled = false }: { lesson: CalendarLesson; labeled?: boolean }) {
   const alert = rsvpAlert(lesson);
+  if (labeled && !alert && lesson.rsvpResponse === "Attending" && (lesson.status === "Normal" || lesson.status === "Makeup")) {
+    return (
+      <span title="Veli: geliyor" className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[var(--success-strong)] px-2 py-0.5 text-[.75rem] font-extrabold leading-tight text-white">
+        <span aria-hidden="true">✓</span>
+        <span className="sr-only">Veli: </span>Geliyor
+      </span>
+    );
+  }
   if (!alert) return null;
   if (labeled) {
     return (
