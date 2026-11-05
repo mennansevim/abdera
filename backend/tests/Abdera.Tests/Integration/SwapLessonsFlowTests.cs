@@ -72,8 +72,10 @@ public class SwapLessonsFlowTests : IClassFixture<AbderaWebApplicationFactory>
         await using var db = await _factory.CreateDbContextAsync();
         var thursdayLessons = await db.Lessons.Where(l => l.LessonSeriesId == thursday.SeriesId).OrderBy(l => l.StartAt).ToListAsync();
         var fridayLessons = await db.Lessons.Where(l => l.LessonSeriesId == friday.SeriesId).ToListAsync();
-        // Ertesi günü Cuma dersi olan ilk Perşembe - aynı haftanın ikilisi.
-        var thursdayLesson = thursdayLessons.First(t => fridayLessons.Any(f => f.StartAt == t.StartAt.AddDays(1)));
+        // Ertesi günü Cuma dersi olan ilk Perşembe - aynı haftanın ikilisi. Henüz başlamamış olmalı:
+        // test Perşembe 15:00'ten sonra koşunca bugünün dersi seçiliyor ve takas "başlamış ders" diye reddediliyordu.
+        var thursdayLesson = thursdayLessons.First(t =>
+            t.StartAt > DateTimeOffset.UtcNow && fridayLessons.Any(f => f.StartAt == t.StartAt.AddDays(1)));
         var fridayLesson = fridayLessons.Single(f => f.StartAt == thursdayLesson.StartAt.AddDays(1));
 
         return new Setup(admin, teacher.Id, teacherCreate.TemporaryPassword, thursday.StudentId, friday.StudentId,
