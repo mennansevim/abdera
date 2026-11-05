@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.05",
+    date: "2026-11-05",
+    items: [
+      { audience: "all", text: "Veli WhatsApp'tan \"gelemiyorum\" ya da \"gecikeceğim\" dediyse takvimde dersi açtığında öğrencinin adının yanında \"Gelemiyor\" ya da \"Gecikecek\" yazar; aynı saatteki dersler listesinde de görünür." },
+      { audience: "admin", text: "Öğretmen künyesine WhatsApp numarası ekleyebilirsin. Numarası girilen öğretmene, veli \"gelemiyor\" ya da \"gecikecek\" dediğinde WhatsApp mesajı da gider." },
+    ],
+  },
+  {
     version: "2026.11.02",
     date: "2026-11-02",
     items: [
