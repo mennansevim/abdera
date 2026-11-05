@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.05.2",
+    date: "2026-11-05",
+    items: [
+      { audience: "all", text: "Takvimde dersi açtığında velinin \"geliyor\" yanıtı da öğrencinin adının yanında yeşil \"Geliyor\" etiketiyle görünür; üç yanıtın üçünü de tek bakışta görürsün." },
+    ],
+  },
+  {
     version: "2026.11.05",
     date: "2026-11-05",
     items: [
