@@ -30,6 +30,7 @@ public static class BillingModule
         app.MapTeacherPayouts();
         app.MapTeacherGroupPayouts();
         app.MapStudentBilling();
+        app.MapPaymentActivity();
         app.MapSendPaymentReminder();
     }
 }

@@ -10,11 +10,12 @@ import { AdminGate, FormActions, FormMessage, Modal, PageHeader, Panel, RowMenu,
 import { ApiError } from "@/lib/api";
 import {
   COURSE_KIND_LABEL, recurringAmountFor, useBillingDues, useChangeRecurringExpenseAmount, useCreateExpense, useCreateRecurringExpense, useEndRecurringExpense,
-  useExpenses, useRecurringExpenses,
+  useExpenses, usePaymentActivity, useRecurringExpenses,
   type CourseKind, type Expense, type ExpenseCategory, type PaymentMethod, type RecurringExpense,
 } from "@/lib/billing";
 import { collectedPayments, downloadIncomeCsv, fileSlug, IncomeBreakdownModal, type IncomeEntry } from "./income-breakdown";
 import { IncomeLedger } from "./income-ledger";
+import { PaymentActivityLog, recordedDay } from "./payment-activity";
 import { ProfitabilityView } from "./profitability";
 
 export default function CostsPage() {
@@ -51,7 +52,7 @@ const SERIES = { recurring: "#d9662a", oneOff: "#9b3f6b" };
 // yine lejant ve ipucu metniyle de verilir.
 const FLOW = { income: "var(--success)", expense: "var(--danger)" };
 
-type View = "summary" | "income" | "expenses" | "profit";
+type View = "summary" | "income" | "activity" | "expenses" | "profit";
 type Scope = "month" | "year";
 // Seçili dönem: yıllık görünümde `month` yok sayılır. `day` yalnızca aylık takvimde bir güne
 // tıklanınca dolar ve defteri o güne daraltır.
@@ -134,6 +135,8 @@ function CostDashboard() {
   const { data: expenses, isLoading: expensesLoading } = useExpenses();
   const { data: recurringData, isLoading: recurringLoading } = useRecurringExpenses();
   const { data: dues, isLoading: duesLoading } = useBillingDues();
+  const { data: activity, isLoading: activityLoading } = usePaymentActivity({ enabled: view === "activity" });
+  const [activitySearch, setActivitySearch] = useState("");
 
   const allExpenses = useMemo(() => expenses ?? [], [expenses]);
   const allRecurring = useMemo(() => recurringData ?? [], [recurringData]);
@@ -189,6 +192,10 @@ function CostDashboard() {
   const periodIncome = payments.filter((payment) => incomeInPeriod(payment, period));
   const listedIncome = periodIncome.filter((payment) => !incomeNeedle
     || `${payment.studentName} ${payment.instrumentName}`.toLocaleLowerCase("tr-TR").includes(incomeNeedle));
+  // Hareketler kayıt gününe göre süzülür: seçili ayda ekrana GİRİLEN her tahsilat kaydı.
+  const activityNeedle = activitySearch.trim().toLocaleLowerCase("tr-TR");
+  const listedActivity = (activity ?? []).filter((row) => inPeriod(recordedDay(row), period)
+    && (!activityNeedle || `${row.studentName} ${row.instrumentName} ${row.actorName ?? ""}`.toLocaleLowerCase("tr-TR").includes(activityNeedle)));
   const openBreakdown = (title: string, entries: IncomeEntry[]) => setBreakdown({ title, entries });
   const incomeBy = (methods: PaymentMethod[]) => periodIncome.filter((payment) => methods.includes(payment.method)).reduce((sum, payment) => sum + payment.amount, 0);
 
@@ -217,13 +224,14 @@ function CostDashboard() {
               options={[
                 { value: "summary", label: "Özet", icon: "activity" },
                 { value: "income", label: "Gelirler", icon: "wallet" },
+                { value: "activity", label: "Hareketler", icon: "clock" },
                 { value: "expenses", label: "Giderler", icon: "bank" },
                 { value: "profit", label: "Kârlılık", icon: "target" },
               ]}
               value={view}
               onChange={(value) => { setView(value); setPeriod((current) => ({ ...current, day: null })); }}
             />
-            {view === "income"
+            {view === "income" || view === "activity"
               ? <Link href="/dashboard/billing" className="btn btn-quiet">Aidatlar ekranına git<Icon name="arrow-right" className="h-4 w-4" /></Link>
               : view !== "profit" && <button type="button" onClick={() => setShowCreate(true)} className="btn btn-primary"><Icon name="plus" className="h-4 w-4" />Gider ekle</button>}
           </>
@@ -320,6 +328,17 @@ function CostDashboard() {
             <IncomeLedger entries={listedIncome} scope={period.scope} loading={loading} search={incomeSearch} />
           </Panel>
         </>
+      )}
+
+      {view === "activity" && (
+        <Panel
+          flush
+          title="Ödeme hareketleri"
+          meta={`${periodLabel(period)} · ${listedActivity.length} kayıt · girildiği güne göre`}
+          actions={<SearchInput value={activitySearch} onChange={setActivitySearch} label="Hareketlerde ara" placeholder="Öğrenci, enstrüman veya giren kişi" />}
+        >
+          <PaymentActivityLog rows={listedActivity} loading={activityLoading} />
+        </Panel>
       )}
 
       {view === "expenses" && (

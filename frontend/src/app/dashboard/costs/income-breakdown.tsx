@@ -36,6 +36,9 @@ export interface IncomeEntry {
   originalDate: string | null;
 }
 
+// Gelirin yazıldığı ay: aylık aidatta kendi dönemi, dönem aidatında ("D002") ödemenin ayı.
+export const incomeMonthOf = (period: string, paymentDate: string) => isCyclePeriod(period) ? paymentDate.slice(0, 7) : period;
+
 // Aidatlara düşen tahsilatları ödeme tarihine göre verir. Düzeltilmiş bir tahsilatın geçerli
 // tutarı en son düzeltmedir (sunucudaki ComputeEffectivePaymentAmountsAsync ile aynı kural);
 // düzeltme satırları ayrıca sayılmaz, yoksa para iki kez gelir yazılırdı. Sıfıra düzeltilmiş
@@ -52,7 +55,7 @@ export function collectedPayments(dues: BillingDue[]): IncomeEntry[] {
         return {
           id: payment.id, date: payment.paymentDate, amount: latest ? latest.amount : payment.amount, method: payment.method,
           reference: payment.reference, studentName: due.studentName, teacherName: due.teacherName, instrumentName: due.instrumentName,
-          courseKind: due.courseKind, period: due.period, incomeMonth: isCyclePeriod(due.period) ? payment.paymentDate.slice(0, 7) : due.period, prepayPlanMonths: payment.prepayPlanMonths, corrected: Boolean(latest),
+          courseKind: due.courseKind, period: due.period, incomeMonth: incomeMonthOf(due.period, payment.paymentDate), prepayPlanMonths: payment.prepayPlanMonths, corrected: Boolean(latest),
           originalDate: payment.originalPaymentDate ?? null,
         };
       })

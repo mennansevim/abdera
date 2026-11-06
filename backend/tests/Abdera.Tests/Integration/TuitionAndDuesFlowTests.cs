@@ -435,6 +435,45 @@ public class TuitionAndDuesFlowTests : IClassFixture<AbderaWebApplicationFactory
         Assert.Equal(HttpStatusCode.BadRequest, future.StatusCode);
     }
 
+    // Gelir ve gider > Hareketler: alınan ödeme, tutar düzeltmesi ve tarih düzeltmesi girildikleri
+    // anla, giren yöneticiyle birlikte listelenir; özgün değer de satırda durur. Yalnızca yönetici görür.
+    [Fact]
+    public async Task Payment_activity_lists_receipt_and_corrections_with_previous_values()
+    {
+        var admin = await CreateAdminClientAsync();
+        var piano = await InstrumentIdAsync(admin, "PIANO");
+        var teacher = await CreateTeacherAsync(admin, "Hareket", piano);
+        var student = await CreateStudentAsync(admin, "Hareket");
+        var enrollment = await EnrollAsync(admin, student.Id, teacher.Id, piano);
+        var receivable = await ReadAsync<Receivables.ReceivableResponse>(await admin.PostAsJsonAsync(
+            "/api/receivables", new Receivables.CreateRequest(enrollment.Id, TestPeriods.Current(_factory.Services))));
+        var clock = _factory.Services.GetRequiredService<IClock>();
+        var enteredOn = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
+        var payment = await ReadAsync<Payments.PaymentResponse>(await PostPaymentAsync(
+            admin, receivable.Id, new Payments.CreateRequest(receivable.Amount, enteredOn, PaymentMethod.Cash, null, null)));
+        (await admin.PostAsJsonAsync($"/api/payments/{payment.Id}/corrections",
+            new PaymentCorrections.CreateRequest(receivable.Amount - 100m, "Eksik sayıldı"))).EnsureSuccessStatusCode();
+        (await admin.PostAsJsonAsync("/api/payments/date-corrections",
+            new PaymentCorrections.DateCorrectionRequest([payment.Id], enteredOn.AddDays(-3), "Önceden alındı"))).EnsureSuccessStatusCode();
+
+        var activity = (await ReadAsync<List<PaymentActivity.ActivityResponse>>(await admin.GetAsync("/api/billing/payment-activity")))
+            .Where(row => row.PaymentId == payment.Id).ToList();
+        Assert.Equal(
+            [PaymentActivity.ActivityKind.DateCorrected, PaymentActivity.ActivityKind.AmountCorrected, PaymentActivity.ActivityKind.Received],
+            activity.Select(row => row.Kind));
+        Assert.All(activity, row => Assert.False(string.IsNullOrEmpty(row.ActorName)));
+        Assert.All(activity, row => Assert.Equal(receivable.Period, row.Period));
+        var received = activity.Single(row => row.Kind == PaymentActivity.ActivityKind.Received);
+        Assert.Equal((receivable.Amount, enteredOn), (received.Amount, received.PaymentDate));
+        var amountFix = activity.Single(row => row.Kind == PaymentActivity.ActivityKind.AmountCorrected);
+        Assert.Equal((receivable.Amount - 100m, receivable.Amount), (amountFix.Amount, amountFix.PreviousAmount!.Value));
+        var dateFix = activity.Single(row => row.Kind == PaymentActivity.ActivityKind.DateCorrected);
+        Assert.Equal((enteredOn.AddDays(-3), enteredOn), (dateFix.PaymentDate, dateFix.PreviousDate!.Value));
+
+        using var anonymous = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/billing/payment-activity")).StatusCode);
+    }
+
     // --- Yıl başı peşin ödeme kampanyası ------------------------------------------
 
     // Toplu ödeme ekranı öğrenciyi /api/students/search ile bulur ve seçtiği satırın

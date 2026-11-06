@@ -283,6 +283,32 @@ export function useStudentBilling(studentId: string, options?: { enabled?: boole
 // docs/04-permissions.md: aidat verisi tamamen Admin - bu uç 403 verir. `enabled: false`
 // ile çağıranlar (örn. Ders Programı'nın gecikmiş-aidat uyarısı Teacher oturumunda) isteği
 // hiç göndermeden bunu atlayabilir.
+// Gelir ve gider > Hareketler: tahsilata dokunan her kayıt, girildiği ana göre (en yeni önce).
+export type PaymentActivityKind = "Received" | "AmountCorrected" | "DateCorrected";
+export interface PaymentActivityRow {
+  id: string;
+  kind: PaymentActivityKind;
+  recordedAt: string;
+  // null: kaydı bir yönetici girmedi (otomatik eşleşen banka havalesi).
+  actorName: string | null;
+  paymentId: string;
+  receivableId: string;
+  studentName: string;
+  instrumentName: string;
+  courseKind: CourseKind;
+  period: string;
+  method: PaymentMethod;
+  amount: number;
+  previousAmount: number | null;
+  paymentDate: string;
+  previousDate: string | null;
+  note: string | null;
+}
+
+export function usePaymentActivity(options?: { enabled?: boolean }) {
+  return useQuery({ queryKey: ["payment-activity"], queryFn: () => api.get<PaymentActivityRow[]>("/api/billing/payment-activity"), enabled: options?.enabled });
+}
+
 export function useBillingDues(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["billing-dues"],
