@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Icon } from "@/components/icons";
 import { Modal } from "@/components/ui";
-import { formatPeriod } from "@/lib/billing-format";
+import { formatPeriod, isCyclePeriod } from "@/lib/billing-format";
 import { COURSE_KIND_LABEL, type BillingDue, type CourseKind, type PaymentMethod } from "@/lib/billing";
 import { methodLabel } from "../billing/collect-sheet";
 
@@ -27,6 +27,9 @@ export interface IncomeEntry {
   instrumentName: string;
   courseKind: CourseKind;
   period: string;
+  // Gelirin yazıldığı ay ("YYYY-MM"): aylık aidatta kendi dönemi, 4 derslik dönem aidatında
+  // ("D002") ayı olmadığı için ödemenin alındığı ay.
+  incomeMonth: string;
   prepayPlanMonths: number | null;
   corrected: boolean;
   // Tarihi düzeltilmiş ödemede ilk girilen tarih (date etkin tarihtir).
@@ -49,7 +52,7 @@ export function collectedPayments(dues: BillingDue[]): IncomeEntry[] {
         return {
           id: payment.id, date: payment.paymentDate, amount: latest ? latest.amount : payment.amount, method: payment.method,
           reference: payment.reference, studentName: due.studentName, teacherName: due.teacherName, instrumentName: due.instrumentName,
-          courseKind: due.courseKind, period: due.period, prepayPlanMonths: payment.prepayPlanMonths, corrected: Boolean(latest),
+          courseKind: due.courseKind, period: due.period, incomeMonth: isCyclePeriod(due.period) ? payment.paymentDate.slice(0, 7) : due.period, prepayPlanMonths: payment.prepayPlanMonths, corrected: Boolean(latest),
           originalDate: payment.originalPaymentDate ?? null,
         };
       })
@@ -64,9 +67,9 @@ export type IncomeBucket = "current" | "late" | "advance";
 export const BUCKET_LABEL: Record<IncomeBucket, string> = { current: "Kendi ayının aidatı", late: "Gecikmiş aidat", advance: "Peşin (ileri aylar)" };
 export const BUCKET_COLOR: Record<IncomeBucket, string> = { current: "var(--success)", late: "#b7791f", advance: "#3f6fb0" };
 
-export function bucketOf(entry: Pick<IncomeEntry, "date" | "period">): IncomeBucket {
+export function bucketOf(entry: Pick<IncomeEntry, "date" | "incomeMonth">): IncomeBucket {
   const paidMonth = entry.date.slice(0, 7);
-  return entry.period === paidMonth ? "current" : entry.period < paidMonth ? "late" : "advance";
+  return entry.incomeMonth === paidMonth ? "current" : entry.incomeMonth < paidMonth ? "late" : "advance";
 }
 
 const money = (value: number) => `₺${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;

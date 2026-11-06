@@ -69,8 +69,9 @@ const inPeriod = (date: string, period: Pick<Period, "scope" | "year" | "month">
   period.scope === "year" ? date.startsWith(`${period.year}-`) : date.startsWith(`${monthKey(period.year, period.month)}-`);
 // Gelir aidat DÖNEMİNE göre sayılır, ödeme tarihine göre değil: Ekim geliri Ekim aidatlarına
 // yapılan ödemelerdir. Eylül aidatı Ekim'de ödense de Eylül'de görünür (kullanıcı isteği - geçmiş
-// ayın parası bu ayın gelirine karışıp kafa karıştırıyordu).
-const incomeInPeriod = (payment: Pick<IncomeEntry, "period">, period: Pick<Period, "scope" | "year" | "month">) => inPeriod(`${payment.period}-`, period);
+// ayın parası bu ayın gelirine karışıp kafa karıştırıyordu). Dönem aidatı ("D002") ödendiği aya
+// yazılır (IncomeEntry.incomeMonth).
+const incomeInPeriod = (payment: Pick<IncomeEntry, "incomeMonth">, period: Pick<Period, "scope" | "year" | "month">) => inPeriod(`${payment.incomeMonth}-`, period);
 const periodMonths = (period: Pick<Period, "scope" | "year" | "month">) =>
   period.scope === "year" ? Array.from({ length: 12 }, (_, month) => monthKey(period.year, month)) : [monthKey(period.year, period.month)];
 // Özetin sütunları: yıllıkta yılın 12 ayı, aylıkta seçili ay ve önceki 5 ay - tek ayı tek
@@ -167,7 +168,7 @@ function CostDashboard() {
       key,
       planned: key > currentMonth,
       income: Object.fromEntries(COURSE_KINDS.map((kind) => [kind,
-        payments.filter((payment) => payment.courseKind === kind && payment.period === key).reduce((sum, payment) => sum + payment.amount, 0)])) as Record<CourseKind, number>,
+        payments.filter((payment) => payment.courseKind === kind && payment.incomeMonth === key).reduce((sum, payment) => sum + payment.amount, 0)])) as Record<CourseKind, number>,
       expense: Object.fromEntries(CATEGORIES.map((value) => [value,
         allRecurring.filter((item) => item.category === value).reduce((sum, item) => sum + recurringAmountFor(item, key), 0)
         + allExpenses.filter((expense) => expense.category === value && expense.expenseDate.startsWith(`${key}-`)).reduce((sum, expense) => sum + expense.amount, 0)])) as Record<ExpenseCategory, number>,
@@ -287,7 +288,7 @@ function CostDashboard() {
               onDrill={drill}
               onIncome={(key, kind) => openBreakdown(
                 `${kind ? `${COURSE_KIND_LABEL[kind]} aidat · ` : ""}${monthLabel(key)}`,
-                payments.filter((payment) => payment.period === key && (!kind || payment.courseKind === kind)))}
+                payments.filter((payment) => payment.incomeMonth === key && (!kind || payment.courseKind === kind)))}
               loading={loading}
             />
           </Panel>

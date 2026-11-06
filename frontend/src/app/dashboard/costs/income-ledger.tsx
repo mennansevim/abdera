@@ -5,7 +5,7 @@ import { Icon } from "@/components/icons";
 import { FormMessage, Modal } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { COURSE_KIND_LABEL, useCorrectPaymentDates } from "@/lib/billing";
-import { formatPeriod, todayInput } from "@/lib/billing-format";
+import { formatPeriod, isCyclePeriod, todayInput } from "@/lib/billing-format";
 import { methodLabel } from "../billing/collect-sheet";
 import { BUCKET_COLOR, BUCKET_LABEL, bucketOf, type IncomeBucket, type IncomeEntry } from "./income-breakdown";
 
@@ -22,7 +22,7 @@ const FILTERS: (IncomeBucket | "all")[] = ["all", "current", "late", "advance"];
 const FILTER_LABEL: Record<IncomeBucket | "all", string> = { all: "Tümü", current: "Kendi ayı", late: "Gecikmiş", advance: "Peşin" };
 
 const money = (value: number) => `₺${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
-const shortPeriod = (period: string) => `${MONTHS_SHORT[Number(period.slice(5, 7)) - 1]} ${period.slice(0, 4)}`;
+const shortPeriod = (period: string) => isCyclePeriod(period) ? formatPeriod(period) : `${MONTHS_SHORT[Number(period.slice(5, 7)) - 1]} ${period.slice(0, 4)}`;
 const shortDate = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS_SHORT[Number(iso.slice(5, 7)) - 1]}`;
 
 function groupHeading(key: string, scope: "month" | "year") {
