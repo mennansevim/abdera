@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.06",
+    date: "2026-11-06",
+    items: [
+      { audience: "admin", text: "Gelir ve gider ekranı birebir derslerin 4 derslik dönem ödemelerini de sayıyor: her ödeme alındığı ayın gelirine yazılır. Önceden bu ödemeler hiçbir ayda görünmüyordu." },
+    ],
+  },
+  {
     version: "2026.11.05.2",
     date: "2026-11-05",
     items: [
