@@ -26,6 +26,7 @@ export const RELEASES: Release[] = [
     date: "2026-11-06",
     items: [
       { audience: "admin", text: "Gelir ve gider ekranı birebir derslerin 4 derslik dönem ödemelerini de sayıyor: her ödeme alındığı ayın gelirine yazılır. Önceden bu ödemeler hiçbir ayda görünmüyordu." },
+      { audience: "admin", text: "Gelir ve gider ekranında yeni \"Hareketler\" sekmesi: alınan her ödeme, tutar ve tarih düzeltmesi girildiği saatle, kimin girdiğiyle ve hangi ayın gelirine yazıldığıyla listelenir." },
     ],
   },
   {
