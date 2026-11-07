@@ -537,6 +537,16 @@ Kullanıcı isteği: "wp üzerinde geliyor gecikeceğim gelemiyorum cevapları t
 | AK5 | Rıza kapısı | `ConsentGatedWhatsAppClient`'ın ikinci istisnası: yalnızca `teacher_rsvp_alert` şablonu ve yalnızca aktif bir öğretmene kayıtlı numara. Dispatcher bu tipte veli/rıza aramaz; öğretmen pasif ya da numara değişmişse job iptal olur. Mesaj `whatsapp_messages`'a (velinin konuşma geçmişi) yazılmaz, kaydı job satırıdır. |
 | AK6 | Şablon | Öğretmenin 24 saatlik penceresi hiç açık olmadığı için serbest metin değil şablon: `teacher_rsvp_alert` (Utility). Meta onayı gelene kadar canlıda gönderim `FAILED` görünür (D2). Gövde `docs/06-whatsapp.md`'de. |
 
+## AL - Gelir ve gider Özet sekmesi ay kartlarıyla açılır (2026-11-08)
+
+Kullanıcı isteği: rakip uygulamanın aylık tahsilat özetini gösterip "aylardaki ... kabaca böyle göstersek içine girince detay ekrana gelse", "anlaşılması kolay olsun", "sadece gelir gider ekranını düzenle, aylar halinde gösterilsin". Aidatlar ekranı değişmedi (H17, AD18 aynen).
+
+| No | Konu | Karar |
+|---|---|---|
+| AL1 | Özet | Özet sekmesi dönem filtresi yerine **ay kartlarıyla** açılır: üstte yıl seçici (‹ 2026 ›) ve yıl neti, "Bekleyen aidat" bandı (Aidatlar'a gider), altında ilk hareketli aydan bu aya kadar her ay bir kart, en yenisi üstte. Kartta Gelir ve Gider çubuğu, altında Gelir · Gider · Net. Gelecek aylar kart olarak görünmez. Eski gelir-gider çubuk grafiği kaldırıldı; nakit akışı tablosu "Yılı tablo olarak gör" ile açılır. |
+| AL2 | Ayın içi | Karta dokununca: "‹ Aylar", üç kutu (Gelir, Gider, Net), **Gelir** dökümü ders türüne göre (satır tahsilat dökümü penceresini açar) ve **Gider** dökümü kategoriye göre (satır Giderler sekmesine o ay ve kategoriyle iner). "Tahsilat defteri" / "Gider defteri" düğmeleri ilgili sekmeye o ayla geçer. |
+| AL3 | Hesap | Değişmedi: gelir aidat dönemine göre (`incomeMonth`, dönem aidatı ödendiği aya), gider sabit + tek seferlik. Kart, ayın içi ve tablo aynı sütunlardan çizilir (`buildFlowColumns`, `app/dashboard/costs/page.tsx`). Sunucu değişmedi. |
+
 ## Master prompt'un "Required First Response" listesiyle eşleme
 
 | Master prompt maddesi | Karşılığı |

@@ -32,7 +32,7 @@ export default function CostsPage() {
 // HER AY TEKRAR EDEN kalemler bir kez girilir ve her aya kendiliğinden sayılır; tamir, alet gibi
 // TEK SEFERLİK giderler tarihiyle deftere yazılır. Ekrandaki her toplam ikisinin birleşimidir.
 //
-// Ekran üç sekme: Özet (gelir-gider çubukları + kategori × ay nakit akışı tablosu), Gelirler
+// Sekmeler: Özet (ay kartları, aya dokununca o ayın gelir/gider dökümü - docs/10-decisions.md AL), Gelirler
 // (tahsilat defteri, salt okunur) ve Giderler. Gelirler sekmesinde "ekle" yok: aidatın tek
 // tahsilat yolu Aidatlar ekranındaki ödeme penceresi (docs/10-decisions.md H17).
 
@@ -48,9 +48,6 @@ const CATEGORY_LABEL: Record<ExpenseCategory, string> = {
 const COURSE_KINDS: CourseKind[] = ["Individual", "Group"];
 // İki seri, dataviz doğrulayıcısından geçti (beyaz zemin, CVD ΔE ≥ 15). Sabit = marka turuncusu.
 const SERIES = { recurring: "#d9662a", oneOff: "#9b3f6b" };
-// Özet çubukları: gelir/gider anlamı taşıdığı için uygulamanın başarı/tehlike tonları; kimlik
-// yine lejant ve ipucu metniyle de verilir.
-const FLOW = { income: "var(--success)", expense: "var(--danger)" };
 
 type View = "summary" | "income" | "activity" | "expenses" | "profit";
 type Scope = "month" | "year";
@@ -75,14 +72,6 @@ const inPeriod = (date: string, period: Pick<Period, "scope" | "year" | "month">
 const incomeInPeriod = (payment: Pick<IncomeEntry, "incomeMonth">, period: Pick<Period, "scope" | "year" | "month">) => inPeriod(`${payment.incomeMonth}-`, period);
 const periodMonths = (period: Pick<Period, "scope" | "year" | "month">) =>
   period.scope === "year" ? Array.from({ length: 12 }, (_, month) => monthKey(period.year, month)) : [monthKey(period.year, period.month)];
-// Özetin sütunları: yıllıkta yılın 12 ayı, aylıkta seçili ay ve önceki 5 ay - tek ayı tek
-// sütunla göstermek tabloyu anlamsızlaştırırdı, kıyas için geriye bakmak gerekir.
-const flowMonths = (period: Pick<Period, "scope" | "year" | "month">) =>
-  period.scope === "year" ? periodMonths(period) : Array.from({ length: 6 }, (_, index) => {
-    const total = period.year * 12 + period.month - 5 + index;
-    return monthKey(Math.floor(total / 12), total % 12);
-  });
-
 function shift(period: Period, step: -1 | 1): Period {
   if (period.scope === "year") return { ...period, year: period.year + step, day: null };
   const index = period.year * 12 + period.month + step;
@@ -110,6 +99,23 @@ const sumTotals = (rows: MonthTotal[]) => rows.reduce((total, row) => total + ro
 
 // Nakit akışı tablosunun bir sütunu: gelir ders türüne, gider kategoriye göre kırılır.
 interface FlowColumn { key: string; planned: boolean; income: Record<CourseKind, number>; expense: Record<ExpenseCategory, number> }
+
+// Ay başına gelir (ders türüne göre) ve gider (kategoriye göre). Özet'in ay kartları, ayın içi ve
+// yıl tablosu aynı sütunlardan çizilir.
+function buildFlowColumns(keys: string[], payments: IncomeEntry[], recurring: RecurringExpense[], oneOffs: Expense[], currentMonth: string): FlowColumn[] {
+  return keys.map((key) => ({
+    key,
+    planned: key > currentMonth,
+    income: Object.fromEntries(COURSE_KINDS.map((kind) => [kind,
+      payments.filter((payment) => payment.courseKind === kind && payment.incomeMonth === key).reduce((sum, payment) => sum + payment.amount, 0)])) as Record<CourseKind, number>,
+    expense: Object.fromEntries(CATEGORIES.map((value) => [value,
+      recurring.filter((item) => item.category === value).reduce((sum, item) => sum + recurringAmountFor(item, key), 0)
+      + oneOffs.filter((expense) => expense.category === value && expense.expenseDate.startsWith(`${key}-`)).reduce((sum, expense) => sum + expense.amount, 0)])) as Record<ExpenseCategory, number>,
+  }));
+}
+
+const incomeOf = (column: FlowColumn) => COURSE_KINDS.reduce((sum, kind) => sum + column.income[kind], 0);
+const expenseOf = (column: FlowColumn) => CATEGORIES.reduce((sum, value) => sum + column.expense[value], 0);
 
 function CostDashboard() {
   const today = useMemo(() => new Date(), []);
@@ -167,17 +173,14 @@ function CostDashboard() {
     const pending = (dues ?? [])
       .filter((row) => row.status !== "Paid" && row.status !== "Cancelled")
       .reduce((total, row) => total + Math.max(0, row.amount - row.totalPaid), 0);
-    const columns: FlowColumn[] = flowMonths(period).map((key) => ({
-      key,
-      planned: key > currentMonth,
-      income: Object.fromEntries(COURSE_KINDS.map((kind) => [kind,
-        payments.filter((payment) => payment.courseKind === kind && payment.incomeMonth === key).reduce((sum, payment) => sum + payment.amount, 0)])) as Record<CourseKind, number>,
-      expense: Object.fromEntries(CATEGORIES.map((value) => [value,
-        allRecurring.filter((item) => item.category === value).reduce((sum, item) => sum + recurringAmountFor(item, key), 0)
-        + allExpenses.filter((expense) => expense.category === value && expense.expenseDate.startsWith(`${key}-`)).reduce((sum, expense) => sum + expense.amount, 0)])) as Record<ExpenseCategory, number>,
-    }));
-    return { income, expenseTotal, toDate, net: income - toDate, pending, columns };
+    return { income, expenseTotal, toDate, net: income - toDate, pending };
   }, [allRecurring, allExpenses, payments, dues, period, currentMonth]);
+  // Özet: seçili yılın ayları (docs/10-decisions.md AD20). Ay kartına dokununca o ayın içi açılır.
+  const [openMonth, setOpenMonth] = useState<string | null>(null);
+  const yearColumns = useMemo(
+    () => buildFlowColumns(Array.from({ length: 12 }, (_, month) => monthKey(period.year, month)), payments, allRecurring, allExpenses, currentMonth),
+    [period.year, payments, allRecurring, allExpenses, currentMonth],
+  );
 
   const needle = search.trim().toLocaleLowerCase("tr-TR");
   const matches = (text: string | null) => !needle || (text ?? "").toLocaleLowerCase("tr-TR").includes(needle);
@@ -241,7 +244,7 @@ function CostDashboard() {
       {/* Kârlılık sekmesi döneme bağlı değil: her zaman bu ay ve son 6 ay. */}
       {view === "profit" && <ProfitabilityView />}
 
-      {view !== "profit" && <section className="app-card flex flex-wrap items-center gap-2 p-3" aria-label={view === "expenses" ? "Dönem ve kategori filtreleri" : "Dönem filtresi"}>
+      {view !== "profit" && view !== "summary" && <section className="app-card flex flex-wrap items-center gap-2 p-3" aria-label={view === "expenses" ? "Dönem ve kategori filtreleri" : "Dönem filtresi"}>
         <Segmented
           label="Görünüm"
           options={[{ value: "month", label: "Aylık" }, { value: "year", label: "Yıllık" }]}
@@ -267,41 +270,32 @@ function CostDashboard() {
         )}
       </section>}
 
-      {view === "summary" && (
-        <>
-          <StatStrip
-            label="Dönem özeti"
-            items={[
-              { key: "income", label: "Gelir", value: money(summary.income), loading, hint: "Bu ayın aidatından tahsil edilen · dökümü için dokun", tone: "success", onClick: () => openBreakdown(`${periodLabel(period)} geliri`, periodIncome) },
-              { key: "expense", label: `Gider${summary.toDate === 0 && summary.expenseTotal > 0 ? " (planlanan)" : ""}`, value: money(summary.expenseTotal), loading, hint: "Sabit + tek seferlik", tone: "danger", onClick: () => { setCategory("all"); setView("expenses"); } },
-              {
-                key: "net",
-                label: "Net sonuç",
-                value: signedMoney(summary.net),
-                loading,
-                hint: summary.toDate !== summary.expenseTotal ? `Bugüne kadarki ${money(summary.toDate)} gider düşüldü` : summary.net < 0 ? "Gider geliri aşıyor" : "Gelir gideri karşılıyor",
-                tone: summary.net < 0 ? "danger" : "brand",
-              },
-              { key: "pending", label: "Bekleyen aidat", value: money(summary.pending), loading, hint: "Tüm dönemler · Aidatlar ekranından tahsil edilir", tone: "warning", href: "/dashboard/billing" },
-            ]}
+      {view === "summary" && (() => {
+        const column = openMonth ? yearColumns.find((item) => item.key === openMonth) : undefined;
+        return column
+          ? <MonthDetail
+            column={column}
+            loading={loading}
+            onBack={() => setOpenMonth(null)}
+            onIncome={(kind) => openBreakdown(
+              `${kind ? `${COURSE_KIND_LABEL[kind]} aidat · ` : ""}${monthLabel(column.key)}`,
+              payments.filter((payment) => payment.incomeMonth === column.key && (!kind || payment.courseKind === kind)))}
+            onDrill={(target, filter) => drill(target, column.key, filter)}
           />
-          <Panel title="Gelir ve gider" meta={period.scope === "year" ? String(period.year) : `Son 6 ay · ${periodLabel(period)} dahil`}>
-            <FlowBars columns={summary.columns} selected={period.scope === "month" ? monthKey(period.year, period.month) : null} onSelect={(key) => drill("income", key)} loading={loading} />
-          </Panel>
-          <Panel flush title="Nakit akışı" meta="Gelir hücresine dokun, döküm açılsın; gider hücresi o ayın kayıtlarına iner">
-            <CashFlowTable
-              columns={summary.columns}
-              showTotal={period.scope === "year"}
-              selected={period.scope === "month" ? monthKey(period.year, period.month) : null}
-              onDrill={drill}
-              onIncome={(key, kind) => openBreakdown(
-                `${kind ? `${COURSE_KIND_LABEL[kind]} aidat · ` : ""}${monthLabel(key)}`,
-                payments.filter((payment) => payment.incomeMonth === key && (!kind || payment.courseKind === kind)))}
-              loading={loading}
-            />
-          </Panel>
-        </>
-      )}
+          : <MonthCards
+            year={period.year}
+            columns={yearColumns}
+            currentMonth={currentMonth}
+            pending={summary.pending}
+            loading={loading}
+            onYear={(year) => setPeriod((current) => ({ ...current, year, day: null }))}
+            onOpen={setOpenMonth}
+            onDrill={drill}
+            onIncome={(key, kind) => openBreakdown(
+              `${kind ? `${COURSE_KIND_LABEL[kind]} aidat · ` : ""}${monthLabel(key)}`,
+              payments.filter((payment) => payment.incomeMonth === key && (!kind || payment.courseKind === kind)))}
+          />;
+      })()}
 
       {view === "income" && (
         <>
@@ -415,48 +409,133 @@ function CostDashboard() {
   );
 }
 
-// Ay başına yan yana iki çubuk: gelir ve gider. Gelecek aylar soluk - yalnızca sabit giderlerin
-// planlanan tutarını taşır, gelirleri henüz yok. Bir aya dokunmak o ayın tahsilatlarını açar.
-function FlowBars({ columns, selected, onSelect, loading }: { columns: FlowColumn[]; selected: string | null; onSelect: (key: string) => void; loading: boolean }) {
-  const totals = columns.map((column) => ({
-    income: COURSE_KINDS.reduce((sum, kind) => sum + column.income[kind], 0),
-    expense: CATEGORIES.reduce((sum, value) => sum + column.expense[value], 0),
-  }));
-  const max = Math.max(0, ...totals.flatMap((row) => [row.income, row.expense]));
-  const height = (value: number) => (max > 0 ? Math.max(value > 0 ? 2 : 0, (value / max) * 88) : 0);
+// Özet = ay kartları (docs/10-decisions.md AD20): en yeni ay üstte, her kartta Gelir · Gider ·
+// Net. Gelir aidat dönemine göre sayılır (incomeMonth), gider sabit + tek seferlik. Gelecek aylar
+// gösterilmez; yıl tablosu isteğe bağlı açılır.
+function MonthCards({ year, columns, currentMonth, pending, loading, onYear, onOpen, onDrill, onIncome }: {
+  year: number; columns: FlowColumn[]; currentMonth: string; pending: number; loading: boolean;
+  onYear: (year: number) => void;
+  onOpen: (key: string) => void;
+  onDrill: (target: "income" | "expenses", key: string, filter?: ExpenseCategory) => void;
+  onIncome: (key: string, kind: CourseKind | null) => void;
+}) {
+  const [showTable, setShowTable] = useState(false);
+  const thisYear = Number(currentMonth.slice(0, 4));
+  // İlk hareketli aydan bugüne kadar her ay görünür (boş bu ay da dahil); gelecek aylar görünmez.
+  const past = columns.filter((column) => !column.planned);
+  const first = past.findIndex((column) => incomeOf(column) > 0 || expenseOf(column) > 0);
+  const shown = first < 0 ? [] : past.slice(first).reverse();
+  const totalIncome = shown.reduce((sum, column) => sum + incomeOf(column), 0);
+  const totalExpense = shown.reduce((sum, column) => sum + expenseOf(column), 0);
 
-  if (loading) return <div className="skeleton h-48 w-full rounded-xl" />;
-  return (
-    <div>
-      <ul className="flex flex-wrap justify-end gap-3 text-[.75rem] font-semibold text-[var(--muted)]" aria-label="Lejant">
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: FLOW.income }} />Gelir</li>
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: FLOW.expense }} />Gider</li>
-      </ul>
-      <div className="mt-2 flex h-44 items-end gap-1 border-b border-[var(--line)] sm:gap-2" role="list" aria-label="Aylara göre gelir ve gider">
-        {columns.map((column, index) => {
-          const { income, expense } = totals[index];
-          const label = `${monthLabel(column.key)}${column.planned ? " (planlanan)" : ""}: gelir ${money(income)}, gider ${money(expense)}, net ${signedMoney(income - expense)}`;
-          return (
-            <button
-              key={column.key}
-              type="button"
-              role="listitem"
-              onClick={() => onSelect(column.key)}
-              title={label}
-              aria-label={label}
-              className={`group flex h-full min-w-0 flex-1 items-end justify-center gap-[2px] rounded-t-md px-0.5 ${column.key === selected ? "bg-[var(--brand-soft)]" : "hover:bg-[var(--surface-muted)]"} ${column.planned ? "opacity-40" : ""}`}
-            >
-              <span className="w-full max-w-6 rounded-t-[4px]" style={{ height: `${height(income)}%`, background: FLOW.income }} />
-              <span className="w-full max-w-6 rounded-t-[4px]" style={{ height: `${height(expense)}%`, background: FLOW.expense }} />
-            </button>
-          );
-        })}
+  return <div className="space-y-3">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-1">
+        <button type="button" onClick={() => onYear(year - 1)} className="icon-btn icon-btn-quiet" aria-label="Önceki yıl"><Icon name="arrow-left" className="h-4 w-4" /></button>
+        <strong className="min-w-14 text-center text-base tabular-nums">{year}</strong>
+        <button type="button" onClick={() => onYear(year + 1)} disabled={year >= thisYear} className="icon-btn icon-btn-quiet disabled:opacity-35" aria-label="Sonraki yıl"><Icon name="arrow-right" className="h-4 w-4" /></button>
       </div>
-      <div className="mt-1 flex gap-1 sm:gap-2" aria-hidden="true">
-        {columns.map((column) => <span key={column.key} className={`min-w-0 flex-1 text-center text-[.625rem] font-bold ${column.key === selected ? "text-[var(--brand-strong)]" : "text-[var(--muted)]"}`}>{MONTHS_SHORT[Number(column.key.slice(5, 7)) - 1]}</span>)}
-      </div>
+      {!loading && shown.length > 0 && <span className="text-sm tabular-nums">
+        <span className="text-meta">{year} toplamı: </span>
+        <strong className={totalIncome - totalExpense < 0 ? "text-[var(--danger-strong)]" : "text-[var(--success-strong)]"}>{signedMoney(totalIncome - totalExpense)}</strong>
+      </span>}
     </div>
-  );
+
+    {pending > 0 && <Link href="/dashboard/billing" className="flex items-center justify-between gap-2 rounded-2xl bg-[var(--warning-soft)] px-4 py-2.5 text-sm font-semibold text-[var(--warning-strong)]">
+      <span>Bekleyen aidat <strong className="tabular-nums">{money(pending)}</strong></span>
+      <span className="inline-flex items-center gap-1 text-xs">Aidatlar<Icon name="arrow-right" className="h-3.5 w-3.5" /></span>
+    </Link>}
+
+    {loading
+      ? <div className="grid gap-2 sm:grid-cols-2">{Array.from({ length: 4 }, (_, index) => <div key={index} className="skeleton h-28 rounded-2xl" />)}</div>
+      : !shown.length
+        ? <p className="app-card text-meta px-4 py-6 text-center">{year} yılında gelir ya da gider yok.</p>
+        : <ul className="grid gap-2 sm:grid-cols-2">
+          {shown.map((column) => {
+            const income = incomeOf(column);
+            const expense = expenseOf(column);
+            const net = income - expense;
+            const max = Math.max(income, expense, 1);
+            return <li key={column.key}>
+              <button type="button" onClick={() => onOpen(column.key)} className="pressable grid w-full gap-2.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-left hover:border-[var(--brand)]">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2 text-base font-bold">
+                    {MONTHS[Number(column.key.slice(5, 7)) - 1]} {column.key.slice(0, 4)}
+                    {column.key === currentMonth && <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[.68rem] font-extrabold text-[var(--brand-strong)]">bu ay</span>}
+                  </span>
+                  <Icon name="arrow-right" className="h-3.5 w-3.5 text-[var(--muted)]" />
+                </span>
+                <span className="grid gap-1.5 text-xs" aria-hidden>
+                  <span className="grid grid-cols-[3.25rem_1fr] items-center gap-2"><span className="text-meta">Gelir</span><span className="h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]"><span className="block h-full rounded-full bg-[var(--success)]" style={{ width: `${(income / max) * 100}%` }} /></span></span>
+                  <span className="grid grid-cols-[3.25rem_1fr] items-center gap-2"><span className="text-meta">Gider</span><span className="h-2 overflow-hidden rounded-full bg-[var(--surface-muted)]"><span className="block h-full rounded-full bg-[var(--danger)]" style={{ width: `${(expense / max) * 100}%` }} /></span></span>
+                </span>
+                <span className="grid grid-cols-3 gap-2 text-xs tabular-nums">
+                  <span><span className="text-meta block">Gelir</span><strong className="text-sm text-[var(--success-strong)]">{money(income)}</strong></span>
+                  <span><span className="text-meta block">Gider</span><strong className="text-sm text-[var(--danger-strong)]">{money(expense)}</strong></span>
+                  <span><span className="text-meta block">Net</span><strong className={`text-sm ${net < 0 ? "text-[var(--danger-strong)]" : ""}`}>{signedMoney(net)}</strong></span>
+                </span>
+              </button>
+            </li>;
+          })}
+        </ul>}
+
+    {!loading && shown.length > 0 && <div>
+      <button type="button" onClick={() => setShowTable((value) => !value)} aria-expanded={showTable} className="btn btn-quiet text-xs">{showTable ? "Tabloyu gizle" : "Yılı tablo olarak gör"}</button>
+      {showTable && <Panel flush title="Nakit akışı" meta={`${year} · gelir hücresine dokun, döküm açılsın`}>
+        <CashFlowTable columns={columns} showTotal selected={null} onDrill={onDrill} onIncome={onIncome} loading={false} />
+      </Panel>}
+    </div>}
+  </div>;
+}
+
+// Bir ayın içi: üç kutu, gelirin ders türüne, giderin kategoriye göre dökümü. Gelir satırı
+// tahsilat dökümünü açar, gider satırı Giderler sekmesine o ay ve kategoriyle iner.
+function MonthDetail({ column, loading, onBack, onIncome, onDrill }: {
+  column: FlowColumn; loading: boolean;
+  onBack: () => void;
+  onIncome: (kind: CourseKind | null) => void;
+  onDrill: (target: "income" | "expenses", filter?: ExpenseCategory) => void;
+}) {
+  const income = incomeOf(column);
+  const expense = expenseOf(column);
+  const net = income - expense;
+  const categories = CATEGORIES.filter((value) => column.expense[value] > 0).sort((a, b) => column.expense[b] - column.expense[a]);
+  const tiles = [
+    { label: "Gelir", value: money(income), className: "text-[var(--success-strong)]" },
+    { label: "Gider", value: money(expense), className: "text-[var(--danger-strong)]" },
+    { label: "Net", value: signedMoney(net), className: net < 0 ? "text-[var(--danger-strong)]" : "" },
+  ];
+  const row = (label: string, amount: number, onClick: () => void, tone: string) => <li key={label}>
+    <button type="button" onClick={onClick} className="pressable flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[var(--surface-muted)]">
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone}`} aria-hidden />
+      <span className="min-w-0 flex-1 text-sm font-semibold">{label}</span>
+      <strong className="text-sm tabular-nums">{money(amount)}</strong>
+      <Icon name="arrow-right" className="h-3.5 w-3.5 text-[var(--muted)]" />
+    </button>
+  </li>;
+
+  return <div className="space-y-3">
+    <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-sm font-bold text-[var(--brand-strong)]"><Icon name="arrow-left" className="h-3.5 w-3.5" />Aylar</button>
+    <h2 className="text-xl font-bold">{MONTHS[Number(column.key.slice(5, 7)) - 1]} {column.key.slice(0, 4)}</h2>
+    <div className="grid grid-cols-3 gap-2">
+      {tiles.map((tile) => <div key={tile.label} className="min-w-0 rounded-2xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5">
+        <span className="text-meta block text-xs font-semibold">{tile.label}</span>
+        <strong className={`block truncate text-base tabular-nums sm:text-xl ${tile.className}`}>{loading ? "…" : tile.value}</strong>
+      </div>)}
+    </div>
+
+    <Panel flush title="Gelir" meta="Bu ayın aidatlarından tahsil edilen" actions={<button type="button" onClick={() => onDrill("income")} className="btn btn-quiet text-xs">Tahsilat defteri</button>}>
+      {income > 0
+        ? <ul className="divide-y divide-[var(--line)]">{COURSE_KINDS.filter((kind) => column.income[kind] > 0).map((kind) => row(`${COURSE_KIND_LABEL[kind]} aidat`, column.income[kind], () => onIncome(kind), "bg-[var(--success)]"))}</ul>
+        : <p className="text-meta px-4 py-5 text-center text-sm">Bu ay tahsilat yok.</p>}
+    </Panel>
+
+    <Panel flush title="Gider" meta="Sabit + tek seferlik" actions={<button type="button" onClick={() => onDrill("expenses")} className="btn btn-quiet text-xs">Gider defteri</button>}>
+      {categories.length
+        ? <ul className="divide-y divide-[var(--line)]">{categories.map((value) => row(CATEGORY_LABEL[value], column.expense[value], () => onDrill("expenses", value), "bg-[var(--danger)]"))}</ul>
+        : <p className="text-meta px-4 py-5 text-center text-sm">Bu ay gider yok.</p>}
+    </Panel>
+  </div>;
 }
 
 // Muhasebe defteri görünümü: satır = ders türü / gider kategorisi, sütun = ay. Toplam ve net
@@ -467,8 +546,6 @@ function CashFlowTable({ columns, showTotal, selected, onDrill, onIncome, loadin
   onIncome: (key: string, kind: CourseKind | null) => void;
 }) {
   if (loading) return <p className="text-meta px-4 py-6 text-center">Yükleniyor…</p>;
-  const incomeOf = (column: FlowColumn) => COURSE_KINDS.reduce((sum, kind) => sum + column.income[kind], 0);
-  const expenseOf = (column: FlowColumn) => CATEGORIES.reduce((sum, value) => sum + column.expense[value], 0);
   const total = (pick: (column: FlowColumn) => number) => columns.reduce((sum, column) => sum + pick(column), 0);
   const amount = (value: number) => value === 0 ? "–" : value.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
   const cellTone = (column: FlowColumn) => `${column.key === selected ? "bg-[var(--brand-soft)]" : ""} ${column.planned ? "text-[var(--muted)] italic" : ""}`;
