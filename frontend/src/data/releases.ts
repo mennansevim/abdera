@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.08",
+    date: "2026-11-08",
+    items: [
+      { audience: "admin", text: "Gelir ve gider ekranının Özet sekmesi artık aylarla açılıyor: her ay bir kartta gelir, gider ve net sonuç. Bir aya dokununca o ayın gelirini ders türüne, giderini kategoriye göre görürsün." },
+    ],
+  },
+  {
     version: "2026.11.06",
     date: "2026-11-06",
     items: [
