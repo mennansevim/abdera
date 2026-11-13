@@ -181,6 +181,7 @@ h1 em { color: var(--brand); }
   font-size: .875rem;
   color: var(--muted);
 }
+.foot small { font-size: .8125rem; }
 
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; }
