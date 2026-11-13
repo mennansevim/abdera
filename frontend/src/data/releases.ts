@@ -22,6 +22,11 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.13",
+    date: "2026-11-13",
+    items: [],
+  },
+  {
     version: "2026.11.08",
     date: "2026-11-08",
     items: [
