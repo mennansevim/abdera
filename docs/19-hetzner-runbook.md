@@ -173,6 +173,7 @@ Bootstrap__AdminPassword=<güçlü, benzersiz>
 # --- Alan adı / CORS / TLS ---
 FRONTEND_ORIGIN=https://panel.okulum.com
 PUBLIC_DOMAIN=panel.okulum.com
+SITE_DOMAIN=okulum.com                  # tanıtım sayfası (site/); www. de buraya yönlenir, DNS'te ikisi de bu sunucuya bakmalı
 ACME_EMAIL=<sertifika-uyarilari@okulum.com>
 # NEXT_PUBLIC_API_BASE_URL'e dokunma: localhost değeri, gerçek alan adında açılan sayfada
 # frontend tarafından otomatik olarak aynı-origin /api'ye çevrilir (frontend/src/lib/api.ts).

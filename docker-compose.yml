@@ -117,12 +117,16 @@ services:
       # (gelistirme) hata verirdi. Bos birakilirsa Caddy bos bir site adresiyle acik
       # bir hata verip durur - yalnizca prod profilini baslatan kisi bunu gorur.
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-}
+      # Okulun tanitim sayfasinin alan adi (site/ klasoru). Bos birakilirsa Caddyfile'daki
+      # varsayilan (site.localhost) gecerli olur - bkz. Caddyfile.
+      SITE_DOMAIN: ${SITE_DOMAIN:-site.localhost}
       ACME_EMAIL: ${ACME_EMAIL:-}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./site:/srv/site:ro
       # Sertifikalar kalici olmazsa her restart'ta yeniden alinir ve Let's Encrypt
       # hiz limitine takilinir.
       - caddy_data:/data

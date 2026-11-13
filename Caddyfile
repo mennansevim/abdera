@@ -43,3 +43,33 @@
 		-Server
 	}
 }
+
+# Okulun herkese açık tanıtım sayfası (site/ klasörü, düz dosya). Panelden bağımsız:
+# api/web kapalıyken de açılır. Meta'nın WhatsApp işletme kontrolü okula ait, adı ve
+# iletişim bilgisi görünen gerçek bir site istiyor.
+#
+# SITE_DOMAIN sunucudaki .env'den gelir (örn. okulum.com). Varsayılan site.localhost:
+# değişken tanımsızken Caddy boş adresle düşmesin ve gerçek bir alan adı için sertifika
+# istemesin (localhost adlarına kendi iç sertifikasını verir).
+{$SITE_DOMAIN:site.localhost} {
+	encode zstd gzip
+	root * /srv/site
+	file_server
+
+	@assets path /fonts/* *.webp *.png *.css
+	header @assets Cache-Control "public, max-age=86400"
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; style-src 'self'; img-src 'self'; font-src 'self'"
+		-Server
+	}
+}
+
+www.{$SITE_DOMAIN:site.localhost} {
+	redir https://{$SITE_DOMAIN:site.localhost}{uri} permanent
+}

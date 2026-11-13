@@ -1,0 +1,192 @@
+/* Abdera Sanat Akademi - public landing page (abderasanat.com).
+   Static on purpose: served by Caddy's file_server, independent of the panel's uptime.
+   Fonts are local copies (latin + latin-ext) for the same reason as the panel: no
+   third-party fetch, and ğ Ğ ş Ş İ must come from the real face. */
+
+@font-face {
+  font-family: "Figtree";
+  src: url("/fonts/Figtree-latin-ext.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lora";
+  src: url("/fonts/Lora-latin-ext.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lora";
+  src: url("/fonts/Lora-Italic-latin-ext.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  --background: #fdf3e7;
+  --surface: #ffffff;
+  --line: #f0ddc4;
+  --foreground: #3a2a1f;
+  --muted: #74604f;
+  --brand: #a65757;        /* logo maroon */
+  --brand-strong: #8a4444;
+  --gutter: clamp(16px, 5vw, 64px);
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+a { color: var(--brand-strong); }
+a:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
+
+h1, h2 {
+  font-family: "Lora", Georgia, serif;
+  font-weight: 500;
+  line-height: 1.15;
+  margin: 0;
+  text-wrap: balance;
+}
+h1 { font-size: clamp(2.1rem, 5.4vw, 3.9rem); }
+h2 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); }
+h1 em { color: var(--brand); }
+
+.eyebrow {
+  margin: 0 0 14px;
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--brand-strong);
+}
+
+/* --- Header --- */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 18px var(--gutter);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--foreground);
+  font-weight: 600;
+  text-decoration: none;
+}
+.brand img { border-radius: 50%; }
+.bar nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; }
+.bar nav a { color: var(--foreground); text-decoration: none; font-size: .9375rem; }
+.bar nav a:hover { color: var(--brand-strong); }
+.bar nav .panel-link {
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+/* --- Hero --- */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr);
+  align-items: center;
+  gap: clamp(24px, 6vw, 80px);
+  padding: clamp(40px, 9vw, 120px) var(--gutter);
+}
+.lead { max-width: 34em; margin: 22px 0 30px; font-size: 1.1875rem; color: var(--muted); }
+.cta {
+  display: inline-block;
+  padding: 13px 26px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+.cta:hover { background: var(--brand-strong); }
+.hero-logo {
+  width: min(100%, 360px);
+  height: auto;
+  justify-self: center;
+  border-radius: 50%;
+  box-shadow: 0 24px 60px rgba(120, 60, 50, .22);
+}
+
+/* --- Sections --- */
+.section {
+  padding: clamp(40px, 7vw, 88px) var(--gutter);
+  border-top: 1px solid var(--line);
+}
+.section-lead { max-width: 40em; margin: 18px 0 34px; color: var(--muted); }
+
+.programs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.programs li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.programs strong { font-family: "Lora", Georgia, serif; font-size: 1.3125rem; font-weight: 500; }
+.programs span { font-size: .875rem; color: var(--muted); }
+
+/* --- Contact --- */
+.contact dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 26px 40px;
+  margin: 30px 0 0;
+}
+.contact dt {
+  margin-bottom: 4px;
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.contact dd { margin: 0; font-size: 1.125rem; overflow-wrap: anywhere; }
+
+/* --- Footer --- */
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 26px var(--gutter);
+  border-top: 1px solid var(--line);
+  font-size: .875rem;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .hero { grid-template-columns: 1fr; }
+  .hero-logo { order: -1; width: min(60%, 240px); justify-self: start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

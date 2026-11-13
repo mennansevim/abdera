@@ -15,6 +15,13 @@
       ],
       "port": 3001,
       "autoPort": false
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "3002", "--directory", "site"],
+      "port": 3002,
+      "autoPort": false
     }
   ]
 }
