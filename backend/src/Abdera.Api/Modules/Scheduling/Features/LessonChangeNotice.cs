@@ -76,6 +76,28 @@ internal static class LessonChangeNotice
             teacherId, actorUserId, StaffNotificationType.LessonCancelled, "Ders iptal edildi", body, "lesson", lessonId);
     }
 
+    // Grup dersinin o günkü oturumu toptan iptal edildi: öğrenci başına değil grup başına tek
+    // bildirim. Referans iptal edilen ilk ders - aynı günü tekrar iptal etmek yeni bildirim açmaz.
+    public static async Task NotifyGroupDayCancelledAsync(
+        IStaffNotifier notifier,
+        IClock clock,
+        Guid? actorUserId,
+        Guid teacherId,
+        string groupName,
+        DateTimeOffset startAt,
+        int cancelledLessons,
+        bool makeupCreditEarned,
+        string? reason,
+        Guid firstLessonId)
+    {
+        var body = $"{groupName} · {Format(clock, startAt)} · {cancelledLessons} öğrenci · " +
+                   (makeupCreditEarned ? "telafi hakkı tanındı" : "telafisiz");
+        if (!string.IsNullOrWhiteSpace(reason)) body += $" · {reason.Trim()}";
+
+        await notifier.NotifyLessonStaffAsync(
+            teacherId, actorUserId, StaffNotificationType.LessonCancelled, "Grup dersi iptal edildi", body, "lesson", firstLessonId);
+    }
+
     public static async Task NotifyMakeupScheduledAsync(
         IStaffNotifier notifier,
         AbderaDbContext db,

@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon, InstrumentSilhouette, instrumentBadgeStyle } from "@/components/icons";
 import { ApiError } from "@/lib/api";
-import { ATTENDANCE_LABELS, useCancelLesson, useMarkAttendance, useRescheduleLesson, type AttendanceStatus } from "@/lib/attendance";
+import { ATTENDANCE_LABELS, useCancelGroupDay, useCancelLesson, useMarkAttendance, useRescheduleLesson, type AttendanceStatus } from "@/lib/attendance";
 import { useMakeupCredits } from "@/lib/billing";
 import { buildInstrumentColorMap, INSTRUMENT_TONES, type InstrumentTone } from "@/lib/lesson-colors";
 import { errorMessage } from "@/lib/library";
@@ -835,6 +835,7 @@ function WeeklyGrid({
           now={now}
           onOpenLesson={(lesson) => { setOpenClass(null); setOpenLesson(lesson); }}
           onClose={() => setOpenClass(null)}
+          onGroupCancelled={canSchedule ? (message) => { setOpenClass(null); showToast("success", message); } : undefined}
         />
       )}
       {openLesson && <LessonDetailsDialog lesson={openLesson} isAdmin={isAdmin} canManage={canSchedule} now={now} onUpdated={(message) => showToast("success", message ?? "Ders ayrıntıları güncellendi.")} onPlanMakeup={(lesson) => { setOpenLesson(null); onPlanMakeup(lesson); }} onClose={() => setOpenLesson(null)} />}
@@ -1272,7 +1273,7 @@ function LessonGroupCard({ lessons, top, height, colors, now, onOpen }: { lesson
   );
 }
 
-function LessonGroupDialog({ lessons, title, subtitle, colors, isAdmin, now, onOpenLesson, onClose }: { lessons: CalendarLesson[]; title?: string; subtitle?: string; colors: Map<string, InstrumentTone>; isAdmin: boolean; now: Date; onOpenLesson: (lesson: CalendarLesson) => void; onClose: () => void }) {
+function LessonGroupDialog({ lessons, title, subtitle, colors, isAdmin, now, onOpenLesson, onClose, onGroupCancelled }: { lessons: CalendarLesson[]; title?: string; subtitle?: string; colors: Map<string, InstrumentTone>; isAdmin: boolean; now: Date; onOpenLesson: (lesson: CalendarLesson) => void; onClose: () => void; onGroupCancelled?: (message: string) => void }) {
   const first = new Date(lessons[0]!.startAt);
   const last = new Date(Math.max(...lessons.map((lesson) => new Date(lesson.endAt).getTime())));
   return (
@@ -1317,7 +1318,54 @@ function LessonGroupDialog({ lessons, title, subtitle, colors, isAdmin, now, onO
           );
         })}
       </ul>
+      {onGroupCancelled && <GroupDayCancel lessons={lessons} onCancelled={onGroupCancelled} />}
     </Modal>
+  );
+}
+
+// Grup dersinin (Resim) o günkü oturumunu toptan iptal: tatil, öğretmen gelemedi gibi okul
+// kaynaklı durumlar. Telafi kararı tekil iptaldeki gibi açıkça seçilir.
+function GroupDayCancel({ lessons, onCancelled }: { lessons: CalendarLesson[]; onCancelled: (message: string) => void }) {
+  const cancelGroupDay = useCancelGroupDay();
+  const [choice, setChoice] = useState<"with-makeup" | "without-makeup" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const groupId = lessons[0]?.lessonGroupId;
+  // Tekil iptaldeki kuralla aynı: yalnızca Normal ders iptal edilebilir.
+  const cancellable = lessons.filter((lesson) => lesson.status === "Normal");
+  if (!groupId || !lessons.every((lesson) => lesson.lessonGroupId === groupId) || !cancellable.length) return null;
+
+  async function confirm() {
+    if (!choice || !groupId) return;
+    setError(null);
+    try {
+      const result = await cancelGroupDay.mutateAsync({ groupId, startAt: lessons[0]!.startAt, grantMakeupCredit: choice === "with-makeup" });
+      onCancelled(result.makeupCreditsEarned
+        ? `Grup dersi iptal edildi: ${result.cancelledLessons} öğrenciye telafi hakkı tanımlandı.`
+        : `Grup dersi telafisiz iptal edildi (${result.cancelledLessons} öğrenci).`);
+    } catch (err) {
+      setError(err instanceof ApiError ? (err.detail ?? err.title) : "Grup dersi iptal edilemedi.");
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-[var(--line)] pt-3">
+      {error && <p role="alert" className="mb-2 text-sm font-bold text-[var(--danger-strong)]">{error}</p>}
+      {choice ? (
+        <div className="rounded-xl border border-[var(--danger)] bg-[var(--danger-soft)] p-3">
+          <p className="text-sm font-bold">{choice === "with-makeup" ? "Bu grup dersi iptal edilip öğrencilere telafi hakkı tanımlansın mı?" : "Bu grup dersi telafi hakkı verilmeden iptal edilsin mi?"}</p>
+          <p className="text-meta mt-1">Gruptaki {cancellable.length} öğrencinin {new Date(lessons[0]!.startAt).toLocaleDateString("tr-TR", { day: "numeric", month: "long" })} {formatTime(new Date(lessons[0]!.startAt))} dersi iptal edilir; diğer haftalar değişmez.</p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <button type="button" disabled={cancelGroupDay.isPending} onClick={confirm} className="pressable min-h-11 rounded-xl bg-[var(--danger-strong)] px-4 text-sm font-bold text-white disabled:opacity-60">{cancelGroupDay.isPending ? "İptal ediliyor…" : "Evet, iptal et"}</button>
+            <button type="button" disabled={cancelGroupDay.isPending} onClick={() => setChoice(null)} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold">Vazgeç</button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button type="button" onClick={() => setChoice("with-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--danger)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">Grup dersini iptal et + telafi</button>
+          <button type="button" onClick={() => setChoice("without-makeup")} className="pressable min-h-11 rounded-xl border border-[var(--line)] bg-white px-4 text-sm font-bold text-[var(--danger-strong)]">Telafisiz iptal</button>
+        </div>
+      )}
+    </div>
   );
 }
 

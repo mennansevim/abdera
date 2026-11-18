@@ -33,6 +33,12 @@ public static class LessonGroups
         DayOfWeek DayOfWeek, TimeOnly StartTime, int DurationMinutes, int Capacity, DateOnly EffectiveFrom,
         LessonGroupStatus Status, DateOnly? EndedOn, IReadOnlyList<MemberResponse> Members);
 
+    // O günkü grup oturumunu (grubun tüm üyelerinin StartAt anındaki dersleri) tek seferde iptal eder.
+    // GrantMakeupCredit açık seçimdir: tatil/öğretmen gelemedi gibi okul kaynaklı iptal; telafi
+    // kararı tekil iptaldeki gibi her öğrencinin kendi kaydına düşer.
+    public record CancelDayRequest(DateTimeOffset StartAt, bool GrantMakeupCredit, string? Reason = null);
+    public record CancelDayResponse(int CancelledLessons, int MakeupCreditsEarned);
+
     public record AddMemberResponse(LessonGroupResponse Group, LessonSeriesFeatures.GenerationSummary Generation);
 
     public static void MapLessonGroups(this IEndpointRouteBuilder app)
@@ -44,6 +50,8 @@ public static class LessonGroups
         group.MapPatch("/{groupId:guid}", UpdateAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPost("/{groupId:guid}/members", AddMemberAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
         group.MapPost("/{groupId:guid}/end", EndAsync).RequireAuthorization(AuthorizationPolicies.AdminOnly);
+        // Tekil iptal gibi: öğretmen kendi grubunun dersini, yönetici tüm grupları iptal edebilir.
+        group.MapPost("/{groupId:guid}/cancel-day", CancelDayAsync).RequireAuthorization(AuthorizationPolicies.TeacherOrAdmin);
     }
 
     private static async Task<IResult> ListAsync(bool? includeEnded, ClaimsPrincipal principal, AbderaDbContext db)
@@ -215,6 +223,49 @@ public static class LessonGroups
             beforeJson: before, afterJson: Serialize(lessonGroup)));
         await db.SaveChangesAsync();
         return Results.Ok((await ToResponsesAsync([lessonGroup], db)).Single());
+    }
+
+    private static async Task<IResult> CancelDayAsync(
+        Guid groupId, CancelDayRequest request, ClaimsPrincipal principal, AbderaDbContext db, IClock clock,
+        IConfiguration config, INotificationScheduler scheduler, IStaffNotifier staffNotifier)
+    {
+        var lessonGroup = await db.LessonGroups.SingleOrDefaultAsync(g => g.Id == groupId)
+            ?? throw new NotFoundException("Grup bulunamadı.");
+        var teacherScope = await AuthContext.ResolveTeacherScopeAsync(principal, db);
+        if (teacherScope is { } scopedTeacherId && scopedTeacherId != lessonGroup.TeacherId)
+            throw new ForbiddenException("Bu grup size atanmamış.");
+
+        // Gruptan ayrılmış üyelerin o güne düşen dersleri de grubun oturumudur - seri durumuna
+        // bakılmaz; yalnızca hâlâ işlenebilir (iptal/tamamlanmamış) dersler iptal edilir.
+        var seriesIds = db.LessonSeries.Where(s => s.LessonGroupId == groupId).Select(s => s.Id);
+        var startAt = request.StartAt.ToUniversalTime();
+        var lessons = await db.Lessons
+            .Where(l => l.LessonSeriesId != null && seriesIds.Contains(l.LessonSeriesId.Value) && l.StartAt == startAt)
+            // Rescheduled: başka saate taşınmış dersin eski kaydı - o saatte artık ders yok.
+            .Where(l => l.Status != LessonStatus.Cancelled && l.Status != LessonStatus.Completed && l.Status != LessonStatus.Rescheduled)
+            .OrderBy(l => l.Id)
+            .ToListAsync();
+        if (lessons.Count == 0)
+            throw new ConflictException("Bu saatte iptal edilecek grup dersi yok (dersler iptal edilmiş ya da yoklaması alınmış olabilir).");
+
+        var actorUserId = AuthContext.GetUserId(principal);
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? $"{lessonGroup.Name} grup dersi iptal edildi." : request.Reason.Trim();
+        var cancelRequest = new CancelLesson.Request(CancelLesson.CancelledBy.School, reason, request.GrantMakeupCredit);
+
+        var credits = 0;
+        foreach (var lesson in lessons)
+        {
+            if (await CancelLesson.ApplyAsync(lesson, cancelRequest, actorUserId, db, clock, config, scheduler, staffNotifier, notifyStaff: false))
+                credits++;
+        }
+
+        await LessonChangeNotice.NotifyGroupDayCancelledAsync(
+            staffNotifier, clock, actorUserId, lessonGroup.TeacherId, lessonGroup.Name, request.StartAt,
+            lessons.Count, request.GrantMakeupCredit, request.Reason, lessons[0].Id);
+
+        await db.SaveChangesAsync();
+        await staffNotifier.FlushEmailsAsync();
+        return Results.Ok(new CancelDayResponse(lessons.Count, credits));
     }
 
     private static Task<int> CountActiveMembersAsync(Guid groupId, AbderaDbContext db) =>

@@ -160,4 +160,59 @@ public class LessonGroupFlowTests : IClassFixture<AbderaWebApplicationFactory>
             new LessonGroups.CreateRequest("Yetkisiz", created.Teacher.Id, art.Id, DayOfWeek.Monday, new TimeOnly(17, 0), NextSaturday()));
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
     }
+
+    [Fact]
+    public async Task Cancelling_the_group_day_cancels_every_member_once_and_leaves_other_weeks_alone()
+    {
+        var admin = await LoginAsync("admin@test.local", "Test1234!");
+        var instruments = await ReadAsync<List<Instruments.InstrumentResponse>>(await admin.GetAsync("/api/instruments"));
+        var art = instruments.Single(i => i.Code == "ART");
+        var email = $"iptal-{Guid.NewGuid():N}@test.local";
+        var created = await ReadAsync<Teachers.CreateResponse>(await admin.PostAsJsonAsync("/api/teachers",
+            new Teachers.CreateRequest("Iptal", $"Grup{Guid.NewGuid():N}"[..12], [art.Id], email)));
+        var other = (await ReadAsync<Teachers.CreateResponse>(await admin.PostAsJsonAsync("/api/teachers",
+            new Teachers.CreateRequest("Diger", $"Ressam{Guid.NewGuid():N}"[..12], [art.Id], null)))).Teacher;
+
+        var firstSaturday = NextSaturday();
+        var group = await ReadAsync<LessonGroups.LessonGroupResponse>(await admin.PostAsJsonAsync("/api/lesson-groups",
+            new LessonGroups.CreateRequest("Resim Iptal", created.Teacher.Id, art.Id, DayOfWeek.Saturday, new TimeOnly(14, 0), firstSaturday)));
+        var foreignGroup = await ReadAsync<LessonGroups.LessonGroupResponse>(await admin.PostAsJsonAsync("/api/lesson-groups",
+            new LessonGroups.CreateRequest("Baskasinin", other.Id, art.Id, DayOfWeek.Saturday, new TimeOnly(14, 0), firstSaturday)));
+        for (var i = 0; i < 3; i++)
+        {
+            var student = await CreateStudentAsync(admin, $"Iptal{i}");
+            await ReadAsync<LessonGroups.AddMemberResponse>(await admin.PostAsJsonAsync(
+                $"/api/lesson-groups/{group.Id}/members", new LessonGroups.AddMemberRequest(student.Id)));
+        }
+        var foreignStudent = await CreateStudentAsync(admin, "Baska");
+        await ReadAsync<LessonGroups.AddMemberResponse>(await admin.PostAsJsonAsync(
+            $"/api/lesson-groups/{foreignGroup.Id}/members", new LessonGroups.AddMemberRequest(foreignStudent.Id)));
+
+        var from = firstSaturday.ToDateTime(TimeOnly.MinValue);
+        async Task<List<Calendar.LessonResponse>> CalendarAsync(int days) =>
+            await ReadAsync<List<Calendar.LessonResponse>>(await admin.GetAsync(
+                $"/api/calendar?from={from:yyyy-MM-dd}T00:00:00Z&to={from.AddDays(days):yyyy-MM-dd}T00:00:00Z&teacherId={created.Teacher.Id}"));
+        var startAt = (await CalendarAsync(1)).First().StartAt;
+
+        // Başka öğretmenin grubunu öğretmen iptal edemez.
+        var teacher = await LoginAsync(email, created.TemporaryPassword!);
+        var forbidden = await teacher.PostAsJsonAsync($"/api/lesson-groups/{foreignGroup.Id}/cancel-day",
+            new LessonGroups.CancelDayRequest(startAt, GrantMakeupCredit: true));
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        var result = await ReadAsync<LessonGroups.CancelDayResponse>(await teacher.PostAsJsonAsync(
+            $"/api/lesson-groups/{group.Id}/cancel-day", new LessonGroups.CancelDayRequest(startAt, GrantMakeupCredit: true, "Öğretmen hasta")));
+        Assert.Equal(3, result.CancelledLessons);
+        Assert.Equal(3, result.MakeupCreditsEarned);
+
+        var twoWeeks = await CalendarAsync(8);
+        Assert.All(twoWeeks.Where(l => l.StartAt == startAt), l => Assert.Equal("Cancelled", l.Status.ToString()));
+        Assert.All(twoWeeks.Where(l => l.StartAt != startAt), l => Assert.Equal("Normal", l.Status.ToString()));
+        Assert.Contains(twoWeeks, l => l.StartAt != startAt);
+
+        // Aynı oturum ikinci kez iptal edilemez.
+        var again = await teacher.PostAsJsonAsync($"/api/lesson-groups/{group.Id}/cancel-day",
+            new LessonGroups.CancelDayRequest(startAt, GrantMakeupCredit: false));
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+    }
 }

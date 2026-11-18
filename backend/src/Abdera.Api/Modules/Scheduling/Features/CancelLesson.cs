@@ -41,6 +41,21 @@ public static class CancelLesson
         if (teacherScope is { } scopedTeacherId && scopedTeacherId != lesson.TeacherId)
             throw new ForbiddenException("Bu ders size atanmamış.");
 
+        var earnsCredit = await ApplyAsync(
+            lesson, request, AuthContext.GetUserId(principal), db, clock, config, scheduler, staffNotifier, notifyStaff: true);
+
+        await db.SaveChangesAsync();
+        await staffNotifier.FlushEmailsAsync();
+        return Results.Ok(new Response(lesson.Id, earnsCredit));
+    }
+
+    // İptalin tek yeri: tekil iptal ve grup dersinin o günkü toplu iptali (LessonGroups.CancelDayAsync)
+    // aynı kuralı (job iptali, telafi kararı, audit) buradan geçirir. SaveChanges çağıranın işi.
+    // notifyStaff=false: toplu iptal öğrenci başına değil grup başına tek bildirim düşürür.
+    internal static async Task<bool> ApplyAsync(
+        Lesson lesson, Request request, Guid? actorUserId, AbderaDbContext db, IClock clock, IConfiguration config,
+        INotificationScheduler scheduler, IStaffNotifier staffNotifier, bool notifyStaff)
+    {
         var now = clock.UtcNow;
         lesson.Cancel(now);
 
@@ -75,7 +90,7 @@ public static class CancelLesson
         }
 
         db.AuditLogs.Add(AuditLog.Record(
-            AuthContext.GetUserId(principal),
+            actorUserId,
             "lesson.cancelled",
             nameof(Lesson),
             lesson.Id,
@@ -93,12 +108,13 @@ public static class CancelLesson
                 Reason = request.Reason,
             })));
 
-        await LessonChangeNotice.NotifyCancelledAsync(
-            staffNotifier, db, clock, AuthContext.GetUserId(principal), lesson.TeacherId, lesson.StudentId,
-            lesson.StartAt, lesson.Id, earnsCredit, request.Reason);
+        if (notifyStaff)
+        {
+            await LessonChangeNotice.NotifyCancelledAsync(
+                staffNotifier, db, clock, actorUserId, lesson.TeacherId, lesson.StudentId,
+                lesson.StartAt, lesson.Id, earnsCredit, request.Reason);
+        }
 
-        await db.SaveChangesAsync();
-        await staffNotifier.FlushEmailsAsync();
-        return Results.Ok(new Response(lesson.Id, earnsCredit));
+        return earnsCredit;
     }
 }

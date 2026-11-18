@@ -313,6 +313,21 @@ export function useCancelLesson() {
   });
 }
 
+// Grup dersinin (Resim) o günkü oturumunu tek seferde iptal eder: gruptaki her öğrencinin o
+// saatteki dersi okul kaynaklı iptal olur. Backend: LessonGroups.CancelDayAsync.
+export function useCancelGroupDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, startAt, grantMakeupCredit, reason }: { groupId: string; startAt: string; grantMakeupCredit: boolean; reason?: string }) =>
+      api.post<{ cancelledLessons: number; makeupCreditsEarned: number }>(`/api/lesson-groups/${groupId}/cancel-day`, { startAt, grantMakeupCredit, reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["calendar"] });
+      queryClient.invalidateQueries({ queryKey: ["makeup-credits"] });
+      queryClient.invalidateQueries({ queryKey: ["benchmark"] });
+    },
+  });
+}
+
 // "Yoklama" ekranı (/dashboard/attendance): geçmişe dönük yoklama dökümü + öğretmen kırılımı.
 // Backend: Modules/Attendance/Features/AttendanceHistory.cs.
 export type AttendanceFilter = AttendanceStatus | "NotMarked";
