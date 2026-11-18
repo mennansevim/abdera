@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.18",
+    date: "2026-11-18",
+    items: [
+      { audience: "all", text: "Takvimde grup dersine dokununca açılan pencereden o günkü dersi tek seferde iptal edebilirsin: \"Grup dersini iptal et + telafi\" ya da \"Telafisiz iptal\". Gruptaki herkesin o saatteki dersi iptal olur, sonraki haftalar değişmez." },
+    ],
+  },
+  {
     version: "2026.11.13.3",
     date: "2026-11-13",
     items: [],
