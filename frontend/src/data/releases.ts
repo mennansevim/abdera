@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.24.2",
+    date: "2026-11-24",
+    items: [
+      { audience: "all", text: "Yeni bir haftalık ders tanımladığın anda takvimde bir yıl ileriye kadar görünür; takvim her gün kendiliğinden bir gün daha ileri yazılır, ders sen bitirene kadar hiç kesilmez." },
+    ],
+  },
+  {
     version: "2026.11.24",
     date: "2026-11-24",
     items: [
