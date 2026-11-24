@@ -22,6 +22,13 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.24",
+    date: "2026-11-24",
+    items: [
+      { audience: "all", text: "Haftalık ders programı artık takvimde okul yılı sonuna (Haziran) kadar görünüyor ve her gün kendiliğinden ileri taşınıyor. Birkaç hafta sonra boşalan günler (özellikle Perşembe ve Cumartesi) yeniden dolu. Taşıdığın veya iptal ettiğin derslere dokunulmadı." },
+    ],
+  },
+  {
     version: "2026.11.22",
     date: "2026-11-22",
     items: [],
