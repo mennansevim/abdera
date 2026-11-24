@@ -83,14 +83,24 @@ public class StudentDeactivationFlowTests : IClassFixture<AbderaWebApplicationFa
             (pastLessonId, makeupLessonId, creditId) = (past.Id, makeup.Id, credit.Id);
         }
 
-        var futureCount = (await CalendarAsync(admin, seeded.TeacherId)).Count;
+        // Dersler 12 ay ileriye yazılı (AM); takvim uç noktası en fazla ~3 ay gösterdiği için
+        // sayı doğrudan veritabanından alınır. Takvimin bu 3 aylık kesiti ayrıca karşılaştırılır.
+        int futureCount;
+        await using (var count = await _factory.CreateDbContextAsync())
+        {
+            var countFrom = DateTimeOffset.UtcNow;
+            futureCount = await count.Lessons.CountAsync(l => l.StudentId == seeded.StudentId && l.StartAt > countFrom &&
+                (l.Status == LessonStatus.Normal || l.Status == LessonStatus.Makeup));
+        }
+        var calendarCount = (await CalendarAsync(admin, seeded.TeacherId)).Count;
+        Assert.InRange(calendarCount, 1, futureCount);
         var impact = await ReadAsync<StudentDeactivation.ImpactResponse>(await admin.GetAsync($"/api/students/{seeded.StudentId}/deactivation-impact"));
         Assert.Equal(futureCount, impact.FutureLessons);
         Assert.Equal(1, impact.ActiveEnrollments);
         Assert.Single(impact.Teachers);
 
         // Etki sorgusu (onay penceresinin vazgeçilen hâli) hiçbir şeyi değiştirmez.
-        Assert.Equal(futureCount, (await CalendarAsync(admin, seeded.TeacherId)).Count);
+        Assert.Equal(calendarCount, (await CalendarAsync(admin, seeded.TeacherId)).Count);
         Assert.Equal(StudentStatus.Active,
             (await ReadAsync<Students.StudentResponse>(await admin.GetAsync($"/api/students/{seeded.StudentId}"))).Status);
 

@@ -24,12 +24,15 @@ public class SeriesExtensionFlowTests : IClassFixture<AbderaWebApplicationFactor
     }
 
     [Fact]
-    public void School_year_ends_in_june_and_rolls_over_in_july()
+    public void Horizon_rolls_twelve_months_ahead_of_today()
     {
         var config = new ConfigurationBuilder().Build();
-        Assert.Equal(new DateOnly(2027, 6, 30), SeriesExtension.SchoolYearEnd(new DateOnly(2026, 11, 24), config));
-        Assert.Equal(new DateOnly(2027, 6, 30), SeriesExtension.SchoolYearEnd(new DateOnly(2027, 6, 30), config));
-        Assert.Equal(new DateOnly(2028, 6, 30), SeriesExtension.SchoolYearEnd(new DateOnly(2027, 7, 1), config));
+        Assert.Equal(new DateOnly(2027, 11, 24), SeriesExtension.HorizonEnd(new DateOnly(2026, 11, 24), config));
+        // Haziran'da bitmez: pencere her gün bugünle birlikte kayar.
+        Assert.Equal(new DateOnly(2028, 6, 30), SeriesExtension.HorizonEnd(new DateOnly(2027, 6, 30), config));
+        var six = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["Scheduling:HorizonMonths"] = "6" }).Build();
+        Assert.Equal(new DateOnly(2027, 5, 24), SeriesExtension.HorizonEnd(new DateOnly(2026, 11, 24), six));
     }
 
     [Fact]
@@ -62,6 +65,24 @@ public class SeriesExtensionFlowTests : IClassFixture<AbderaWebApplicationFactor
         var kept = await SeriesAsync("Uzayan", DayOfWeek.Saturday);
         var ended = await SeriesAsync("Biten", DayOfWeek.Thursday);
 
+        var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
+        DateOnly Local(DateTimeOffset at) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, tz).Date);
+        var horizon = SeriesExtension.HorizonEnd(Local(DateTimeOffset.UtcNow), _factory.Services.GetRequiredService<IConfiguration>());
+
+        // Seri kurulduğu anda ufka (12 ay) kadar yazılı - ertesi günü beklemez.
+        await using (var check = await _factory.CreateDbContextAsync())
+        {
+            var latest = await check.Lessons.Where(l => l.LessonSeriesId == kept.SeriesId).MaxAsync(l => l.StartAt);
+            Assert.True(Local(latest) > horizon.AddDays(-7) && Local(latest) <= horizon);
+        }
+
+        // Eski kurulumdaki gibi 8 haftadan sonrası hiç üretilmemiş bir seri taklit edilir.
+        await using (var trim = await _factory.CreateDbContextAsync())
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddDays(56);
+            await trim.Lessons.Where(l => l.LessonSeriesId == kept.SeriesId && l.StartAt > cutoff).ExecuteDeleteAsync();
+        }
+
         // Uzayan serinin 3. gelecek dersi aynı öğrenciyle ertesi güne taşınır: eski satırın seri bağı kopar.
         await using var db = await _factory.CreateDbContextAsync();
         var moved = (await db.Lessons.Where(l => l.LessonSeriesId == kept.SeriesId && l.StartAt > DateTimeOffset.UtcNow)
@@ -89,8 +110,6 @@ public class SeriesExtensionFlowTests : IClassFixture<AbderaWebApplicationFactor
         Assert.True(first.LessonsCreated > 0);
 
         db.ChangeTracker.Clear();
-        var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/Istanbul");
-        DateOnly Local(DateTimeOffset at) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, tz).Date);
 
         // Var olan hiçbir ders silinmedi.
         var afterIds = await db.Lessons.Where(l => l.TeacherId == teacher.Id).Select(l => l.Id).ToListAsync();

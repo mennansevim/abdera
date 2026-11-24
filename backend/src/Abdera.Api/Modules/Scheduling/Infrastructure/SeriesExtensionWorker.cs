@@ -6,7 +6,7 @@ using Abdera.Api.Shared;
 
 namespace Abdera.Api.Modules.Scheduling.Infrastructure;
 
-// docs/10-decisions.md AM: açık serileri okul yılı sonuna kadar uzatır (SeriesExtension).
+// docs/10-decisions.md AM: açık serileri bugünden 12 ay ileriye kadar yazılı tutar (SeriesExtension).
 // Açılışta bir kez (deploy sonrası boşluk hemen dolsun), sonra günde bir. İdempotent: zaten
 // üretilmiş günlere dokunmaz, iki kez çalışması zarar vermez. Scheduling:ExtendSeries=false
 // ile kapatılır (entegrasyon testleri kendi ders sayılarını bozmasın diye kapatır).

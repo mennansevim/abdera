@@ -332,13 +332,12 @@ public static class LessonSeriesFeatures
         if (!await IsStudentActiveAsync(enrollment.StudentId, db))
             return new GenerationSummary(0, [], []);
 
-        // from/until: SeriesExtension okul yılı sonuna kadar uzatırken verir (AM). Verilmezse
-        // seri kurulurken/taşınırken bugünden itibaren GenerationWeeks haftalık pencere.
-        var weeks = config.GetValue("Scheduling:GenerationWeeks", 10);
+        // Seri kurulurken/taşınırken de günlük uzatmadaki gibi ufka (bugün + HorizonMonths) kadar
+        // üretilir (AM1) - yeni program ilk günden ileriye dolu görünür. from/until SeriesExtension'dan.
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
         var earliest = from is { } f && f > today ? f : today;
         var windowStart = series.EffectiveFrom > earliest ? series.EffectiveFrom : earliest;
-        var windowEnd = until ?? windowStart.AddDays(weeks * 7);
+        var windowEnd = until ?? SeriesExtension.HorizonEnd(today, config);
 
         var existingDates = await LoadOccupiedDatesAsync(series.Id, db, clock);
 

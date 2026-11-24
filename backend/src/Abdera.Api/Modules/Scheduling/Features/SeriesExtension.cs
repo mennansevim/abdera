@@ -8,21 +8,21 @@ namespace Abdera.Api.Modules.Scheduling.Features;
 
 // docs/10-decisions.md AM: seri kurulurken yalnızca GenerationWeeks haftalık ders üretiliyordu ve
 // pencereyi ileri taşıyan bir iş yoktu - Eylül sonunda girilen program Kasım sonunda takvimden
-// boşaldı. Bu iş her açık seriyi okul yılı sonuna kadar uzatır. Yalnızca EKSİK günleri açar:
+// boşaldı. Artık her seri bugünden HorizonMonths (varsayılan 12) ay ileriye kadar yazılı tutulur:
+// seri kurulurken/taşınırken hemen, sonra bu iş her gün pencereyi bir gün daha ileri kaydırır -
+// "bitiş" diye bir tarih yoktur, seri bitirilene kadar takvim dolu kalır. Yalnızca EKSİK günleri açar:
 // var olan derse (iptal, taşınmış, telafi zinciri dahil) dokunmaz; tatil ve öğretmen izni
 // atlanır; bitmiş/donmuş kayıt ve pasif öğrenci uzatılmaz. Bugünün dersi açılmaz (yarından başlar).
 public static class SeriesExtension
 {
     public record Result(int SeriesVisited, int LessonsCreated, DateOnly Until);
 
-    // Okul yılı Haziran sonunda biter. Temmuz'dan itibaren bir sonraki okul yılının sonu hedeflenir.
-    // Scheduling:SchoolYearEnd (yyyy-MM-dd) verilirse ve geçmemişse o tarih kullanılır.
-    public static DateOnly SchoolYearEnd(DateOnly today, IConfiguration config)
+    // Ufkun tek hesabı: bugünden Scheduling:HorizonMonths ay sonrası (kayan pencere, AM1). Yaz
+    // ayları dahil - okul yazın da ders veriyor; kapalı günler tatil olarak girilir.
+    public static DateOnly HorizonEnd(DateOnly today, IConfiguration config)
     {
-        if (DateOnly.TryParse(config["Scheduling:SchoolYearEnd"], out var configured) && configured >= today)
-            return configured;
-        var year = today.Month >= 7 ? today.Year + 1 : today.Year;
-        return new DateOnly(year, 6, 30);
+        var months = config.GetValue("Scheduling:HorizonMonths", 12);
+        return today.AddMonths(Math.Clamp(months, 1, 24));
     }
 
     public static async Task<Result> ExtendAllAsync(
@@ -31,7 +31,7 @@ public static class SeriesExtension
     {
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
         var from = today.AddDays(1);
-        var until = SchoolYearEnd(today, config);
+        var until = HorizonEnd(today, config);
 
         var candidates = await db.LessonSeries
             .Where(s => s.Status == LessonSeriesStatus.Active)
