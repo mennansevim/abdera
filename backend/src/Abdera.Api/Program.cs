@@ -116,6 +116,7 @@ builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSingleton<IPasswordHasher<Guardian>, PasswordHasher<Guardian>>();
 // Periyodik işler (aidat, bildirim, hatırlatma, yedek) tek, uzun ömürlü container'da
 // BackgroundService olarak çalışır (Hetzner, docs/19-hetzner-runbook.md).
+builder.Services.AddSchedulingModule();
 builder.Services.AddBillingModule();
 builder.Services.AddMessagingModule();
 builder.Services.AddOpsModule();

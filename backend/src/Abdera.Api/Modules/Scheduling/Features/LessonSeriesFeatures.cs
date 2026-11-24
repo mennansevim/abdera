@@ -325,24 +325,22 @@ public static class LessonSeriesFeatures
 
     internal static async Task<GenerationSummary> GenerateForSeriesAsync(
         LessonSeries series, Enrollment enrollment, AbderaDbContext db, IClock clock, IConfiguration config,
-        INotificationScheduler scheduler)
+        INotificationScheduler scheduler, DateOnly? from = null, DateOnly? until = null)
     {
         // Ders üretiminin tek noktası: pasif öğrenciye hiçbir yoldan ders açılmaz (AI). Öğrenci
         // bu kural gelmeden pasife alınmış ve serisi açık kalmış olabilir.
         if (!await IsStudentActiveAsync(enrollment.StudentId, db))
             return new GenerationSummary(0, [], []);
 
+        // from/until: SeriesExtension okul yılı sonuna kadar uzatırken verir (AM). Verilmezse
+        // seri kurulurken/taşınırken bugünden itibaren GenerationWeeks haftalık pencere.
         var weeks = config.GetValue("Scheduling:GenerationWeeks", 10);
         var today = DateOnly.FromDateTime(clock.ToSchoolLocal(clock.UtcNow).Date);
-        var windowStart = series.EffectiveFrom > today ? series.EffectiveFrom : today;
-        var windowEnd = windowStart.AddDays(weeks * 7);
+        var earliest = from is { } f && f > today ? f : today;
+        var windowStart = series.EffectiveFrom > earliest ? series.EffectiveFrom : earliest;
+        var windowEnd = until ?? windowStart.AddDays(weeks * 7);
 
-        var existingDates = (await db.Lessons
-                .Where(l => l.LessonSeriesId == series.Id)
-                .Select(l => l.StartAt)
-                .ToListAsync())
-            .Select(startAt => DateOnly.FromDateTime(clock.ToSchoolLocal(startAt).Date))
-            .ToHashSet();
+        var existingDates = await LoadOccupiedDatesAsync(series.Id, db, clock);
 
         var holidayDates = await db.SchoolCalendarDays
             .Where(d => d.Type == SchoolCalendarDayType.Holiday && d.Date >= windowStart && d.Date <= windowEnd)
@@ -384,6 +382,37 @@ public static class LessonSeriesFeatures
         await db.SaveChangesAsync();
 
         return new GenerationSummary(plan.ToCreate.Count, plan.SkippedHolidays, plan.SkippedTeacherTimeOff);
+    }
+
+    // Serinin "dolu" günleri: seriye bağlı her ders (iptal/taşınmış dahil) ve bu derslerin
+    // OriginalLessonId zincirindeki eski satırlar. Tek ders düzenlenince (Lesson.CreateEditedCopy)
+    // eski satırın seri bağı kopar; zinciri izlemesek uzatma o eski güne yeniden ders açardı ve
+    // taşınmış ders iki kez görünürdü.
+    private static async Task<HashSet<DateOnly>> LoadOccupiedDatesAsync(Guid seriesId, AbderaDbContext db, IClock clock)
+    {
+        var rows = await db.Lessons
+            .Where(l => l.LessonSeriesId == seriesId)
+            .Select(l => new { l.Id, l.StartAt, l.OriginalLessonId })
+            .ToListAsync();
+
+        var startTimes = rows.Select(r => r.StartAt).ToList();
+        var seen = rows.Select(r => r.Id).ToHashSet();
+        var pending = rows.Where(r => r.OriginalLessonId is { } id && !seen.Contains(id))
+            .Select(r => r.OriginalLessonId!.Value).ToHashSet();
+
+        while (pending.Count > 0)
+        {
+            var originals = await db.Lessons
+                .Where(l => pending.Contains(l.Id))
+                .Select(l => new { l.Id, l.StartAt, l.OriginalLessonId })
+                .ToListAsync();
+            seen.UnionWith(pending);
+            startTimes.AddRange(originals.Select(o => o.StartAt));
+            pending = originals.Where(o => o.OriginalLessonId is { } id && !seen.Contains(id))
+                .Select(o => o.OriginalLessonId!.Value).ToHashSet();
+        }
+
+        return startTimes.Select(startAt => DateOnly.FromDateTime(clock.ToSchoolLocal(startAt).Date)).ToHashSet();
     }
 
     private static Task<bool> IsStudentActiveAsync(Guid studentId, AbderaDbContext db) =>
