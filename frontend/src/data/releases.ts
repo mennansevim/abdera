@@ -22,6 +22,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: "2026.11.28",
+    date: "2026-11-28",
+    items: [
+      { audience: "all", text: "Haftada 2 ders isteyen öğrenciye aynı kurs için ikinci bir ders günü ekleyebilirsin: öğrenci künyesinde kursun altındaki \"+ İkinci gün\" ile. İki günün de saati ayrı ayrı değiştirilebilir; bir kursta en fazla 2 gün olur." },
+      { audience: "admin", text: "Haftada 2 ders alan öğrencinin iki günü aynı 4 derslik kartı doldurur; kart yaklaşık iki haftada dolduğu için ayda yaklaşık iki dönem aidatı açılır." },
+    ],
+  },
+  {
     version: "2026.11.24.2",
     date: "2026-11-24",
     items: [
