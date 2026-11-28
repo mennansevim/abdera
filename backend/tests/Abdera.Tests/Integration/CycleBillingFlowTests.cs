@@ -150,6 +150,50 @@ public class CycleBillingFlowTests : IClassFixture<AbderaWebApplicationFactory>
             Assert.True(await db.AuditLogs.AnyAsync(log => log.Action == "receivable.cycle_accrued" && log.EntityId == cycles[1].Id));
     }
 
+    // K9a: haftada 2 ders alan öğrencinin iki programı aynı kurs kaydına bağlıdır, ikisinin
+    // dersleri TEK kartı doldurur - 4 ders (iki hafta) bir dönem aidatı, ikinci kart açılmaz.
+    [Fact]
+    public async Task Two_weekly_schedules_on_one_enrollment_fill_a_single_card()
+    {
+        var admin = await AdminAsync();
+        var seeded = await SeedAsync(admin, "IkiGun", 0);
+
+        var monday = await ReadAsync<Abdera.Api.Modules.Scheduling.Features.LessonSeriesFeatures.CreateResponse>(
+            await admin.PostAsJsonAsync("/api/lesson-series", new Abdera.Api.Modules.Scheduling.Features.LessonSeriesFeatures.CreateRequest(
+                seeded.EnrollmentId, DayOfWeek.Monday, new TimeOnly(18, 0), 45, CycleStart, null)));
+        var thursday = await ReadAsync<Abdera.Api.Modules.Scheduling.Features.LessonSeriesFeatures.CreateResponse>(
+            await admin.PostAsJsonAsync("/api/lesson-series", new Abdera.Api.Modules.Scheduling.Features.LessonSeriesFeatures.CreateRequest(
+                seeded.EnrollmentId, DayOfWeek.Thursday, new TimeOnly(16, 0), 45, CycleStart, null)));
+
+        // İki programdan dönüşümlü dört geçmiş ders (seri üretimi bugünden ileriye yazdığı için elle).
+        var lessons = new List<Lesson>();
+        await using (var db = await _factory.CreateDbContextAsync())
+        {
+            for (var index = 0; index < 5; index++)
+            {
+                var seriesId = index % 2 == 0 ? monday.Series.Id : thursday.Series.Id;
+                var start = Now.AddDays(-30 + index * 3);
+                lessons.Add(Lesson.CreateFromSeries(seriesId, seeded.StudentId, seeded.TeacherId, seeded.InstrumentId, start, start.AddMinutes(45), Now));
+            }
+            db.Lessons.AddRange(lessons);
+            await db.SaveChangesAsync();
+        }
+
+        for (var index = 0; index < 4; index++)
+            await MarkAsync(admin, lessons[index].Id, AttendanceStatus.Present);
+
+        var first = Assert.Single(await CyclesAsync(seeded.EnrollmentId));
+        Assert.Equal("D001", first.Period);
+        Assert.Equal(lessons[0].Id, first.AccruedLessonId);
+        var card = await CardAsync(admin, seeded.EnrollmentId);
+        Assert.Equal(1, card.CurrentCycle);
+        Assert.Equal(4, card.FilledInCurrent);
+
+        // 5. ders (öteki programdan) 2. dönemi açar.
+        await MarkAsync(admin, lessons[4].Id, AttendanceStatus.Present);
+        Assert.Equal(["D001", "D002"], (await CyclesAsync(seeded.EnrollmentId)).Select(r => r.Period));
+    }
+
     [Fact]
     public async Task Correcting_the_opening_lesson_cancels_the_unpaid_cycle_and_marking_it_again_reopens_the_same_row()
     {

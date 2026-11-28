@@ -155,7 +155,7 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
         var instruments = await (await admin.GetAsync("/api/instruments"))
             .Content.ReadFromJsonAsync<List<Instruments.InstrumentResponse>>(TestJson.Options);
         // Aynı enstrümandan ikinci bir program açılamadığı için (bkz.
-        // Student_cannot_have_two_schedules_for_the_same_instrument) haftalık sınır ancak
+        // Same_instrument_allows_two_days_on_one_enrollment_but_not_a_second_teacher) haftalık sınır ancak
         // farklı enstrümanlarla test edilebilir - beş ayrı branş gerekiyor.
         var branches = instruments!
             .Where(item => item.Code is "PIANO" or "GUITAR" or "VIOLIN" or "DRUMS" or "CELLO")
@@ -610,11 +610,10 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
             log.Action == "lesson_series.rescheduled" && log.EntityId == moved.Series.Id));
     }
 
-    // Kullanıcı kuralı: "bir öğrenci aynı enstrüman için birden fazla ders alamasın, farklı
-    // saatler de olsa." Enrollment kısıtı yalnızca aynı öğretmeni engelliyordu; asıl sızıntı
-    // ikinci bir öğretmenle aynı enstrümandan ikinci bir program açmaktı.
+    // Kullanıcı kuralı (K9): aynı enstrümanı ikinci bir öğretmenden (ikinci kayıtla) almak yasak.
+    // K9a: aynı kayıt üzerinde haftada en fazla 2 program serbest (haftada 2 ders isteyen öğrenci).
     [Fact]
-    public async Task Student_cannot_have_two_schedules_for_the_same_instrument()
+    public async Task Same_instrument_allows_two_days_on_one_enrollment_but_not_a_second_teacher()
     {
         var admin = await CreateAdminClientAsync();
 
@@ -641,10 +640,27 @@ public class PeopleAndSchedulingFlowTests : IClassFixture<AbderaWebApplicationFa
             pianoEnrollment.Id, DayOfWeek.Monday, new TimeOnly(18, 0), 45, new DateOnly(2026, 8, 3), null));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
 
-        // Aynı kayıt üzerinden farklı bir güne ikinci program
+        // K9a: aynı kayıt (aynı öğretmen) üzerinden farklı bir güne ikinci program - haftada 2 ders.
         var sameEnrollmentAgain = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
             pianoEnrollment.Id, DayOfWeek.Thursday, new TimeOnly(16, 0), 45, new DateOnly(2026, 8, 3), null));
-        Assert.Equal(HttpStatusCode.Conflict, sameEnrollmentAgain.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, sameEnrollmentAgain.StatusCode);
+        var secondDay = (await sameEnrollmentAgain.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+
+        // Üçüncü gün açılamaz: kurs başına en fazla 2 haftalık program.
+        var thirdDay = await admin.PostAsJsonAsync("/api/lesson-series", new LessonSeriesFeatures.CreateRequest(
+            pianoEnrollment.Id, DayOfWeek.Saturday, new TimeOnly(11, 0), 45, new DateOnly(2026, 8, 3), null));
+        Assert.Equal(HttpStatusCode.Conflict, thirdDay.StatusCode);
+
+        // İki programdan biri taşınabilir - öteki program bu taşımayı engellemez.
+        var moved = await admin.PostAsJsonAsync($"/api/lesson-series/{secondDay.Series.Id}/reschedule",
+            new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Tuesday, new TimeOnly(17, 0), 45, null));
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+
+        // Ama öteki programın üstüne taşınamaz (öğrenci çakışması).
+        var movedData = (await moved.Content.ReadFromJsonAsync<LessonSeriesFeatures.CreateResponse>(TestJson.Options))!;
+        var onTopOfMonday = await admin.PostAsJsonAsync($"/api/lesson-series/{movedData.Series.Id}/reschedule",
+            new LessonSeriesFeatures.RescheduleRequest(DayOfWeek.Monday, new TimeOnly(18, 0), 45, null));
+        Assert.Equal(HttpStatusCode.Conflict, onTopOfMonday.StatusCode);
 
         // Aynı enstrüman, BAŞKA öğretmen - asıl kapatılan açık bu
         var otherTeacherEnrollment = (await (await admin.PostAsJsonAsync($"/api/students/{student.Id}/enrollments",

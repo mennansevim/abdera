@@ -43,9 +43,9 @@ public class MessagingFlowTests : IClassFixture<AbderaWebApplicationFactory>
     }
 
     // TeacherId ve yedek enstrümanlar, aynı öğrenciye İKİNCİ bir ders programı açması gereken
-    // testler için: "bir öğrenci aynı enstrüman için tek program" kuralı (LessonSeriesFeatures
-    // .EnsureSingleSeriesPerInstrumentAsync) aynı kayıt üzerinden ikinci seriyi reddediyor,
-    // bu yüzden ikinci program farklı bir enstrümandan açılır.
+    // testler için: "aynı enstrüman başka kayıttan alınamaz" kuralı (LessonSeriesFeatures
+    // .EnsureSingleSeriesPerInstrumentAsync); aynı kayda ikinci gün eklenebilir ama bu testler
+    // iki ayrı kurs istiyor, bu yüzden ikinci program farklı bir enstrümandan açılır.
     internal record SeededLesson(
         Guid LessonId, Guid StudentId, Guid GuardianId, string GuardianPhone, Guid EnrollmentId,
         Guid TeacherId, Guid[] SpareInstrumentIds);

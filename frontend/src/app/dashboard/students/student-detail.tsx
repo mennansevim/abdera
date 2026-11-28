@@ -87,7 +87,8 @@ export function StudentDetail({
   const activeEnrollments = enrollments?.filter((enrollment) => enrollment.status === "Active") ?? [];
   const fullName = `${student.firstName} ${student.lastName}`;
   const selectedProgramEnrollment = activeEnrollments.find((enrollment) => enrollment.id === programEnrollmentId) ?? null;
-  const selectedProgramSeries = lessonSeries?.find((item) => item.enrollmentId === programEnrollmentId) ?? null;
+  // Bir kursun birden fazla haftalık programı olabilir (haftada 2 ders - K9a); hepsi listelenir.
+  const seriesFor = (enrollmentId: string) => lessonSeries?.filter((item) => item.enrollmentId === enrollmentId) ?? [];
   const selectedProgramInstrument = instruments?.find((item) => item.id === selectedProgramEnrollment?.instrumentId);
   const selectedProgramTeacher = teachers?.find((item) => item.id === selectedProgramEnrollment?.teacherId);
 
@@ -214,7 +215,7 @@ export function StudentDetail({
                   instrumentName={instrument?.name ?? "Enstrüman"}
                   instrumentVariant={enrollment.instrumentVariant}
                   teacherName={teacher ? `${teacher.firstName} ${teacher.lastName}` : "Öğretmen"}
-                  series={lessonSeries?.find((item) => item.enrollmentId === enrollment.id) ?? null}
+                  series={seriesFor(enrollment.id)}
                   isAdmin={isAdmin}
                   canManage={canManage}
                 />
@@ -263,7 +264,7 @@ export function StudentDetail({
                   <div className="rounded-xl bg-[var(--brand-soft)] px-3 py-2.5 text-sm font-bold text-[var(--brand-strong)]">
                     {selectedProgramInstrument?.name ?? "Ders"}{selectedProgramTeacher ? ` · ${selectedProgramTeacher.firstName} ${selectedProgramTeacher.lastName}` : ""}
                   </div>
-                  <ScheduleForm studentId={studentId} enrollmentId={selectedProgramEnrollment.id} series={selectedProgramSeries} onClose={() => setProgramEnrollmentId(null)} />
+                  <ScheduleManager studentId={studentId} enrollmentId={selectedProgramEnrollment.id} series={seriesFor(selectedProgramEnrollment.id)} initialTarget={null} onClose={() => setProgramEnrollmentId(null)} />
                 </div>
               ) : (
                 <p className="text-meta">Aktif kurs bulunamadı.</p>
@@ -403,7 +404,7 @@ function EditGuardianForm({ studentId, guardian, isAdmin, onClose }: { studentId
   );
 }
 
-function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, instrumentVariant, teacherName, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; instrumentVariant: string | null; teacherName: string; series: StudentLessonSeries | null; isAdmin: boolean; canManage: boolean }) {
+function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, instrumentVariant, teacherName, series, isAdmin, canManage }: { studentId: string; enrollmentId: string; teacherId: string; instrumentName: string; instrumentVariant: string | null; teacherName: string; series: StudentLessonSeries[]; isAdmin: boolean; canManage: boolean }) {
   const endEnrollment = useEndEnrollment(studentId);
   const setVariant = useSetInstrumentVariant(studentId);
   // null = kapalı; metin = düzenleniyor. Alt dal (Gitar -> Elektro/Bas) yalnızca bilgi etiketi.
@@ -413,7 +414,9 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
   const [confirming, setConfirming] = useState(false);
   const [endReason, setEndReason] = useState<EnrollmentEndReason | "">("");
   const [endNote, setEndNote] = useState("");
-  const [editingSchedule, setEditingSchedule] = useState(false);
+  // null = kapalı; "pick" = program seçimi; "new" = yeni gün; diğer = taşınacak serinin id'si.
+  const [editingSchedule, setEditingSchedule] = useState<ScheduleTarget | null>(null);
+  const canAddDay = series.length < MAX_SERIES_PER_ENROLLMENT;
   const [error, setError] = useState<string | null>(null);
 
   async function remove(event: FormEvent<HTMLFormElement>) {
@@ -453,8 +456,13 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
             {(close) => (
               <>
                 {canManage && (
-                  <RowMenuItem icon="calendar" onClick={() => { close(); setEditingSchedule(true); }}>
-                    {series ? "Ders saatini değiştir" : "Ders programı gir"}
+                  <RowMenuItem icon="calendar" onClick={() => { close(); setEditingSchedule(series.length === 0 ? "new" : series.length === 1 ? series[0]!.id : "pick"); }}>
+                    {series.length ? "Ders saatini değiştir" : "Ders programı gir"}
+                  </RowMenuItem>
+                )}
+                {canManage && series.length > 0 && canAddDay && (
+                  <RowMenuItem icon="plus" onClick={() => { close(); setEditingSchedule("new"); }}>
+                    İkinci ders günü ekle
                   </RowMenuItem>
                 )}
                 {canManage && (
@@ -481,21 +489,38 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
       {/* Haftalık program satırı: kullanıcı isteği "öğrenci altında program görünebilir
           olmalı, buradan ders saatini güncelleyebilmeliyim". Program yoksa bunu da açıkça
           söylüyoruz - sessiz boşluk "ders yok mu, veri mi gelmedi" sorusunu doğuruyordu. */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        {series ? (
-          <span className="inline-flex items-center gap-1.5 text-[.75rem] font-semibold text-[var(--brand-strong)]">
-            <Icon name="calendar" className="h-3.5 w-3.5" />
-            {formatWeeklySchedule(series)}
-          </span>
-        ) : (
+      {series.length === 0 ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <span className="text-meta">Haftalık program girilmemiş.</span>
-        )}
-        {canManage && (
-          <button type="button" onClick={() => setEditingSchedule(true)} className="pressable min-h-11 rounded-lg px-2 text-[.75rem] font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
-            {series ? "Değiştir" : "Program gir"}
-          </button>
-        )}
-      </div>
+          {canManage && (
+            <button type="button" onClick={() => setEditingSchedule("new")} className="pressable min-h-11 rounded-lg px-2 text-[.75rem] font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
+              Program gir
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+          {series.length > 1 && <span className="text-micro text-[var(--muted)]">Haftada {series.length} ders</span>}
+          {series.map((item) => (
+            <span key={item.id} className="inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1.5 text-[.75rem] font-semibold text-[var(--brand-strong)]">
+                <Icon name="calendar" className="h-3.5 w-3.5" />
+                {formatWeeklySchedule(item)}
+              </span>
+              {canManage && (
+                <button type="button" onClick={() => setEditingSchedule(item.id)} aria-label={`${formatWeeklySchedule(item)} programını değiştir`} className="pressable min-h-11 rounded-lg px-2 text-[.75rem] font-bold text-[var(--brand-strong)] hover:bg-[var(--brand-soft)]">
+                  Değiştir
+                </button>
+              )}
+            </span>
+          ))}
+          {canManage && canAddDay && (
+            <button type="button" onClick={() => setEditingSchedule("new")} className="pressable min-h-11 rounded-lg px-2 text-[.75rem] font-bold text-[var(--muted)] hover:bg-[var(--brand-soft)] hover:text-[var(--brand-strong)]">
+              + İkinci gün
+            </button>
+          )}
+        </div>
+      )}
 
       {variantDraft !== null && (
         <form
@@ -538,16 +563,17 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
       {editingSchedule && (
         <Modal
           open
-          title={series ? "Ders saatini değiştir" : "Ders programı gir"}
+          title={editingSchedule === "new" ? (series.length ? "İkinci ders günü ekle" : "Ders programı gir") : "Ders saatini değiştir"}
           description={`${instrumentName} · ${teacherName}`}
-          onClose={() => setEditingSchedule(false)}
+          onClose={() => setEditingSchedule(null)}
           size="sm"
         >
-          <ScheduleForm
+          <ScheduleManager
             studentId={studentId}
             enrollmentId={enrollmentId}
             series={series}
-            onClose={() => setEditingSchedule(false)}
+            initialTarget={editingSchedule === "pick" ? null : editingSchedule}
+            onClose={() => setEditingSchedule(null)}
           />
         </Modal>
       )}
@@ -579,6 +605,52 @@ function EnrollmentRow({ studentId, enrollmentId, teacherId, instrumentName, ins
 }
 
 
+// Bir kursta haftada en fazla 2 ders günü (sunucu: LessonSeriesFeatures.MaxSeriesPerEnrollment, K9a).
+const MAX_SERIES_PER_ENROLLMENT = 2;
+type ScheduleTarget = "pick" | "new" | string;
+
+// Kursun programları arasında seçim: hangi günü taşıyacağını ya da ikinci günü ekleyeceğini
+// kullanıcı açıkça seçer. Tek programlı/programsız kursta doğrudan forma geçilir. İkinci gün
+// eklemek aidatı etkiler (4 derslik kart iki haftada dolar), bu yüzden formda söylenir.
+function ScheduleManager({ studentId, enrollmentId, series, initialTarget, onClose }: { studentId: string; enrollmentId: string; series: StudentLessonSeries[]; initialTarget: string | null; onClose: () => void }) {
+  const canAddDay = series.length < MAX_SERIES_PER_ENROLLMENT;
+  const [target, setTarget] = useState<string | null>(() => initialTarget ?? (series.length === 0 ? "new" : series.length === 1 && !canAddDay ? series[0]!.id : null));
+
+  if (target === null) {
+    return (
+      <div className="space-y-3">
+        <p className="text-meta">Değiştirmek istediğin ders gününü seç{canAddDay ? " ya da ikinci bir gün ekle" : ""}.</p>
+        <div className="grid gap-2">
+          {series.map((item) => (
+            <button key={item.id} type="button" onClick={() => setTarget(item.id)} className="pressable flex min-h-12 items-center gap-3 rounded-xl border border-[var(--line)] bg-white px-3 text-left text-sm font-bold hover:border-[var(--brand)]">
+              <Icon name="calendar" className="h-4 w-4 shrink-0 text-[var(--brand)]" />
+              {formatWeeklySchedule(item)}
+            </button>
+          ))}
+          {canAddDay && (
+            <button type="button" onClick={() => setTarget("new")} className="pressable flex min-h-12 items-center gap-3 rounded-xl border border-dashed border-[var(--line)] bg-white px-3 text-left text-sm font-bold text-[var(--brand-strong)] hover:border-[var(--brand)]">
+              <Icon name="plus" className="h-4 w-4 shrink-0" />
+              İkinci ders günü ekle
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const editing = target === "new" ? null : series.find((item) => item.id === target) ?? null;
+  return (
+    <ScheduleForm
+      key={target}
+      studentId={studentId}
+      enrollmentId={enrollmentId}
+      series={editing}
+      otherSeries={series.filter((item) => item.id !== editing?.id)}
+      onClose={onClose}
+    />
+  );
+}
+
 // Hem ilk programı girmek hem de var olanı taşımak için tek form. Taşıma sunucuda
 // "eskisini kapat + yenisini aç" olarak işlenir (LessonSeriesFeatures.RescheduleAsync);
 // geçmiş dersler eski programa bağlı kalır, bu yüzden "geçerlilik başlangıcı" alanı
@@ -587,7 +659,7 @@ const SCHEDULE_DAY_KEYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday
 const SCHEDULE_DAY_SHORT: Record<string, string> = { Monday: "Pzt", Tuesday: "Sal", Wednesday: "Çar", Thursday: "Per", Friday: "Cum", Saturday: "Cmt", Sunday: "Paz" };
 const SCHEDULE_DURATIONS = [30, 45, 60];
 
-function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId: string; enrollmentId: string; series: StudentLessonSeries | null; onClose: () => void }) {
+function ScheduleForm({ studentId, enrollmentId, series, otherSeries, onClose }: { studentId: string; enrollmentId: string; series: StudentLessonSeries | null; otherSeries: StudentLessonSeries[]; onClose: () => void }) {
   const createSeries = useCreateLessonSeries();
   const rescheduleSeries = useRescheduleLessonSeries(studentId);
   const [dayOfWeek, setDayOfWeek] = useState(series?.dayOfWeek ?? "Monday");
@@ -651,7 +723,9 @@ function ScheduleForm({ studentId, enrollmentId, series, onClose }: { studentId:
       <p className="text-meta">
         {series
           ? `Şu anki program: ${formatWeeklySchedule(series)}. Seçilen tarihten önceki dersler olduğu gibi kalır, sonrasındakiler yeni saate taşınır.`
-          : "Seçilen gün ve saat her hafta tekrarlanır; öğretmen ve öğrenci çakışmaları otomatik kontrol edilir."}
+          : otherSeries.length
+            ? `Bu kursun ikinci ders günü olur (mevcut: ${otherSeries.map(formatWeeklySchedule).join(", ")}). Öğrenci haftada ${otherSeries.length + 1} ders alır; iki günün dersleri aynı 4 derslik kartı doldurur, yani kart iki haftada dolar.`
+            : "Seçilen gün ve saat her hafta tekrarlanır; öğretmen ve öğrenci çakışmaları otomatik kontrol edilir."}
       </p>
 
       {error && <FormMessage tone="error">{error}</FormMessage>}

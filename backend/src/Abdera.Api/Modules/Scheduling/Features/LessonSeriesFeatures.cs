@@ -88,7 +88,8 @@ public static class LessonSeriesFeatures
         await EnsureStudentWeeklyLimitAsync(
             enrollment.StudentId, request.EffectiveFrom, request.EffectiveUntil, db);
         await EnsureSingleSeriesPerInstrumentAsync(
-            enrollment.StudentId, enrollment.InstrumentId, request.EffectiveFrom, request.EffectiveUntil, db);
+            enrollment.StudentId, enrollment.InstrumentId, request.EffectiveFrom, request.EffectiveUntil, db,
+            sameEnrollmentId: enrollment.Id);
         await EnsureWithinAvailabilityAsync(enrollment.TeacherId, request.DayOfWeek, request.StartTime, endTime, db);
         await EnsureNoConflictAsync(enrollment, request.DayOfWeek, request.StartTime, endTime, request.EffectiveFrom, request.EffectiveUntil, db);
 
@@ -233,7 +234,7 @@ public static class LessonSeriesFeatures
             effectiveFrom, originalUntil, db, excludeSeriesId: series.Id);
         await EnsureSingleSeriesPerInstrumentAsync(
             enrollment.StudentId, enrollment.InstrumentId, effectiveFrom, originalUntil, db,
-            excludeSeriesId: series.Id);
+            excludeSeriesId: series.Id, sameEnrollmentId: enrollment.Id);
         await EnsureNoSingleLessonConflictAsync(
             enrollment, request.DayOfWeek, request.StartTime, endTime, effectiveFrom, originalUntil,
             series.Id, db, clock);
@@ -550,14 +551,20 @@ public static class LessonSeriesFeatures
         }
     }
 
-    // Kullanıcı kuralı: "bir öğrenci aynı enstrüman için birden fazla ders alamasın, farklı
-    // saatler de olsa." Kayıt (enrollment) seviyesindeki kısıt yalnızca aynı ÖĞRETMEN için
-    // mükerrer kaydı engelliyordu; aynı enstrümanı iki ayrı öğretmenden almak ya da tek kayıt
-    // üzerine ikinci bir haftalık program açmak hâlâ mümkündü - takvimde aynı öğrencinin
-    // haftada birkaç kez aynı derste görünmesinin sebebi buydu.
+    // Kullanıcı kuralı (K9): "bir öğrenci aynı enstrüman için birden fazla ders alamasın, farklı
+    // saatler de olsa." Asıl sızıntı aynı enstrümanı ikinci bir öğretmenden (ikinci bir kurs
+    // kaydıyla) almaktı - takvimde aynı öğrencinin haftada birkaç kez aynı derste görünmesinin
+    // sebebi buydu, ve ikinci kayıt çoklu kurs indirimini de yanlışlıkla açardı. Bu hâlâ yasak.
+    //
+    // K9a (docs/10-decisions.md): haftada 2 ders isteyen öğrenci için AYNI kurs kaydına en fazla
+    // MaxSeriesPerEnrollment haftalık program açılabilir. sameEnrollmentId yalnızca bireysel ders
+    // yolları (oluştur/taşı) tarafından verilir; grup dersi yolu vermez ve eski kural aynen kalır.
+    // Grup dersine bağlı bir programın yanına aynı kayıtta bireysel program açılmaz.
+    internal const int MaxSeriesPerEnrollment = 2;
+
     internal static async Task EnsureSingleSeriesPerInstrumentAsync(
         Guid studentId, Guid instrumentId, DateOnly effectiveFrom, DateOnly? effectiveUntil,
-        AbderaDbContext db, Guid? excludeSeriesId = null)
+        AbderaDbContext db, Guid? excludeSeriesId = null, Guid? sameEnrollmentId = null)
     {
         var sameInstrumentSeries = await db.LessonSeries
             .Where(series => series.Status == LessonSeriesStatus.Active)
@@ -569,15 +576,29 @@ public static class LessonSeriesFeatures
 
         // Yalnızca tarih aralığı çakışanlar sayılır: eski program kapatılıp yenisi açıldığında
         // (ders saati değişikliği) bu kural engel olmamalı.
-        var overlapping = sameInstrumentSeries.FirstOrDefault(series => DateRangesOverlap(
-            effectiveFrom, effectiveUntil, series.EffectiveFrom, series.EffectiveUntil));
+        var overlapping = sameInstrumentSeries
+            .Where(series => DateRangesOverlap(effectiveFrom, effectiveUntil, series.EffectiveFrom, series.EffectiveUntil))
+            .ToList();
 
-        if (overlapping is not null)
+        var blocking = overlapping.FirstOrDefault(series =>
+            sameEnrollmentId is null || series.EnrollmentId != sameEnrollmentId || series.LessonGroupId is not null);
+        if (blocking is not null)
         {
             throw new ConflictException(
                 "Bu öğrencinin bu enstrüman için zaten bir ders programı var " +
-                $"({Describe(overlapping.DayOfWeek, overlapping.StartTime)}). " +
-                "Yeni bir program açmak yerine mevcut programın saatini değiştirin.");
+                $"({Describe(blocking.DayOfWeek, blocking.StartTime)}). " +
+                (sameEnrollmentId is not null && blocking.EnrollmentId == sameEnrollmentId
+                    ? "Grup dersine bağlı bir kursa ayrıca bireysel program açılamaz."
+                    : "İkinci ders günü aynı kurs kaydına (aynı öğretmen) eklenebilir; başka öğretmenle aynı enstrümandan ikinci program açılamaz."));
+        }
+
+        if (overlapping.Count >= MaxSeriesPerEnrollment)
+        {
+            var days = string.Join(", ", overlapping.OrderBy(s => s.DayOfWeek).ThenBy(s => s.StartTime)
+                .Select(s => Describe(s.DayOfWeek, s.StartTime)));
+            throw new ConflictException(
+                $"Bu kursta haftada en fazla {MaxSeriesPerEnrollment} ders günü olabilir ({days}). " +
+                "Yeni bir gün eklemek yerine mevcut programlardan birinin saatini değiştirin.");
         }
     }
 

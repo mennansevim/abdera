@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { ApiError } from "@/lib/api";
 import { useEnrollments, useInstruments, useStudents, useTeachers } from "@/lib/people";
 import { findRecurringSlots, type SuggestedSlot } from "@/lib/smart-scheduling";
-import { DAY_NAMES_TR, useCalendar, useCreateLessonSeries, useTeacherAvailability } from "@/lib/scheduling";
+import { DAY_NAMES_TR, formatWeeklySchedule, useCalendar, useCreateLessonSeries, useStudentLessonSeries, useTeacherAvailability } from "@/lib/scheduling";
 import { useMe } from "@/lib/use-auth";
 
 const DAY_KEYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -51,6 +51,10 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
   const enrollment = activeEnrollments.find((item) => item.id === resolvedEnrollmentId);
   const teacher = teachers?.find((item) => item.id === enrollment?.teacherId);
   const instrument = instruments?.find((item) => item.id === enrollment?.instrumentId);
+  // Kursun zaten haftalık programı varsa bu form ikinci bir ders günü ekler (K9a) - bunu açıkça
+  // söyleriz; aynı öğrencinin takvimde haftada iki kez görünmesi bilinçli bir karar olmalı.
+  const { data: studentSeries } = useStudentLessonSeries(studentId);
+  const existingSeries = studentSeries?.filter((item) => item.enrollmentId === resolvedEnrollmentId) ?? [];
   const { data: availability, isLoading: availabilityLoading } = useTeacherAvailability(enrollment?.teacherId ?? "");
   // Takvim henüz yüklenmemişken boş ders listesiyle öneri üretmek, dolu saatleri boş gibi
   // gösterirdi; tarama bitene kadar öneri listesi boş kalır.
@@ -136,6 +140,14 @@ export function CreateSeriesForm({ onCreated, onCancel, initialDate, initialDay,
       </div>
 
       <p className="text-meta">Seçilen gün ve saat her hafta tekrarlanır; bir öğrenci haftada en fazla 4 düzenli ders alabilir. Çakışmalar otomatik kontrol edilir.</p>
+
+      {existingSeries.length > 0 && (
+        <p role="status" className="rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-xs font-semibold text-[var(--warning-strong)]">
+          {existingSeries.length >= 2
+            ? `Bu kursun zaten haftada 2 ders günü var (${existingSeries.map(formatWeeklySchedule).join(", ")}). Yeni gün eklenemez; öğrenci künyesinden mevcut günlerden birinin saatini değiştir.`
+            : `Bu kursun zaten bir programı var (${existingSeries.map(formatWeeklySchedule).join(", ")}). Kaydedersen ikinci ders günü olarak eklenir ve öğrenci haftada 2 ders alır; iki günün dersleri aynı 4 derslik kartı doldurur.`}
+        </p>
+      )}
 
       {enrollment && !manualMode && (
         <section className="rounded-2xl border border-[var(--line)] p-3 sm:p-4">
