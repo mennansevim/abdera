@@ -177,15 +177,20 @@ test.describe.serial("Abdera critical role flows", () => {
     await expect(page.getByRole("heading", { name: "Ders Programı" })).toBeVisible();
     await expect(page.getByRole("button", { name: new RegExp(`Deneme Öğrenci ${suffix}.*${targetLabel}`) })).toHaveCount(0);
 
-    // Aynı enstrümandan ikinci bir haftalık program açılamaz - saat farklı olsa bile (K9).
-    const duplicateInstrumentSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
-      data: { enrollmentId: enrollment.id, dayOfWeek: "Tuesday", startTime: "08:00:00", durationMinutes: 30, effectiveFrom: date },
+    // K9a: aynı kursa haftada ikinci bir ders günü eklenebilir (haftada 2 ders), üçüncüsü
+    // eklenemez. Saatler aşağıdaki branş programlarıyla (Salı-Cuma 08:xx) çakışmaz.
+    const secondDaySeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
+      data: { enrollmentId: enrollment.id, dayOfWeek: "Saturday", startTime: "08:00:00", durationMinutes: 30, effectiveFrom: date },
     });
-    expect(duplicateInstrumentSeries.status()).toBe(409);
+    expect(secondDaySeries.status()).toBe(201);
+    const thirdDaySeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
+      data: { enrollmentId: enrollment.id, dayOfWeek: "Sunday", startTime: "08:00:00", durationMinutes: 30, effectiveFrom: date },
+    });
+    expect(thirdDaySeries.status()).toBe(409);
 
     // Aynı öğrencinin beşinci düzenli haftalık serisi, UI'dan bağımsız olarak API/domain
-    // katmanında da reddedilmelidir. Piyano programı yukarıda UI'dan açıldı, geri kalan
-    // üçü farklı branşlardan geliyor - beşinci branş haftalık sınıra takılır.
+    // katmanında da reddedilmelidir. Piyanonun iki günü (Pazartesi UI'dan, Cumartesi yukarıda)
+    // haftalık sınırın ikisini doldurur; iki branş daha 4'e tamamlar, sonrakiler sınıra takılır.
     const branchSchedule: Array<[string, string]> = [["Tuesday", "08:00:00"], ["Wednesday", "08:15:00"], ["Thursday", "08:30:00"], ["Friday", "08:45:00"]];
     for (const [index, branch] of otherBranches.entries()) {
       const branchEnrollment = await page.request.post(`${apiUrl}/api/students/${student.id}/enrollments`, {
@@ -196,7 +201,7 @@ test.describe.serial("Abdera critical role flows", () => {
       const branchSeries = await page.request.post(`${apiUrl}/api/lesson-series`, {
         data: { enrollmentId: (await branchEnrollment.json()).id, dayOfWeek, startTime, durationMinutes: 30, effectiveFrom: date },
       });
-      expect(branchSeries.status()).toBe(index === otherBranches.length - 1 ? 400 : 201);
+      expect(branchSeries.status()).toBe(index >= 2 ? 400 : 201);
     }
 
     // Demo seed merkezi ücret tarifesini kurar; kayıt bazlı FeePlan artık yoktur. Kurs kaydı
